@@ -70,6 +70,11 @@ fn handle_subcommand() -> Result<bool> {
         return Ok(true);
     }
 
+    if args.iter().any(|arg| arg == "--refresh-currency") {
+        refresh_currency()?;
+        return Ok(true);
+    }
+
     Ok(false)
 }
 
@@ -169,6 +174,20 @@ fn refresh_prices() -> Result<()> {
 #[cfg(not(feature = "refresh-prices"))]
 fn refresh_prices() -> Result<()> {
     eprintln!("--refresh-prices requires building with --features refresh-prices");
+    Ok(())
+}
+
+#[cfg(feature = "refresh-currency")]
+fn refresh_currency() -> Result<()> {
+    let target = std::path::PathBuf::from("currency/rates.json");
+    tokenuse::currency::refresh::run(&target)?;
+    println!("wrote {}", target.display());
+    Ok(())
+}
+
+#[cfg(not(feature = "refresh-currency"))]
+fn refresh_currency() -> Result<()> {
+    eprintln!("--refresh-currency requires building with --features refresh-currency");
     Ok(())
 }
 

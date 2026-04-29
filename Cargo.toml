@@ -20,3 +20,4 @@ ureq = { version = "2", features = ["json"], optional = true }
 [features]
 default = []
 refresh-prices = ["ureq"]
+refresh-currency = ["ureq"]

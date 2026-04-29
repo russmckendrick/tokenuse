@@ -2,7 +2,7 @@
 
 `tokenuse` is a local-only Rust TUI for exploring AI coding tool token and cost usage. It reads session files already written on your machine, ingests them once at startup, and renders a dense terminal dashboard for spend by day, project, tool, model, shell command, and MCP server.
 
-There is no API key, proxy, telemetry endpoint, or background watcher. The default build has no network dependency; the only networked path is the explicit pricing refresh feature.
+There is no API key, proxy, telemetry endpoint, or background watcher. The default build has no network dependency; the only networked paths are the explicit pricing and currency refresh features.
 
 ## Quick Start
 
@@ -64,7 +64,13 @@ Refresh the embedded LiteLLM-derived pricing snapshot:
 cargo run --features refresh-prices -- --refresh-prices
 ```
 
-Do not hand-edit `src/pricing/snapshot.json`; use the refresh command so aliases and filtered model entries stay consistent.
+Refresh the checked-in Frankfurter-derived currency snapshot:
+
+```bash
+cargo run --features refresh-currency -- --refresh-currency
+```
+
+Do not hand-edit `src/pricing/snapshot.json` or `currency/rates.json`; use the refresh commands so generated data stays consistent.
 
 ## Documentation
 

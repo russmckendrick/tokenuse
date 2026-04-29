@@ -3,7 +3,8 @@
 ## Tooling
 
 - Update embedded pricing: `cargo run --features refresh-prices -- --refresh-prices` - never hand-edit `src/pricing/snapshot.json`.
-- Default build has zero network deps; `ureq` is gated behind the `refresh-prices` feature.
+- Update embedded currency rates: `cargo run --features refresh-currency -- --refresh-currency` - never hand-edit `currency/rates.json`.
+- Default build has zero network deps; `ureq` is gated behind the `refresh-prices` and `refresh-currency` features.
 
 ## Non-obvious rules
 

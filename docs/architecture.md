@@ -9,6 +9,7 @@ flowchart TD
     A[cargo run] --> B[handle CLI flags]
     B -->|--list-projects| C[load ingestion and print inventory]
     B -->|--refresh-prices| D[refresh pricing snapshot when feature is enabled]
+    B -->|--refresh-currency| L[refresh currency snapshot when feature is enabled]
     B -->|no flag| E[ingest::load]
     E --> F[discover sources for each tool adapter]
     F --> G[parse local files into ParsedCall records]
@@ -131,3 +132,15 @@ Claude Opus fast mode uses the model row's `fast_multiplier` when present. The r
 ```bash
 cargo run --features refresh-prices -- --refresh-prices
 ```
+
+## Currency Snapshot
+
+`currency/rates.json` is a checked-in generated snapshot for future currency display. The running dashboard does not call an exchange-rate API and still stores calculated spend as `cost_usd`.
+
+The snapshot is generated from Frankfurter's USD-based v2 rates endpoint, filtered to fiat display currencies, and refreshed by a nightly GitHub Action:
+
+```bash
+cargo run --features refresh-currency -- --refresh-currency
+```
+
+The default build does not include this networked refresh path.
