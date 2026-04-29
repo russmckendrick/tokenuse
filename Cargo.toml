@@ -2,7 +2,7 @@
 name = "tokenuse"
 version = "0.0.1"
 edition = "2021"
-description = "A prototype terminal dashboard for AI token usage analytics."
+description = "A terminal dashboard for AI token usage analytics."
 license = "MIT"
 
 [dependencies]
