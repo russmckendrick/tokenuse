@@ -1,7 +1,7 @@
 {
   "base": "USD",
   "date": "2026-04-29",
-  "generated_at": "2026-04-29T12:43:07Z",
+  "generated_at": "2026-04-29T12:46:59Z",
   "source": {
     "name": "Frankfurter",
     "url": "https://api.frankfurter.dev/v2/rates?base=USD",
