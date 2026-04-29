@@ -2,7 +2,7 @@
 
 Copilot has two separate on-disk layouts: the legacy CLI agent (`~/.copilot/...`) and the VS Code Copilot Chat extension (workspace storage). `tokenuse` reads both.
 
-> Status: discovery + config implemented (`src/providers/copilot/`). Parser is a scaffold; this doc is the implementation plan.
+> Status: implemented (`src/providers/copilot/`).
 
 ## Where the data lives
 
@@ -31,6 +31,18 @@ GitHub.copilot-chat/transcripts/<session>.jsonl
 ```
 
 A directory only counts as a Copilot source if at least one transcript file's first line is `{"type":"session.start","producer":"copilot-agent",...}`.
+
+```mermaid
+flowchart TD
+    A[legacy copilot session state] --> B[events jsonl and workspace yaml]
+    C[VS Code workspaceStorage] --> D[copilot chat transcripts]
+    B --> E[normalize session timeline]
+    D --> F[validate session.start producer]
+    F --> E
+    E --> G[assistant turns plus toolCalls]
+    G --> H[token estimation and model inference]
+    H --> I[planned ParsedCall output]
+```
 
 ## Record format
 
@@ -84,24 +96,38 @@ The aliases resolve through `src/pricing/snapshot.json`.
 
 ## Deduplication
 
-- Legacy: `dedup_key = format!("copilot:{session_id}:{message_id}")` (the `id` field on `assistant.message`).
-- VS Code: `dedup_key = format!("copilot-vscode:{file}:{line_number}")` (transcripts have no stable message IDs; line position is stable enough across reads of the same file).
+- Legacy: `dedup_key = format!("copilot:{session_id}:{message_id}")` where `session_id` is the parent directory name (the session UUID) and `message_id` is `data.messageId` on the `assistant.message` event.
+- VS Code: `dedup_key = format!("copilot:{session_id}:{message_id}")` where `session_id` is the transcript file stem and `message_id` is `data.messageId`.
 
 ## Tools / bash extraction
 
-Walk `toolCalls[]` and normalize each `name`:
+Walk `data.toolRequests[]` and normalize each `name`:
 
 | Copilot name | Normalized |
 | --- | --- |
-| `bash` | `Bash` |
+| `bash`, `run_in_terminal`, `kill_terminal` | `Bash` |
 | `read_file` | `Read` |
-| `edit_file`, `write_file`, `apply_patch` | `Edit` |
+| `edit_file`, `write_file`, `replace_string_in_file`, `apply_patch` | `Edit` |
+| `create_file` | `Write` |
+| `delete_file` | `Delete` |
+| `search_files`, `file_search` | `Grep` |
+| `find_files` | `Glob` |
+| `list_directory`, `list_dir` | `LS` |
 | `web_search` | `WebSearch` |
 | `fetch_webpage` | `WebFetch` |
 | `github_repo` | `GitHub` |
 | `memory` | `Memory` |
 
-For `bash` calls, run `arguments.command` (or `input.command`) through `providers::jsonl::split_bash_commands`.
+For `bash`-class calls, parse `arguments` as a JSON string and run `command` (or `cmd`) through `providers::jsonl::split_bash_commands`.
+
+```mermaid
+flowchart LR
+    A[toolCalls array] --> B[normalize tool name]
+    A -->|bash| C[arguments.command or input.command]
+    C --> D[split_bash_commands]
+    B --> E[tools]
+    D --> F[bash_commands]
+```
 
 ## Known limitations
 
