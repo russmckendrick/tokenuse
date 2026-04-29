@@ -1,0 +1,141 @@
+mod components;
+mod sections;
+
+use ratatui::{
+    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
+    prelude::{Frame, Line, Span},
+    text::Text,
+    widgets::{Block, Paragraph, Widget},
+};
+
+use crate::{app::App, data::dashboard_data, theme};
+
+use components::{centered_rect, two_columns};
+use sections::{
+    render_activities, render_counts, render_daily, render_footer, render_models, render_nav,
+    render_projects, render_sessions, render_summary,
+};
+
+pub fn render(frame: &mut Frame<'_>, app: &App) {
+    let root = frame.area();
+    Block::default()
+        .style(theme::base())
+        .render(root, frame.buffer_mut());
+
+    if root.width < 120 || root.height < 40 {
+        render_small_terminal_notice(frame, root);
+        return;
+    }
+
+    let area = root.inner(Margin {
+        horizontal: 1,
+        vertical: 1,
+    });
+
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(4),
+            Constraint::Length(1),
+            Constraint::Length(9),
+            Constraint::Length(1),
+            Constraint::Length(8),
+            Constraint::Length(1),
+            Constraint::Length(10),
+            Constraint::Length(1),
+            Constraint::Length(10),
+            Constraint::Length(1),
+            Constraint::Length(5),
+            Constraint::Min(3),
+        ])
+        .split(area);
+
+    let data = dashboard_data(app.period, app.provider);
+
+    render_nav(frame, sections[0], app);
+    render_summary(frame, sections[1], app, &data.summary);
+
+    let top = two_columns(sections[3]);
+    render_daily(frame, top[0], &data.daily);
+    render_projects(frame, top[1], &data.projects);
+
+    render_sessions(frame, sections[5], &data.sessions);
+
+    let middle = two_columns(sections[7]);
+    render_activities(frame, middle[0], &data.activities);
+    render_models(frame, middle[1], &data.models);
+
+    let lower = two_columns(sections[9]);
+    render_counts(frame, lower[0], "Core Tools", theme::CYAN, &data.tools);
+    render_counts(
+        frame,
+        lower[1],
+        "Shell Commands",
+        theme::PRIMARY,
+        &data.commands,
+    );
+
+    render_counts(
+        frame,
+        sections[11],
+        "MCP Servers",
+        theme::MAGENTA,
+        &data.mcp_servers,
+    );
+    render_footer(frame, sections[12], app);
+}
+
+fn render_small_terminal_notice(frame: &mut Frame<'_>, area: Rect) {
+    let block = theme::panel_block("tokenuse", theme::PRIMARY);
+    let text = Text::from(vec![
+        Line::from(vec![
+            Span::styled("terminal too small", theme::key()),
+            Span::styled(" for the dashboard", theme::muted()),
+        ]),
+        Line::from(vec![Span::styled(
+            "resize to at least 120x40 for the full MVP layout",
+            theme::muted(),
+        )]),
+        Line::from(vec![
+            Span::styled("q", theme::key()),
+            Span::styled(" quit", theme::muted()),
+        ]),
+    ]);
+
+    let notice = centered_rect(72, 7, area);
+    Paragraph::new(text)
+        .alignment(Alignment::Center)
+        .block(block)
+        .style(theme::base())
+        .render(notice, frame.buffer_mut());
+}
+
+#[cfg(test)]
+mod tests {
+    use ratatui::{backend::TestBackend, Terminal};
+
+    use super::*;
+
+    #[test]
+    fn dashboard_render_smoke_test() {
+        let backend = TestBackend::new(170, 64);
+        let mut terminal = Terminal::new(backend).expect("create terminal");
+        let app = App::default();
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("draw dashboard");
+
+        let buffer = terminal.backend().buffer();
+        let rendered = buffer
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+
+        assert!(rendered.contains("tokenuse"));
+        assert!(rendered.contains("Daily Activity"));
+        assert!(rendered.contains("q quit"));
+    }
+}

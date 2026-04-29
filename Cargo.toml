@@ -1,0 +1,11 @@
+[package]
+name = "tokenuse"
+version = "0.1.0"
+edition = "2021"
+description = "A prototype terminal dashboard for AI token usage analytics."
+license = "MIT"
+
+[dependencies]
+color-eyre = "0.6"
+crossterm = "0.28"
+ratatui = "0.29"
