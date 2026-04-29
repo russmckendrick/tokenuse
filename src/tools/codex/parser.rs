@@ -6,7 +6,9 @@ use color_eyre::Result;
 use serde::Deserialize;
 
 use crate::pricing;
-use crate::tools::{jsonl, ParsedCall, SessionSource, Speed};
+use crate::tools::{
+    jsonl, LimitCredits, LimitSnapshot, LimitWindow, ParsedCall, SessionSource, Speed,
+};
 
 use super::config;
 
@@ -52,6 +54,8 @@ struct EventMsg {
     kind: String,
     #[serde(default)]
     info: Option<TokenInfo>,
+    #[serde(default)]
+    rate_limits: Option<RateLimits>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -72,6 +76,44 @@ struct TokenUsage {
     output_tokens: u64,
     #[serde(default)]
     reasoning_output_tokens: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct RateLimits {
+    #[serde(default)]
+    limit_id: String,
+    #[serde(default)]
+    limit_name: Option<String>,
+    #[serde(default)]
+    primary: Option<RateLimitWindow>,
+    #[serde(default)]
+    secondary: Option<RateLimitWindow>,
+    #[serde(default)]
+    credits: Option<RateLimitCredits>,
+    #[serde(default)]
+    plan_type: Option<String>,
+    #[serde(default)]
+    rate_limit_reached_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RateLimitWindow {
+    #[serde(default)]
+    used_percent: f64,
+    #[serde(default)]
+    window_minutes: u64,
+    #[serde(default)]
+    resets_at: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RateLimitCredits {
+    #[serde(default)]
+    has_credits: bool,
+    #[serde(default)]
+    unlimited: bool,
+    #[serde(default)]
+    balance: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -230,6 +272,112 @@ pub fn parse_session(
     Ok(calls)
 }
 
+pub fn parse_session_limits(source: &SessionSource) -> Result<Vec<LimitSnapshot>> {
+    let lines = match jsonl::read_lines(&source.path) {
+        Ok(l) => l,
+        Err(_) => return Ok(Vec::new()),
+    };
+
+    let mut iter = lines.into_iter();
+
+    let Some(first_raw) = iter.next() else {
+        return Ok(Vec::new());
+    };
+    let Ok(first) = serde_json::from_str::<Entry>(&first_raw) else {
+        return Ok(Vec::new());
+    };
+    if first.kind != "session_meta" {
+        return Ok(Vec::new());
+    }
+    let meta: SessionMeta = first
+        .payload
+        .as_ref()
+        .and_then(|p| serde_json::from_value(p.clone()).ok())
+        .unwrap_or_default();
+    if !meta
+        .originator
+        .as_deref()
+        .map(|o| o.to_lowercase().contains("codex"))
+        .unwrap_or(false)
+    {
+        return Ok(Vec::new());
+    }
+
+    let mut snapshots = Vec::new();
+    for line in iter {
+        let Ok(entry) = serde_json::from_str::<Entry>(&line) else {
+            continue;
+        };
+        if entry.kind != "event_msg" {
+            continue;
+        }
+        let Some(payload) = entry.payload else {
+            continue;
+        };
+        let Ok(event) = serde_json::from_value::<EventMsg>(payload) else {
+            continue;
+        };
+        if event.kind != "token_count" {
+            continue;
+        }
+        let Some(rate_limits) = event.rate_limits else {
+            continue;
+        };
+        if rate_limits.limit_id.is_empty() {
+            continue;
+        }
+
+        snapshots.push(rate_limits.into_snapshot(
+            config::TOOL_ID,
+            entry.timestamp.as_deref().and_then(parse_timestamp),
+        ));
+    }
+
+    Ok(snapshots)
+}
+
+impl RateLimits {
+    fn into_snapshot(
+        self,
+        tool: &'static str,
+        observed_at: Option<DateTime<Utc>>,
+    ) -> LimitSnapshot {
+        LimitSnapshot {
+            tool,
+            limit_id: self.limit_id,
+            limit_name: self.limit_name.filter(|s| !s.is_empty()),
+            plan_type: self.plan_type.filter(|s| !s.is_empty()),
+            observed_at,
+            primary: self.primary.map(Into::into),
+            secondary: self.secondary.map(Into::into),
+            credits: self.credits.map(Into::into),
+            rate_limit_reached_type: self.rate_limit_reached_type.filter(|s| !s.is_empty()),
+        }
+    }
+}
+
+impl From<RateLimitWindow> for LimitWindow {
+    fn from(value: RateLimitWindow) -> Self {
+        Self {
+            used_percent: value.used_percent,
+            window_minutes: value.window_minutes,
+            resets_at: value
+                .resets_at
+                .and_then(|seconds| DateTime::from_timestamp(seconds, 0)),
+        }
+    }
+}
+
+impl From<RateLimitCredits> for LimitCredits {
+    fn from(value: RateLimitCredits) -> Self {
+        Self {
+            has_credits: value.has_credits,
+            unlimited: value.unlimited,
+            balance: value.balance,
+        }
+    }
+}
+
 fn normalize_tool(name: &str) -> String {
     match name {
         "exec_command" => "Bash".to_string(),
@@ -275,6 +423,8 @@ mod tests {
     const TOKEN_NULL: &str = r#"{"timestamp":"2026-03-29T15:04:01.591Z","type":"event_msg","payload":{"type":"token_count","info":null}}"#;
     const TOKEN_FIRST: &str = r#"{"timestamp":"2026-03-29T15:04:10.090Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":18193,"cached_input_tokens":10624,"output_tokens":371,"reasoning_output_tokens":38,"total_tokens":18564},"total_token_usage":{"input_tokens":18193,"cached_input_tokens":10624,"output_tokens":371,"reasoning_output_tokens":38,"total_tokens":18564}}}}"#;
     const TOKEN_SECOND: &str = r#"{"timestamp":"2026-03-29T15:05:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":21590,"cached_input_tokens":10624,"output_tokens":375,"reasoning_output_tokens":12,"total_tokens":21965},"total_token_usage":{"input_tokens":39783,"cached_input_tokens":21248,"output_tokens":746,"reasoning_output_tokens":50,"total_tokens":40529}}}}"#;
+    const TOKEN_LIMIT_NULL: &str = r#"{"timestamp":"2026-04-29T07:59:08.887Z","type":"event_msg","payload":{"type":"token_count","info":null,"rate_limits":{"limit_id":"codex","limit_name":null,"primary":{"used_percent":17.0,"window_minutes":300,"resets_at":1777477636},"secondary":{"used_percent":6.0,"window_minutes":10080,"resets_at":1777960801},"credits":null,"plan_type":"prolite","rate_limit_reached_type":null}}}"#;
+    const TOKEN_LIMIT_MODEL: &str = r#"{"timestamp":"2026-04-29T07:59:28.815Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":18193,"cached_input_tokens":10624,"output_tokens":371,"reasoning_output_tokens":38,"total_tokens":18564},"total_token_usage":{"input_tokens":18193,"cached_input_tokens":10624,"output_tokens":371,"reasoning_output_tokens":38,"total_tokens":18564}},"rate_limits":{"limit_id":"codex_bengalfox","limit_name":"GPT-5.3-Codex-Spark","primary":{"used_percent":0.0,"window_minutes":300,"resets_at":1777487853},"secondary":{"used_percent":0.0,"window_minutes":10080,"resets_at":1778074653},"credits":{"has_credits":false,"unlimited":false,"balance":null},"plan_type":null,"rate_limit_reached_type":null}}}"#;
 
     #[test]
     fn parses_basic_session() {
@@ -313,6 +463,32 @@ mod tests {
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].tools, vec!["Bash"]);
         assert_eq!(calls[0].bash_commands, vec!["ls -la", "grep foo"]);
+    }
+
+    #[test]
+    fn extracts_rate_limits_from_null_and_normal_token_counts() {
+        let f = write_session(&[META_OK, TURN_GPT5, TOKEN_LIMIT_NULL, TOKEN_LIMIT_MODEL]);
+
+        let limits = parse_session_limits(&source_for(f.path().to_path_buf())).unwrap();
+
+        assert_eq!(limits.len(), 2);
+        assert_eq!(limits[0].limit_id, "codex");
+        assert_eq!(limits[0].limit_name, None);
+        assert_eq!(limits[0].plan_type.as_deref(), Some("prolite"));
+        assert_eq!(limits[0].primary.unwrap().used_percent, 17.0);
+        assert_eq!(limits[0].primary.unwrap().window_minutes, 300);
+        assert!(limits[0].primary.unwrap().resets_at.is_some());
+        assert_eq!(limits[0].secondary.unwrap().used_percent, 6.0);
+        assert_eq!(limits[1].limit_id, "codex_bengalfox");
+        assert_eq!(limits[1].limit_name.as_deref(), Some("GPT-5.3-Codex-Spark"));
+        assert!(limits[1]
+            .credits
+            .as_ref()
+            .is_some_and(|credits| !credits.has_credits));
+
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source_for(f.path().to_path_buf()), &mut seen).unwrap();
+        assert_eq!(calls.len(), 1, "normal call parsing must stay unchanged");
     }
 
     #[test]

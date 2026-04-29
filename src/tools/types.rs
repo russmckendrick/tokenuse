@@ -21,6 +21,33 @@ pub struct SessionSource {
     pub tool: &'static str,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct LimitSnapshot {
+    pub tool: &'static str,
+    pub limit_id: String,
+    pub limit_name: Option<String>,
+    pub plan_type: Option<String>,
+    pub observed_at: Option<DateTime<Utc>>,
+    pub primary: Option<LimitWindow>,
+    pub secondary: Option<LimitWindow>,
+    pub credits: Option<LimitCredits>,
+    pub rate_limit_reached_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LimitWindow {
+    pub used_percent: f64,
+    pub window_minutes: u64,
+    pub resets_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LimitCredits {
+    pub has_credits: bool,
+    pub unlimited: bool,
+    pub balance: Option<f64>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct ParsedCall {
     pub tool: &'static str,

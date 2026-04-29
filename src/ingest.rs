@@ -7,13 +7,15 @@ use color_eyre::Result;
 use crate::app::{Period, ProjectFilter, Tool};
 use crate::currency::CurrencyFormatter;
 use crate::data::{
-    CountMetric, DailyMetric, DashboardData, ModelMetric, ProjectMetric, ProjectOption,
-    ProjectToolMetric, SessionMetric, Summary,
+    CountMetric, DailyMetric, DashboardData, LimitMetric, LimitsData, ModelMetric, ProjectMetric,
+    ProjectOption, ProjectToolMetric, RecentModelMetric, RecentUsageMetric, SessionMetric, Summary,
+    ToolLimitSection,
 };
-use crate::tools::{self, ParsedCall};
+use crate::tools::{self, LimitSnapshot, LimitWindow, ParsedCall};
 
 pub struct Ingested {
     pub calls: Vec<ParsedCall>,
+    pub limits: Vec<LimitSnapshot>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,6 +31,7 @@ pub struct ProjectInventoryRow {
 pub fn load() -> Result<Ingested> {
     let mut seen: HashSet<String> = HashSet::new();
     let mut calls: Vec<ParsedCall> = Vec::new();
+    let mut limits: Vec<LimitSnapshot> = Vec::new();
 
     for tool in tools::registry() {
         let sources = match tool.discover() {
@@ -36,14 +39,16 @@ pub fn load() -> Result<Ingested> {
             Err(_) => continue,
         };
         for source in sources {
-            match tool.parse(&source, &mut seen) {
-                Ok(mut more) => calls.append(&mut more),
-                Err(_) => continue,
+            if let Ok(mut more) = tool.parse(&source, &mut seen) {
+                calls.append(&mut more);
+            }
+            if let Ok(mut more) = tool.parse_limits(&source) {
+                limits.append(&mut more);
             }
         }
     }
 
-    Ok(Ingested { calls })
+    Ok(Ingested { calls, limits })
 }
 
 impl Ingested {
@@ -82,8 +87,12 @@ impl Ingested {
         build_project_options(&filtered, currency)
     }
 
+    pub fn limits(&self, tool: Tool, currency: &CurrencyFormatter) -> LimitsData {
+        build_limits_data(&self.limits, &self.calls, tool, currency)
+    }
+
     pub fn is_empty(&self) -> bool {
-        self.calls.is_empty()
+        self.calls.is_empty() && self.limits.is_empty()
     }
 
     pub fn project_inventory(&self) -> Vec<ProjectInventoryRow> {
@@ -160,6 +169,309 @@ fn in_period(call: &ParsedCall, period: Period, now: DateTime<Local>) -> bool {
         Period::ThirtyDays => date >= today - Duration::days(29),
         Period::Month => date.year() == today.year() && date.month() == today.month(),
         Period::AllTime => true,
+    }
+}
+
+fn build_limits_data(
+    limits: &[LimitSnapshot],
+    calls: &[ParsedCall],
+    _tool: Tool,
+    currency: &CurrencyFormatter,
+) -> LimitsData {
+    let mut latest: HashMap<(&'static str, String), &LimitSnapshot> = HashMap::new();
+
+    for limit in limits {
+        let key = (limit.tool, limit.limit_id.clone());
+        match latest.get(&key) {
+            Some(existing) if !limit_is_newer(limit, existing) => {}
+            _ => {
+                latest.insert(key, limit);
+            }
+        }
+    }
+
+    let mut rows = Vec::new();
+    for limit in latest.into_values() {
+        if let Some(window) = limit.primary {
+            rows.push(limit_metric(limit, window));
+        }
+        if let Some(window) = limit.secondary {
+            rows.push(limit_metric(limit, window));
+        }
+    }
+
+    rows.sort_by(|a, b| {
+        a.tool
+            .cmp(b.tool)
+            .then_with(|| a.scope.cmp(b.scope))
+            .then_with(|| window_rank(a.window).cmp(&window_rank(b.window)))
+            .then_with(|| a.window.cmp(b.window))
+    });
+
+    let mut limits_by_tool: HashMap<&'static str, Vec<LimitMetric>> = HashMap::new();
+    for row in rows {
+        limits_by_tool.entry(row.tool).or_default().push(row);
+    }
+
+    LimitsData {
+        sections: build_tool_limit_sections(calls, limits_by_tool, currency),
+    }
+}
+
+#[derive(Default)]
+struct ModelAcc {
+    calls: u64,
+    tokens: u64,
+    cost: f64,
+}
+
+fn build_tool_limit_sections(
+    calls: &[ParsedCall],
+    mut limits_by_tool: HashMap<&'static str, Vec<LimitMetric>>,
+    currency: &CurrencyFormatter,
+) -> Vec<ToolLimitSection> {
+    #[derive(Default)]
+    struct Acc {
+        buckets: [u64; 24],
+        calls: u64,
+        tokens: u64,
+        cost: f64,
+        last_seen: Option<DateTime<Local>>,
+        models: HashMap<String, ModelAcc>,
+    }
+
+    const TOOLS: [(&str, &str); 4] = [
+        ("codex", "Codex"),
+        ("claude-code", "Claude Code"),
+        ("cursor", "Cursor"),
+        ("copilot", "Copilot"),
+    ];
+
+    let now = Local::now();
+    let mut by_tool: HashMap<&str, Acc> =
+        TOOLS.iter().map(|(id, _)| (*id, Acc::default())).collect();
+    let display_lookup = tool_display_lookup();
+
+    for call in calls {
+        let Some(acc) = by_tool.get_mut(call.tool) else {
+            continue;
+        };
+        let Some(ts) = call.timestamp else {
+            continue;
+        };
+        let local = ts.with_timezone(&Local);
+        if local > now {
+            continue;
+        }
+        let elapsed_hours = now.signed_duration_since(local).num_hours();
+        if !(0..24).contains(&elapsed_hours) {
+            continue;
+        }
+
+        let tokens = activity_tokens(call).max(1);
+        let bucket = 23usize.saturating_sub(elapsed_hours as usize);
+        acc.buckets[bucket] = acc.buckets[bucket].saturating_add(tokens);
+        acc.calls += 1;
+        acc.tokens = acc.tokens.saturating_add(tokens);
+        acc.cost += call.cost_usd;
+        acc.last_seen = Some(acc.last_seen.map(|prev| prev.max(local)).unwrap_or(local));
+
+        let model = display_lookup
+            .get(call.tool)
+            .map(|adapter| adapter.model_display(&call.model))
+            .unwrap_or_else(|| call.model.clone());
+        let model_acc = acc.models.entry(model).or_default();
+        model_acc.calls += 1;
+        model_acc.tokens = model_acc.tokens.saturating_add(tokens);
+        model_acc.cost += call.cost_usd;
+    }
+
+    let mut ordered: Vec<(usize, &str, &str, Acc)> = TOOLS
+        .into_iter()
+        .enumerate()
+        .map(|(idx, (id, label))| (idx, id, label, by_tool.remove(id).unwrap_or_default()))
+        .collect();
+    ordered.sort_by(|a, b| b.3.tokens.cmp(&a.3.tokens).then_with(|| a.0.cmp(&b.0)));
+
+    ordered
+        .into_iter()
+        .map(|(_, _, label, acc)| ToolLimitSection {
+            tool: label,
+            limits: limits_by_tool.remove(label).unwrap_or_default(),
+            usage: RecentUsageMetric {
+                buckets: scale_buckets(acc.buckets),
+                calls: acc.calls,
+                tokens: leak(format_compact(acc.tokens)),
+                cost: leak(currency.format_money(acc.cost)),
+                last_seen: leak(format_last_seen(acc.last_seen, now)),
+            },
+            models: recent_model_rows(acc.models, currency),
+        })
+        .collect()
+}
+
+fn tool_display_lookup() -> HashMap<&'static str, Box<dyn tools::ToolAdapter>> {
+    let mut display_lookup: HashMap<&'static str, Box<dyn tools::ToolAdapter>> = HashMap::new();
+    for adapter in tools::registry() {
+        display_lookup.insert(adapter.id(), adapter);
+    }
+    display_lookup
+}
+
+fn recent_model_rows(
+    models: HashMap<String, ModelAcc>,
+    currency: &CurrencyFormatter,
+) -> Vec<RecentModelMetric> {
+    let mut rows: Vec<(String, u64, u64, f64)> = models
+        .into_iter()
+        .map(|(name, acc)| (name, acc.calls, acc.tokens, acc.cost))
+        .collect();
+    rows.sort_by(|a, b| {
+        b.2.cmp(&a.2)
+            .then_with(|| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal))
+            .then_with(|| b.1.cmp(&a.1))
+            .then_with(|| a.0.cmp(&b.0))
+    });
+    let max = rows.first().map(|row| row.2).unwrap_or(0);
+
+    rows.into_iter()
+        .take(3)
+        .map(|(name, calls, tokens, cost)| RecentModelMetric {
+            name: leak(name),
+            calls,
+            tokens: leak(format_compact(tokens)),
+            cost: leak(currency.format_money(cost)),
+            value: if max == 0 {
+                0
+            } else {
+                ((tokens as f64 / max as f64) * 100.0)
+                    .round()
+                    .clamp(1.0, 100.0) as u64
+            },
+        })
+        .collect()
+}
+
+fn activity_tokens(call: &ParsedCall) -> u64 {
+    call.input_tokens
+        .saturating_add(call.output_tokens)
+        .saturating_add(call.cache_creation_input_tokens)
+        .saturating_add(call.cache_read_input_tokens)
+}
+
+fn scale_buckets<const N: usize>(buckets: [u64; N]) -> [u64; N] {
+    let max = buckets.iter().copied().max().unwrap_or(0);
+    if max == 0 {
+        return buckets;
+    }
+
+    buckets.map(|value| {
+        if value == 0 {
+            0
+        } else {
+            ((value as f64 / max as f64) * 100.0)
+                .round()
+                .clamp(1.0, 100.0) as u64
+        }
+    })
+}
+
+fn format_last_seen(last_seen: Option<DateTime<Local>>, now: DateTime<Local>) -> String {
+    let Some(last_seen) = last_seen else {
+        return "-".into();
+    };
+    let minutes = now.signed_duration_since(last_seen).num_minutes().max(0);
+    match minutes {
+        0 => "now".into(),
+        1..=59 => format!("{minutes}m"),
+        60..=1439 => format!("{}h", minutes / 60),
+        _ => format!("{}d", minutes / 1440),
+    }
+}
+
+fn limit_is_newer(candidate: &LimitSnapshot, existing: &LimitSnapshot) -> bool {
+    match (candidate.observed_at, existing.observed_at) {
+        (Some(candidate), Some(existing)) => candidate > existing,
+        (Some(_), None) => true,
+        (None, Some(_)) => false,
+        (None, None) => false,
+    }
+}
+
+fn limit_metric(limit: &LimitSnapshot, window: LimitWindow) -> LimitMetric {
+    let used = window.used_percent.round().clamp(0.0, 100.0) as u64;
+    let left = (100.0 - window.used_percent).round().clamp(0.0, 100.0) as u64;
+    LimitMetric {
+        tool: tool_short_label(limit.tool),
+        scope: leak(
+            limit
+                .limit_name
+                .clone()
+                .unwrap_or_else(|| tool_short_label(limit.tool).to_string()),
+        ),
+        window: leak(format_window(window.window_minutes)),
+        used,
+        left: leak(format!("{left}% left")),
+        reset: leak(format_reset(window.resets_at)),
+        plan: leak(
+            limit
+                .plan_type
+                .as_deref()
+                .map(format_plan_type)
+                .unwrap_or_else(|| "-".into()),
+        ),
+    }
+}
+
+fn window_rank(label: &str) -> u8 {
+    match label {
+        "5h" => 0,
+        "weekly" => 1,
+        _ => 2,
+    }
+}
+
+fn format_window(minutes: u64) -> String {
+    match minutes {
+        300 => "5h".into(),
+        10080 => "weekly".into(),
+        m if m >= 1440 && m % 1440 == 0 => format!("{}d", m / 1440),
+        m if m >= 60 && m % 60 == 0 => format!("{}h", m / 60),
+        m => format!("{m}m"),
+    }
+}
+
+fn format_reset(ts: Option<chrono::DateTime<chrono::Utc>>) -> String {
+    let Some(ts) = ts else {
+        return "-".into();
+    };
+    let local = ts.with_timezone(&Local);
+    if local.date_naive() == Local::now().date_naive() {
+        local.format("%H:%M").to_string()
+    } else {
+        local.format("%d %b %H:%M").to_string()
+    }
+}
+
+fn format_plan_type(plan: &str) -> String {
+    match plan {
+        "prolite" => "Pro Lite".into(),
+        "plus" => "Plus".into(),
+        "pro" => "Pro".into(),
+        other => other
+            .split(['_', '-'])
+            .filter(|part| !part.is_empty())
+            .map(|part| {
+                let mut chars = part.chars();
+                match chars.next() {
+                    Some(first) => {
+                        first.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase()
+                    }
+                    None => String::new(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
     }
 }
 
@@ -840,6 +1152,53 @@ mod tests {
         }
     }
 
+    fn mk_limit(
+        id: &str,
+        name: Option<&str>,
+        observed_at: &str,
+        primary_used: f64,
+        secondary_used: f64,
+    ) -> LimitSnapshot {
+        LimitSnapshot {
+            tool: "codex",
+            limit_id: id.into(),
+            limit_name: name.map(Into::into),
+            plan_type: Some("prolite".into()),
+            observed_at: DateTime::parse_from_rfc3339(observed_at)
+                .ok()
+                .map(|d| d.with_timezone(&chrono::Utc)),
+            primary: Some(LimitWindow {
+                used_percent: primary_used,
+                window_minutes: 300,
+                resets_at: DateTime::parse_from_rfc3339("2026-04-29T15:47:00Z")
+                    .ok()
+                    .map(|d| d.with_timezone(&chrono::Utc)),
+            }),
+            secondary: Some(LimitWindow {
+                used_percent: secondary_used,
+                window_minutes: 10080,
+                resets_at: DateTime::parse_from_rfc3339("2026-05-05T06:00:00Z")
+                    .ok()
+                    .map(|d| d.with_timezone(&chrono::Utc)),
+            }),
+            credits: None,
+            rate_limit_reached_type: None,
+        }
+    }
+
+    fn mk_recent_call(tool: &'static str, cost: f64, input_tokens: u64) -> ParsedCall {
+        ParsedCall {
+            tool,
+            timestamp: Some(chrono::Utc::now()),
+            cost_usd: cost,
+            input_tokens,
+            session_id: "recent".into(),
+            project: "/Users/me/Code/widgets".into(),
+            model: "test-model".into(),
+            ..ParsedCall::default()
+        }
+    }
+
     #[test]
     fn period_today_filters_correctly() {
         use chrono::TimeZone;
@@ -863,6 +1222,114 @@ mod tests {
     }
 
     #[test]
+    fn limits_use_latest_snapshot_and_flatten_windows() {
+        let ingested = Ingested {
+            calls: Vec::new(),
+            limits: vec![
+                mk_limit("codex", None, "2026-04-29T08:00:00Z", 80.0, 40.0),
+                mk_limit("codex", None, "2026-04-29T09:00:00Z", 17.0, 6.0),
+            ],
+        };
+
+        let data = ingested.limits(Tool::All, &CurrencyFormatter::usd());
+
+        let codex = data
+            .sections
+            .iter()
+            .find(|section| section.tool == "Codex")
+            .unwrap();
+        assert_eq!(codex.limits.len(), 2);
+        assert_eq!(codex.limits[0].tool, "Codex");
+        assert_eq!(codex.limits[0].scope, "Codex");
+        assert_eq!(codex.limits[0].window, "5h");
+        assert_eq!(codex.limits[0].used, 17);
+        assert_eq!(codex.limits[0].left, "83% left");
+        assert_eq!(codex.limits[0].plan, "Pro Lite");
+        assert_eq!(codex.limits[1].window, "weekly");
+        assert_eq!(codex.limits[1].used, 6);
+        assert_eq!(codex.limits[1].left, "94% left");
+        assert_eq!(data.sections.len(), 4);
+        assert_eq!(data.sections[0].tool, "Codex");
+        assert_eq!(data.sections[1].tool, "Claude Code");
+    }
+
+    #[test]
+    fn limits_keep_model_specific_rows_and_honor_tool_filter() {
+        let ingested = Ingested {
+            calls: Vec::new(),
+            limits: vec![
+                mk_limit("codex", None, "2026-04-29T08:00:00Z", 17.0, 6.0),
+                mk_limit(
+                    "codex_bengalfox",
+                    Some("GPT-5.3-Codex-Spark"),
+                    "2026-04-29T08:01:00Z",
+                    0.0,
+                    0.0,
+                ),
+            ],
+        };
+
+        let codex = ingested.limits(Tool::Codex, &CurrencyFormatter::usd());
+        let claude = ingested.limits(Tool::ClaudeCode, &CurrencyFormatter::usd());
+
+        let codex_section = codex
+            .sections
+            .iter()
+            .find(|section| section.tool == "Codex")
+            .unwrap();
+        let claude_section = claude
+            .sections
+            .iter()
+            .find(|section| section.tool == "Claude Code")
+            .unwrap();
+        assert_eq!(codex_section.limits.len(), 4);
+        assert!(codex
+            .sections
+            .iter()
+            .flat_map(|section| section.limits.iter())
+            .any(|row| row.scope == "GPT-5.3-Codex-Spark"));
+        assert!(claude_section.limits.is_empty());
+        assert_eq!(claude.sections[0].tool, "Codex");
+        assert_eq!(claude.sections.len(), 4);
+    }
+
+    #[test]
+    fn usage_sections_show_last_24_hours_for_all_tools_sorted_by_usage() {
+        let ingested = Ingested {
+            calls: vec![
+                mk_recent_call("codex", 1.0, 100),
+                mk_recent_call("claude-code", 2.0, 200),
+                mk_recent_call("cursor", 3.0, 300),
+                mk_recent_call("copilot", 4.0, 400),
+            ],
+            limits: Vec::new(),
+        };
+
+        let data = ingested.limits(Tool::ClaudeCode, &CurrencyFormatter::usd());
+        let tools: Vec<&str> = data.sections.iter().map(|row| row.tool).collect();
+
+        assert_eq!(tools, vec!["Copilot", "Cursor", "Claude Code", "Codex"]);
+        assert!(data
+            .sections
+            .iter()
+            .all(|section| section.limits.is_empty()));
+        assert!(data.sections.iter().all(|section| section.usage.calls == 1));
+        assert!(data
+            .sections
+            .iter()
+            .all(|section| section.usage.buckets[23] == 100));
+        let claude = data
+            .sections
+            .iter()
+            .find(|section| section.tool == "Claude Code")
+            .unwrap();
+        assert_eq!(claude.usage.tokens, "200");
+        assert_eq!(claude.usage.cost, "$2.00");
+        assert_eq!(claude.models[0].name, "test-model");
+        assert_eq!(claude.models[0].calls, 1);
+    }
+
+    #[test]
     fn project_costs_roll_up_across_tools() {
         let ingested = Ingested {
             calls: vec![
@@ -870,6 +1337,7 @@ mod tests {
                 mk_project_call("codex", "s1", "/Users/me/Code/widgets", 3.0),
                 mk_project_call("cursor", "s2", "/Users/me/Code/widgets", 5.0),
             ],
+            limits: Vec::new(),
         };
 
         let data = ingested.dashboard(
@@ -896,6 +1364,7 @@ mod tests {
                 mk_project_call("claude-code", "s1", "/Users/me/Code/ai-commit-dev", 2.0),
                 mk_project_call("codex", "s2", "/Users/me/Code/ai-commit-dev", 3.0),
             ],
+            limits: Vec::new(),
         };
 
         let data = ingested.dashboard(
@@ -919,6 +1388,7 @@ mod tests {
                 mk_project_call("codex", "s2", "/Users/me/Code/widgets", 3.0),
                 mk_project_call("codex", "s3", "/Users/me/Code/widgets/", 5.0),
             ],
+            limits: Vec::new(),
         };
 
         let rows = ingested.project_inventory();
@@ -941,6 +1411,7 @@ mod tests {
                 mk_project_call("codex", "s2", "/Users/me/Code/widgets", 3.0),
                 mk_project_call("codex", "s3", "/Users/me/Code/widgets/", 5.0),
             ],
+            limits: Vec::new(),
         };
 
         let options =
@@ -961,6 +1432,7 @@ mod tests {
                 mk_project_call("claude-code", "s1", "/Users/me/Code/tokens", 2.0),
                 mk_project_call("codex", "s2", "/Users/me/Code/dvr/tokens", 3.0),
             ],
+            limits: Vec::new(),
         };
 
         let data = ingested.dashboard(
@@ -997,6 +1469,7 @@ mod tests {
                 mk_project_call("codex", "s1", &nested_dvr, 2.0),
                 mk_project_call("claude-code", "s2", &tokens, 3.0),
             ],
+            limits: Vec::new(),
         };
 
         let data = ingested.dashboard(
@@ -1023,6 +1496,7 @@ mod tests {
                 mk_project_call("claude-code", "s1", "/Users/me/Code/widgets", 2.0),
                 mk_project_call("codex", "s1", "/Users/me/Code/widgets", 3.0),
             ],
+            limits: Vec::new(),
         };
 
         let data = ingested.dashboard(
@@ -1053,6 +1527,7 @@ mod tests {
 
         let ingested = Ingested {
             calls: vec![widgets, blog],
+            limits: Vec::new(),
         };
         let filter = ProjectFilter::Selected {
             identity: "/Users/me/Code/widgets".into(),
@@ -1090,6 +1565,7 @@ mod tests {
                 mk_project_call("claude-code", "shared", "/Users/me/Code/widgets", 2.0),
                 mk_project_call("codex", "shared", "/Users/me/Code/widgets", 3.0),
             ],
+            limits: Vec::new(),
         };
 
         let data = ingested.dashboard(
@@ -1112,6 +1588,7 @@ mod tests {
                 mk_project_call("codex", "a2", "/Users/me/Code/a", 9.0),
                 mk_project_call("cursor", "b1", "/Users/me/Code/b", 10.0),
             ],
+            limits: Vec::new(),
         };
 
         let data = ingested.dashboard(

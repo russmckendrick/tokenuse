@@ -8,8 +8,8 @@ use ratatui::{
 use crate::{
     app::{App, Page, Period},
     data::{
-        CountMetric, DailyMetric, ModelMetric, ProjectMetric, ProjectToolMetric, SessionMetric,
-        Summary,
+        CountMetric, DailyMetric, ModelMetric, ProjectMetric, ProjectToolMetric, RecentModelMetric,
+        RecentUsageMetric, SessionMetric, Summary, ToolLimitSection,
     },
     theme,
 };
@@ -305,6 +305,152 @@ pub(super) fn render_counts(
     frame.render_widget(table, area);
 }
 
+pub(super) fn render_limits(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(8),
+            Constraint::Length(3),
+        ])
+        .split(area);
+
+    let data = app.usage();
+
+    render_limits_header(frame, sections[0], app);
+    let tool_sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Ratio(1, 4),
+            Constraint::Ratio(1, 4),
+            Constraint::Ratio(1, 4),
+            Constraint::Ratio(1, 4),
+        ])
+        .split(sections[2]);
+
+    for (idx, section) in data.sections.iter().enumerate().take(4) {
+        render_tool_usage_section(frame, tool_sections[idx], section);
+    }
+
+    render_footer(frame, sections[3], app);
+    render_project_modal(frame, root, app);
+    render_currency_modal(frame, root, app);
+}
+
+fn render_limits_header(frame: &mut Frame<'_>, area: Rect, _app: &App) {
+    let columns = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .split(area);
+
+    Paragraph::new(Line::from(vec![
+        Span::styled("[ Usage ]", theme::key()),
+        Span::raw("    "),
+        Span::styled("Dashboard", theme::dim()),
+        Span::raw("    "),
+        Span::styled("Config", theme::dim()),
+    ]))
+    .style(theme::base())
+    .render(columns[0], frame.buffer_mut());
+
+    Paragraph::new(Line::from(vec![Span::styled(
+        "sorted by 24h usage",
+        theme::muted(),
+    )]))
+    .style(theme::base())
+    .alignment(Alignment::Right)
+    .render(columns[1], frame.buffer_mut());
+}
+
+fn render_tool_usage_section(frame: &mut Frame<'_>, area: Rect, section: &ToolLimitSection) {
+    let mut rows = Vec::new();
+
+    rows.push(Row::new(vec![
+        Cell::from("usage").style(theme::key()),
+        Cell::from("24h total").style(theme::muted()),
+        usage_cell(&section.usage),
+        Cell::from(section.usage.calls.to_string()).style(theme::base()),
+        Cell::from(section.usage.tokens).style(theme::muted()),
+        Cell::from(section.usage.cost).style(theme::money()),
+        Cell::from(section.usage.last_seen).style(theme::muted()),
+    ]));
+
+    rows.extend(section.limits.iter().map(|limit| {
+        Row::new(vec![
+            Cell::from("limit").style(theme::base().fg(theme::CYAN)),
+            Cell::from(format!("{} {}", limit.scope, limit.window)).style(theme::muted()),
+            bar_cell(limit.used),
+            Cell::from(limit.left).style(theme::base()),
+            Cell::from(limit.reset).style(theme::muted()),
+            Cell::from(limit.plan).style(theme::base().fg(theme::YELLOW_SOFT)),
+            Cell::from(""),
+        ])
+    }));
+
+    rows.extend(section.models.iter().map(model_row));
+
+    let title = format!("{} · 24h usage + models", section.tool);
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(7),
+            Constraint::Min(22),
+            Constraint::Length(24),
+            Constraint::Length(10),
+            Constraint::Length(14),
+            Constraint::Length(12),
+            Constraint::Length(8),
+        ],
+    )
+    .header(Row::new(vec![
+        Cell::from("kind").style(theme::dim()),
+        Cell::from("name").style(theme::dim()),
+        Cell::from("24h / used").style(theme::dim()),
+        Cell::from("calls / left").style(theme::dim()),
+        Cell::from("tokens / reset").style(theme::dim()),
+        Cell::from("cost / plan").style(theme::dim()),
+        Cell::from("seen").style(theme::dim()),
+    ]))
+    .column_spacing(1)
+    .block(theme::panel_block(&title, theme::MAGENTA));
+
+    frame.render_widget(table, area);
+}
+
+fn model_row(model: &RecentModelMetric) -> Row<'static> {
+    Row::new(vec![
+        Cell::from("model").style(theme::base().fg(theme::BLUE_SOFT)),
+        Cell::from(model.name).style(theme::muted()),
+        bar_cell(model.value),
+        Cell::from(model.calls.to_string()).style(theme::base()),
+        Cell::from(model.tokens).style(theme::muted()),
+        Cell::from(model.cost).style(theme::money()),
+        Cell::from(""),
+    ])
+}
+
+fn usage_cell(usage: &RecentUsageMetric) -> Cell<'static> {
+    let spans = usage
+        .buckets
+        .into_iter()
+        .map(|value| {
+            let color = if value == 0 {
+                theme::BAR_EMPTY
+            } else if value < 34 {
+                theme::BLUE_SOFT
+            } else if value < 67 {
+                theme::CYAN
+            } else {
+                theme::PRIMARY
+            };
+            Span::styled(" ", theme::base().bg(color))
+        })
+        .collect::<Vec<_>>();
+
+    Cell::from(Line::from(spans))
+}
+
 pub(super) fn render_config(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
     let sections = Layout::default()
         .direction(Direction::Vertical)
@@ -435,6 +581,26 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
         return;
     }
 
+    if app.page == Page::Usage {
+        let commands = Line::from(vec![
+            Span::styled("q", theme::key()),
+            Span::styled(" quit    ", theme::muted()),
+            Span::styled("Esc", theme::key()),
+            Span::styled(" dashboard    ", theme::muted()),
+            Span::styled("u", theme::key()),
+            Span::styled(" dashboard    ", theme::muted()),
+            Span::styled("c", theme::key()),
+            Span::styled(" config", theme::muted()),
+        ]);
+
+        Paragraph::new(commands)
+            .alignment(Alignment::Center)
+            .block(theme::panel_block("", theme::DIM))
+            .style(theme::base())
+            .render(area, frame.buffer_mut());
+        return;
+    }
+
     let commands = Line::from(vec![
         Span::styled("q", theme::key()),
         Span::styled(" quit    ", theme::muted()),
@@ -453,7 +619,9 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Span::styled("p", theme::key()),
         Span::styled(" project    ", theme::muted()),
         Span::styled("c", theme::key()),
-        Span::styled(" config", theme::muted()),
+        Span::styled(" config    ", theme::muted()),
+        Span::styled("u", theme::key()),
+        Span::styled(" usage", theme::muted()),
     ]);
 
     Paragraph::new(commands)

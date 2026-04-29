@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use color_eyre::Result;
 
-use super::{ParsedCall, SessionSource, ToolAdapter};
+use super::{LimitSnapshot, ParsedCall, SessionSource, ToolAdapter};
 
 pub mod config;
 pub mod discovery;
@@ -25,6 +25,10 @@ impl ToolAdapter for Codex {
 
     fn parse(&self, source: &SessionSource, seen: &mut HashSet<String>) -> Result<Vec<ParsedCall>> {
         parser::parse_session(source, seen)
+    }
+
+    fn parse_limits(&self, source: &SessionSource) -> Result<Vec<LimitSnapshot>> {
+        parser::parse_session_limits(source)
     }
 
     fn model_display(&self, model: &str) -> String {

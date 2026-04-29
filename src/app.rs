@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 
 use crate::config::{ConfigPaths, UserConfig};
 use crate::currency::{CurrencyFormatter, CurrencyTable};
-use crate::data::{DashboardData, ProjectOption};
+use crate::data::{DashboardData, LimitsData, ProjectOption};
 use crate::ingest::Ingested;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -57,6 +57,7 @@ pub enum Tool {
 pub enum Page {
     Dashboard,
     Config,
+    Usage,
 }
 
 impl Tool {
@@ -222,6 +223,14 @@ impl App {
         }
     }
 
+    pub fn usage(&self) -> LimitsData {
+        let currency = self.currency();
+        match &self.source {
+            DataSource::Live(ingested) => ingested.limits(self.tool, &currency),
+            DataSource::Sample => crate::data::limits_data(self.tool),
+        }
+    }
+
     pub fn currency(&self) -> CurrencyFormatter {
         self.currency_table.formatter(&self.settings.currency)
     }
@@ -295,6 +304,11 @@ impl App {
             return;
         }
 
+        if self.page == Page::Usage {
+            self.handle_usage_key(key);
+            return;
+        }
+
         match key.code {
             KeyCode::Esc => self.should_quit = true,
             KeyCode::Char('1') => self.period = Period::Today,
@@ -305,6 +319,7 @@ impl App {
             KeyCode::Char('t') => self.tool = self.tool.next(),
             KeyCode::Char('p') => self.open_project_modal(),
             KeyCode::Char('c') => self.page = Page::Config,
+            KeyCode::Char('u') => self.page = Page::Usage,
             _ => {}
         }
     }
@@ -392,6 +407,16 @@ impl App {
             KeyCode::Home => self.config_selected = 0,
             KeyCode::End => self.config_selected = self.config_rows().len().saturating_sub(1),
             KeyCode::Enter => self.activate_config_row(),
+            _ => {}
+        }
+    }
+
+    fn handle_usage_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('d') | KeyCode::Char('u') => {
+                self.page = Page::Dashboard;
+            }
+            KeyCode::Char('c') => self.page = Page::Config,
             _ => {}
         }
     }
@@ -520,6 +545,49 @@ mod tests {
         app.handle_key(key(KeyCode::Char('t')));
 
         assert_eq!(app.tool, Tool::ClaudeCode);
+    }
+
+    #[test]
+    fn u_opens_usage_and_u_or_escape_returns_dashboard() {
+        let mut app = App::default();
+
+        app.handle_key(key(KeyCode::Char('u')));
+        assert_eq!(app.page, Page::Usage);
+
+        app.handle_key(key(KeyCode::Char('u')));
+        assert_eq!(app.page, Page::Dashboard);
+
+        app.handle_key(key(KeyCode::Char('u')));
+        app.handle_key(key(KeyCode::Esc));
+        assert_eq!(app.page, Page::Dashboard);
+        assert!(!app.should_quit());
+    }
+
+    #[test]
+    fn usage_page_keeps_config_shortcut() {
+        let mut app = App::default();
+
+        app.handle_key(key(KeyCode::Char('u')));
+        assert_eq!(app.page, Page::Usage);
+
+        app.handle_key(key(KeyCode::Char('c')));
+        assert_eq!(app.page, Page::Config);
+    }
+
+    #[test]
+    fn usage_ignores_period_and_project_filters() {
+        let mut app = App::default();
+        app.period = Period::Today;
+        app.project_filter = ProjectFilter::Selected {
+            identity: "missing".into(),
+            label: "missing".into(),
+        };
+
+        app.handle_key(key(KeyCode::Char('u')));
+        let data = app.usage();
+
+        assert_eq!(app.page, Page::Usage);
+        assert!(!data.sections.is_empty());
     }
 
     #[test]

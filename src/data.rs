@@ -15,6 +15,48 @@ pub struct DashboardData {
 }
 
 #[derive(Debug, Clone)]
+pub struct LimitsData {
+    pub sections: Vec<ToolLimitSection>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ToolLimitSection {
+    pub tool: &'static str,
+    pub limits: Vec<LimitMetric>,
+    pub usage: RecentUsageMetric,
+    pub models: Vec<RecentModelMetric>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LimitMetric {
+    pub tool: &'static str,
+    pub scope: &'static str,
+    pub window: &'static str,
+    pub used: u64,
+    pub left: &'static str,
+    pub reset: &'static str,
+    pub plan: &'static str,
+}
+
+#[derive(Debug, Clone)]
+pub struct RecentUsageMetric {
+    pub buckets: [u64; 24],
+    pub calls: u64,
+    pub tokens: &'static str,
+    pub cost: &'static str,
+    pub last_seen: &'static str,
+}
+
+#[derive(Debug, Clone)]
+pub struct RecentModelMetric {
+    pub name: &'static str,
+    pub calls: u64,
+    pub tokens: &'static str,
+    pub cost: &'static str,
+    pub value: u64,
+}
+
+#[derive(Debug, Clone)]
 pub struct Summary {
     pub cost: &'static str,
     pub calls: &'static str,
@@ -196,6 +238,165 @@ pub fn project_options(
     }));
 
     options
+}
+
+pub fn limits_data(_tool: Tool) -> LimitsData {
+    let codex_limits = vec![
+        LimitMetric {
+            tool: "Codex",
+            scope: "Codex",
+            window: "5h",
+            used: 17,
+            left: "83% left",
+            reset: "16:47",
+            plan: "Pro Lite",
+        },
+        LimitMetric {
+            tool: "Codex",
+            scope: "Codex",
+            window: "weekly",
+            used: 6,
+            left: "94% left",
+            reset: "05 May 07:00",
+            plan: "Pro Lite",
+        },
+        LimitMetric {
+            tool: "Codex",
+            scope: "GPT-5.3-Codex-Spark",
+            window: "5h",
+            used: 0,
+            left: "100% left",
+            reset: "19:37",
+            plan: "-",
+        },
+        LimitMetric {
+            tool: "Codex",
+            scope: "GPT-5.3-Codex-Spark",
+            window: "weekly",
+            used: 0,
+            left: "100% left",
+            reset: "06 May 14:37",
+            plan: "-",
+        },
+    ];
+
+    LimitsData {
+        sections: sample_limit_sections(codex_limits),
+    }
+}
+
+fn sample_limit_sections(codex_limits: Vec<LimitMetric>) -> Vec<ToolLimitSection> {
+    vec![
+        ToolLimitSection {
+            tool: "Codex",
+            limits: codex_limits,
+            usage: RecentUsageMetric {
+                buckets: [
+                    0, 0, 12, 24, 8, 0, 18, 30, 42, 17, 5, 0, 0, 0, 18, 48, 66, 21, 9, 0, 36, 75,
+                    44, 11,
+                ],
+                calls: 41,
+                tokens: "1.2M",
+                cost: "$5.38",
+                last_seen: "now",
+            },
+            models: vec![
+                RecentModelMetric {
+                    name: "GPT-5",
+                    calls: 24,
+                    tokens: "820K",
+                    cost: "$3.91",
+                    value: 100,
+                },
+                RecentModelMetric {
+                    name: "GPT-5.3-Codex-Spark",
+                    calls: 17,
+                    tokens: "380K",
+                    cost: "$1.47",
+                    value: 46,
+                },
+            ],
+        },
+        ToolLimitSection {
+            tool: "Claude Code",
+            limits: Vec::new(),
+            usage: RecentUsageMetric {
+                buckets: [
+                    8, 14, 0, 0, 21, 44, 36, 9, 0, 0, 12, 28, 0, 6, 18, 40, 55, 31, 12, 0, 9, 20,
+                    48, 33,
+                ],
+                calls: 73,
+                tokens: "5.8M",
+                cost: "$11.42",
+                last_seen: "18m",
+            },
+            models: vec![
+                RecentModelMetric {
+                    name: "Opus 4.7",
+                    calls: 51,
+                    tokens: "4.9M",
+                    cost: "$10.70",
+                    value: 100,
+                },
+                RecentModelMetric {
+                    name: "Haiku 4.5",
+                    calls: 22,
+                    tokens: "900K",
+                    cost: "$0.72",
+                    value: 18,
+                },
+            ],
+        },
+        ToolLimitSection {
+            tool: "Cursor",
+            limits: Vec::new(),
+            usage: RecentUsageMetric {
+                buckets: [
+                    0, 0, 0, 6, 10, 4, 0, 0, 0, 9, 13, 0, 0, 0, 0, 7, 15, 24, 8, 0, 0, 12, 18, 0,
+                ],
+                calls: 18,
+                tokens: "184K",
+                cost: "$0.92",
+                last_seen: "47m",
+            },
+            models: vec![RecentModelMetric {
+                name: "Sonnet 4.5",
+                calls: 18,
+                tokens: "184K",
+                cost: "$0.92",
+                value: 100,
+            }],
+        },
+        ToolLimitSection {
+            tool: "Copilot",
+            limits: Vec::new(),
+            usage: RecentUsageMetric {
+                buckets: [
+                    4, 7, 0, 0, 0, 16, 22, 5, 0, 8, 0, 0, 0, 0, 0, 10, 29, 20, 5, 0, 0, 7, 0, 0,
+                ],
+                calls: 29,
+                tokens: "96K",
+                cost: "$0.47",
+                last_seen: "2h",
+            },
+            models: vec![
+                RecentModelMetric {
+                    name: "anthropic-auto",
+                    calls: 17,
+                    tokens: "60K",
+                    cost: "$0.31",
+                    value: 100,
+                },
+                RecentModelMetric {
+                    name: "openai-auto",
+                    calls: 12,
+                    tokens: "36K",
+                    cost: "$0.16",
+                    value: 60,
+                },
+            ],
+        },
+    ]
 }
 
 fn apply_project_filter(data: &mut DashboardData, project_filter: &ProjectFilter) {

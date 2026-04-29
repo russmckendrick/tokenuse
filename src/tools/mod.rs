@@ -10,7 +10,7 @@ pub mod jsonl;
 pub mod paths;
 pub mod types;
 
-pub use types::{ParsedCall, SessionSource, Speed};
+pub use types::{LimitCredits, LimitSnapshot, LimitWindow, ParsedCall, SessionSource, Speed};
 
 pub trait ToolAdapter: Send + Sync {
     fn id(&self) -> &'static str;
@@ -19,6 +19,10 @@ pub trait ToolAdapter: Send + Sync {
     fn discover(&self) -> Result<Vec<SessionSource>>;
 
     fn parse(&self, source: &SessionSource, seen: &mut HashSet<String>) -> Result<Vec<ParsedCall>>;
+
+    fn parse_limits(&self, _source: &SessionSource) -> Result<Vec<LimitSnapshot>> {
+        Ok(Vec::new())
+    }
 
     fn model_display(&self, model: &str) -> String {
         model.to_string()

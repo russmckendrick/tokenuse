@@ -1,6 +1,6 @@
 # Codex
 
-OpenAI Codex writes one JSONL "rollout" file per session under a year/month/day tree. Every entry has the shape `{ "timestamp": "...", "type": "...", "payload": { ... } }`; the first line is always a `session_meta` envelope and per-turn usage is reported via `event_msg` events of inner type `token_count`.
+OpenAI Codex writes one JSONL "rollout" file per session under a year/month/day tree. Every entry has the shape `{ "timestamp": "...", "type": "...", "payload": { ... } }`; the first line is always a `session_meta` envelope and per-turn usage is reported via `event_msg` events of inner type `token_count`. Recent Codex builds also attach local rate-limit snapshots to those token-count events.
 
 > Status: implemented (`src/tools/codex/`).
 
@@ -27,9 +27,11 @@ flowchart TD
     D --> E[turn_context updates current model]
     D --> F[response_item buffers tools and bash]
     D --> G[event_msg token_count]
+    D --> I[event_msg rate_limits]
     E --> G
     F --> G
     G -->|last_token_usage present| H[emit ParsedCall]
+    I --> J[emit LimitSnapshot]
 ```
 
 ## Record format
@@ -64,8 +66,21 @@ A rollout is heterogeneous JSONL. The interesting types:
                          "total_token_usage": { "input_tokens": 18193, "cached_input_tokens": 10624,
                                                 "output_tokens": 371, "reasoning_output_tokens": 38,
                                                 "total_tokens": 18564 },
-                         "model_context_window": 258400 } } }
+                         "model_context_window": 258400 },
+               "rate_limits": {
+                 "limit_id": "codex",
+                 "limit_name": null,
+                 "primary": { "used_percent": 17.0, "window_minutes": 300,
+                              "resets_at": 1777477636 },
+                 "secondary": { "used_percent": 6.0, "window_minutes": 10080,
+                                "resets_at": 1777960801 },
+                 "credits": null,
+                 "plan_type": "prolite",
+                 "rate_limit_reached_type": null
+               } } }
 ```
+
+`rate_limits` is parsed even when `info` is null. The Limits page keeps the latest observed snapshot per `(tool, limit_id)` and displays its primary and secondary windows separately, for example `5h` and `weekly`.
 
 `response_item` names map to canonical tool labels:
 
@@ -123,3 +138,4 @@ flowchart LR
 - `payload.cwd` from `session_meta` is the only reliable project signal; absent that, the parser falls back to the `YYYY/MM/DD` discovery label.
 - Codex rolls models mid-session via `turn_context`; the parser tracks the most-recently-set model so each turn is priced correctly. Variants such as `gpt-5.4` resolve through the pricing table's exact, alias, prefix, or fallback lookup path.
 - Cache-creation tokens are not exposed by OpenAI, so `cache_creation_input_tokens` is always zero. The "Cache Written" tile will read 0 for Codex.
+- Limit snapshots are not live API reads. They are the latest local values Codex wrote to session JSONL, and the app still ingests once at startup.

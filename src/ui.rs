@@ -16,8 +16,8 @@ use crate::{
 use components::{centered_rect, two_columns};
 use sections::{
     render_config, render_counts, render_currency_modal, render_daily, render_footer,
-    render_models, render_nav, render_project_modal, render_project_tools, render_projects,
-    render_sessions, render_summary,
+    render_limits, render_models, render_nav, render_project_modal, render_project_tools,
+    render_projects, render_sessions, render_summary,
 };
 
 pub fn render(frame: &mut Frame<'_>, app: &App) {
@@ -39,6 +39,7 @@ pub fn render(frame: &mut Frame<'_>, app: &App) {
     match app.page {
         Page::Dashboard => render_dashboard(frame, area, root, app),
         Page::Config => render_config(frame, area, root, app),
+        Page::Usage => render_limits(frame, area, root, app),
     }
 }
 
@@ -155,6 +156,7 @@ mod tests {
         assert!(rendered.contains("t tool"));
         assert!(rendered.contains("p project"));
         assert!(rendered.contains("c config"));
+        assert!(rendered.contains("u usage"));
         assert!(!rendered.contains("p tool"));
         assert!(!rendered.contains("switch"));
         assert!(!rendered.contains("optimize"));
@@ -209,6 +211,39 @@ mod tests {
         assert!(rendered.contains("LiteLLM prices"));
         assert!(rendered.contains("Local Files"));
         assert!(rendered.contains("Esc dashboard"));
+    }
+
+    #[test]
+    fn usage_page_render_smoke_test() {
+        let backend = TestBackend::new(170, 64);
+        let mut terminal = Terminal::new(backend).expect("create terminal");
+        let mut app = App::default();
+        app.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::NONE));
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("draw usage page");
+
+        let buffer = terminal.backend().buffer();
+        let rendered = buffer
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+
+        assert!(rendered.contains("Usage"));
+        assert!(rendered.contains("Codex"));
+        assert!(rendered.contains("5h"));
+        assert!(rendered.contains("weekly"));
+        assert!(rendered.contains("% left"));
+        assert!(rendered.contains("24h"));
+        assert!(rendered.contains("models"));
+        assert!(rendered.contains("Claude Code"));
+        assert!(rendered.contains("Cursor"));
+        assert!(rendered.contains("Copilot"));
+        assert!(rendered.contains("tokens"));
+        assert!(rendered.contains("sorted by 24h usage"));
+        assert!(rendered.contains("c config"));
     }
 
     #[test]
