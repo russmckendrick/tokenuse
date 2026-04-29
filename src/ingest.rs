@@ -8,8 +8,8 @@ use crate::app::{Period, ProjectFilter, Tool};
 use crate::currency::CurrencyFormatter;
 use crate::data::{
     CountMetric, DailyMetric, DashboardData, LimitMetric, LimitsData, ModelMetric, ProjectMetric,
-    ProjectOption, ProjectToolMetric, RecentModelMetric, RecentUsageMetric, SessionMetric, Summary,
-    ToolLimitSection,
+    ProjectOption, ProjectToolMetric, RecentModelMetric, RecentUsageMetric, SessionDetail,
+    SessionDetailView, SessionMetric, SessionOption, Summary, ToolLimitSection,
 };
 use crate::tools::{self, LimitSnapshot, LimitWindow, ParsedCall};
 
@@ -89,6 +89,42 @@ impl Ingested {
 
     pub fn limits(&self, tool: Tool, currency: &CurrencyFormatter) -> LimitsData {
         build_limits_data(&self.limits, &self.calls, tool, currency)
+    }
+
+    pub fn session_options(
+        &self,
+        period: Period,
+        tool: Tool,
+        project_filter: &ProjectFilter,
+        currency: &CurrencyFormatter,
+    ) -> Vec<SessionOption> {
+        let now = Local::now();
+        let filtered: Vec<&ParsedCall> = self
+            .calls
+            .iter()
+            .filter(|c| {
+                matches_tool(c, tool)
+                    && matches_project(c, project_filter)
+                    && in_period(c, period, now)
+            })
+            .collect();
+        build_session_options(&filtered, currency)
+    }
+
+    pub fn session_detail(
+        &self,
+        key: &str,
+        currency: &CurrencyFormatter,
+    ) -> Option<SessionDetailView> {
+        let matching: Vec<&ParsedCall> = self
+            .calls
+            .iter()
+            .filter(|c| session_key(c).as_deref() == Some(key))
+            .collect();
+        if matching.is_empty() {
+            return None;
+        }
+        Some(build_session_detail(key, &matching, currency))
     }
 
     pub fn is_empty(&self) -> bool {
@@ -791,6 +827,206 @@ fn aggregate_sessions(
         .collect()
 }
 
+fn build_session_options(
+    calls: &[&ParsedCall],
+    currency: &CurrencyFormatter,
+) -> Vec<SessionOption> {
+    #[derive(Default)]
+    struct Acc {
+        cost: f64,
+        calls: u64,
+        date: Option<NaiveDate>,
+        project: String,
+        tool: &'static str,
+    }
+    let labels = project_label_lookup(calls.iter().map(|call| call.project.as_str()));
+    let mut by_session: HashMap<String, Acc> = HashMap::new();
+    for c in calls {
+        let Some(key) = session_key(c) else {
+            continue;
+        };
+        let entry = by_session.entry(key).or_default();
+        entry.cost += c.cost_usd;
+        entry.calls += 1;
+        if entry.project.is_empty() {
+            entry.project = project_identity(&c.project);
+        }
+        if entry.tool.is_empty() {
+            entry.tool = c.tool;
+        }
+        if let Some(ts) = c.timestamp {
+            let d = ts.with_timezone(&Local).date_naive();
+            entry.date = Some(entry.date.map(|prev| prev.max(d)).unwrap_or(d));
+        }
+    }
+
+    let mut rows: Vec<(String, Acc)> = by_session.into_iter().collect();
+    rows.sort_by(|a, b| {
+        b.1.cost
+            .partial_cmp(&a.1.cost)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| b.1.calls.cmp(&a.1.calls))
+    });
+    let max = rows.first().map(|r| r.1.cost).unwrap_or(0.0);
+
+    rows.into_iter()
+        .map(|(key, acc)| SessionOption {
+            key,
+            date: acc
+                .date
+                .map(|d| d.format("%Y-%m-%d").to_string())
+                .unwrap_or_else(|| "-".into()),
+            project: project_label(&labels, &acc.project),
+            tool: tool_short_label(acc.tool),
+            cost: currency.format_money(acc.cost),
+            calls: acc.calls,
+            value: scale(acc.cost, max),
+        })
+        .collect()
+}
+
+fn build_session_detail(
+    key: &str,
+    calls: &[&ParsedCall],
+    currency: &CurrencyFormatter,
+) -> SessionDetailView {
+    let mut sorted: Vec<&ParsedCall> = calls.to_vec();
+    sorted.sort_by_key(|c| c.timestamp);
+
+    let display_lookup = tool_display_lookup();
+
+    let total_cost: f64 = sorted.iter().map(|c| c.cost_usd).sum();
+    let total_calls = sorted.len() as u64;
+    let total_input: u64 = sorted
+        .iter()
+        .map(|c| c.input_tokens.saturating_add(c.cached_input_tokens))
+        .sum();
+    let total_output: u64 = sorted.iter().map(|c| c.output_tokens).sum();
+    let total_cache_read: u64 = sorted.iter().map(|c| c.cache_read_input_tokens).sum();
+
+    let first_date = sorted.iter().filter_map(|c| c.timestamp).min();
+    let last_date = sorted.iter().filter_map(|c| c.timestamp).max();
+    let date_range = match (first_date, last_date) {
+        (Some(a), Some(b)) if a.date_naive() == b.date_naive() => {
+            a.with_timezone(&Local).format("%Y-%m-%d").to_string()
+        }
+        (Some(a), Some(b)) => format!(
+            "{} → {}",
+            a.with_timezone(&Local).format("%Y-%m-%d"),
+            b.with_timezone(&Local).format("%Y-%m-%d")
+        ),
+        _ => "-".into(),
+    };
+
+    let project = sorted
+        .first()
+        .map(|c| project_identity(&c.project))
+        .unwrap_or_default();
+    let labels = project_label_lookup(std::iter::once(project.as_str()));
+    let project_label = project_label(&labels, &project);
+    let session_id = sorted
+        .first()
+        .map(|c| c.session_id.clone())
+        .unwrap_or_default();
+    let tool_label = sorted
+        .first()
+        .map(|c| tool_short_label(c.tool))
+        .unwrap_or("Other");
+
+    let detail_calls = sorted
+        .iter()
+        .map(|c| {
+            let model = display_lookup
+                .get(c.tool)
+                .map(|adapter| adapter.model_display(&c.model))
+                .unwrap_or_else(|| c.model.clone());
+            let timestamp = c
+                .timestamp
+                .map(|ts| ts.with_timezone(&Local).format("%m-%d %H:%M").to_string())
+                .unwrap_or_else(|| "-".into());
+            let mut tools = c
+                .tools
+                .iter()
+                .filter(|t| !t.starts_with("mcp__"))
+                .cloned()
+                .collect::<Vec<_>>();
+            for t in &c.tools {
+                if let Some(rest) = t.strip_prefix("mcp__") {
+                    let server = rest.split("__").next().unwrap_or(rest);
+                    tools.push(format!("mcp:{server}"));
+                }
+            }
+            let tools_text = if tools.is_empty() {
+                "-".into()
+            } else {
+                tools.join(", ")
+            };
+            SessionDetail {
+                timestamp,
+                model,
+                cost: currency.format_money(c.cost_usd),
+                input_tokens: c.input_tokens.saturating_add(c.cached_input_tokens),
+                output_tokens: c.output_tokens,
+                cache_read: c.cache_read_input_tokens,
+                cache_write: c.cache_creation_input_tokens,
+                tools: tools_text,
+                prompt: snippet(&c.user_message, 120),
+            }
+        })
+        .collect();
+
+    SessionDetailView {
+        key: key.into(),
+        session_id,
+        project: project_label,
+        tool: tool_label,
+        date_range,
+        total_cost: currency.format_money(total_cost),
+        total_calls,
+        total_input: format_compact(total_input),
+        total_output: format_compact(total_output),
+        total_cache_read: format_compact(total_cache_read),
+        calls: detail_calls,
+        note: None,
+    }
+}
+
+fn snippet(text: &str, max: usize) -> String {
+    let cleaned: String = text
+        .chars()
+        .map(|c| {
+            if c == '\n' || c == '\r' || c == '\t' {
+                ' '
+            } else if c.is_control() {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect();
+    let mut compacted = String::with_capacity(cleaned.len());
+    let mut last_space = false;
+    for c in cleaned.chars() {
+        if c == ' ' {
+            if !last_space {
+                compacted.push(' ');
+            }
+            last_space = true;
+        } else {
+            compacted.push(c);
+            last_space = false;
+        }
+    }
+    let trimmed = compacted.trim();
+    if trimmed.chars().count() <= max {
+        trimmed.to_string()
+    } else {
+        let mut out: String = trimmed.chars().take(max.saturating_sub(1)).collect();
+        out.push('…');
+        out
+    }
+}
+
 fn aggregate_models(calls: &[&ParsedCall], currency: &CurrencyFormatter) -> Vec<ModelMetric> {
     #[derive(Default)]
     struct Acc {
@@ -1095,13 +1331,17 @@ mod tests {
 
     impl TempDir {
         fn new(name: &str) -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static SEQ: AtomicU64 = AtomicU64::new(0);
+            let seq = SEQ.fetch_add(1, Ordering::Relaxed);
             let path = std::env::temp_dir().join(format!(
-                "tokenuse-ingest-{}-{}-{}",
+                "tokenuse-ingest-{}-{}-{}-{}",
                 std::process::id(),
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
                     .as_nanos(),
+                seq,
                 name
             ));
             std::fs::create_dir_all(&path).unwrap();

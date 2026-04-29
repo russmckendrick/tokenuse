@@ -15,9 +15,10 @@ use crate::{
 
 use components::{centered_rect, two_columns};
 use sections::{
-    render_config, render_counts, render_currency_modal, render_daily, render_footer,
-    render_limits, render_models, render_nav, render_project_modal, render_project_tools,
-    render_projects, render_sessions, render_summary,
+    render_config, render_counts, render_currency_modal, render_daily, render_export_modal,
+    render_footer, render_help_modal, render_limits, render_models, render_nav,
+    render_project_modal, render_project_tools, render_projects, render_session_modal,
+    render_session_page, render_sessions, render_summary,
 };
 
 pub fn render(frame: &mut Frame<'_>, app: &App) {
@@ -40,7 +41,10 @@ pub fn render(frame: &mut Frame<'_>, app: &App) {
         Page::Dashboard => render_dashboard(frame, area, root, app),
         Page::Config => render_config(frame, area, root, app),
         Page::Usage => render_limits(frame, area, root, app),
+        Page::Session => render_session_page(frame, area, root, app),
     }
+
+    render_help_modal(frame, root, app);
 }
 
 fn render_dashboard(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
@@ -98,6 +102,8 @@ fn render_dashboard(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
     render_footer(frame, sections[12], app);
     render_project_modal(frame, root, app);
     render_currency_modal(frame, root, app);
+    render_session_modal(frame, root, app);
+    render_export_modal(frame, root, app);
 }
 
 fn render_small_terminal_notice(frame: &mut Frame<'_>, area: Rect) {
@@ -153,14 +159,46 @@ mod tests {
         assert!(rendered.contains("Daily Activity"));
         assert!(rendered.contains("Project Spend by Tool"));
         assert!(rendered.contains("q quit"));
-        assert!(rendered.contains("t tool"));
-        assert!(rendered.contains("p project"));
-        assert!(rendered.contains("c config"));
-        assert!(rendered.contains("u usage"));
+        assert!(rendered.contains("h help"));
+        assert!(rendered.contains("[t]"));
+        assert!(rendered.contains("[p]"));
         assert!(!rendered.contains("p tool"));
         assert!(!rendered.contains("switch"));
         assert!(!rendered.contains("optimize"));
         assert!(!rendered.contains("compare"));
+    }
+
+    #[test]
+    fn h_opens_help_modal_and_h_or_escape_closes_it() {
+        let backend = TestBackend::new(170, 64);
+        let mut terminal = Terminal::new(backend).expect("create terminal");
+        let mut app = App::default();
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));
+        assert!(app.help_open);
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("draw help modal");
+        let rendered = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(rendered.contains("Help"));
+        assert!(rendered.contains("keybindings"));
+        assert!(rendered.contains("Period"));
+        assert!(rendered.contains("Pickers"));
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));
+        assert!(!app.help_open);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE));
+        assert!(app.help_open);
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(!app.help_open);
     }
 
     #[test]

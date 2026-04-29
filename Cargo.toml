@@ -16,6 +16,7 @@ dirs = "5"
 walkdir = "2"
 rusqlite = { version = "0.31", features = ["bundled"] }
 ureq = { version = "2", features = ["json"], optional = true }
+plotters = { version = "0.3", default-features = false, features = ["svg_backend", "bitmap_backend", "bitmap_encoder", "line_series", "ttf"] }
 
 [features]
 default = []

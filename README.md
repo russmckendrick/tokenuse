@@ -47,8 +47,14 @@ Project names are normalized across tools. Absolute paths are folded to the near
 - `4`: this month
 - `5`: all time
 - `t`: cycle tool filter
-- `p`: open project picker
+- `p`: open project picker (type to search; Backspace to clear last char; Ctrl-U to clear)
 - `c`: open configuration
+- `s`: open session picker (drill into a single session's calls)
+- `u`: open usage page
+- `e`: export current view (JSON, CSV, SVG, PNG) to `<config dir>/exports/`
+- `r`: reload (re-run ingest in place; keeps prior data on failure)
+- `h` or `?`: open the keybinding reference (full list of shortcuts)
+- In the session page: `Up`/`Down`, `PgUp`/`PgDn`, `Home`/`End`, `Esc`/`d` back to dashboard
 - In the project picker: `Up` / `Down`, `Home`, `End`, `Enter`, `Esc`
 - In configuration: `Up` / `Down`, `Home`, `End`, `Enter`, `Esc`
 

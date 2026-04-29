@@ -2,6 +2,7 @@ pub mod app;
 pub mod config;
 pub mod currency;
 pub mod data;
+pub mod export;
 pub mod ingest;
 pub mod pricing;
 pub mod theme;

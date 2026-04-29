@@ -1,7 +1,9 @@
+use serde::Serialize;
+
 use crate::app::{Period, ProjectFilter, Tool};
 use crate::currency::CurrencyFormatter;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct DashboardData {
     pub summary: Summary,
     pub daily: Vec<DailyMetric>,
@@ -56,7 +58,7 @@ pub struct RecentModelMetric {
     pub value: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Summary {
     pub cost: &'static str,
     pub calls: &'static str,
@@ -68,7 +70,7 @@ pub struct Summary {
     pub written: &'static str,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct DailyMetric {
     pub day: &'static str,
     pub cost: &'static str,
@@ -76,7 +78,7 @@ pub struct DailyMetric {
     pub value: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ProjectMetric {
     pub name: &'static str,
     pub cost: &'static str,
@@ -86,7 +88,7 @@ pub struct ProjectMetric {
     pub value: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ProjectToolMetric {
     pub project: &'static str,
     pub tool: &'static str,
@@ -97,7 +99,7 @@ pub struct ProjectToolMetric {
     pub value: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SessionMetric {
     pub date: &'static str,
     pub project: &'static str,
@@ -106,7 +108,7 @@ pub struct SessionMetric {
     pub value: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ModelMetric {
     pub name: &'static str,
     pub cost: &'static str,
@@ -115,7 +117,7 @@ pub struct ModelMetric {
     pub value: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct CountMetric {
     pub name: &'static str,
     pub calls: u64,
@@ -128,6 +130,46 @@ pub struct ProjectOption {
     pub label: String,
     pub cost: String,
     pub calls: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct SessionOption {
+    pub key: String,
+    pub date: String,
+    pub project: String,
+    pub tool: &'static str,
+    pub cost: String,
+    pub calls: u64,
+    pub value: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct SessionDetail {
+    pub timestamp: String,
+    pub model: String,
+    pub cost: String,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_read: u64,
+    pub cache_write: u64,
+    pub tools: String,
+    pub prompt: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SessionDetailView {
+    pub key: String,
+    pub session_id: String,
+    pub project: String,
+    pub tool: &'static str,
+    pub date_range: String,
+    pub total_cost: String,
+    pub total_calls: u64,
+    pub total_input: String,
+    pub total_output: String,
+    pub total_cache_read: String,
+    pub calls: Vec<SessionDetail>,
+    pub note: Option<String>,
 }
 
 impl ProjectOption {
@@ -238,6 +280,50 @@ pub fn project_options(
     }));
 
     options
+}
+
+pub fn session_options(
+    period: Period,
+    tool: Tool,
+    currency: &CurrencyFormatter,
+) -> Vec<SessionOption> {
+    let data = dashboard_data(period, tool, &ProjectFilter::All, currency);
+    data.sessions
+        .iter()
+        .enumerate()
+        .map(|(idx, session)| SessionOption {
+            key: format!("sample:{idx}"),
+            date: session.date.into(),
+            project: session.project.into(),
+            tool: "Sample",
+            cost: session.cost.into(),
+            calls: session.calls,
+            value: session.value,
+        })
+        .collect()
+}
+
+pub fn session_detail(key: &str, _currency: &CurrencyFormatter) -> Option<SessionDetailView> {
+    if !key.starts_with("sample:") {
+        return None;
+    }
+    Some(SessionDetailView {
+        key: key.into(),
+        session_id: key.trim_start_matches("sample:").into(),
+        project: "(sample data)".into(),
+        tool: "Sample",
+        date_range: "-".into(),
+        total_cost: "$0.00".into(),
+        total_calls: 0,
+        total_input: "0".into(),
+        total_output: "0".into(),
+        total_cache_read: "0".into(),
+        calls: Vec::new(),
+        note: Some(
+            "sample data does not include per-call records · run with live sessions to drill in"
+                .into(),
+        ),
+    })
 }
 
 pub fn limits_data(_tool: Tool) -> LimitsData {

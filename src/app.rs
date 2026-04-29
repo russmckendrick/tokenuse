@@ -1,8 +1,9 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::config::{ConfigPaths, UserConfig};
 use crate::currency::{CurrencyFormatter, CurrencyTable};
-use crate::data::{DashboardData, LimitsData, ProjectOption};
+use crate::data::{DashboardData, LimitsData, ProjectOption, SessionDetailView, SessionOption};
+use crate::export::ExportFormat;
 use crate::ingest::Ingested;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -58,6 +59,7 @@ pub enum Page {
     Dashboard,
     Config,
     Usage,
+    Session,
 }
 
 impl Tool {
@@ -123,13 +125,128 @@ impl ProjectFilter {
 #[derive(Debug, Clone)]
 pub struct ProjectModal {
     pub options: Vec<ProjectOption>,
+    pub filtered: Vec<usize>,
+    pub query: String,
     pub selected: usize,
+}
+
+impl ProjectModal {
+    pub fn refilter(&mut self) {
+        let needle = self.query.to_lowercase();
+        self.filtered = self
+            .options
+            .iter()
+            .enumerate()
+            .filter(|(_, option)| {
+                if option.identity.is_none() {
+                    return true;
+                }
+                if needle.is_empty() {
+                    return true;
+                }
+                option.label.to_lowercase().contains(&needle)
+            })
+            .map(|(idx, _)| idx)
+            .collect();
+        if self.filtered.is_empty() {
+            self.selected = 0;
+        } else {
+            let last = self.filtered.len() - 1;
+            self.selected = self.selected.min(last);
+        }
+    }
+
+    pub fn current_option(&self) -> Option<&ProjectOption> {
+        let idx = *self.filtered.get(self.selected)?;
+        self.options.get(idx)
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct CurrencyModal {
     pub options: Vec<String>,
+    pub filtered: Vec<usize>,
+    pub query: String,
     pub selected: usize,
+}
+
+impl CurrencyModal {
+    pub fn refilter(&mut self) {
+        let needle = self.query.to_lowercase();
+        self.filtered = self
+            .options
+            .iter()
+            .enumerate()
+            .filter(|(_, code)| needle.is_empty() || code.to_lowercase().contains(&needle))
+            .map(|(idx, _)| idx)
+            .collect();
+        if self.filtered.is_empty() {
+            self.selected = 0;
+        } else {
+            let last = self.filtered.len() - 1;
+            self.selected = self.selected.min(last);
+        }
+    }
+
+    pub fn current_code(&self) -> Option<&str> {
+        let idx = *self.filtered.get(self.selected)?;
+        self.options.get(idx).map(|s| s.as_str())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ExportModal {
+    pub options: Vec<ExportFormat>,
+    pub selected: usize,
+}
+
+impl ExportModal {
+    pub fn new() -> Self {
+        Self {
+            options: ExportFormat::ALL.to_vec(),
+            selected: 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SessionModal {
+    pub options: Vec<SessionOption>,
+    pub filtered: Vec<usize>,
+    pub query: String,
+    pub selected: usize,
+}
+
+impl SessionModal {
+    pub fn refilter(&mut self) {
+        let needle = self.query.to_lowercase();
+        self.filtered = self
+            .options
+            .iter()
+            .enumerate()
+            .filter(|(_, option)| {
+                if needle.is_empty() {
+                    return true;
+                }
+                option.project.to_lowercase().contains(&needle)
+                    || option.date.to_lowercase().contains(&needle)
+                    || option.key.to_lowercase().contains(&needle)
+                    || option.tool.to_lowercase().contains(&needle)
+            })
+            .map(|(idx, _)| idx)
+            .collect();
+        if self.filtered.is_empty() {
+            self.selected = 0;
+        } else {
+            let last = self.filtered.len() - 1;
+            self.selected = self.selected.min(last);
+        }
+    }
+
+    pub fn current_option(&self) -> Option<&SessionOption> {
+        let idx = *self.filtered.get(self.selected)?;
+        self.options.get(idx)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -151,6 +268,11 @@ pub struct App {
     pub project_filter: ProjectFilter,
     pub project_modal: Option<ProjectModal>,
     pub currency_modal: Option<CurrencyModal>,
+    pub session_modal: Option<SessionModal>,
+    pub export_modal: Option<ExportModal>,
+    pub session_view: Option<SessionDetailView>,
+    pub session_scroll: usize,
+    pub help_open: bool,
     pub config_selected: usize,
     pub settings: UserConfig,
     pub paths: ConfigPaths,
@@ -169,6 +291,11 @@ impl Default for App {
             project_filter: ProjectFilter::All,
             project_modal: None,
             currency_modal: None,
+            session_modal: None,
+            export_modal: None,
+            session_view: None,
+            session_scroll: 0,
+            help_open: false,
             config_selected: 0,
             settings: UserConfig::default(),
             paths: ConfigPaths::default(),
@@ -235,6 +362,224 @@ impl App {
         self.currency_table.formatter(&self.settings.currency)
     }
 
+    pub fn reload(&mut self) {
+        match crate::ingest::load() {
+            Ok(ingested) if !ingested.is_empty() => {
+                let n = ingested.calls.len();
+                self.source = DataSource::Live(ingested);
+                self.status = Some(format!("reloaded · {n} calls"));
+            }
+            Ok(_) => {
+                self.status = Some("reload · no sessions found · prior data kept".into());
+            }
+            Err(e) => {
+                self.status = Some(format!("reload failed · prior data kept ({e})"));
+            }
+        }
+        if let Some(view) = self.session_view.as_ref() {
+            let key = view.key.clone();
+            self.session_view = self.lookup_session_view(&key);
+        }
+    }
+
+    fn session_options(&self) -> Vec<SessionOption> {
+        let currency = self.currency();
+        match &self.source {
+            DataSource::Live(ingested) => {
+                ingested.session_options(self.period, self.tool, &self.project_filter, &currency)
+            }
+            DataSource::Sample => crate::data::session_options(self.period, self.tool, &currency),
+        }
+    }
+
+    fn lookup_session_view(&self, key: &str) -> Option<SessionDetailView> {
+        let currency = self.currency();
+        match &self.source {
+            DataSource::Live(ingested) => ingested.session_detail(key, &currency),
+            DataSource::Sample => crate::data::session_detail(key, &currency),
+        }
+    }
+
+    fn open_session_modal(&mut self) {
+        let options = self.session_options();
+        if options.is_empty() {
+            self.status = Some("no sessions to drill into".into());
+            return;
+        }
+        let filtered: Vec<usize> = (0..options.len()).collect();
+        self.session_modal = Some(SessionModal {
+            options,
+            filtered,
+            query: String::new(),
+            selected: 0,
+        });
+    }
+
+    fn handle_session_modal_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => self.session_modal = None,
+            KeyCode::Up => {
+                if let Some(modal) = self.session_modal.as_mut() {
+                    modal.selected = modal.selected.saturating_sub(1);
+                }
+            }
+            KeyCode::Down => {
+                if let Some(modal) = self.session_modal.as_mut() {
+                    let last = modal.filtered.len().saturating_sub(1);
+                    modal.selected = (modal.selected + 1).min(last);
+                }
+            }
+            KeyCode::Home => {
+                if let Some(modal) = self.session_modal.as_mut() {
+                    modal.selected = 0;
+                }
+            }
+            KeyCode::End => {
+                if let Some(modal) = self.session_modal.as_mut() {
+                    modal.selected = modal.filtered.len().saturating_sub(1);
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(modal) = self.session_modal.as_mut() {
+                    modal.query.pop();
+                    modal.refilter();
+                }
+            }
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if let Some(modal) = self.session_modal.as_mut() {
+                    modal.query.clear();
+                    modal.refilter();
+                }
+            }
+            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if let Some(modal) = self.session_modal.as_mut() {
+                    modal.query.push(c);
+                    modal.refilter();
+                }
+            }
+            KeyCode::Enter => {
+                let key = self
+                    .session_modal
+                    .as_ref()
+                    .and_then(|modal| modal.current_option())
+                    .map(|option| option.key.clone());
+                self.session_modal = None;
+                if let Some(key) = key {
+                    self.enter_session(&key);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn enter_session(&mut self, key: &str) {
+        match self.lookup_session_view(key) {
+            Some(view) => {
+                self.session_view = Some(view);
+                self.session_scroll = 0;
+                self.page = Page::Session;
+            }
+            None => {
+                self.status = Some(format!("session not found · {key}"));
+            }
+        }
+    }
+
+    fn handle_session_page_key(&mut self, key: KeyEvent) {
+        let row_count = self
+            .session_view
+            .as_ref()
+            .map(|view| view.calls.len())
+            .unwrap_or(0);
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('d') => {
+                self.page = Page::Dashboard;
+                self.session_view = None;
+                self.session_scroll = 0;
+            }
+            KeyCode::Up => {
+                self.session_scroll = self.session_scroll.saturating_sub(1);
+            }
+            KeyCode::Down => {
+                let last = row_count.saturating_sub(1);
+                self.session_scroll = (self.session_scroll + 1).min(last);
+            }
+            KeyCode::PageUp => {
+                self.session_scroll = self.session_scroll.saturating_sub(10);
+            }
+            KeyCode::PageDown => {
+                let last = row_count.saturating_sub(1);
+                self.session_scroll = (self.session_scroll + 10).min(last);
+            }
+            KeyCode::Home => self.session_scroll = 0,
+            KeyCode::End => self.session_scroll = row_count.saturating_sub(1),
+            KeyCode::Char('r') => self.reload(),
+            KeyCode::Char('s') => self.open_session_modal(),
+            _ => {}
+        }
+    }
+
+    fn open_export_modal(&mut self) {
+        self.export_modal = Some(ExportModal::new());
+    }
+
+    fn handle_export_modal_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => self.export_modal = None,
+            KeyCode::Up => {
+                if let Some(modal) = self.export_modal.as_mut() {
+                    modal.selected = modal.selected.saturating_sub(1);
+                }
+            }
+            KeyCode::Down => {
+                if let Some(modal) = self.export_modal.as_mut() {
+                    let last = modal.options.len().saturating_sub(1);
+                    modal.selected = (modal.selected + 1).min(last);
+                }
+            }
+            KeyCode::Home => {
+                if let Some(modal) = self.export_modal.as_mut() {
+                    modal.selected = 0;
+                }
+            }
+            KeyCode::End => {
+                if let Some(modal) = self.export_modal.as_mut() {
+                    modal.selected = modal.options.len().saturating_sub(1);
+                }
+            }
+            KeyCode::Enter => {
+                let format = self
+                    .export_modal
+                    .as_ref()
+                    .and_then(|modal| modal.options.get(modal.selected).copied());
+                self.export_modal = None;
+                if let Some(format) = format {
+                    self.run_export(format);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn run_export(&mut self, format: ExportFormat) {
+        let data = self.dashboard();
+        match crate::export::write(
+            &self.paths,
+            format,
+            &data,
+            self.period,
+            self.tool,
+            &self.project_filter,
+        ) {
+            Ok(path) => {
+                self.status = Some(format!("exported {} · {}", format.label(), path.display()));
+            }
+            Err(e) => {
+                self.status = Some(format!("export failed · {e}"));
+            }
+        }
+    }
+
     pub fn config_rows(&self) -> Vec<ConfigRowView> {
         let currency = self.currency();
         let currency_value = if currency.is_usd() {
@@ -284,6 +629,15 @@ impl App {
             return;
         }
 
+        if self.help_open {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('h') | KeyCode::Char('?') => self.help_open = false,
+                KeyCode::Char('q') => self.should_quit = true,
+                _ => {}
+            }
+            return;
+        }
+
         if self.currency_modal.is_some() {
             self.handle_currency_modal_key(key);
             return;
@@ -294,8 +648,23 @@ impl App {
             return;
         }
 
+        if self.session_modal.is_some() {
+            self.handle_session_modal_key(key);
+            return;
+        }
+
+        if self.export_modal.is_some() {
+            self.handle_export_modal_key(key);
+            return;
+        }
+
         if key.code == KeyCode::Char('q') {
             self.should_quit = true;
+            return;
+        }
+
+        if matches!(key.code, KeyCode::Char('h') | KeyCode::Char('?')) {
+            self.help_open = true;
             return;
         }
 
@@ -306,6 +675,11 @@ impl App {
 
         if self.page == Page::Usage {
             self.handle_usage_key(key);
+            return;
+        }
+
+        if self.page == Page::Session {
+            self.handle_session_page_key(key);
             return;
         }
 
@@ -320,6 +694,9 @@ impl App {
             KeyCode::Char('p') => self.open_project_modal(),
             KeyCode::Char('c') => self.page = Page::Config,
             KeyCode::Char('u') => self.page = Page::Usage,
+            KeyCode::Char('r') => self.reload(),
+            KeyCode::Char('s') => self.open_session_modal(),
+            KeyCode::Char('e') => self.open_export_modal(),
             _ => {}
         }
     }
@@ -340,7 +717,7 @@ impl App {
             options.push(ProjectOption::all("$0.00".into(), 0));
         }
 
-        let selected = self
+        let initial = self
             .project_filter
             .identity()
             .and_then(|identity| {
@@ -350,7 +727,15 @@ impl App {
             })
             .unwrap_or(0);
 
-        self.project_modal = Some(ProjectModal { options, selected });
+        let filtered: Vec<usize> = (0..options.len()).collect();
+        let selected = filtered.iter().position(|&i| i == initial).unwrap_or(0);
+
+        self.project_modal = Some(ProjectModal {
+            options,
+            filtered,
+            query: String::new(),
+            selected,
+        });
     }
 
     fn handle_project_modal_key(&mut self, key: KeyEvent) {
@@ -363,7 +748,7 @@ impl App {
             }
             KeyCode::Down => {
                 if let Some(modal) = self.project_modal.as_mut() {
-                    let last = modal.options.len().saturating_sub(1);
+                    let last = modal.filtered.len().saturating_sub(1);
                     modal.selected = (modal.selected + 1).min(last);
                 }
             }
@@ -374,14 +759,32 @@ impl App {
             }
             KeyCode::End => {
                 if let Some(modal) = self.project_modal.as_mut() {
-                    modal.selected = modal.options.len().saturating_sub(1);
+                    modal.selected = modal.filtered.len().saturating_sub(1);
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(modal) = self.project_modal.as_mut() {
+                    modal.query.pop();
+                    modal.refilter();
+                }
+            }
+            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if let Some(modal) = self.project_modal.as_mut() {
+                    modal.query.push(c);
+                    modal.refilter();
+                }
+            }
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if let Some(modal) = self.project_modal.as_mut() {
+                    modal.query.clear();
+                    modal.refilter();
                 }
             }
             KeyCode::Enter => {
                 let selected = self
                     .project_modal
                     .as_ref()
-                    .and_then(|modal| modal.options.get(modal.selected))
+                    .and_then(|modal| modal.current_option())
                     .cloned();
                 if let Some(option) = selected {
                     self.project_filter = ProjectFilter::from_option(&option);
@@ -417,6 +820,7 @@ impl App {
                 self.page = Page::Dashboard;
             }
             KeyCode::Char('c') => self.page = Page::Config,
+            KeyCode::Char('r') => self.reload(),
             _ => {}
         }
     }
@@ -432,11 +836,18 @@ impl App {
 
     fn open_currency_modal(&mut self) {
         let options = self.currency_table.codes();
-        let selected = options
+        let initial = options
             .iter()
             .position(|code| code == self.currency().code())
             .unwrap_or(0);
-        self.currency_modal = Some(CurrencyModal { options, selected });
+        let filtered: Vec<usize> = (0..options.len()).collect();
+        let selected = filtered.iter().position(|&i| i == initial).unwrap_or(0);
+        self.currency_modal = Some(CurrencyModal {
+            options,
+            filtered,
+            query: String::new(),
+            selected,
+        });
     }
 
     fn handle_currency_modal_key(&mut self, key: KeyEvent) {
@@ -449,7 +860,7 @@ impl App {
             }
             KeyCode::Down => {
                 if let Some(modal) = self.currency_modal.as_mut() {
-                    let last = modal.options.len().saturating_sub(1);
+                    let last = modal.filtered.len().saturating_sub(1);
                     modal.selected = (modal.selected + 1).min(last);
                 }
             }
@@ -460,15 +871,33 @@ impl App {
             }
             KeyCode::End => {
                 if let Some(modal) = self.currency_modal.as_mut() {
-                    modal.selected = modal.options.len().saturating_sub(1);
+                    modal.selected = modal.filtered.len().saturating_sub(1);
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(modal) = self.currency_modal.as_mut() {
+                    modal.query.pop();
+                    modal.refilter();
+                }
+            }
+            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if let Some(modal) = self.currency_modal.as_mut() {
+                    modal.query.push(c);
+                    modal.refilter();
+                }
+            }
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if let Some(modal) = self.currency_modal.as_mut() {
+                    modal.query.clear();
+                    modal.refilter();
                 }
             }
             KeyCode::Enter => {
                 let selected = self
                     .currency_modal
                     .as_ref()
-                    .and_then(|modal| modal.options.get(modal.selected))
-                    .cloned();
+                    .and_then(|modal| modal.current_code())
+                    .map(|s| s.to_string());
                 if let Some(code) = selected {
                     self.set_currency(&code);
                 }

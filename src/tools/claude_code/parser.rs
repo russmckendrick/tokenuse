@@ -331,18 +331,23 @@ mod tests {
 
     mod tempfile_lite {
         use std::path::{Path, PathBuf};
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static SEQ: AtomicU64 = AtomicU64::new(0);
 
         pub struct TempDir(PathBuf);
 
         impl TempDir {
             pub fn new() -> Self {
+                let seq = SEQ.fetch_add(1, Ordering::Relaxed);
                 let base = std::env::temp_dir().join(format!(
-                    "tokenuse-test-{}-{}",
+                    "tokenuse-test-{}-{}-{}",
                     std::process::id(),
                     std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap()
-                        .as_nanos()
+                        .as_nanos(),
+                    seq
                 ));
                 std::fs::create_dir_all(&base).unwrap();
                 Self(base)

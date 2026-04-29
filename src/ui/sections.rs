@@ -560,6 +560,417 @@ fn path_line(label: &'static str, value: String) -> Line<'static> {
     ])
 }
 
+pub(super) fn render_session_page(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(4),
+            Constraint::Length(1),
+            Constraint::Min(8),
+            Constraint::Length(3),
+        ])
+        .split(area);
+
+    render_session_header(frame, sections[0], app);
+    render_session_summary(frame, sections[1], app);
+    render_session_calls(frame, sections[3], app);
+    render_footer(frame, sections[4], app);
+    render_session_modal(frame, root, app);
+    render_currency_modal(frame, root, app);
+    render_project_modal(frame, root, app);
+}
+
+fn render_session_header(frame: &mut Frame<'_>, area: Rect, _app: &App) {
+    Paragraph::new(Line::from(vec![
+        Span::styled("[ Session ]", theme::key()),
+        Span::raw("    "),
+        Span::styled("Dashboard", theme::dim()),
+        Span::raw("    "),
+        Span::styled("Config", theme::dim()),
+    ]))
+    .style(theme::base())
+    .render(area, frame.buffer_mut());
+}
+
+fn render_session_summary(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let Some(view) = app.session_view.as_ref() else {
+        let text = Text::from(vec![Line::from(vec![Span::styled(
+            "no session loaded · press s to pick one",
+            theme::muted(),
+        )])]);
+        Paragraph::new(text)
+            .block(theme::panel_block("Session", theme::PRIMARY))
+            .style(theme::base())
+            .render(area, frame.buffer_mut());
+        return;
+    };
+
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled(view.project.as_str(), theme::key()),
+            Span::raw("  "),
+            Span::styled(view.tool, theme::base().fg(theme::YELLOW_SOFT)),
+            Span::raw("  "),
+            Span::styled(view.session_id.as_str(), theme::muted()),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                view.total_cost.as_str(),
+                theme::money().add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" cost   ", theme::muted()),
+            Span::styled(
+                view.total_calls.to_string(),
+                theme::base().add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" calls   ", theme::muted()),
+            Span::styled(view.date_range.as_str(), theme::muted()),
+        ]),
+        Line::from(vec![
+            Span::styled(view.total_input.as_str(), theme::muted()),
+            Span::styled(" in   ", theme::dim()),
+            Span::styled(view.total_output.as_str(), theme::muted()),
+            Span::styled(" out   ", theme::dim()),
+            Span::styled(view.total_cache_read.as_str(), theme::muted()),
+            Span::styled(" cached", theme::dim()),
+        ]),
+    ];
+
+    if let Some(note) = view.note.as_ref() {
+        lines.push(Line::from(vec![Span::styled(note.as_str(), theme::dim())]));
+    }
+
+    Paragraph::new(Text::from(lines))
+        .block(theme::panel_block("Session", theme::PRIMARY))
+        .style(theme::base())
+        .render(area, frame.buffer_mut());
+}
+
+fn render_session_calls(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let Some(view) = app.session_view.as_ref() else {
+        return;
+    };
+
+    let inner_height = area.height.saturating_sub(3) as usize; // header + table header + 1 buffer
+    let total = view.calls.len();
+    let start = app.session_scroll.min(total.saturating_sub(1).max(0));
+    let end = (start + inner_height.max(1)).min(total);
+
+    let rows = view.calls[start..end].iter().map(|call| {
+        Row::new(vec![
+            Cell::from(call.timestamp.clone()).style(theme::muted()),
+            Cell::from(call.model.clone()).style(theme::base()),
+            Cell::from(call.cost.clone()).style(theme::money()),
+            Cell::from(format_compact_u64(call.input_tokens)).style(theme::base()),
+            Cell::from(format_compact_u64(call.output_tokens)).style(theme::base()),
+            Cell::from(format_compact_u64(call.cache_read)).style(theme::muted()),
+            Cell::from(format_compact_u64(call.cache_write)).style(theme::muted()),
+            Cell::from(call.tools.clone()).style(theme::base().fg(theme::BLUE_SOFT)),
+            Cell::from(call.prompt.clone()).style(theme::muted()),
+        ])
+    });
+
+    let title = format!(
+        "Calls · {}–{} of {}",
+        if total == 0 { 0 } else { start + 1 },
+        end,
+        total
+    );
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(11),
+            Constraint::Length(16),
+            Constraint::Length(9),
+            Constraint::Length(7),
+            Constraint::Length(7),
+            Constraint::Length(7),
+            Constraint::Length(7),
+            Constraint::Length(22),
+            Constraint::Min(20),
+        ],
+    )
+    .header(Row::new(vec![
+        Cell::from("time").style(theme::dim()),
+        Cell::from("model").style(theme::dim()),
+        Cell::from("cost").style(theme::dim()),
+        Cell::from("in").style(theme::dim()),
+        Cell::from("out").style(theme::dim()),
+        Cell::from("cache r").style(theme::dim()),
+        Cell::from("cache w").style(theme::dim()),
+        Cell::from("tools").style(theme::dim()),
+        Cell::from("prompt").style(theme::dim()),
+    ]))
+    .column_spacing(1)
+    .block(theme::panel_block(&title, theme::CYAN));
+
+    frame.render_widget(table, area);
+}
+
+fn format_compact_u64(n: u64) -> String {
+    if n >= 1_000_000_000 {
+        format!("{:.1}B", n as f64 / 1_000_000_000.0)
+    } else if n >= 1_000_000 {
+        format!("{:.1}M", n as f64 / 1_000_000.0)
+    } else if n >= 1_000 {
+        format!("{:.1}K", n as f64 / 1_000.0)
+    } else if n == 0 {
+        "-".into()
+    } else {
+        n.to_string()
+    }
+}
+
+pub(super) fn render_help_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    if !app.help_open {
+        return;
+    }
+
+    let width = 80.min(area.width.saturating_sub(4)).max(60);
+    let height = 32.min(area.height.saturating_sub(4)).max(24);
+    let modal_area = centered_rect(width, height, area);
+    Clear.render(modal_area, frame.buffer_mut());
+
+    let block = theme::panel_block("Help · keybindings", theme::PRIMARY);
+    let inner = block.inner(modal_area);
+    block.render(modal_area, frame.buffer_mut());
+
+    let groups: Vec<(&str, Vec<(&str, &str)>)> = vec![
+        (
+            "General",
+            vec![
+                ("q", "quit"),
+                ("h  ?", "toggle this help"),
+                ("Esc", "close modal · back from page"),
+            ],
+        ),
+        (
+            "Period",
+            vec![
+                ("1", "today"),
+                ("2", "7 days"),
+                ("3", "30 days"),
+                ("4", "this month"),
+                ("5", "all time"),
+            ],
+        ),
+        (
+            "Filter",
+            vec![("t", "cycle tool"), ("p", "project picker (typeable)")],
+        ),
+        (
+            "Pages",
+            vec![
+                ("c", "configuration"),
+                ("u", "usage / rate limits"),
+                ("s", "session drill-down"),
+            ],
+        ),
+        (
+            "Actions",
+            vec![
+                ("e", "export current view (JSON / CSV / SVG / PNG)"),
+                ("r", "reload (re-run ingest)"),
+            ],
+        ),
+        (
+            "Pickers",
+            vec![
+                ("type", "filter list as you type"),
+                ("Backspace", "delete last char"),
+                ("Ctrl-U", "clear filter"),
+                ("Up/Down  Home/End", "navigate"),
+                ("Enter", "select"),
+            ],
+        ),
+        (
+            "Session page",
+            vec![
+                ("Up/Down  PgUp/PgDn", "scroll calls"),
+                ("Home/End", "jump to ends"),
+                ("d  Esc", "back to dashboard"),
+            ],
+        ),
+    ];
+
+    let mut lines: Vec<Line> = Vec::new();
+    for (i, (heading, rows)) in groups.iter().enumerate() {
+        if i > 0 {
+            lines.push(Line::from(""));
+        }
+        lines.push(Line::from(vec![Span::styled(
+            *heading,
+            theme::base().fg(theme::CYAN).add_modifier(Modifier::BOLD),
+        )]));
+        for (key, desc) in rows {
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(format!("{key:<22}"), theme::key()),
+                Span::styled((*desc).to_string(), theme::muted()),
+            ]));
+        }
+    }
+
+    Paragraph::new(Text::from(lines))
+        .style(theme::base())
+        .render(inner, frame.buffer_mut());
+}
+
+pub(super) fn render_export_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let Some(modal) = app.export_modal.as_ref() else {
+        return;
+    };
+
+    let width = 60.min(area.width.saturating_sub(4)).max(40);
+    let height = (modal.options.len() as u16 + 4)
+        .min(area.height.saturating_sub(4))
+        .max(8);
+    let modal_area = centered_rect(width, height, area);
+    Clear.render(modal_area, frame.buffer_mut());
+
+    let title = format!(
+        "Export {}/{}",
+        modal.selected.saturating_add(1),
+        modal.options.len().max(1)
+    );
+    let block = theme::panel_block(&title, theme::YELLOW);
+    let inner = block.inner(modal_area);
+    block.render(modal_area, frame.buffer_mut());
+
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1)])
+        .split(inner);
+
+    Paragraph::new(Line::from(vec![
+        Span::styled("Format ", theme::key()),
+        Span::styled(
+            "writes to <config dir>/exports · current period & filters apply",
+            theme::dim(),
+        ),
+    ]))
+    .style(theme::base())
+    .render(layout[0], frame.buffer_mut());
+
+    let rows = modal.options.iter().enumerate().map(|(idx, option)| {
+        let is_selected = idx == modal.selected;
+        let bg = if is_selected {
+            theme::SURFACE
+        } else {
+            theme::BACKGROUND
+        };
+        let marker = if is_selected { ">" } else { " " };
+        Row::new(vec![
+            Cell::from(marker).style(theme::key().bg(bg)),
+            Cell::from(option.label()).style(if is_selected {
+                theme::key().bg(bg)
+            } else {
+                theme::muted().bg(bg)
+            }),
+        ])
+    });
+
+    let table = Table::new(rows, [Constraint::Length(2), Constraint::Min(20)]).column_spacing(1);
+
+    frame.render_widget(table, layout[1]);
+}
+
+pub(super) fn render_session_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let Some(modal) = app.session_modal.as_ref() else {
+        return;
+    };
+
+    let width = 92.min(area.width.saturating_sub(4)).max(60);
+    let height = (modal.filtered.len() as u16 + 4)
+        .min(area.height.saturating_sub(4))
+        .max(10);
+    let modal_area = centered_rect(width, height, area);
+    Clear.render(modal_area, frame.buffer_mut());
+
+    let title = if modal.query.is_empty() {
+        format!(
+            "Session {}/{}",
+            modal.selected.saturating_add(1),
+            modal.filtered.len().max(1)
+        )
+    } else {
+        format!(
+            "Session {}/{} (of {})",
+            modal.selected.saturating_add(1),
+            modal.filtered.len().max(1),
+            modal.options.len()
+        )
+    };
+    let block = theme::panel_block(&title, theme::RED);
+    let inner = block.inner(modal_area);
+    block.render(modal_area, frame.buffer_mut());
+
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1)])
+        .split(inner);
+
+    render_filter_input(frame, layout[0], &modal.query);
+
+    let table_area = layout[1];
+    let row_capacity = table_area.height.saturating_sub(1).max(1) as usize;
+    let selected = modal.selected.min(modal.filtered.len().saturating_sub(1));
+    let start = selected.saturating_add(1).saturating_sub(row_capacity);
+    let end = (start + row_capacity).min(modal.filtered.len());
+
+    let rows = modal.filtered[start..end]
+        .iter()
+        .enumerate()
+        .map(|(offset, &option_idx)| {
+            let idx = start + offset;
+            let option = &modal.options[option_idx];
+            let is_selected = idx == modal.selected;
+            let bg = if is_selected {
+                theme::SURFACE
+            } else {
+                theme::BACKGROUND
+            };
+            let marker = if is_selected { ">" } else { " " };
+
+            Row::new(vec![
+                Cell::from(marker).style(theme::key().bg(bg)),
+                Cell::from(option.date.as_str()).style(theme::muted().bg(bg)),
+                Cell::from(option.tool).style(theme::base().fg(theme::YELLOW_SOFT).bg(bg)),
+                Cell::from(option.project.as_str()).style(if is_selected {
+                    theme::key().bg(bg)
+                } else {
+                    theme::muted().bg(bg)
+                }),
+                Cell::from(option.cost.as_str()).style(theme::money().bg(bg)),
+                Cell::from(option.calls.to_string()).style(theme::base().bg(bg)),
+            ])
+        });
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(2),
+            Constraint::Length(11),
+            Constraint::Length(8),
+            Constraint::Min(20),
+            Constraint::Length(10),
+            Constraint::Length(8),
+        ],
+    )
+    .header(Row::new(vec![
+        Cell::from(""),
+        Cell::from("date").style(theme::dim()),
+        Cell::from("tool").style(theme::dim()),
+        Cell::from("project").style(theme::dim()),
+        Cell::from("cost").style(theme::dim()),
+        Cell::from("calls").style(theme::dim()),
+    ]))
+    .column_spacing(1);
+
+    frame.render_widget(table, table_area);
+}
+
 pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
     if app.page == Page::Config {
         let commands = Line::from(vec![
@@ -570,7 +981,31 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
             Span::styled("Up/Down", theme::key()),
             Span::styled(" move    ", theme::muted()),
             Span::styled("Enter", theme::key()),
-            Span::styled(" select", theme::muted()),
+            Span::styled(" select    ", theme::muted()),
+            Span::styled("h", theme::key()),
+            Span::styled(" help", theme::muted()),
+        ]);
+
+        Paragraph::new(commands)
+            .alignment(Alignment::Center)
+            .block(theme::panel_block("", theme::DIM))
+            .style(theme::base())
+            .render(area, frame.buffer_mut());
+        return;
+    }
+
+    if app.page == Page::Session {
+        let commands = Line::from(vec![
+            Span::styled("q", theme::key()),
+            Span::styled(" quit    ", theme::muted()),
+            Span::styled("Esc/d", theme::key()),
+            Span::styled(" dashboard    ", theme::muted()),
+            Span::styled("Up/Down", theme::key()),
+            Span::styled(" scroll    ", theme::muted()),
+            Span::styled("s", theme::key()),
+            Span::styled(" pick    ", theme::muted()),
+            Span::styled("h", theme::key()),
+            Span::styled(" help", theme::muted()),
         ]);
 
         Paragraph::new(commands)
@@ -587,10 +1022,10 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
             Span::styled(" quit    ", theme::muted()),
             Span::styled("Esc", theme::key()),
             Span::styled(" dashboard    ", theme::muted()),
-            Span::styled("u", theme::key()),
-            Span::styled(" dashboard    ", theme::muted()),
             Span::styled("c", theme::key()),
-            Span::styled(" config", theme::muted()),
+            Span::styled(" config    ", theme::muted()),
+            Span::styled("h", theme::key()),
+            Span::styled(" help", theme::muted()),
         ]);
 
         Paragraph::new(commands)
@@ -614,14 +1049,8 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Span::raw("    "),
         footer_period("5", "all time", app.period == Period::AllTime),
         Span::raw("    "),
-        Span::styled("t", theme::key()),
-        Span::styled(" tool    ", theme::muted()),
-        Span::styled("p", theme::key()),
-        Span::styled(" project    ", theme::muted()),
-        Span::styled("c", theme::key()),
-        Span::styled(" config    ", theme::muted()),
-        Span::styled("u", theme::key()),
-        Span::styled(" usage", theme::muted()),
+        Span::styled("h", theme::key()),
+        Span::styled(" help", theme::muted()),
     ]);
 
     Paragraph::new(commands)
@@ -642,31 +1071,49 @@ pub(super) fn render_project_modal(frame: &mut Frame<'_>, area: Rect, app: &App)
     };
 
     let width = 76.min(area.width.saturating_sub(4)).max(48);
-    let height = (modal.options.len() as u16 + 3)
+    let height = (modal.filtered.len() as u16 + 4)
         .min(area.height.saturating_sub(4))
-        .max(7);
+        .max(8);
     let modal_area = centered_rect(width, height, area);
     Clear.render(modal_area, frame.buffer_mut());
 
-    let title = format!(
-        "Project {}/{}",
-        modal.selected.saturating_add(1),
-        modal.options.len().max(1)
-    );
+    let title = if modal.query.is_empty() {
+        format!(
+            "Project {}/{}",
+            modal.selected.saturating_add(1),
+            modal.filtered.len().max(1)
+        )
+    } else {
+        format!(
+            "Project {}/{} (of {})",
+            modal.selected.saturating_add(1),
+            modal.filtered.len().max(1),
+            modal.options.len()
+        )
+    };
     let block = theme::panel_block(&title, theme::GREEN);
     let inner = block.inner(modal_area);
     block.render(modal_area, frame.buffer_mut());
 
-    let row_capacity = inner.height.saturating_sub(1).max(1) as usize;
-    let selected = modal.selected.min(modal.options.len().saturating_sub(1));
-    let start = selected.saturating_add(1).saturating_sub(row_capacity);
-    let end = (start + row_capacity).min(modal.options.len());
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1)])
+        .split(inner);
 
-    let rows = modal.options[start..end]
+    render_filter_input(frame, layout[0], &modal.query);
+
+    let table_area = layout[1];
+    let row_capacity = table_area.height.saturating_sub(1).max(1) as usize;
+    let selected = modal.selected.min(modal.filtered.len().saturating_sub(1));
+    let start = selected.saturating_add(1).saturating_sub(row_capacity);
+    let end = (start + row_capacity).min(modal.filtered.len());
+
+    let rows = modal.filtered[start..end]
         .iter()
         .enumerate()
-        .map(|(offset, option)| {
+        .map(|(offset, &option_idx)| {
             let idx = start + offset;
+            let option = &modal.options[option_idx];
             let is_selected = idx == modal.selected;
             let bg = if is_selected {
                 theme::SURFACE
@@ -704,7 +1151,31 @@ pub(super) fn render_project_modal(frame: &mut Frame<'_>, area: Rect, app: &App)
     ]))
     .column_spacing(1);
 
-    frame.render_widget(table, inner);
+    frame.render_widget(table, table_area);
+}
+
+fn render_filter_input(frame: &mut Frame<'_>, area: Rect, query: &str) {
+    let line = if query.is_empty() {
+        Line::from(vec![
+            Span::styled("Filter ", theme::key()),
+            Span::styled(
+                "type to search · Backspace to delete · Ctrl-U clear",
+                theme::dim(),
+            ),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled("Filter ", theme::key()),
+            Span::styled(
+                query.to_string(),
+                theme::base().add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("_", theme::muted()),
+        ])
+    };
+    Paragraph::new(line)
+        .style(theme::base())
+        .render(area, frame.buffer_mut());
 }
 
 pub(super) fn render_currency_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
@@ -713,31 +1184,49 @@ pub(super) fn render_currency_modal(frame: &mut Frame<'_>, area: Rect, app: &App
     };
 
     let width = 58.min(area.width.saturating_sub(4)).max(40);
-    let height = (modal.options.len() as u16 + 3)
+    let height = (modal.filtered.len() as u16 + 4)
         .min(area.height.saturating_sub(4))
-        .max(9);
+        .max(10);
     let modal_area = centered_rect(width, height, area);
     Clear.render(modal_area, frame.buffer_mut());
 
-    let title = format!(
-        "Currency {}/{}",
-        modal.selected.saturating_add(1),
-        modal.options.len().max(1)
-    );
+    let title = if modal.query.is_empty() {
+        format!(
+            "Currency {}/{}",
+            modal.selected.saturating_add(1),
+            modal.filtered.len().max(1)
+        )
+    } else {
+        format!(
+            "Currency {}/{} (of {})",
+            modal.selected.saturating_add(1),
+            modal.filtered.len().max(1),
+            modal.options.len()
+        )
+    };
     let block = theme::panel_block(&title, theme::PRIMARY);
     let inner = block.inner(modal_area);
     block.render(modal_area, frame.buffer_mut());
 
-    let row_capacity = inner.height.saturating_sub(1).max(1) as usize;
-    let selected = modal.selected.min(modal.options.len().saturating_sub(1));
-    let start = selected.saturating_add(1).saturating_sub(row_capacity);
-    let end = (start + row_capacity).min(modal.options.len());
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1)])
+        .split(inner);
 
-    let rows = modal.options[start..end]
+    render_filter_input(frame, layout[0], &modal.query);
+
+    let table_area = layout[1];
+    let row_capacity = table_area.height.saturating_sub(1).max(1) as usize;
+    let selected = modal.selected.min(modal.filtered.len().saturating_sub(1));
+    let start = selected.saturating_add(1).saturating_sub(row_capacity);
+    let end = (start + row_capacity).min(modal.filtered.len());
+
+    let rows = modal.filtered[start..end]
         .iter()
         .enumerate()
-        .map(|(offset, code)| {
+        .map(|(offset, &code_idx)| {
             let idx = start + offset;
+            let code = &modal.options[code_idx];
             let is_selected = idx == modal.selected;
             let is_active = code == app.currency().code();
             let bg = if is_selected {
@@ -782,5 +1271,5 @@ pub(super) fn render_currency_modal(frame: &mut Frame<'_>, area: Rect, app: &App
     ]))
     .column_spacing(1);
 
-    frame.render_widget(table, inner);
+    frame.render_widget(table, table_area);
 }
