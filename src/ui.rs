@@ -16,9 +16,9 @@ use crate::{
 use components::{centered_rect, two_columns};
 use sections::{
     render_config, render_counts, render_currency_modal, render_daily, render_export_modal,
-    render_footer, render_help_modal, render_limits, render_models, render_nav,
+    render_footer, render_help_modal, render_kpi_strip, render_limits, render_models,
     render_project_modal, render_project_tools, render_projects, render_session_modal,
-    render_session_page, render_sessions, render_summary,
+    render_session_page, render_sessions, render_summary, render_title_bar,
 };
 
 pub fn render(frame: &mut Frame<'_>, app: &App) {
@@ -38,7 +38,8 @@ pub fn render(frame: &mut Frame<'_>, app: &App) {
     });
 
     match app.page {
-        Page::Dashboard => render_dashboard(frame, area, root, app),
+        Page::Overview => render_overview(frame, area, root, app),
+        Page::DeepDive => render_dashboard(frame, area, root, app),
         Page::Config => render_config(frame, area, root, app),
         Page::Usage => render_limits(frame, area, root, app),
         Page::Session => render_session_page(frame, area, root, app),
@@ -47,11 +48,63 @@ pub fn render(frame: &mut Frame<'_>, app: &App) {
     render_help_modal(frame, root, app);
 }
 
+fn render_overview(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Length(5),
+            Constraint::Length(1),
+            Constraint::Min(11),
+            Constraint::Length(1),
+            Constraint::Min(10),
+            Constraint::Length(3),
+        ])
+        .split(area);
+
+    let data = app.dashboard();
+
+    render_title_bar(frame, sections[0], app);
+    render_kpi_strip(frame, sections[1], app, &data.summary);
+
+    let middle = two_columns(sections[3]);
+    render_daily(frame, middle[0], &data.daily);
+    render_models(frame, middle[1], &data.models);
+
+    let lower = two_columns(sections[5]);
+    render_project_tools(frame, lower[0], &data.project_tools);
+
+    let right_split = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(lower[1]);
+    render_counts(
+        frame,
+        right_split[0],
+        "Shell Commands",
+        theme::PRIMARY,
+        &data.commands,
+    );
+    render_counts(
+        frame,
+        right_split[1],
+        "MCP Servers",
+        theme::MAGENTA,
+        &data.mcp_servers,
+    );
+
+    render_footer(frame, sections[6], app);
+    render_project_modal(frame, root, app);
+    render_currency_modal(frame, root, app);
+    render_session_modal(frame, root, app);
+    render_export_modal(frame, root, app);
+}
+
 fn render_dashboard(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
     let sections = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),
+            Constraint::Length(3),
             Constraint::Length(4),
             Constraint::Length(1),
             Constraint::Length(9),
@@ -69,7 +122,7 @@ fn render_dashboard(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
 
     let data = app.dashboard();
 
-    render_nav(frame, sections[0], app);
+    render_title_bar(frame, sections[0], app);
     render_summary(frame, sections[1], app, &data.summary);
 
     let top = two_columns(sections[3]);
@@ -142,7 +195,8 @@ mod tests {
     fn dashboard_render_smoke_test() {
         let backend = TestBackend::new(170, 64);
         let mut terminal = Terminal::new(backend).expect("create terminal");
-        let app = App::default();
+        let mut app = App::default();
+        app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
 
         terminal
             .draw(|frame| render(frame, &app))
@@ -162,10 +216,42 @@ mod tests {
         assert!(rendered.contains("h help"));
         assert!(rendered.contains("[t]"));
         assert!(rendered.contains("[p]"));
+        assert!(rendered.contains("Tab"));
         assert!(!rendered.contains("p tool"));
         assert!(!rendered.contains("switch"));
         assert!(!rendered.contains("optimize"));
         assert!(!rendered.contains("compare"));
+    }
+
+    #[test]
+    fn overview_render_smoke_test() {
+        let backend = TestBackend::new(170, 64);
+        let mut terminal = Terminal::new(backend).expect("create terminal");
+        let app = App::default();
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("draw overview");
+
+        let buffer = terminal.backend().buffer();
+        let rendered = buffer
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+
+        assert!(rendered.contains("tokenuse"));
+        assert!(rendered.contains("Overview"));
+        assert!(rendered.contains("Deep Dive"));
+        assert!(rendered.contains("Usage"));
+        assert!(rendered.contains("COST"));
+        assert!(rendered.contains("CALLS"));
+        assert!(rendered.contains("CACHE HIT"));
+        assert!(rendered.contains("Daily Activity"));
+        assert!(rendered.contains("Project Spend by Tool"));
+        assert!(rendered.contains("Shell Commands"));
+        assert!(rendered.contains("MCP Servers"));
+        assert!(rendered.contains("Tab"));
     }
 
     #[test]

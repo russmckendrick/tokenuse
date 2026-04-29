@@ -58,10 +58,37 @@ pub enum Tool {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Page {
-    Dashboard,
+    Overview,
+    DeepDive,
     Config,
     Usage,
     Session,
+}
+
+impl Page {
+    pub const TABS: [Page; 3] = [Page::Overview, Page::DeepDive, Page::Usage];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Overview => "Overview",
+            Self::DeepDive => "Deep Dive",
+            Self::Usage => "Usage",
+            Self::Config => "Config",
+            Self::Session => "Session",
+        }
+    }
+
+    pub fn next_tab(self) -> Page {
+        let tabs = Self::TABS;
+        let idx = tabs.iter().position(|p| *p == self).unwrap_or(0);
+        tabs[(idx + 1) % tabs.len()]
+    }
+
+    pub fn prev_tab(self) -> Page {
+        let tabs = Self::TABS;
+        let idx = tabs.iter().position(|p| *p == self).unwrap_or(0);
+        tabs[(idx + tabs.len() - 1) % tabs.len()]
+    }
 }
 
 impl Tool {
@@ -299,7 +326,7 @@ pub struct App {
 impl Default for App {
     fn default() -> Self {
         Self {
-            page: Page::Dashboard,
+            page: Page::Overview,
             period: Period::Week,
             tool: Tool::All,
             project_filter: ProjectFilter::All,
@@ -539,7 +566,7 @@ impl App {
             .unwrap_or(0);
         match key.code {
             KeyCode::Esc | KeyCode::Char('d') => {
-                self.page = Page::Dashboard;
+                self.page = Page::DeepDive;
                 self.session_view = None;
                 self.session_scroll = 0;
             }
@@ -731,6 +758,8 @@ impl App {
 
         match key.code {
             KeyCode::Esc => self.should_quit = true,
+            KeyCode::Tab => self.page = self.page.next_tab(),
+            KeyCode::BackTab => self.page = self.page.prev_tab(),
             KeyCode::Char('1') => self.period = Period::Today,
             KeyCode::Char('2') => self.period = Period::Week,
             KeyCode::Char('3') => self.period = Period::ThirtyDays,
@@ -739,6 +768,8 @@ impl App {
             KeyCode::Char('t') => self.tool = self.tool.next(),
             KeyCode::Char('p') => self.open_project_modal(),
             KeyCode::Char('c') => self.page = Page::Config,
+            KeyCode::Char('o') => self.page = Page::Overview,
+            KeyCode::Char('d') => self.page = Page::DeepDive,
             KeyCode::Char('u') => self.page = Page::Usage,
             KeyCode::Char('r') => self.reload(),
             KeyCode::Char('s') => self.open_session_modal(),
@@ -844,7 +875,7 @@ impl App {
     fn handle_config_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Esc | KeyCode::Char('d') | KeyCode::Char('c') => {
-                self.page = Page::Dashboard;
+                self.page = Page::DeepDive;
             }
             KeyCode::Up => {
                 self.config_selected = self.config_selected.saturating_sub(1);
@@ -862,9 +893,17 @@ impl App {
 
     fn handle_usage_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Esc | KeyCode::Char('d') | KeyCode::Char('u') => {
-                self.page = Page::Dashboard;
-            }
+            KeyCode::Esc | KeyCode::Char('d') => self.page = Page::DeepDive,
+            KeyCode::Char('o') => self.page = Page::Overview,
+            KeyCode::Char('u') => self.page = Page::Overview,
+            KeyCode::Tab => self.page = self.page.next_tab(),
+            KeyCode::BackTab => self.page = self.page.prev_tab(),
+            KeyCode::Char('1') => self.period = Period::Today,
+            KeyCode::Char('2') => self.period = Period::Week,
+            KeyCode::Char('3') => self.period = Period::ThirtyDays,
+            KeyCode::Char('4') => self.period = Period::Month,
+            KeyCode::Char('5') => self.period = Period::AllTime,
+            KeyCode::Char('t') => self.tool = self.tool.next(),
             KeyCode::Char('c') => self.page = Page::Config,
             KeyCode::Char('r') => self.reload(),
             _ => {}
@@ -1023,19 +1062,53 @@ mod tests {
     }
 
     #[test]
-    fn u_opens_usage_and_u_or_escape_returns_dashboard() {
+    fn u_opens_usage_and_u_or_escape_returns_to_a_main_tab() {
         let mut app = App::default();
+        assert_eq!(app.page, Page::Overview);
 
         app.handle_key(key(KeyCode::Char('u')));
         assert_eq!(app.page, Page::Usage);
 
+        // From Usage, `u` returns to Overview (the home tab).
         app.handle_key(key(KeyCode::Char('u')));
-        assert_eq!(app.page, Page::Dashboard);
+        assert_eq!(app.page, Page::Overview);
 
+        // From Usage, Esc routes to Deep Dive (preserves the historical
+        // "esc returns to dashboard" behaviour).
         app.handle_key(key(KeyCode::Char('u')));
         app.handle_key(key(KeyCode::Esc));
-        assert_eq!(app.page, Page::Dashboard);
+        assert_eq!(app.page, Page::DeepDive);
         assert!(!app.should_quit());
+    }
+
+    #[test]
+    fn tab_cycles_between_main_tabs() {
+        let mut app = App::default();
+        assert_eq!(app.page, Page::Overview);
+
+        app.handle_key(key(KeyCode::Tab));
+        assert_eq!(app.page, Page::DeepDive);
+        app.handle_key(key(KeyCode::Tab));
+        assert_eq!(app.page, Page::Usage);
+        app.handle_key(key(KeyCode::Tab));
+        assert_eq!(app.page, Page::Overview);
+
+        app.handle_key(key(KeyCode::BackTab));
+        assert_eq!(app.page, Page::Usage);
+    }
+
+    #[test]
+    fn direct_keys_jump_between_tabs() {
+        let mut app = App::default();
+
+        app.handle_key(key(KeyCode::Char('d')));
+        assert_eq!(app.page, Page::DeepDive);
+
+        app.handle_key(key(KeyCode::Char('u')));
+        assert_eq!(app.page, Page::Usage);
+
+        app.handle_key(key(KeyCode::Char('o')));
+        assert_eq!(app.page, Page::Overview);
     }
 
     #[test]

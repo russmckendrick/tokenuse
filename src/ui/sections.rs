@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    prelude::{Color, Frame, Line, Modifier, Span},
+    prelude::{Color, Frame, Line, Modifier, Span, Style},
     text::Text,
     widgets::{Cell, Clear, Paragraph, Row, Table, Widget},
 };
@@ -15,41 +15,6 @@ use crate::{
 };
 
 use super::components::{bar_cell, centered_rect, BAR_WIDTH};
-
-pub(super) fn render_nav(frame: &mut Frame<'_>, area: Rect, app: &App) {
-    let columns = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(74), Constraint::Percentage(26)])
-        .split(area);
-
-    let mut spans = Vec::new();
-    for period in Period::ALL {
-        if period == app.period {
-            spans.push(Span::styled(
-                format!("[ {} ]", period.label()),
-                theme::key(),
-            ));
-        } else {
-            spans.push(Span::styled(period.label(), theme::dim()));
-        }
-        spans.push(Span::raw("    "));
-    }
-
-    Paragraph::new(Line::from(spans))
-        .style(theme::base())
-        .render(columns[0], frame.buffer_mut());
-
-    Paragraph::new(Line::from(vec![
-        Span::styled("|  ", theme::dim()),
-        Span::styled("[t] ", theme::key()),
-        Span::styled(app.tool.label(), theme::key()),
-        Span::styled("  [p] ", theme::key()),
-        Span::styled(app.project_filter.label(), theme::muted()),
-    ]))
-    .style(theme::base())
-    .alignment(Alignment::Right)
-    .render(columns[1], frame.buffer_mut());
-}
 
 pub(super) fn render_summary(frame: &mut Frame<'_>, area: Rect, app: &App, summary: &Summary) {
     let title_owned = match &app.status {
@@ -91,6 +56,139 @@ pub(super) fn render_summary(frame: &mut Frame<'_>, area: Rect, app: &App, summa
 
     Paragraph::new(text)
         .block(theme::panel_block("", theme::PRIMARY))
+        .style(theme::base())
+        .render(area, frame.buffer_mut());
+}
+
+pub(super) fn render_title_bar(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let block = theme::panel_block("", theme::PRIMARY);
+    let inner = block.inner(area);
+    block.render(area, frame.buffer_mut());
+
+    let columns = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(28),
+            Constraint::Min(20),
+            Constraint::Length(44),
+        ])
+        .split(inner);
+
+    let version = format!("tokenuse · v{}", env!("CARGO_PKG_VERSION"));
+    Paragraph::new(Line::from(Span::styled(version, theme::key())))
+        .style(theme::base())
+        .render(columns[0], frame.buffer_mut());
+
+    let mut tab_spans: Vec<Span<'_>> = Vec::new();
+    for (i, tab) in Page::TABS.iter().enumerate() {
+        if i > 0 {
+            tab_spans.push(Span::raw("    "));
+        }
+        if *tab == app.page {
+            tab_spans.push(Span::styled(format!("[ {} ]", tab.label()), theme::key()));
+        } else {
+            tab_spans.push(Span::styled(tab.label().to_string(), theme::dim()));
+        }
+    }
+    Paragraph::new(Line::from(tab_spans))
+        .alignment(Alignment::Center)
+        .style(theme::base())
+        .render(columns[1], frame.buffer_mut());
+
+    Paragraph::new(Line::from(vec![
+        Span::styled(app.period.label(), theme::muted()),
+        Span::styled("  ·  ", theme::dim()),
+        Span::styled("[t] ", theme::key()),
+        Span::styled(app.tool.label(), theme::muted()),
+        Span::styled("  ·  ", theme::dim()),
+        Span::styled("[p] ", theme::key()),
+        Span::styled(app.project_filter.label().to_string(), theme::muted()),
+    ]))
+    .alignment(Alignment::Right)
+    .style(theme::base())
+    .render(columns[2], frame.buffer_mut());
+}
+
+pub(super) fn render_kpi_strip(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    app: &App,
+    summary: &Summary,
+) {
+    let cells = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Ratio(1, 5),
+            Constraint::Ratio(1, 5),
+            Constraint::Ratio(1, 5),
+            Constraint::Ratio(1, 5),
+            Constraint::Ratio(1, 5),
+        ])
+        .split(area);
+
+    let currency_code = app.currency().code().to_string();
+    let period_label = app.period.label();
+
+    render_kpi_card(
+        frame,
+        cells[0],
+        "COST",
+        summary.cost,
+        theme::money().add_modifier(Modifier::BOLD),
+        &format!("{currency_code} · {period_label}"),
+    );
+    render_kpi_card(
+        frame,
+        cells[1],
+        "CALLS",
+        summary.calls,
+        theme::base().add_modifier(Modifier::BOLD),
+        &format!("{} in", summary.input),
+    );
+    render_kpi_card(
+        frame,
+        cells[2],
+        "SESSIONS",
+        summary.sessions,
+        theme::base().add_modifier(Modifier::BOLD),
+        period_label,
+    );
+    render_kpi_card(
+        frame,
+        cells[3],
+        "CACHE HIT",
+        summary.cache_hit,
+        theme::base()
+            .fg(theme::PRIMARY)
+            .add_modifier(Modifier::BOLD),
+        &format!("{} cached", summary.cached),
+    );
+    render_kpi_card(
+        frame,
+        cells[4],
+        "IN / OUT",
+        summary.input,
+        theme::base().add_modifier(Modifier::BOLD),
+        &format!("/ {} out", summary.output),
+    );
+}
+
+fn render_kpi_card(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    label: &str,
+    value: &str,
+    value_style: Style,
+    sub: &str,
+) {
+    let block = theme::panel_block("", theme::PRIMARY);
+    let text = Text::from(vec![
+        Line::from(Span::styled(label.to_string(), theme::muted())),
+        Line::from(Span::styled(value.to_string(), value_style)),
+        Line::from(Span::styled(sub.to_string(), theme::dim())),
+    ]);
+    Paragraph::new(text)
+        .block(block)
         .style(theme::base())
         .render(area, frame.buffer_mut());
 }
@@ -309,7 +407,7 @@ pub(super) fn render_limits(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
     let sections = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),
+            Constraint::Length(3),
             Constraint::Length(1),
             Constraint::Min(8),
             Constraint::Length(3),
@@ -318,7 +416,16 @@ pub(super) fn render_limits(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
 
     let data = app.usage();
 
-    render_limits_header(frame, sections[0], app);
+    render_title_bar(frame, sections[0], app);
+
+    Paragraph::new(Line::from(Span::styled(
+        "sorted by 24h usage",
+        theme::muted(),
+    )))
+    .style(theme::base())
+    .alignment(Alignment::Right)
+    .render(sections[1], frame.buffer_mut());
+
     let tool_sections = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -336,31 +443,6 @@ pub(super) fn render_limits(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
     render_footer(frame, sections[3], app);
     render_project_modal(frame, root, app);
     render_currency_modal(frame, root, app);
-}
-
-fn render_limits_header(frame: &mut Frame<'_>, area: Rect, _app: &App) {
-    let columns = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
-        .split(area);
-
-    Paragraph::new(Line::from(vec![
-        Span::styled("[ Usage ]", theme::key()),
-        Span::raw("    "),
-        Span::styled("Dashboard", theme::dim()),
-        Span::raw("    "),
-        Span::styled("Config", theme::dim()),
-    ]))
-    .style(theme::base())
-    .render(columns[0], frame.buffer_mut());
-
-    Paragraph::new(Line::from(vec![Span::styled(
-        "sorted by 24h usage",
-        theme::muted(),
-    )]))
-    .style(theme::base())
-    .alignment(Alignment::Right)
-    .render(columns[1], frame.buffer_mut());
 }
 
 fn render_tool_usage_section(frame: &mut Frame<'_>, area: Rect, section: &ToolLimitSection) {
@@ -728,7 +810,7 @@ pub(super) fn render_help_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
     }
 
     let width = 80.min(area.width.saturating_sub(4)).max(60);
-    let height = 32.min(area.height.saturating_sub(4)).max(24);
+    let height = 38.min(area.height.saturating_sub(4)).max(24);
     let modal_area = centered_rect(width, height, area);
     Clear.render(modal_area, frame.buffer_mut());
 
@@ -760,10 +842,18 @@ pub(super) fn render_help_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
             vec![("t", "cycle tool"), ("p", "project picker (typeable)")],
         ),
         (
+            "Tabs",
+            vec![
+                ("Tab  Shift-Tab", "cycle main tabs"),
+                ("o", "Overview"),
+                ("d", "Deep Dive"),
+                ("u", "Usage / rate limits"),
+            ],
+        ),
+        (
             "Pages",
             vec![
                 ("c", "configuration"),
-                ("u", "usage / rate limits"),
                 ("s", "session drill-down"),
             ],
         ),
@@ -1020,8 +1110,10 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
         let commands = Line::from(vec![
             Span::styled("q", theme::key()),
             Span::styled(" quit    ", theme::muted()),
-            Span::styled("Esc", theme::key()),
-            Span::styled(" dashboard    ", theme::muted()),
+            Span::styled("Tab", theme::key()),
+            Span::styled(" tabs    ", theme::muted()),
+            Span::styled("o/d", theme::key()),
+            Span::styled(" overview/deep    ", theme::muted()),
             Span::styled("c", theme::key()),
             Span::styled(" config    ", theme::muted()),
             Span::styled("h", theme::key()),
@@ -1039,6 +1131,8 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let commands = Line::from(vec![
         Span::styled("q", theme::key()),
         Span::styled(" quit    ", theme::muted()),
+        Span::styled("Tab", theme::key()),
+        Span::styled(" tabs    ", theme::muted()),
         footer_period("1", "today", app.period == Period::Today),
         Span::raw("    "),
         footer_period("2", "week", app.period == Period::Week),
@@ -1047,7 +1141,7 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Span::raw("    "),
         footer_period("4", "month", app.period == Period::Month),
         Span::raw("    "),
-        footer_period("5", "all time", app.period == Period::AllTime),
+        footer_period("5", "all", app.period == Period::AllTime),
         Span::raw("    "),
         Span::styled("h", theme::key()),
         Span::styled(" help", theme::muted()),
