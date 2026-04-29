@@ -51,12 +51,30 @@ const CYAN: RGBColor = RGBColor(77, 243, 232);
 const MAGENTA: RGBColor = RGBColor(240, 90, 242);
 
 const FONT_FAMILY: &str = "monospace";
-const TITLE_SIZE: u32 = 16;
-const HEAD_SIZE: u32 = 12;
-const BODY_SIZE: u32 = 13;
-const NUM_SIZE: u32 = 22;
-const ROW_HEIGHT: i32 = 18;
-const CHAR_W: i32 = 8;
+const TITLE_SIZE: u32 = 22;
+const HEAD_SIZE: u32 = 14;
+const BODY_SIZE: u32 = 17;
+const NUM_SIZE: u32 = 30;
+const ROW_HEIGHT: i32 = 24;
+const CHAR_W: i32 = 10;
+
+// Row caps per panel — used both by the layout calculator and by each
+// draw_* function so the panel size and the data we render line up.
+const DAILY_CAP: usize = 8;
+const PROJECTS_CAP: usize = 8;
+const SESSIONS_CAP: usize = 10;
+const PROJECT_TOOLS_CAP: usize = 13;
+const MODELS_CAP: usize = 13;
+const COUNTS_CAP: usize = 10;
+
+// Panel chrome — these must agree with the offsets used inside draw_panel
+// and the per-table draw_* helpers:
+//   draw_panel   passes body(x+16, y + PANEL_BODY_TOP, w-32, h - PANEL_BODY_TOP - PANEL_BODY_BOTTOM)
+//   draw_*       puts the column header at body_y and the first data row at
+//                body_y + PANEL_HEADER_GAP, then ROW_HEIGHT per row after that.
+const PANEL_BODY_TOP: i32 = 14;
+const PANEL_BODY_BOTTOM: i32 = 12;
+const PANEL_HEADER_GAP: i32 = 28;
 
 pub fn write(
     paths: &ConfigPaths,
@@ -321,7 +339,60 @@ fn write_counts_csv(dir: &Path, name: &str, rows: &[CountMetric]) -> Result<()> 
 }
 
 const CANVAS_W: u32 = 1800;
-const CANVAS_H: u32 = 1500;
+
+// Top-of-canvas chrome above the panel grid.
+const OUTER_PAD: i32 = 24;
+const PERIOD_STRIP_H: i32 = 32;
+const PERIOD_STRIP_GAP: i32 = 12;
+const SUMMARY_H: i32 = 130;
+const ROW_GAP: i32 = 12;
+
+struct Layout {
+    row1_h: i32, // Daily | Projects
+    sessions_h: i32,
+    row3_h: i32, // Project Spend by Tool | By Model
+    row4_h: i32, // Core Tools | Shell Commands
+    mcp_h: i32,
+    canvas_h: u32,
+}
+
+fn compute_layout(data: &DashboardData) -> Layout {
+    let row1_h = panel_h(data.daily.len().min(DAILY_CAP))
+        .max(panel_h(data.projects.len().min(PROJECTS_CAP)));
+    let sessions_h = panel_h(data.sessions.len().min(SESSIONS_CAP));
+    let row3_h = panel_h(data.project_tools.len().min(PROJECT_TOOLS_CAP))
+        .max(panel_h(data.models.len().min(MODELS_CAP)));
+    let row4_h =
+        panel_h(data.tools.len().min(COUNTS_CAP)).max(panel_h(data.commands.len().min(COUNTS_CAP)));
+    let mcp_h = panel_h(data.mcp_servers.len().min(COUNTS_CAP));
+
+    // Stack: outer pad, period strip, gap, summary, gap, four panel rows
+    // separated by ROW_GAP, then the MCP row, then outer pad.
+    let total = OUTER_PAD
+        + PERIOD_STRIP_H
+        + PERIOD_STRIP_GAP
+        + SUMMARY_H
+        + ROW_GAP
+        + row1_h
+        + ROW_GAP
+        + sessions_h
+        + ROW_GAP
+        + row3_h
+        + ROW_GAP
+        + row4_h
+        + ROW_GAP
+        + mcp_h
+        + OUTER_PAD;
+
+    Layout {
+        row1_h,
+        sessions_h,
+        row3_h,
+        row4_h,
+        mcp_h,
+        canvas_h: total as u32,
+    }
+}
 
 fn write_chart_svg(
     path: &Path,
@@ -330,8 +401,9 @@ fn write_chart_svg(
     tool: Tool,
     project_filter: &ProjectFilter,
 ) -> Result<()> {
-    let backend = SVGBackend::new(path, (CANVAS_W, CANVAS_H));
-    render_dashboard_chart(backend, data, period, tool, project_filter)
+    let layout = compute_layout(data);
+    let backend = SVGBackend::new(path, (CANVAS_W, layout.canvas_h));
+    render_dashboard_chart(backend, data, period, tool, project_filter, &layout)
         .map_err(|e| color_eyre::eyre::eyre!("svg render failed: {e}"))?;
     Ok(())
 }
@@ -343,8 +415,9 @@ fn write_chart_png(
     tool: Tool,
     project_filter: &ProjectFilter,
 ) -> Result<()> {
-    let backend = BitMapBackend::new(path, (CANVAS_W, CANVAS_H));
-    render_dashboard_chart(backend, data, period, tool, project_filter)
+    let layout = compute_layout(data);
+    let backend = BitMapBackend::new(path, (CANVAS_W, layout.canvas_h));
+    render_dashboard_chart(backend, data, period, tool, project_filter, &layout)
         .map_err(|e| color_eyre::eyre::eyre!("png render failed: {e}"))?;
     Ok(())
 }
@@ -379,6 +452,7 @@ fn render_dashboard_chart<DB>(
     period: Period,
     tool: Tool,
     project_filter: &ProjectFilter,
+    layout: &Layout,
 ) -> ChartResult
 where
     DB: DrawingBackend,
@@ -387,112 +461,115 @@ where
     let root = backend.into_drawing_area();
     root.fill(&SURFACE)?;
 
-    let outer_x = 24i32;
-    let mut y = 24i32;
+    let outer_x = OUTER_PAD;
+    let mut y = OUTER_PAD;
     let panel_w = CANVAS_W as i32 - outer_x * 2;
-    let half_gap = 12i32;
-    let half_w = (panel_w - half_gap) / 2;
+    let half_w = (panel_w - ROW_GAP) / 2;
 
     // Header band (period chips + summary)
     draw_period_strip(&root, outer_x, y, panel_w, period, tool, project_filter)?;
-    y += 32;
-    draw_summary_panel(&root, outer_x, y, panel_w, 110, &data.summary, period, tool)?;
-    y += 110 + 12;
+    y += PERIOD_STRIP_H + PERIOD_STRIP_GAP;
+    draw_summary_panel(
+        &root,
+        outer_x,
+        y,
+        panel_w,
+        SUMMARY_H,
+        &data.summary,
+        period,
+        tool,
+    )?;
+    y += SUMMARY_H + ROW_GAP;
 
     // Row: Daily | Projects
-    let row_h = 256;
     draw_panel(
         &root,
         outer_x,
         y,
         half_w,
-        row_h,
+        layout.row1_h,
         "Daily Activity",
         &BLUE,
         |x, y, w, h| draw_daily(&root, x, y, w, h, &data.daily),
     )?;
     draw_panel(
         &root,
-        outer_x + half_w + half_gap,
+        outer_x + half_w + ROW_GAP,
         y,
         half_w,
-        row_h,
+        layout.row1_h,
         "By Project",
         &GREEN,
         |x, y, w, h| draw_projects(&root, x, y, w, h, &data.projects),
     )?;
-    y += row_h + 12;
+    y += layout.row1_h + ROW_GAP;
 
     // Row: Top Sessions full width
-    let sessions_h = 200;
     draw_panel(
         &root,
         outer_x,
         y,
         panel_w,
-        sessions_h,
+        layout.sessions_h,
         "Top Sessions",
         &RED,
         |x, y, w, h| draw_sessions(&root, x, y, w, h, &data.sessions),
     )?;
-    y += sessions_h + 12;
+    y += layout.sessions_h + ROW_GAP;
 
     // Row: Project Tools | Models
-    let row_h = 320;
     draw_panel(
         &root,
         outer_x,
         y,
         half_w,
-        row_h,
+        layout.row3_h,
         "Project Spend by Tool",
         &YELLOW,
         |x, y, w, h| draw_project_tools(&root, x, y, w, h, &data.project_tools),
     )?;
     draw_panel(
         &root,
-        outer_x + half_w + half_gap,
+        outer_x + half_w + ROW_GAP,
         y,
         half_w,
-        row_h,
+        layout.row3_h,
         "By Model",
         &MAGENTA,
         |x, y, w, h| draw_models(&root, x, y, w, h, &data.models),
     )?;
-    y += row_h + 12;
+    y += layout.row3_h + ROW_GAP;
 
     // Row: Core Tools | Shell Commands
-    let row_h = 240;
     draw_panel(
         &root,
         outer_x,
         y,
         half_w,
-        row_h,
+        layout.row4_h,
         "Core Tools",
         &CYAN,
         |x, y, w, h| draw_counts(&root, x, y, w, h, &data.tools),
     )?;
     draw_panel(
         &root,
-        outer_x + half_w + half_gap,
+        outer_x + half_w + ROW_GAP,
         y,
         half_w,
-        row_h,
+        layout.row4_h,
         "Shell Commands",
         &PRIMARY,
         |x, y, w, h| draw_counts(&root, x, y, w, h, &data.commands),
     )?;
-    y += row_h + 12;
+    y += layout.row4_h + ROW_GAP;
 
     // Row: MCP Servers full width
-    let mcp_h = (CANVAS_H as i32 - y - 24).max(140);
     draw_panel(
         &root,
         outer_x,
         y,
         panel_w,
-        mcp_h,
+        layout.mcp_h,
         "MCP Servers",
         &MAGENTA,
         |x, y, w, h| draw_counts(&root, x, y, w, h, &data.mcp_servers),
@@ -533,7 +610,20 @@ where
     ))?;
     root.draw_text(&title_text, &title_style(accent), (x + 18, y - 9))?;
 
-    body(x + 16, y + 14, w - 32, h - 24)
+    body(
+        x + 16,
+        y + PANEL_BODY_TOP,
+        w - 32,
+        h - PANEL_BODY_TOP - PANEL_BODY_BOTTOM,
+    )
+}
+
+/// Natural height of a panel rendering `rows` data rows (plus a column
+/// header). Empty data still gets a single row's worth of room for the
+/// "no data" placeholder.
+fn panel_h(rows: usize) -> i32 {
+    let n = rows.max(1) as i32;
+    PANEL_BODY_TOP + PANEL_HEADER_GAP + n * ROW_HEIGHT + PANEL_BODY_BOTTOM
 }
 
 fn draw_period_strip<DB>(
@@ -764,11 +854,11 @@ where
     draw_text_right(root, x + w, head_y, "calls", &head_style())?;
 
     if rows.is_empty() {
-        return empty_note(root, x, y + 24);
+        return empty_note(root, x, y + PANEL_HEADER_GAP);
     }
 
-    for (i, row) in rows.iter().take(8).enumerate() {
-        let ry = y + 24 + i as i32 * ROW_HEIGHT;
+    for (i, row) in rows.iter().take(DAILY_CAP).enumerate() {
+        let ry = y + PANEL_HEADER_GAP + i as i32 * ROW_HEIGHT;
         draw_text_left(root, x, ry, row.day, &body_style(&MUTED))?;
         draw_heatbar(root, x + date_w, ry + 2, bar_w, ROW_HEIGHT - 6, row.value)?;
         draw_text_right(root, x + w - calls_w, ry, row.cost, &body_style(&YELLOW))?;
@@ -818,11 +908,11 @@ where
     draw_text_left(root, x + w - tools_w + 6, head_y, "tools", &head_style())?;
 
     if rows.is_empty() {
-        return empty_note(root, x, y + 24);
+        return empty_note(root, x, y + PANEL_HEADER_GAP);
     }
 
-    for (i, row) in rows.iter().take(8).enumerate() {
-        let ry = y + 24 + i as i32 * ROW_HEIGHT;
+    for (i, row) in rows.iter().take(PROJECTS_CAP).enumerate() {
+        let ry = y + PANEL_HEADER_GAP + i as i32 * ROW_HEIGHT;
         draw_heatbar(root, x, ry + 2, bar_w, ROW_HEIGHT - 6, row.value)?;
         let name = truncate(row.name, 30);
         draw_text_left(root, name_x, ry, &name, &body_style(&MUTED))?;
@@ -878,11 +968,11 @@ where
     draw_text_right(root, x + w, head_y, "calls", &head_style())?;
 
     if rows.is_empty() {
-        return empty_note(root, x, y + 24);
+        return empty_note(root, x, y + PANEL_HEADER_GAP);
     }
 
-    for (i, row) in rows.iter().take(8).enumerate() {
-        let ry = y + 24 + i as i32 * ROW_HEIGHT;
+    for (i, row) in rows.iter().take(SESSIONS_CAP).enumerate() {
+        let ry = y + PANEL_HEADER_GAP + i as i32 * ROW_HEIGHT;
         draw_heatbar(root, x, ry + 2, bar_w, ROW_HEIGHT - 6, row.value)?;
         draw_text_left(root, x + bar_w + 8, ry, row.date, &body_style(&MUTED))?;
         draw_text_left(
@@ -948,11 +1038,11 @@ where
     draw_text_right(root, x + w, head_y, "avg/s", &head_style())?;
 
     if rows.is_empty() {
-        return empty_note(root, x, y + 24);
+        return empty_note(root, x, y + PANEL_HEADER_GAP);
     }
 
-    for (i, row) in rows.iter().take(13).enumerate() {
-        let ry = y + 24 + i as i32 * ROW_HEIGHT;
+    for (i, row) in rows.iter().take(PROJECT_TOOLS_CAP).enumerate() {
+        let ry = y + PANEL_HEADER_GAP + i as i32 * ROW_HEIGHT;
         draw_heatbar(root, x, ry + 2, bar_w, ROW_HEIGHT - 6, row.value)?;
         draw_text_left(
             root,
@@ -1021,11 +1111,11 @@ where
     draw_text_right(root, x + w, head_y, "calls", &head_style())?;
 
     if rows.is_empty() {
-        return empty_note(root, x, y + 24);
+        return empty_note(root, x, y + PANEL_HEADER_GAP);
     }
 
-    for (i, row) in rows.iter().take(13).enumerate() {
-        let ry = y + 24 + i as i32 * ROW_HEIGHT;
+    for (i, row) in rows.iter().take(MODELS_CAP).enumerate() {
+        let ry = y + PANEL_HEADER_GAP + i as i32 * ROW_HEIGHT;
         draw_heatbar(root, x, ry + 2, bar_w, ROW_HEIGHT - 6, row.value)?;
         draw_text_left(
             root,
@@ -1067,12 +1157,13 @@ where
     draw_text_right(root, x + w, y, "calls", &head_style())?;
 
     if rows.is_empty() {
-        return empty_note(root, x, y + 24);
+        return empty_note(root, x, y + PANEL_HEADER_GAP);
     }
 
-    let max_rows = ((h - 24) / ROW_HEIGHT).max(1) as usize;
+    let fit_rows = ((h - PANEL_HEADER_GAP) / ROW_HEIGHT).max(1) as usize;
+    let max_rows = COUNTS_CAP.min(fit_rows);
     for (i, row) in rows.iter().take(max_rows).enumerate() {
-        let ry = y + 24 + i as i32 * ROW_HEIGHT;
+        let ry = y + PANEL_HEADER_GAP + i as i32 * ROW_HEIGHT;
         draw_heatbar(root, x, ry + 2, bar_w, ROW_HEIGHT - 6, row.value)?;
         draw_text_left(
             root,
