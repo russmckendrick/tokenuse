@@ -4,10 +4,10 @@ use std::path::Path;
 use chrono::{DateTime, Datelike, Duration, Local, NaiveDate};
 use color_eyre::Result;
 
-use crate::app::{Period, Provider};
+use crate::app::{Period, ProjectFilter, Tool};
 use crate::data::{
-    CountMetric, DailyMetric, DashboardData, ModelMetric, ProjectMetric, ProjectProviderMetric,
-    SessionMetric, Summary,
+    CountMetric, DailyMetric, DashboardData, ModelMetric, ProjectMetric, ProjectOption,
+    ProjectProviderMetric, SessionMetric, Summary,
 };
 use crate::providers::{self, ParsedCall};
 
@@ -46,14 +46,33 @@ pub fn load() -> Result<Ingested> {
 }
 
 impl Ingested {
-    pub fn dashboard(&self, period: Period, provider: Provider) -> DashboardData {
+    pub fn dashboard(
+        &self,
+        period: Period,
+        tool: Tool,
+        project_filter: &ProjectFilter,
+    ) -> DashboardData {
         let now = Local::now();
         let filtered: Vec<&ParsedCall> = self
             .calls
             .iter()
-            .filter(|c| matches_provider(c, provider) && in_period(c, period, now))
+            .filter(|c| {
+                matches_tool(c, tool)
+                    && matches_project(c, project_filter)
+                    && in_period(c, period, now)
+            })
             .collect();
         build_dashboard(&filtered)
+    }
+
+    pub fn project_options(&self, period: Period, tool: Tool) -> Vec<ProjectOption> {
+        let now = Local::now();
+        let filtered: Vec<&ParsedCall> = self
+            .calls
+            .iter()
+            .filter(|c| matches_tool(c, tool) && in_period(c, period, now))
+            .collect();
+        build_project_options(&filtered)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -102,13 +121,20 @@ impl Ingested {
     }
 }
 
-fn matches_provider(call: &ParsedCall, provider: Provider) -> bool {
-    match provider {
-        Provider::All => true,
-        Provider::ClaudeCode => call.provider == "claude-code",
-        Provider::Cursor => call.provider == "cursor",
-        Provider::Codex => call.provider == "codex",
-        Provider::Copilot => call.provider == "copilot",
+fn matches_tool(call: &ParsedCall, tool: Tool) -> bool {
+    match tool {
+        Tool::All => true,
+        Tool::ClaudeCode => call.provider == "claude-code",
+        Tool::Cursor => call.provider == "cursor",
+        Tool::Codex => call.provider == "codex",
+        Tool::Copilot => call.provider == "copilot",
+    }
+}
+
+fn matches_project(call: &ParsedCall, project_filter: &ProjectFilter) -> bool {
+    match project_filter {
+        ProjectFilter::All => true,
+        ProjectFilter::Selected { identity, .. } => project_identity(&call.project) == *identity,
     }
 }
 
@@ -205,6 +231,51 @@ fn empty_dashboard() -> DashboardData {
         commands: Vec::new(),
         mcp_servers: Vec::new(),
     }
+}
+
+fn build_project_options(calls: &[&ParsedCall]) -> Vec<ProjectOption> {
+    #[derive(Default)]
+    struct Acc {
+        cost: f64,
+        calls: u64,
+    }
+
+    let total_cost: f64 = calls.iter().map(|c| c.cost_usd).sum();
+    let labels = project_label_lookup(calls.iter().map(|call| call.project.as_str()));
+    let mut by_project: HashMap<String, Acc> = HashMap::new();
+
+    for call in calls {
+        let entry = by_project
+            .entry(project_identity(&call.project))
+            .or_default();
+        entry.cost += call.cost_usd;
+        entry.calls += 1;
+    }
+
+    let mut rows: Vec<(String, String, Acc)> = by_project
+        .into_iter()
+        .map(|(identity, acc)| {
+            let label = project_label(&labels, &identity);
+            (identity, label, acc)
+        })
+        .collect();
+
+    rows.sort_by(|a, b| {
+        b.2.cost
+            .partial_cmp(&a.2.cost)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| b.2.calls.cmp(&a.2.calls))
+            .then_with(|| a.1.cmp(&b.1))
+    });
+
+    let mut options = vec![ProjectOption::all(
+        format_money(total_cost),
+        calls.len() as u64,
+    )];
+    options.extend(rows.into_iter().map(|(identity, label, acc)| {
+        ProjectOption::selected(identity, label, format_money(acc.cost), acc.calls)
+    }));
+    options
 }
 
 fn aggregate_daily(calls: &[&ParsedCall]) -> Vec<DailyMetric> {
@@ -815,7 +886,7 @@ mod tests {
             ],
         };
 
-        let data = ingested.dashboard(Period::AllTime, Provider::All);
+        let data = ingested.dashboard(Period::AllTime, Tool::All, &ProjectFilter::All);
 
         assert_eq!(data.projects.len(), 1);
         assert_eq!(data.projects[0].name, "widgets");
@@ -836,7 +907,7 @@ mod tests {
             ],
         };
 
-        let data = ingested.dashboard(Period::AllTime, Provider::All);
+        let data = ingested.dashboard(Period::AllTime, Tool::All, &ProjectFilter::All);
 
         assert_eq!(data.projects.len(), 1);
         assert_eq!(data.projects[0].name, "ai-commit-dev");
@@ -867,6 +938,26 @@ mod tests {
     }
 
     #[test]
+    fn project_options_are_unique_across_tools() {
+        let ingested = Ingested {
+            calls: vec![
+                mk_project_call("claude-code", "s1", "/Users/me/Code/widgets", 2.0),
+                mk_project_call("codex", "s2", "/Users/me/Code/widgets", 3.0),
+                mk_project_call("codex", "s3", "/Users/me/Code/widgets/", 5.0),
+            ],
+        };
+
+        let options = ingested.project_options(Period::AllTime, Tool::All);
+
+        assert_eq!(options.len(), 2);
+        assert_eq!(options[0].identity, None);
+        assert_eq!(options[0].label, "All");
+        assert_eq!(options[1].label, "widgets");
+        assert_eq!(options[1].calls, 3);
+        assert_eq!(options[1].cost, "$10.00");
+    }
+
+    #[test]
     fn project_labels_disambiguate_leaf_collisions_with_shortest_suffixes() {
         let ingested = Ingested {
             calls: vec![
@@ -875,7 +966,7 @@ mod tests {
             ],
         };
 
-        let data = ingested.dashboard(Period::AllTime, Provider::All);
+        let data = ingested.dashboard(Period::AllTime, Tool::All, &ProjectFilter::All);
         let names: HashSet<&str> = data.projects.iter().map(|project| project.name).collect();
 
         assert_eq!(data.projects.len(), 2);
@@ -906,7 +997,7 @@ mod tests {
             ],
         };
 
-        let data = ingested.dashboard(Period::AllTime, Provider::All);
+        let data = ingested.dashboard(Period::AllTime, Tool::All, &ProjectFilter::All);
         let names: HashSet<&str> = data.projects.iter().map(|project| project.name).collect();
         assert_eq!(data.projects.len(), 2);
         assert!(names.contains("dvr"));
@@ -919,7 +1010,7 @@ mod tests {
     }
 
     #[test]
-    fn provider_filter_keeps_project_costs_provider_local() {
+    fn tool_filter_keeps_project_costs_tool_local() {
         let ingested = Ingested {
             calls: vec![
                 mk_project_call("claude-code", "s1", "/Users/me/Code/widgets", 2.0),
@@ -927,13 +1018,51 @@ mod tests {
             ],
         };
 
-        let data = ingested.dashboard(Period::AllTime, Provider::Codex);
+        let data = ingested.dashboard(Period::AllTime, Tool::Codex, &ProjectFilter::All);
 
         assert_eq!(data.projects.len(), 1);
         assert_eq!(data.projects[0].cost, "$3.00");
         assert_eq!(data.projects[0].provider_mix, "Codex $3.00");
         assert_eq!(data.project_providers.len(), 1);
         assert_eq!(data.project_providers[0].provider, "Codex");
+    }
+
+    #[test]
+    fn project_filter_applies_before_all_aggregations() {
+        let mut widgets = mk_project_call("codex", "s1", "/Users/me/Code/widgets", 2.0);
+        widgets.model = "gpt-5".into();
+        widgets.tools = vec!["Bash".into(), "mcp__linear__search".into()];
+        widgets.bash_commands = vec!["cargo test".into()];
+
+        let mut blog = mk_project_call("claude-code", "s2", "/Users/me/Code/blog", 5.0);
+        blog.model = "claude-opus-4-7".into();
+        blog.tools = vec!["Read".into(), "mcp__github__search".into()];
+        blog.bash_commands = vec!["rg widgets".into()];
+
+        let ingested = Ingested {
+            calls: vec![widgets, blog],
+        };
+        let filter = ProjectFilter::Selected {
+            identity: "/Users/me/Code/widgets".into(),
+            label: "widgets".into(),
+        };
+
+        let data = ingested.dashboard(Period::AllTime, Tool::All, &filter);
+
+        assert_eq!(data.summary.calls, "1");
+        assert_eq!(data.summary.cost, "$2.00");
+        assert_eq!(data.projects.len(), 1);
+        assert_eq!(data.projects[0].name, "widgets");
+        assert_eq!(data.sessions.len(), 1);
+        assert_eq!(data.sessions[0].project, "widgets");
+        assert_eq!(data.models.len(), 1);
+        assert_eq!(data.models[0].name, "GPT-5");
+        assert_eq!(data.tools.len(), 1);
+        assert_eq!(data.tools[0].name, "Bash");
+        assert_eq!(data.commands.len(), 1);
+        assert_eq!(data.commands[0].name, "cargo");
+        assert_eq!(data.mcp_servers.len(), 1);
+        assert_eq!(data.mcp_servers[0].name, "linear");
     }
 
     #[test]
@@ -946,7 +1075,7 @@ mod tests {
             ],
         };
 
-        let data = ingested.dashboard(Period::AllTime, Provider::All);
+        let data = ingested.dashboard(Period::AllTime, Tool::All, &ProjectFilter::All);
 
         assert_eq!(data.summary.sessions, "2");
         assert_eq!(data.projects[0].sessions, 2);
@@ -963,7 +1092,7 @@ mod tests {
             ],
         };
 
-        let data = ingested.dashboard(Period::AllTime, Provider::All);
+        let data = ingested.dashboard(Period::AllTime, Tool::All, &ProjectFilter::All);
 
         assert_eq!(data.project_providers[0].project, "a");
         assert_eq!(data.project_providers[0].provider, "Codex");

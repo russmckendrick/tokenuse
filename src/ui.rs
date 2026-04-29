@@ -12,7 +12,7 @@ use crate::{app::App, theme};
 
 use components::{centered_rect, two_columns};
 use sections::{
-    render_counts, render_daily, render_footer, render_models, render_nav,
+    render_counts, render_daily, render_footer, render_models, render_nav, render_project_modal,
     render_project_providers, render_projects, render_sessions, render_summary,
 };
 
@@ -84,6 +84,7 @@ pub fn render(frame: &mut Frame<'_>, app: &App) {
         &data.mcp_servers,
     );
     render_footer(frame, sections[12], app);
+    render_project_modal(frame, root, app);
 }
 
 fn render_small_terminal_notice(frame: &mut Frame<'_>, area: Rect) {
@@ -113,6 +114,7 @@ fn render_small_terminal_notice(frame: &mut Frame<'_>, area: Rect) {
 
 #[cfg(test)]
 mod tests {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use ratatui::{backend::TestBackend, Terminal};
 
     use super::*;
@@ -136,11 +138,37 @@ mod tests {
 
         assert!(rendered.contains("tokenuse"));
         assert!(rendered.contains("Daily Activity"));
-        assert!(rendered.contains("Project Spend by Provider"));
+        assert!(rendered.contains("Project Spend by Tool"));
         assert!(rendered.contains("q quit"));
-        assert!(rendered.contains("p provider"));
+        assert!(rendered.contains("t tool"));
+        assert!(rendered.contains("p project"));
+        assert!(!rendered.contains("p provider"));
         assert!(!rendered.contains("switch"));
         assert!(!rendered.contains("optimize"));
         assert!(!rendered.contains("compare"));
+    }
+
+    #[test]
+    fn project_modal_render_smoke_test() {
+        let backend = TestBackend::new(170, 64);
+        let mut terminal = Terminal::new(backend).expect("create terminal");
+        let mut app = App::default();
+        app.handle_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("draw dashboard");
+
+        let buffer = terminal.backend().buffer();
+        let rendered = buffer
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+
+        assert!(rendered.contains("Project 1/"));
+        assert!(rendered.contains("All"));
+        assert!(rendered.contains("cost"));
+        assert!(rendered.contains("calls"));
     }
 }

@@ -2,7 +2,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     prelude::{Color, Frame, Line, Modifier, Span},
     text::Text,
-    widgets::{Cell, Paragraph, Row, Table, Widget},
+    widgets::{Cell, Clear, Paragraph, Row, Table, Widget},
 };
 
 use crate::{
@@ -14,7 +14,7 @@ use crate::{
     theme,
 };
 
-use super::components::{bar_cell, BAR_WIDTH};
+use super::components::{bar_cell, centered_rect, BAR_WIDTH};
 
 pub(super) fn render_nav(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let columns = Layout::default()
@@ -41,8 +41,10 @@ pub(super) fn render_nav(frame: &mut Frame<'_>, area: Rect, app: &App) {
 
     Paragraph::new(Line::from(vec![
         Span::styled("|  ", theme::dim()),
-        Span::styled("[p] ", theme::key()),
-        Span::styled(app.provider.label(), theme::key()),
+        Span::styled("[t] ", theme::key()),
+        Span::styled(app.tool.label(), theme::key()),
+        Span::styled("  [p] ", theme::key()),
+        Span::styled(app.project_filter.label(), theme::muted()),
     ]))
     .style(theme::base())
     .alignment(Alignment::Right)
@@ -153,7 +155,7 @@ pub(super) fn render_projects(frame: &mut Frame<'_>, area: Rect, rows: &[Project
         Cell::from("cost").style(theme::dim()),
         Cell::from("avg/s").style(theme::dim()),
         Cell::from("sess").style(theme::dim()),
-        Cell::from("providers").style(theme::dim()),
+        Cell::from("tools").style(theme::dim()),
     ]))
     .column_spacing(1)
     .block(theme::panel_block("By Project", theme::GREEN));
@@ -227,17 +229,14 @@ pub(super) fn render_project_providers(
     .header(Row::new(vec![
         Cell::from(""),
         Cell::from("project").style(theme::dim()),
-        Cell::from("prov").style(theme::dim()),
+        Cell::from("tool").style(theme::dim()),
         Cell::from("cost").style(theme::dim()),
         Cell::from("calls").style(theme::dim()),
         Cell::from("sess").style(theme::dim()),
         Cell::from("avg/s").style(theme::dim()),
     ]))
     .column_spacing(1)
-    .block(theme::panel_block(
-        "Project Spend by Provider",
-        theme::YELLOW,
-    ));
+    .block(theme::panel_block("Project Spend by Tool", theme::YELLOW));
 
     frame.render_widget(table, area);
 }
@@ -324,8 +323,10 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Span::raw("    "),
         footer_period("5", "all time", app.period == Period::AllTime),
         Span::raw("    "),
+        Span::styled("t", theme::key()),
+        Span::styled(" tool    ", theme::muted()),
         Span::styled("p", theme::key()),
-        Span::styled(" provider", theme::muted()),
+        Span::styled(" project", theme::muted()),
     ]);
 
     Paragraph::new(commands)
@@ -338,4 +339,75 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
 fn footer_period<'a>(key: &'a str, label: &'a str, active: bool) -> Span<'a> {
     let style = if active { theme::key() } else { theme::muted() };
     Span::styled(format!("{key} {label}"), style)
+}
+
+pub(super) fn render_project_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let Some(modal) = app.project_modal.as_ref() else {
+        return;
+    };
+
+    let width = 76.min(area.width.saturating_sub(4)).max(48);
+    let height = (modal.options.len() as u16 + 3)
+        .min(area.height.saturating_sub(4))
+        .max(7);
+    let modal_area = centered_rect(width, height, area);
+    Clear.render(modal_area, frame.buffer_mut());
+
+    let title = format!(
+        "Project {}/{}",
+        modal.selected.saturating_add(1),
+        modal.options.len().max(1)
+    );
+    let block = theme::panel_block(&title, theme::GREEN);
+    let inner = block.inner(modal_area);
+    block.render(modal_area, frame.buffer_mut());
+
+    let row_capacity = inner.height.saturating_sub(1).max(1) as usize;
+    let selected = modal.selected.min(modal.options.len().saturating_sub(1));
+    let start = selected.saturating_add(1).saturating_sub(row_capacity);
+    let end = (start + row_capacity).min(modal.options.len());
+
+    let rows = modal.options[start..end]
+        .iter()
+        .enumerate()
+        .map(|(offset, option)| {
+            let idx = start + offset;
+            let is_selected = idx == modal.selected;
+            let bg = if is_selected {
+                theme::SURFACE
+            } else {
+                theme::BACKGROUND
+            };
+            let marker = if is_selected { ">" } else { " " };
+
+            Row::new(vec![
+                Cell::from(marker).style(theme::key().bg(bg)),
+                Cell::from(option.label.as_str()).style(if is_selected {
+                    theme::key().bg(bg)
+                } else {
+                    theme::muted().bg(bg)
+                }),
+                Cell::from(option.cost.as_str()).style(theme::money().bg(bg)),
+                Cell::from(option.calls.to_string()).style(theme::base().bg(bg)),
+            ])
+        });
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(2),
+            Constraint::Min(30),
+            Constraint::Length(10),
+            Constraint::Length(8),
+        ],
+    )
+    .header(Row::new(vec![
+        Cell::from(""),
+        Cell::from("project").style(theme::dim()),
+        Cell::from("cost").style(theme::dim()),
+        Cell::from("calls").style(theme::dim()),
+    ]))
+    .column_spacing(1);
+
+    frame.render_widget(table, inner);
 }

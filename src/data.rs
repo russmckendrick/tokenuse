@@ -1,4 +1,4 @@
-use crate::app::{Period, Provider};
+use crate::app::{Period, ProjectFilter, Tool};
 
 #[derive(Debug, Clone)]
 pub struct DashboardData {
@@ -79,7 +79,35 @@ pub struct CountMetric {
     pub value: u64,
 }
 
-pub fn dashboard_data(period: Period, provider: Provider) -> DashboardData {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectOption {
+    pub identity: Option<String>,
+    pub label: String,
+    pub cost: String,
+    pub calls: u64,
+}
+
+impl ProjectOption {
+    pub fn all(cost: String, calls: u64) -> Self {
+        Self {
+            identity: None,
+            label: "All".into(),
+            cost,
+            calls,
+        }
+    }
+
+    pub fn selected(identity: String, label: String, cost: String, calls: u64) -> Self {
+        Self {
+            identity: Some(identity),
+            label,
+            cost,
+            calls,
+        }
+    }
+}
+
+pub fn dashboard_data(period: Period, tool: Tool, project_filter: &ProjectFilter) -> DashboardData {
     let mut data = match period {
         Period::Today => today_data(),
         Period::Week => week_data(),
@@ -88,7 +116,7 @@ pub fn dashboard_data(period: Period, provider: Provider) -> DashboardData {
         Period::AllTime => all_time_data(),
     };
 
-    if provider == Provider::All {
+    if tool == Tool::All {
         data.summary.calls = "1,038";
         data.summary.sessions = "27";
         data.summary.cache_hit = "96.0%";
@@ -129,7 +157,87 @@ pub fn dashboard_data(period: Period, provider: Provider) -> DashboardData {
         );
     }
 
+    apply_project_filter(&mut data, project_filter);
+
     data
+}
+
+pub fn project_options(period: Period, tool: Tool) -> Vec<ProjectOption> {
+    let data = dashboard_data(period, tool, &ProjectFilter::All);
+    let mut options = vec![ProjectOption::all(
+        data.summary.cost.into(),
+        parse_count(data.summary.calls),
+    )];
+
+    options.extend(data.projects.iter().map(|project| {
+        let calls = data
+            .project_providers
+            .iter()
+            .filter(|row| row.project == project.name)
+            .map(|row| row.calls)
+            .sum();
+        ProjectOption::selected(
+            project.name.into(),
+            project.name.into(),
+            project.cost.into(),
+            calls,
+        )
+    }));
+
+    options
+}
+
+fn apply_project_filter(data: &mut DashboardData, project_filter: &ProjectFilter) {
+    let ProjectFilter::Selected { label, .. } = project_filter else {
+        return;
+    };
+
+    if let Some(project) = data.projects.iter().find(|project| project.name == label) {
+        let calls: u64 = data
+            .project_providers
+            .iter()
+            .filter(|row| row.project == label)
+            .map(|row| row.calls)
+            .sum();
+        data.summary.cost = project.cost;
+        data.summary.calls = leak(format_int(calls));
+        data.summary.sessions = leak(format_int(project.sessions));
+    } else {
+        data.summary.cost = "$0.00";
+        data.summary.calls = "0";
+        data.summary.sessions = "0";
+        data.summary.cache_hit = "-";
+    }
+
+    data.projects.retain(|project| project.name == label);
+    data.project_providers.retain(|row| row.project == label);
+    data.sessions.retain(|row| row.project == label);
+}
+
+fn parse_count(value: &str) -> u64 {
+    value
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .collect::<String>()
+        .parse()
+        .unwrap_or(0)
+}
+
+fn format_int(n: u64) -> String {
+    let s = n.to_string();
+    let bytes = s.as_bytes();
+    let mut out = String::with_capacity(s.len() + s.len() / 3);
+    for (i, b) in bytes.iter().enumerate() {
+        if i > 0 && (bytes.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(*b as char);
+    }
+    out
+}
+
+fn leak(s: String) -> &'static str {
+    Box::leak(s.into_boxed_str())
 }
 
 fn week_data() -> DashboardData {
