@@ -50,11 +50,16 @@ pub(super) fn render_nav(frame: &mut Frame<'_>, area: Rect, app: &App) {
 }
 
 pub(super) fn render_summary(frame: &mut Frame<'_>, area: Rect, app: &App, summary: &Summary) {
-    let title = match app.view {
+    let base = match app.view {
         crate::app::View::Dashboard => "tokenuse",
         crate::app::View::Optimize => "tokenuse Optimize",
         crate::app::View::Compare => "tokenuse Compare",
     };
+    let title_owned = match &app.status {
+        Some(s) => format!("{base}  ·  {s}"),
+        None => base.to_string(),
+    };
+    let title: &str = &title_owned;
 
     let text = Text::from(vec![
         Line::from(vec![

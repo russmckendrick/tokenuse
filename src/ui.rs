@@ -8,7 +8,7 @@ use ratatui::{
     widgets::{Block, Paragraph, Widget},
 };
 
-use crate::{app::App, data::dashboard_data, theme};
+use crate::{app::App, theme};
 
 use components::{centered_rect, two_columns};
 use sections::{
@@ -51,7 +51,7 @@ pub fn render(frame: &mut Frame<'_>, app: &App) {
         ])
         .split(area);
 
-    let data = dashboard_data(app.period, app.provider);
+    let data = app.dashboard();
 
     render_nav(frame, sections[0], app);
     render_summary(frame, sections[1], app, &data.summary);

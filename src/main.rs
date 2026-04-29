@@ -10,19 +10,35 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
-use tokenuse::{app::App, ui};
+use tokenuse::{
+    app::{App, DataSource},
+    ingest, ui,
+};
 
 fn main() -> Result<()> {
     color_eyre::install()?;
 
+    if handle_subcommand()? {
+        return Ok(());
+    }
+
+    let (source, status) = match ingest::load() {
+        Ok(ingested) if !ingested.is_empty() => (DataSource::Live(ingested), None),
+        Ok(_) => (
+            DataSource::Sample,
+            Some("no local sessions found · sample data".into()),
+        ),
+        Err(e) => (
+            DataSource::Sample,
+            Some(format!("ingest failed · sample data ({e})")),
+        ),
+    };
+
     let mut session = TerminalSession::new()?;
-    let result = run(session.terminal());
-    result
+    run(session.terminal(), App::with_source(source, status))
 }
 
-fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
-    let mut app = App::default();
-
+fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, mut app: App) -> Result<()> {
     loop {
         terminal.draw(|frame| ui::render(frame, &app))?;
 
@@ -38,6 +54,29 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(feature = "refresh-prices")]
+fn handle_subcommand() -> Result<bool> {
+    let mut args = std::env::args().skip(1);
+    if let Some(arg) = args.next() {
+        if arg == "--refresh-prices" {
+            let target = std::path::PathBuf::from("src/pricing/snapshot.json");
+            tokenuse::pricing::refresh::run(&target)?;
+            println!("wrote {}", target.display());
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+#[cfg(not(feature = "refresh-prices"))]
+fn handle_subcommand() -> Result<bool> {
+    if std::env::args().any(|a| a == "--refresh-prices") {
+        eprintln!("--refresh-prices requires building with --features refresh-prices");
+        return Ok(true);
+    }
+    Ok(false)
 }
 
 struct TerminalSession {

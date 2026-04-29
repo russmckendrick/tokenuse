@@ -1,6 +1,9 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use crate::data::DashboardData;
+use crate::ingest::Ingested;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Period {
     Today,
     Week,
@@ -41,22 +44,31 @@ impl Period {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Provider {
-    Claude,
+    ClaudeCode,
+    Cursor,
+    Codex,
+    Copilot,
     All,
 }
 
 impl Provider {
     pub fn label(self) -> &'static str {
         match self {
-            Self::Claude => "Claude",
+            Self::ClaudeCode => "Claude Code",
+            Self::Cursor => "Cursor",
+            Self::Codex => "Codex",
+            Self::Copilot => "Copilot",
             Self::All => "All",
         }
     }
 
     fn next(self) -> Self {
         match self {
-            Self::Claude => Self::All,
-            Self::All => Self::Claude,
+            Self::ClaudeCode => Self::Cursor,
+            Self::Cursor => Self::Codex,
+            Self::Codex => Self::Copilot,
+            Self::Copilot => Self::All,
+            Self::All => Self::ClaudeCode,
         }
     }
 }
@@ -86,11 +98,17 @@ impl View {
     }
 }
 
-#[derive(Debug, Clone)]
+pub enum DataSource {
+    Live(Ingested),
+    Sample,
+}
+
 pub struct App {
     pub period: Period,
     pub provider: Provider,
     pub view: View,
+    pub source: DataSource,
+    pub status: Option<String>,
     should_quit: bool,
 }
 
@@ -98,16 +116,33 @@ impl Default for App {
     fn default() -> Self {
         Self {
             period: Period::Week,
-            provider: Provider::Claude,
+            provider: Provider::ClaudeCode,
             view: View::Dashboard,
+            source: DataSource::Sample,
+            status: None,
             should_quit: false,
         }
     }
 }
 
 impl App {
+    pub fn with_source(source: DataSource, status: Option<String>) -> Self {
+        Self {
+            source,
+            status,
+            ..Self::default()
+        }
+    }
+
     pub fn should_quit(&self) -> bool {
         self.should_quit
+    }
+
+    pub fn dashboard(&self) -> DashboardData {
+        match &self.source {
+            DataSource::Live(ingested) => ingested.dashboard(self.period, self.provider),
+            DataSource::Sample => crate::data::dashboard_data(self.period, self.provider),
+        }
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
