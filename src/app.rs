@@ -44,56 +44,31 @@ impl Period {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Provider {
+    All,
     ClaudeCode,
     Cursor,
     Codex,
     Copilot,
-    All,
 }
 
 impl Provider {
     pub fn label(self) -> &'static str {
         match self {
+            Self::All => "All",
             Self::ClaudeCode => "Claude Code",
             Self::Cursor => "Cursor",
             Self::Codex => "Codex",
             Self::Copilot => "Copilot",
-            Self::All => "All",
         }
     }
 
     fn next(self) -> Self {
         match self {
+            Self::All => Self::ClaudeCode,
             Self::ClaudeCode => Self::Cursor,
             Self::Cursor => Self::Codex,
             Self::Codex => Self::Copilot,
             Self::Copilot => Self::All,
-            Self::All => Self::ClaudeCode,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum View {
-    Dashboard,
-    Optimize,
-    Compare,
-}
-
-impl View {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Dashboard => "Dashboard",
-            Self::Optimize => "Optimize",
-            Self::Compare => "Compare",
-        }
-    }
-
-    fn next(self) -> Self {
-        match self {
-            Self::Dashboard => Self::Optimize,
-            Self::Optimize => Self::Compare,
-            Self::Compare => Self::Dashboard,
         }
     }
 }
@@ -106,7 +81,6 @@ pub enum DataSource {
 pub struct App {
     pub period: Period,
     pub provider: Provider,
-    pub view: View,
     pub source: DataSource,
     pub status: Option<String>,
     should_quit: bool,
@@ -116,8 +90,7 @@ impl Default for App {
     fn default() -> Self {
         Self {
             period: Period::Week,
-            provider: Provider::ClaudeCode,
-            view: View::Dashboard,
+            provider: Provider::All,
             source: DataSource::Sample,
             status: None,
             should_quit: false,
@@ -158,9 +131,6 @@ impl App {
             KeyCode::Char('4') => self.period = Period::Month,
             KeyCode::Char('5') => self.period = Period::AllTime,
             KeyCode::Char('p') => self.provider = self.provider.next(),
-            KeyCode::Char('o') => self.view = View::Optimize,
-            KeyCode::Char('c') => self.view = View::Compare,
-            KeyCode::Char('<') | KeyCode::Char('>') | KeyCode::Tab => self.view = self.view.next(),
             _ => {}
         }
     }
