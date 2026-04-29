@@ -18,7 +18,9 @@ flowchart LR
 ## Start Here
 
 - [Tool ingestion](tools/README.md): what local files each AI coding tool writes, how `tokenuse` discovers them, and how fields are normalized.
-- [Architecture](architecture.md): startup flow, dashboard aggregation, project identity, deduplication, and pricing behavior.
+- [Architecture](architecture.md): startup flow, the page/modal state machine (dashboard, usage, session drill-down, config, help), dashboard aggregation, project identity, deduplication, pricing, and the export pipeline.
+
+The short [project README](../README.md) covers installation, the keyboard reference (including `h` for help, `s` for the session drill-down, `e` for export, `r` for live reload), and the configuration directory layout.
 
 ## Terminology
 

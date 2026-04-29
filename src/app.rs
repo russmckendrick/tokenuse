@@ -1,3 +1,5 @@
+use std::sync::mpsc::{Receiver, TryRecvError};
+
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::config::{ConfigPaths, UserConfig};
@@ -261,6 +263,17 @@ pub enum DataSource {
     Sample,
 }
 
+pub enum ReloadState {
+    Idle,
+    Pending(Receiver<color_eyre::Result<Ingested>>),
+}
+
+impl Default for ReloadState {
+    fn default() -> Self {
+        Self::Idle
+    }
+}
+
 pub struct App {
     pub page: Page,
     pub period: Period,
@@ -273,6 +286,7 @@ pub struct App {
     pub session_view: Option<SessionDetailView>,
     pub session_scroll: usize,
     pub help_open: bool,
+    pub reload_state: ReloadState,
     pub config_selected: usize,
     pub settings: UserConfig,
     pub paths: ConfigPaths,
@@ -296,6 +310,7 @@ impl Default for App {
             session_view: None,
             session_scroll: 0,
             help_open: false,
+            reload_state: ReloadState::Idle,
             config_selected: 0,
             settings: UserConfig::default(),
             paths: ConfigPaths::default(),
@@ -362,20 +377,51 @@ impl App {
         self.currency_table.formatter(&self.settings.currency)
     }
 
+    /// Kick off a background reload. Returns immediately; the result is
+    /// applied later via `poll_reload`. Subsequent presses while a reload is
+    /// already in flight are ignored so we don't pile up worker threads.
     pub fn reload(&mut self) {
-        match crate::ingest::load() {
-            Ok(ingested) if !ingested.is_empty() => {
+        if matches!(self.reload_state, ReloadState::Pending(_)) {
+            return;
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(crate::ingest::load());
+        });
+        self.reload_state = ReloadState::Pending(rx);
+        self.status = Some("reloading…".into());
+    }
+
+    /// Drain the result of any pending reload. Called every tick from the
+    /// main loop so the UI stays responsive while ingest is running.
+    pub fn poll_reload(&mut self) {
+        let result = match &self.reload_state {
+            ReloadState::Idle => return,
+            ReloadState::Pending(rx) => match rx.try_recv() {
+                Ok(result) => Some(result),
+                Err(TryRecvError::Empty) => return,
+                Err(TryRecvError::Disconnected) => None,
+            },
+        };
+        self.reload_state = ReloadState::Idle;
+
+        match result {
+            Some(Ok(ingested)) if !ingested.is_empty() => {
                 let n = ingested.calls.len();
                 self.source = DataSource::Live(ingested);
                 self.status = Some(format!("reloaded · {n} calls"));
             }
-            Ok(_) => {
+            Some(Ok(_)) => {
                 self.status = Some("reload · no sessions found · prior data kept".into());
             }
-            Err(e) => {
+            Some(Err(e)) => {
                 self.status = Some(format!("reload failed · prior data kept ({e})"));
             }
+            None => {
+                self.status = Some("reload thread exited unexpectedly · prior data kept".into());
+            }
         }
+
         if let Some(view) = self.session_view.as_ref() {
             let key = view.key.clone();
             self.session_view = self.lookup_session_view(&key);
@@ -1062,5 +1108,53 @@ mod tests {
         app.handle_key(key(KeyCode::Char('q')));
 
         assert!(app.should_quit());
+    }
+
+    #[test]
+    fn reload_is_non_blocking_and_idempotent_while_pending() {
+        let mut app = App::default();
+        assert!(matches!(app.reload_state, ReloadState::Idle));
+
+        app.reload();
+        assert!(matches!(app.reload_state, ReloadState::Pending(_)));
+        assert_eq!(app.status.as_deref(), Some("reloading…"));
+
+        // Pressing r again while a reload is already in flight is a no-op:
+        // status stays as "reloading…" and we don't lose the existing receiver.
+        app.status = Some("untouched".into());
+        app.reload();
+        assert_eq!(app.status.as_deref(), Some("untouched"));
+        assert!(matches!(app.reload_state, ReloadState::Pending(_)));
+    }
+
+    #[test]
+    fn poll_reload_with_idle_state_is_a_noop() {
+        let mut app = App::default();
+        app.status = Some("untouched".into());
+        app.poll_reload();
+        assert_eq!(app.status.as_deref(), Some("untouched"));
+    }
+
+    #[test]
+    fn poll_reload_drains_a_pre_completed_channel() {
+        // This synthesises the "background thread already finished" case
+        // without actually walking the filesystem, so the test is fast and
+        // deterministic regardless of how much local session data exists.
+        let mut app = App::default();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let ingested = crate::ingest::Ingested {
+            calls: Vec::new(),
+            limits: Vec::new(),
+        };
+        tx.send(Ok(ingested)).unwrap();
+        app.reload_state = ReloadState::Pending(rx);
+
+        app.poll_reload();
+
+        assert!(matches!(app.reload_state, ReloadState::Idle));
+        assert_eq!(
+            app.status.as_deref(),
+            Some("reload · no sessions found · prior data kept")
+        );
     }
 }

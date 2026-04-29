@@ -77,11 +77,15 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, mut app: App) -> Resul
             break;
         }
 
-        if event::poll(Duration::from_millis(200))? {
+        // Short timeout so reload completion shows up promptly even when the
+        // user isn't pressing keys. ingest::load runs on a background thread
+        // and surfaces its result via App::poll_reload.
+        if event::poll(Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
                 app.handle_key(key);
             }
         }
+        app.poll_reload();
     }
 
     Ok(())
