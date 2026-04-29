@@ -5,7 +5,8 @@ use color_eyre::Result;
 
 use crate::app::{Period, Provider};
 use crate::data::{
-    CountMetric, DailyMetric, DashboardData, ModelMetric, ProjectMetric, SessionMetric, Summary,
+    CountMetric, DailyMetric, DashboardData, ModelMetric, ProjectMetric, ProjectProviderMetric,
+    SessionMetric, Summary,
 };
 use crate::providers::{self, ParsedCall};
 
@@ -94,12 +95,7 @@ fn build_dashboard(calls: &[&ParsedCall]) -> DashboardData {
         0.0
     };
 
-    let mut sessions_set: HashSet<String> = HashSet::new();
-    for c in calls {
-        if !c.session_id.is_empty() {
-            sessions_set.insert(c.session_id.clone());
-        }
-    }
+    let sessions_set: HashSet<String> = calls.iter().filter_map(|c| session_key(c)).collect();
 
     let summary = Summary {
         cost: leak(format_money(total_cost)),
@@ -114,6 +110,7 @@ fn build_dashboard(calls: &[&ParsedCall]) -> DashboardData {
 
     let daily = aggregate_daily(calls);
     let projects = aggregate_projects(calls);
+    let project_providers = aggregate_project_providers(calls);
     let sessions = aggregate_sessions(calls);
     let models = aggregate_models(calls);
     let tools = aggregate_tools(calls);
@@ -124,8 +121,8 @@ fn build_dashboard(calls: &[&ParsedCall]) -> DashboardData {
         summary,
         daily,
         projects,
+        project_providers,
         sessions,
-        activities: Vec::new(),
         models,
         tools,
         commands,
@@ -147,8 +144,8 @@ fn empty_dashboard() -> DashboardData {
         },
         daily: Vec::new(),
         projects: Vec::new(),
+        project_providers: Vec::new(),
         sessions: Vec::new(),
-        activities: Vec::new(),
         models: Vec::new(),
         tools: Vec::new(),
         commands: Vec::new(),
@@ -185,20 +182,25 @@ fn aggregate_projects(calls: &[&ParsedCall]) -> Vec<ProjectMetric> {
     struct Acc {
         cost: f64,
         sessions: HashSet<String>,
-        cache_overhead: u64,
+        providers: HashMap<&'static str, f64>,
     }
     let mut by_project: HashMap<String, Acc> = HashMap::new();
     for c in calls {
-        let entry = by_project.entry(c.project.clone()).or_default();
+        let entry = by_project.entry(canonical_project(&c.project)).or_default();
         entry.cost += c.cost_usd;
-        if !c.session_id.is_empty() {
-            entry.sessions.insert(c.session_id.clone());
+        if let Some(key) = session_key(c) {
+            entry.sessions.insert(key);
         }
-        entry.cache_overhead += c.cache_creation_input_tokens;
+        *entry.providers.entry(c.provider).or_default() += c.cost_usd;
     }
 
     let mut rows: Vec<(String, Acc)> = by_project.into_iter().collect();
-    rows.sort_by(|a, b| b.1.cost.partial_cmp(&a.1.cost).unwrap_or(std::cmp::Ordering::Equal));
+    rows.sort_by(|a, b| {
+        b.1.cost
+            .partial_cmp(&a.1.cost)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.0.cmp(&b.0))
+    });
     let max = rows.first().map(|r| r.1.cost).unwrap_or(0.0);
 
     rows.into_iter()
@@ -207,11 +209,73 @@ fn aggregate_projects(calls: &[&ParsedCall]) -> Vec<ProjectMetric> {
             let session_count = acc.sessions.len().max(1) as u64;
             let avg = acc.cost / session_count as f64;
             ProjectMetric {
-                name: leak(short_project(&name)),
+                name: leak(name),
                 cost: leak(format_money(acc.cost)),
                 avg_per_session: leak(format_money(avg)),
                 sessions: session_count,
-                overhead: leak(format_compact(acc.cache_overhead / session_count)),
+                provider_mix: leak(format_provider_mix(&acc.providers)),
+                value: scale(acc.cost, max),
+            }
+        })
+        .collect()
+}
+
+fn aggregate_project_providers(calls: &[&ParsedCall]) -> Vec<ProjectProviderMetric> {
+    #[derive(Default)]
+    struct Acc {
+        cost: f64,
+        calls: u64,
+        sessions: HashSet<String>,
+    }
+
+    let mut project_totals: HashMap<String, f64> = HashMap::new();
+    let mut by_pair: HashMap<(String, &'static str), Acc> = HashMap::new();
+
+    for c in calls {
+        let project = canonical_project(&c.project);
+        *project_totals.entry(project.clone()).or_default() += c.cost_usd;
+
+        let entry = by_pair.entry((project, c.provider)).or_default();
+        entry.cost += c.cost_usd;
+        entry.calls += 1;
+        if let Some(key) = session_key(c) {
+            entry.sessions.insert(key);
+        }
+    }
+
+    let mut rows: Vec<(String, &'static str, f64, Acc)> = by_pair
+        .into_iter()
+        .map(|((project, provider), acc)| {
+            let total = *project_totals.get(&project).unwrap_or(&0.0);
+            (project, provider, total, acc)
+        })
+        .collect();
+
+    rows.sort_by(|a, b| {
+        b.2.partial_cmp(&a.2)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| {
+                b.3.cost
+                    .partial_cmp(&a.3.cost)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .then_with(|| a.0.cmp(&b.0))
+            .then_with(|| provider_short_label(a.1).cmp(provider_short_label(b.1)))
+    });
+    let max = rows.iter().map(|r| r.3.cost).fold(0.0_f64, f64::max);
+
+    rows.into_iter()
+        .take(12)
+        .map(|(project, provider, _, acc)| {
+            let session_count = acc.sessions.len().max(1) as u64;
+            let avg = acc.cost / session_count as f64;
+            ProjectProviderMetric {
+                project: leak(project),
+                provider: provider_short_label(provider),
+                cost: leak(format_money(acc.cost)),
+                calls: acc.calls,
+                sessions: session_count,
+                avg_per_session: leak(format_money(avg)),
                 value: scale(acc.cost, max),
             }
         })
@@ -228,14 +292,14 @@ fn aggregate_sessions(calls: &[&ParsedCall]) -> Vec<SessionMetric> {
     }
     let mut by_session: HashMap<String, Acc> = HashMap::new();
     for c in calls {
-        if c.session_id.is_empty() {
+        let Some(key) = session_key(c) else {
             continue;
-        }
-        let entry = by_session.entry(c.session_id.clone()).or_default();
+        };
+        let entry = by_session.entry(key).or_default();
         entry.cost += c.cost_usd;
         entry.calls += 1;
         if entry.project.is_empty() {
-            entry.project = short_project(&c.project);
+            entry.project = canonical_project(&c.project);
         }
         if let Some(ts) = c.timestamp {
             let d = ts.with_timezone(&Local).date_naive();
@@ -244,7 +308,11 @@ fn aggregate_sessions(calls: &[&ParsedCall]) -> Vec<SessionMetric> {
     }
 
     let mut rows: Vec<Acc> = by_session.into_values().collect();
-    rows.sort_by(|a, b| b.cost.partial_cmp(&a.cost).unwrap_or(std::cmp::Ordering::Equal));
+    rows.sort_by(|a, b| {
+        b.cost
+            .partial_cmp(&a.cost)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let max = rows.first().map(|r| r.cost).unwrap_or(0.0);
 
     rows.into_iter()
@@ -291,7 +359,11 @@ fn aggregate_models(calls: &[&ParsedCall]) -> Vec<ModelMetric> {
     }
 
     let mut rows: Vec<(String, Acc)> = by_model.into_iter().collect();
-    rows.sort_by(|a, b| b.1.cost.partial_cmp(&a.1.cost).unwrap_or(std::cmp::Ordering::Equal));
+    rows.sort_by(|a, b| {
+        b.1.cost
+            .partial_cmp(&a.1.cost)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let max = rows.first().map(|r| r.1.cost).unwrap_or(0.0);
 
     rows.into_iter()
@@ -358,9 +430,70 @@ fn top_counts(counts: HashMap<String, u64>, limit: usize) -> Vec<CountMetric> {
         .map(|(name, calls)| CountMetric {
             name: leak(name),
             calls,
-            value: if max == 0 { 0 } else { (calls * 100 / max).max(1) },
+            value: if max == 0 {
+                0
+            } else {
+                (calls * 100 / max).max(1)
+            },
         })
         .collect()
+}
+
+fn session_key(call: &ParsedCall) -> Option<String> {
+    if call.session_id.is_empty() {
+        None
+    } else {
+        Some(format!("{}:{}", call.provider, call.session_id))
+    }
+}
+
+fn canonical_project(raw: &str) -> String {
+    let normalized = raw.trim().replace('\\', "/");
+    let trimmed = normalized.trim_end_matches('/');
+    let display = short_project(trimmed);
+    if display.is_empty() {
+        "(unknown)".into()
+    } else {
+        display
+    }
+}
+
+fn format_provider_mix(providers: &HashMap<&'static str, f64>) -> String {
+    let mut rows: Vec<(&'static str, f64)> = providers
+        .iter()
+        .map(|(provider, cost)| (*provider, *cost))
+        .collect();
+    rows.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| provider_short_label(a.0).cmp(provider_short_label(b.0)))
+    });
+
+    if rows.is_empty() {
+        return "-".into();
+    }
+
+    rows.into_iter()
+        .take(3)
+        .map(|(provider, cost)| {
+            format!(
+                "{} {}",
+                provider_short_label(provider),
+                format_money_short(cost)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("  ")
+}
+
+fn provider_short_label(provider: &str) -> &'static str {
+    match provider {
+        "claude-code" => "Claude",
+        "cursor" => "Cursor",
+        "codex" => "Codex",
+        "copilot" => "Copilot",
+        _ => "Other",
+    }
 }
 
 fn scale(value: f64, max: f64) -> u64 {
@@ -388,6 +521,20 @@ fn format_money(amount: f64) -> String {
         format!("${:.2}", amount)
     } else if amount >= 0.01 {
         format!("${:.3}", amount)
+    } else {
+        format!("${:.4}", amount)
+    }
+}
+
+fn format_money_short(amount: f64) -> String {
+    if amount >= 100.0 {
+        format!("${:.0}", amount)
+    } else if amount >= 10.0 {
+        format!("${:.1}", amount)
+    } else if amount >= 1.0 {
+        format!("${:.2}", amount)
+    } else if amount >= 0.01 {
+        format!("${:.2}", amount)
     } else {
         format!("${:.4}", amount)
     }
@@ -440,6 +587,25 @@ mod tests {
         }
     }
 
+    fn mk_project_call(
+        provider: &'static str,
+        session_id: &str,
+        project: &str,
+        cost: f64,
+    ) -> ParsedCall {
+        ParsedCall {
+            provider,
+            timestamp: DateTime::parse_from_rfc3339("2026-04-29T08:00:00Z")
+                .ok()
+                .map(|d| d.with_timezone(&chrono::Utc)),
+            cost_usd: cost,
+            session_id: session_id.into(),
+            project: project.into(),
+            model: "test-model".into(),
+            ..ParsedCall::default()
+        }
+    }
+
     #[test]
     fn period_today_filters_correctly() {
         use chrono::TimeZone;
@@ -457,5 +623,82 @@ mod tests {
             short_project("/Users/me/Code/asciinema/to/svg"),
             "asciinema/to/svg"
         );
+    }
+
+    #[test]
+    fn project_costs_roll_up_across_providers() {
+        let ingested = Ingested {
+            calls: vec![
+                mk_project_call("claude-code", "s1", "/Users/me/Code/widgets", 2.0),
+                mk_project_call("codex", "s1", "me/Code/widgets", 3.0),
+                mk_project_call("cursor", "s2", "/Users/me/Code/widgets", 5.0),
+            ],
+        };
+
+        let data = ingested.dashboard(Period::AllTime, Provider::All);
+
+        assert_eq!(data.projects.len(), 1);
+        assert_eq!(data.projects[0].name, "me/Code/widgets");
+        assert_eq!(data.projects[0].cost, "$10.00");
+        assert_eq!(data.projects[0].sessions, 3);
+        assert!(data.projects[0].provider_mix.contains("Cursor $5.00"));
+        assert!(data.projects[0].provider_mix.contains("Codex $3.00"));
+        assert!(data.projects[0].provider_mix.contains("Claude $2.00"));
+        assert_eq!(data.project_providers.len(), 3);
+    }
+
+    #[test]
+    fn provider_filter_keeps_project_costs_provider_local() {
+        let ingested = Ingested {
+            calls: vec![
+                mk_project_call("claude-code", "s1", "/Users/me/Code/widgets", 2.0),
+                mk_project_call("codex", "s1", "/Users/me/Code/widgets", 3.0),
+            ],
+        };
+
+        let data = ingested.dashboard(Period::AllTime, Provider::Codex);
+
+        assert_eq!(data.projects.len(), 1);
+        assert_eq!(data.projects[0].cost, "$3.00");
+        assert_eq!(data.projects[0].provider_mix, "Codex $3.00");
+        assert_eq!(data.project_providers.len(), 1);
+        assert_eq!(data.project_providers[0].provider, "Codex");
+    }
+
+    #[test]
+    fn session_counts_are_provider_qualified() {
+        let ingested = Ingested {
+            calls: vec![
+                mk_project_call("claude-code", "shared", "/Users/me/Code/widgets", 1.0),
+                mk_project_call("claude-code", "shared", "/Users/me/Code/widgets", 2.0),
+                mk_project_call("codex", "shared", "/Users/me/Code/widgets", 3.0),
+            ],
+        };
+
+        let data = ingested.dashboard(Period::AllTime, Provider::All);
+
+        assert_eq!(data.summary.sessions, "2");
+        assert_eq!(data.projects[0].sessions, 2);
+        assert_eq!(data.projects[0].avg_per_session, "$3.00");
+    }
+
+    #[test]
+    fn project_provider_rows_sort_by_project_total_then_provider_cost() {
+        let ingested = Ingested {
+            calls: vec![
+                mk_project_call("claude-code", "a1", "/Users/me/Code/a", 2.0),
+                mk_project_call("codex", "a2", "/Users/me/Code/a", 9.0),
+                mk_project_call("cursor", "b1", "/Users/me/Code/b", 10.0),
+            ],
+        };
+
+        let data = ingested.dashboard(Period::AllTime, Provider::All);
+
+        assert_eq!(data.project_providers[0].project, "me/Code/a");
+        assert_eq!(data.project_providers[0].provider, "Codex");
+        assert_eq!(data.project_providers[1].project, "me/Code/a");
+        assert_eq!(data.project_providers[1].provider, "Claude");
+        assert_eq!(data.project_providers[2].project, "me/Code/b");
+        assert_eq!(data.project_providers[2].provider, "Cursor");
     }
 }
