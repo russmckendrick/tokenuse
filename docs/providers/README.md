@@ -7,11 +7,11 @@
 | Provider | Status | Source format | Doc |
 | --- | --- | --- | --- |
 | Claude Code | implemented | JSONL session files under `~/.claude/projects/` | [claude-code.md](claude-code.md) |
-| Cursor | scaffolded | SQLite `state.vscdb` | [cursor.md](cursor.md) |
-| Codex | scaffolded | JSONL rollouts under `~/.codex/sessions/` | [codex.md](codex.md) |
+| Cursor | implemented | SQLite `state.vscdb` | [cursor.md](cursor.md) |
+| Codex | implemented | JSONL rollouts under `~/.codex/sessions/` | [codex.md](codex.md) |
 | GitHub Copilot | scaffolded | JSONL events (legacy CLI + VS Code transcripts) | [copilot.md](copilot.md) |
 
-Scaffolded providers ship the full **discovery + config** code and produce zero `ParsedCall`s today. The doc for each describes the schema and decisions a follow-up implementation needs to make; the parser file (`parser.rs`) is the only piece that needs to land.
+Today only Copilot is still scaffolded. Scaffolded providers ship the full **discovery + config** code and produce zero `ParsedCall`s until the parser lands.
 
 ## Provider trait
 
@@ -55,6 +55,16 @@ pub struct ParsedCall {
 ```
 
 ## Pipeline
+
+```mermaid
+flowchart LR
+    A[provider.discover] --> B[Vec of SessionSource]
+    B --> C[provider.parse source and seen]
+    C --> D[Vec of ParsedCall]
+    D --> E[ingest load]
+    E --> F[DashboardData]
+    C -. dedup_key gate .-> G[shared seen set]
+```
 
 ```
 provider.discover()          -> Vec<SessionSource>

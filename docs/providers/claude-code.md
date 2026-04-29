@@ -22,6 +22,20 @@ The project directory name is the URL-encoded current working directory at sessi
 - Walk the Desktop sessions tree to depth 8 looking for any directory named `projects`; treat each child as a session source.
 - Skip `node_modules` and `.git` while walking.
 
+```mermaid
+flowchart TD
+    A[claude projects dir] --> C[project directory]
+    B[desktop local agent sessions] --> D[projects directory]
+    C --> E[main jsonl files]
+    C --> F[subagents jsonl files]
+    D --> E
+    D --> F
+    E --> G[parse JSONL entries]
+    F --> G
+    G --> H[user updates last user text]
+    G --> I[assistant with usage emits ParsedCall]
+```
+
 ## Record format
 
 Each `*.jsonl` is one JSON object per line. Two entry types matter:
@@ -94,6 +108,15 @@ Re-reading the same JSONL across runs is normal; the shared `seen: &mut HashSet<
 Walk `message.content[]` and collect `name` from every `{ "type": "tool_use" }` block.
 - `mcp__server__tool` names are kept in `tools` and surface separately in the dashboard's MCP servers panel (split on `__`).
 - For `Bash` and `BashOutput` tool calls, parse `input.command` and split on unquoted `;`, `|`, `&&`, `||`. Each split is a separate command (`providers::jsonl::split_bash_commands`). The dashboard then groups by first word (`first_word`).
+
+```mermaid
+flowchart LR
+    A[assistant content array] --> B{tool_use block}
+    B -->|name only| C[tools]
+    B -->|Bash or BashOutput| D[input.command]
+    D --> E[split_bash_commands]
+    E --> F[bash_commands]
+```
 
 ## Known limitations
 

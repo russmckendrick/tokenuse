@@ -19,6 +19,19 @@ OpenAI Codex writes one JSONL "rollout" file per session under a year/month/day 
 - Match files whose name starts with `rollout-` and ends with `.jsonl`.
 - Use the relative directory (`YYYY/MM/DD`) as the project label fallback.
 
+```mermaid
+flowchart TD
+    A[codex sessions root] --> B[rollout jsonl files]
+    B --> C[first line session_meta]
+    C -->|originator contains codex| D[stream remaining entries]
+    D --> E[turn_context updates current model]
+    D --> F[response_item buffers tools and bash]
+    D --> G[event_msg token_count]
+    E --> G
+    F --> G
+    G -->|last_token_usage present| H[emit ParsedCall]
+```
+
 ## Record format
 
 A rollout is heterogeneous JSONL. The interesting types:
@@ -92,6 +105,17 @@ Including the cumulative totals from `total_token_usage` prevents two consecutiv
 ## Tools / bash extraction
 
 `response_item` entries between successive `token_count` events are accumulated into `tools` (and `bash_commands` for `exec_command`). The arguments string is JSON-decoded and the inner `cmd` field is split via `providers::jsonl::split_bash_commands`. On each emitted `ParsedCall` the buffers are drained (so the next turn starts empty); duplicate `token_count` entries that lose to the `seen` dedup set also clear the buffer to avoid leaking tool calls into the following turn.
+
+```mermaid
+flowchart LR
+    A[response_item] --> B[normalize tool name]
+    A -->|exec_command| C[decode arguments json]
+    C --> D[split_bash_commands]
+    B --> E[pending tools]
+    D --> F[pending bash]
+    E --> G[next token_count emits ParsedCall]
+    F --> G
+```
 
 ## Known limitations
 
