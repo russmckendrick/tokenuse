@@ -24,8 +24,7 @@ pub fn cache_path() -> Option<PathBuf> {
     paths::cache_dir().map(|c| c.join(CACHE_FILE))
 }
 
-pub const BUBBLE_QUERY: &str =
-    "SELECT key, value FROM cursorDiskKV WHERE key LIKE 'bubbleId:%'";
+pub const BUBBLE_QUERY: &str = "SELECT key, value FROM cursorDiskKV WHERE key LIKE 'bubbleId:%'";
 
 pub const AGENT_KV_QUERY: &str =
     "SELECT key, value FROM cursorDiskKV WHERE key LIKE 'agentKv:blob:%'";

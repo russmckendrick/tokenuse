@@ -14,7 +14,7 @@ Copilot has two separate on-disk layouts: the legacy CLI agent (`~/.copilot/...`
     workspace.yaml
 ```
 
-`workspace.yaml` carries the cwd and is parsed for the project label. `events.jsonl` is the timeline.
+`workspace.yaml` carries the cwd and is parsed as the project path. `events.jsonl` is the timeline.
 
 ### VS Code extension
 
@@ -31,6 +31,7 @@ GitHub.copilot-chat/transcripts/<session>.jsonl
 ```
 
 A directory only counts as a Copilot source if at least one transcript file's first line is `{"type":"session.start","producer":"copilot-agent",...}`.
+When the transcript's `session.start` event includes `data.context.cwd`, that cwd is the authoritative project path. If it is absent, tokenuse falls back to `workspace.yaml` and then the discovered source project.
 
 ```mermaid
 flowchart TD
@@ -65,7 +66,8 @@ flowchart TD
 ### VS Code transcripts
 
 ```jsonc
-{ "type": "session.start", "producer": "copilot-agent", "model": "gpt-5" }
+{ "type": "session.start", "producer": "copilot-agent", "model": "gpt-5",
+  "context": { "cwd": "/Users/me/Code/tokens" } }
 { "type": "user.message", "content": "..." }
 { "type": "assistant.message", "content": "...", "reasoningText": "...",
   "toolCalls": [{ "id": "call_abc", "name": "edit_file" }] }
@@ -133,4 +135,4 @@ flowchart LR
 
 - VS Code transcripts have no canonical timestamp on every entry — use file mtime as a coarse fallback when the line lacks one.
 - Token counts are estimates whenever the legacy `outputTokens` is absent; the dashboard's totals are within ~10–20% of reality on Copilot data, not exact.
-- `workspace.yaml` parsing is YAML; pull a small YAML crate (e.g. `serde_yaml`) only if the project label is needed — the session ID directory name is an acceptable fallback.
+- `workspace.yaml` parsing currently reads the scalar `cwd:` line used by Copilot's session-state files. If Copilot starts writing more complex YAML here, replace the small parser with a YAML crate.

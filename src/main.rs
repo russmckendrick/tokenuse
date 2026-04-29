@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     io::{self, Stdout},
     time::Duration,
 };
@@ -56,27 +57,119 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, mut app: App) -> Resul
     Ok(())
 }
 
-#[cfg(feature = "refresh-prices")]
 fn handle_subcommand() -> Result<bool> {
-    let mut args = std::env::args().skip(1);
-    if let Some(arg) = args.next() {
-        if arg == "--refresh-prices" {
-            let target = std::path::PathBuf::from("src/pricing/snapshot.json");
-            tokenuse::pricing::refresh::run(&target)?;
-            println!("wrote {}", target.display());
-            return Ok(true);
-        }
+    let args: Vec<String> = std::env::args().skip(1).collect();
+
+    if args.iter().any(|arg| arg == "--list-projects") {
+        print_project_inventory()?;
+        return Ok(true);
     }
+
+    if args.iter().any(|arg| arg == "--refresh-prices") {
+        refresh_prices()?;
+        return Ok(true);
+    }
+
     Ok(false)
 }
 
-#[cfg(not(feature = "refresh-prices"))]
-fn handle_subcommand() -> Result<bool> {
-    if std::env::args().any(|a| a == "--refresh-prices") {
-        eprintln!("--refresh-prices requires building with --features refresh-prices");
-        return Ok(true);
+fn print_project_inventory() -> Result<()> {
+    let ingested = ingest::load()?;
+    if ingested.is_empty() {
+        println!("no local sessions found");
+        return Ok(());
     }
-    Ok(false)
+
+    let rows = ingested.project_inventory();
+    let projects: BTreeSet<&str> = rows.iter().map(|row| row.project.as_str()).collect();
+    let raw_projects: BTreeSet<&str> = rows.iter().map(|row| row.raw_project.as_str()).collect();
+
+    println!(
+        "{} projects, {} raw variants, {} project-agent rows, {} calls",
+        projects.len(),
+        raw_projects.len(),
+        rows.len(),
+        ingested.calls.len()
+    );
+    println!();
+
+    let project_w = rows
+        .iter()
+        .map(|row| row.project.len())
+        .chain(std::iter::once("project".len()))
+        .max()
+        .unwrap_or("project".len());
+    let agent_w = rows
+        .iter()
+        .map(|row| row.provider.len())
+        .chain(std::iter::once("agent".len()))
+        .max()
+        .unwrap_or("agent".len());
+    let calls_w = rows
+        .iter()
+        .map(|row| row.calls.to_string().len())
+        .chain(std::iter::once("calls".len()))
+        .max()
+        .unwrap_or("calls".len());
+    let sessions_w = rows
+        .iter()
+        .map(|row| row.sessions.to_string().len())
+        .chain(std::iter::once("sess".len()))
+        .max()
+        .unwrap_or("sess".len());
+    let cost_w = rows
+        .iter()
+        .map(|row| row.cost.len())
+        .chain(std::iter::once("cost".len()))
+        .max()
+        .unwrap_or("cost".len());
+
+    println!(
+        "{:<project_w$}  {:<agent_w$}  {:>calls_w$}  {:>sessions_w$}  {:>cost_w$}  raw project",
+        "project",
+        "agent",
+        "calls",
+        "sess",
+        "cost",
+        project_w = project_w,
+        agent_w = agent_w,
+        calls_w = calls_w,
+        sessions_w = sessions_w,
+        cost_w = cost_w
+    );
+
+    for row in rows {
+        println!(
+            "{:<project_w$}  {:<agent_w$}  {:>calls_w$}  {:>sessions_w$}  {:>cost_w$}  {}",
+            row.project,
+            row.provider,
+            row.calls,
+            row.sessions,
+            row.cost,
+            row.raw_project,
+            project_w = project_w,
+            agent_w = agent_w,
+            calls_w = calls_w,
+            sessions_w = sessions_w,
+            cost_w = cost_w
+        );
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "refresh-prices")]
+fn refresh_prices() -> Result<()> {
+    let target = std::path::PathBuf::from("src/pricing/snapshot.json");
+    tokenuse::pricing::refresh::run(&target)?;
+    println!("wrote {}", target.display());
+    Ok(())
+}
+
+#[cfg(not(feature = "refresh-prices"))]
+fn refresh_prices() -> Result<()> {
+    eprintln!("--refresh-prices requires building with --features refresh-prices");
+    Ok(())
 }
 
 struct TerminalSession {

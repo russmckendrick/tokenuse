@@ -21,6 +21,8 @@ struct JournalEntry {
     #[serde(default, rename = "sessionId")]
     session_id: Option<String>,
     #[serde(default)]
+    cwd: Option<String>,
+    #[serde(default)]
     message: Option<Message>,
 }
 
@@ -60,10 +62,14 @@ struct ServerToolUse {
     web_search_requests: u64,
 }
 
-pub fn parse_session(source: &SessionSource, seen: &mut HashSet<String>) -> Result<Vec<ParsedCall>> {
+pub fn parse_session(
+    source: &SessionSource,
+    seen: &mut HashSet<String>,
+) -> Result<Vec<ParsedCall>> {
     let mut calls = Vec::new();
     for path in collect_jsonl(&source.path) {
         let mut last_user_text = String::new();
+        let mut project = source.project.clone();
         let lines = match jsonl::read_lines(&path) {
             Ok(l) => l,
             Err(_) => continue,
@@ -78,6 +84,10 @@ pub fn parse_session(source: &SessionSource, seen: &mut HashSet<String>) -> Resu
                 Ok(e) => e,
                 Err(_) => continue,
             };
+
+            if let Some(cwd) = entry.cwd.as_ref().filter(|cwd| !cwd.trim().is_empty()) {
+                project = cwd.clone();
+            }
 
             match entry.kind.as_str() {
                 "user" => {
@@ -101,10 +111,9 @@ pub fn parse_session(source: &SessionSource, seen: &mut HashSet<String>) -> Resu
                         continue;
                     };
 
-                    let dedup_key = msg
-                        .id
-                        .clone()
-                        .unwrap_or_else(|| format!("claude:{}", entry.timestamp.clone().unwrap_or_default()));
+                    let dedup_key = msg.id.clone().unwrap_or_else(|| {
+                        format!("claude:{}", entry.timestamp.clone().unwrap_or_default())
+                    });
 
                     if !seen.insert(dedup_key.clone()) {
                         continue;
@@ -132,14 +141,14 @@ pub fn parse_session(source: &SessionSource, seen: &mut HashSet<String>) -> Resu
                         speed,
                         tools,
                         bash_commands,
-                        timestamp: entry
-                            .timestamp
-                            .as_deref()
-                            .and_then(parse_timestamp),
+                        timestamp: entry.timestamp.as_deref().and_then(parse_timestamp),
                         dedup_key,
                         user_message: last_user_text.clone(),
-                        session_id: entry.session_id.clone().unwrap_or_else(|| session_id.clone()),
-                        project: source.project.clone(),
+                        session_id: entry
+                            .session_id
+                            .clone()
+                            .unwrap_or_else(|| session_id.clone()),
+                        project: project.clone(),
                         ..ParsedCall::default()
                     };
 
@@ -162,14 +171,17 @@ fn collect_jsonl(dir: &Path) -> Vec<std::path::PathBuf> {
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some(config::SESSION_GLOB_EXT) {
+        if path.is_file()
+            && path.extension().and_then(|s| s.to_str()) == Some(config::SESSION_GLOB_EXT)
+        {
             files.push(path);
         } else if path.is_dir() && entry.file_name() == config::SUBAGENTS_DIR {
             if let Ok(sub_entries) = fs::read_dir(&path) {
                 for sub in sub_entries.flatten() {
                     let sub_path = sub.path();
                     if sub_path.is_file()
-                        && sub_path.extension().and_then(|s| s.to_str()) == Some(config::SESSION_GLOB_EXT)
+                        && sub_path.extension().and_then(|s| s.to_str())
+                            == Some(config::SESSION_GLOB_EXT)
                     {
                         files.push(sub_path);
                     }
@@ -181,7 +193,9 @@ fn collect_jsonl(dir: &Path) -> Vec<std::path::PathBuf> {
 }
 
 fn parse_timestamp(s: &str) -> Option<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(s).ok().map(|d| d.with_timezone(&Utc))
+    DateTime::parse_from_rfc3339(s)
+        .ok()
+        .map(|d| d.with_timezone(&Utc))
 }
 
 fn extract_user_text(msg: &Message) -> String {
@@ -287,6 +301,32 @@ mod tests {
         assert_eq!(call.bash_commands, vec!["ls -la", "grep foo"]);
         assert!(call.cost_usd > 0.0);
         assert_eq!(call.user_message, "refactor the parser");
+    }
+
+    #[test]
+    fn cwd_overrides_lossy_project_directory_fallback() {
+        let dir = tempfile_lite::TempDir::new();
+        let path = dir.path().join("session.jsonl");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(
+            f,
+            r#"{{"type":"assistant","timestamp":"2026-04-26T10:00:01Z","sessionId":"s1","cwd":"/Users/russ.mckendrick/Code/ai-commit-dev","message":{{"role":"assistant","id":"msg_1","model":"claude-opus-4-7","usage":{{"input_tokens":100,"output_tokens":50}}}}}}"#
+        )
+        .unwrap();
+
+        let source = SessionSource {
+            path: dir.path().to_path_buf(),
+            project: "/Users/russ/mckendrick/Code/ai/commit/dev".into(),
+            provider: config::PROVIDER_ID,
+        };
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source, &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 1);
+        assert_eq!(
+            calls[0].project,
+            "/Users/russ.mckendrick/Code/ai-commit-dev"
+        );
     }
 
     mod tempfile_lite {

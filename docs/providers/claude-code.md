@@ -15,7 +15,7 @@ Subagent transcripts live in a `subagents/` subdirectory under each project and 
 
 **Env var override:** `CLAUDE_CONFIG_DIR` replaces `~/.claude` for the CLI projects path. Useful for sandboxed installs.
 
-The project directory name is the URL-encoded current working directory at session start (e.g. `-Users-me-Code-widgets` → `/Users/me/Code/widgets`). We unsanitize by replacing `-` with `/` for display.
+Claude entries include a top-level `cwd` field, and that is the authoritative project path for parsed calls. The project directory name is only a lossy fallback: names like `-Users-me-Code-ai-commit-dev` cannot distinguish path separators from real hyphens, so never treat the directory-derived value as canonical when `cwd` is present.
 
 **Discovery rules** (`src/providers/claude_code/discovery.rs`):
 - Enumerate immediate subdirectories of `~/.claude/projects/`.

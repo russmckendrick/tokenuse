@@ -16,7 +16,10 @@ const ANTHROPIC_AUTO: &str = "anthropic-auto";
 const OPENAI_AUTO: &str = "openai-auto";
 const COPILOT_AUTO: &str = "copilot-auto";
 
-pub fn parse_session(source: &SessionSource, seen: &mut HashSet<String>) -> Result<Vec<ParsedCall>> {
+pub fn parse_session(
+    source: &SessionSource,
+    seen: &mut HashSet<String>,
+) -> Result<Vec<ParsedCall>> {
     let path = &source.path;
     if path.is_dir() {
         let mut calls = Vec::new();
@@ -48,14 +51,18 @@ fn parse_file(path: &Path, source: &SessionSource, seen: &mut HashSet<String>) -
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_default();
-        parse_transcript(&lines, &session_id, source, seen)
+        let project = transcript_cwd(&lines)
+            .or_else(|| workspace_cwd(path))
+            .unwrap_or_else(|| source.project.clone());
+        parse_transcript(&lines, &session_id, &project, seen)
     } else {
         let session_id = path
             .parent()
             .and_then(|p| p.file_name())
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_default();
-        parse_legacy(&lines, &session_id, source, seen)
+        let project = workspace_cwd(path).unwrap_or_else(|| source.project.clone());
+        parse_legacy(&lines, &session_id, &project, seen)
     }
 }
 
@@ -64,16 +71,13 @@ fn is_transcript(first_line: &str) -> bool {
         return false;
     };
     value.get("type").and_then(|t| t.as_str()) == Some("session.start")
-        && value
-            .pointer("/data/producer")
-            .and_then(|p| p.as_str())
-            == Some("copilot-agent")
+        && value.pointer("/data/producer").and_then(|p| p.as_str()) == Some("copilot-agent")
 }
 
 fn parse_legacy(
     lines: &[String],
     session_id: &str,
-    source: &SessionSource,
+    project: &str,
     seen: &mut HashSet<String>,
 ) -> Vec<ParsedCall> {
     let mut current_model = String::new();
@@ -107,9 +111,7 @@ fn parse_legacy(
                 if output_tokens == 0 || current_model.is_empty() {
                     continue;
                 }
-                let Some(message_id) = event
-                    .pointer("/data/messageId")
-                    .and_then(|v| v.as_str())
+                let Some(message_id) = event.pointer("/data/messageId").and_then(|v| v.as_str())
                 else {
                     continue;
                 };
@@ -120,7 +122,9 @@ fn parse_legacy(
                 }
 
                 let (tools, bash_commands) = extract_tools(
-                    event.pointer("/data/toolRequests").and_then(|v| v.as_array()),
+                    event
+                        .pointer("/data/toolRequests")
+                        .and_then(|v| v.as_array()),
                 );
                 let timestamp = event
                     .get("timestamp")
@@ -139,7 +143,7 @@ fn parse_legacy(
                     dedup_key,
                     user_message: std::mem::take(&mut pending_user_message),
                     session_id: session_id.to_string(),
-                    project: source.project.clone(),
+                    project: project.to_string(),
                     ..ParsedCall::default()
                 };
                 call.cost_usd = pricing::cost(&current_model, &call, Speed::Standard);
@@ -152,10 +156,26 @@ fn parse_legacy(
     calls
 }
 
+fn workspace_cwd(path: &Path) -> Option<String> {
+    let dir = if path.is_dir() { path } else { path.parent()? };
+    let raw = fs::read_to_string(dir.join(config::WORKSPACE_FILE)).ok()?;
+    raw.lines().find_map(parse_workspace_cwd_line)
+}
+
+fn parse_workspace_cwd_line(line: &str) -> Option<String> {
+    let value = line.trim().strip_prefix("cwd:")?.trim();
+    let value = value.trim_matches('"').trim_matches('\'').trim();
+    if value.is_empty() || value == "null" {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
 fn parse_transcript(
     lines: &[String],
     session_id: &str,
-    source: &SessionSource,
+    project: &str,
     seen: &mut HashSet<String>,
 ) -> Vec<ParsedCall> {
     let events: Vec<Value> = lines
@@ -190,7 +210,9 @@ fn parse_transcript(
             .pointer("/data/reasoningText")
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        let tool_array = event.pointer("/data/toolRequests").and_then(|v| v.as_array());
+        let tool_array = event
+            .pointer("/data/toolRequests")
+            .and_then(|v| v.as_array());
         let has_tools = tool_array.map(|a| !a.is_empty()).unwrap_or(false);
 
         if content_text.is_empty() && reasoning_text.is_empty() && !has_tools {
@@ -238,7 +260,7 @@ fn parse_transcript(
             dedup_key,
             user_message: std::mem::take(&mut pending_user_message),
             session_id: session_id.to_string(),
-            project: source.project.clone(),
+            project: project.to_string(),
             ..ParsedCall::default()
         };
         call.cost_usd = pricing::cost(&model, &call, Speed::Standard);
@@ -248,13 +270,30 @@ fn parse_transcript(
     calls
 }
 
+fn transcript_cwd(lines: &[String]) -> Option<String> {
+    lines.iter().find_map(|line| {
+        let value = serde_json::from_str::<Value>(line).ok()?;
+        if value.get("type").and_then(|t| t.as_str()) != Some("session.start") {
+            return None;
+        }
+        value
+            .pointer("/data/context/cwd")
+            .and_then(|cwd| cwd.as_str())
+            .filter(|cwd| !cwd.trim().is_empty())
+            .map(|cwd| cwd.to_string())
+    })
+}
+
 fn infer_model_from_tool_ids(events: &[Value]) -> String {
     let mut counts: HashMap<&'static str, u64> = HashMap::new();
     for event in events {
         if event.get("type").and_then(|v| v.as_str()) != Some("assistant.message") {
             continue;
         }
-        let Some(tools) = event.pointer("/data/toolRequests").and_then(|v| v.as_array()) else {
+        let Some(tools) = event
+            .pointer("/data/toolRequests")
+            .and_then(|v| v.as_array())
+        else {
             continue;
         };
         for tool in tools {
@@ -389,7 +428,14 @@ mod tests {
     fn parses_legacy_events() {
         let dir = TempDir::new();
         let session_id = "sess-abc";
-        let events = dir.path().join(session_id).join("events.jsonl");
+        let session_dir = dir.path().join(session_id);
+        std::fs::create_dir_all(&session_dir).unwrap();
+        let events = session_dir.join("events.jsonl");
+        std::fs::write(
+            session_dir.join(config::WORKSPACE_FILE),
+            "cwd: /Users/me/Code/aicommit\n",
+        )
+        .unwrap();
         write_lines(
             &events,
             &[
@@ -414,6 +460,7 @@ mod tests {
         assert_eq!(call.tools, vec!["Bash", "Edit"]);
         assert_eq!(call.bash_commands, vec!["ls -la", "wc -l"]);
         assert_eq!(call.user_message, "fix the typo");
+        assert_eq!(call.project, "/Users/me/Code/aicommit");
         assert!(call.cost_usd > 0.0);
         assert_eq!(call.dedup_key, format!("copilot:{}:m1", session_id));
 
@@ -444,6 +491,15 @@ mod tests {
     }
 
     #[test]
+    fn parses_workspace_cwd_from_yaml_line() {
+        assert_eq!(
+            parse_workspace_cwd_line(r#"cwd: "/Users/me/Code/tokens""#).as_deref(),
+            Some("/Users/me/Code/tokens")
+        );
+        assert_eq!(parse_workspace_cwd_line("cwd: null"), None);
+    }
+
+    #[test]
     fn parses_transcript_with_anthropic_inference() {
         let dir = TempDir::new();
         let uuid = "11111111-2222-3333-4444-555555555555";
@@ -451,7 +507,7 @@ mod tests {
         write_lines(
             &transcript,
             &[
-                r#"{"type":"session.start","data":{"sessionId":"x","producer":"copilot-agent","model":"gpt-5"}}"#,
+                r#"{"type":"session.start","data":{"sessionId":"x","producer":"copilot-agent","model":"gpt-5","context":{"cwd":"/Users/me/Code/tokens"}}}"#,
                 r#"{"type":"user.message","data":{"content":"hello world"}}"#,
                 r#"{"type":"assistant.message","data":{"messageId":"abc","content":"sure thing","reasoningText":"let me think","toolRequests":[{"toolCallId":"toolu_bdrk_01ZZ","name":"read_file"},{"toolCallId":"toolu_bdrk_02YY","name":"edit_file"}]}}"#,
                 r#"{"type":"assistant.message","data":{"messageId":"def","content":"ok","toolRequests":[{"toolCallId":"call_999","name":"web_search"}]}}"#,
@@ -472,9 +528,13 @@ mod tests {
         assert_eq!(calls[1].model, "anthropic-auto");
         assert_eq!(calls[0].session_id, uuid);
         assert_eq!(calls[0].dedup_key, format!("copilot:{}:abc", uuid));
+        assert_eq!(calls[0].project, "/Users/me/Code/tokens");
         assert_eq!(calls[0].tools, vec!["Read", "Edit"]);
         assert_eq!(calls[1].tools, vec!["WebSearch"]);
-        assert!(calls[0].input_tokens > 0, "input estimated from user message length");
+        assert!(
+            calls[0].input_tokens > 0,
+            "input estimated from user message length"
+        );
         assert!(calls[0].output_tokens > 0);
         assert!(calls[0].reasoning_tokens > 0);
         assert!(calls[0].cost_usd > 0.0);
@@ -483,7 +543,9 @@ mod tests {
     #[test]
     fn directory_source_iterates_transcripts() {
         let dir = TempDir::new();
-        let t1 = dir.path().join("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jsonl");
+        let t1 = dir
+            .path()
+            .join("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jsonl");
         write_lines(
             &t1,
             &[

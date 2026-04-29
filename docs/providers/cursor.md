@@ -27,7 +27,7 @@ flowchart TD
 
 ## Record format
 
-Cursor uses two storage layouts in the `cursorDiskKV` table. Both are JSON blobs stored under string keys.
+Cursor uses two storage layouts in the `cursorDiskKV` table. Both are JSON blobs stored under string keys. Some Agent KV values are stored with SQLite's `blob` type even when the bytes are UTF-8 JSON, so the parser decodes blob bytes before deserializing.
 
 ### V2 bubbles
 
@@ -53,7 +53,7 @@ Each row's `value` is JSON of the form:
 
 Query: `SELECT key, value FROM cursorDiskKV WHERE key LIKE 'agentKv:blob:%'`
 
-These rows carry a series of `{role, content}` pairs without explicit token counts. Estimate tokens with `chars / 4.0` and treat the row's `requestId` as the dedup key (`cursor:agentKv:<requestId>`).
+These rows carry a series of `{role, content}` pairs without explicit token counts. Estimate tokens with `chars / 4.0` and treat the row's `requestId` as the dedup key (`cursor:agentKv:<requestId>`). Cursor often injects a `<user_info>` block with `Workspace Path: ...`; when present, tokenuse uses that as the project path for the Agent KV session. If the database has exactly one unique Agent KV workspace path, tokenuse also uses it as the fallback project for bubble rows.
 
 ## Token & cost mapping
 
@@ -86,6 +86,6 @@ Cursor does not expose tool-call names in a structured form on these tables. We 
 
 ## Known limitations
 
-- All Cursor activity rolls up under a synthetic `cursor-workspace` project — Cursor stores the cwd separately per-bubble and the linkage isn't reliable enough to set per-call.
+- Bubble rows still roll up under a synthetic `cursor-workspace` project unless the row text itself contains a workspace path or the database has exactly one unique Agent KV workspace path to use as a cautious fallback. Agent KV rows use the attached `Workspace Path:` context when present.
 - AgentKv chars/4 estimation undercounts code blocks (which compress more in tokenization). Treat the cost as approximate.
 - The DB is locked while Cursor is running. Open with `SQLITE_OPEN_READ_ONLY` and add `?immutable=1` to the URI to avoid blocking.

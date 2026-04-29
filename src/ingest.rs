@@ -1,4 +1,5 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::path::Path;
 
 use chrono::{DateTime, Datelike, Duration, Local, NaiveDate};
 use color_eyre::Result;
@@ -12,6 +13,16 @@ use crate::providers::{self, ParsedCall};
 
 pub struct Ingested {
     pub calls: Vec<ParsedCall>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectInventoryRow {
+    pub project: String,
+    pub provider: &'static str,
+    pub raw_project: String,
+    pub calls: u64,
+    pub sessions: u64,
+    pub cost: String,
 }
 
 pub fn load() -> Result<Ingested> {
@@ -47,6 +58,47 @@ impl Ingested {
 
     pub fn is_empty(&self) -> bool {
         self.calls.is_empty()
+    }
+
+    pub fn project_inventory(&self) -> Vec<ProjectInventoryRow> {
+        #[derive(Default)]
+        struct Acc {
+            calls: u64,
+            cost: f64,
+            sessions: HashSet<String>,
+        }
+
+        let labels = project_label_lookup(self.calls.iter().map(|call| &call.project));
+        let mut by_project: BTreeMap<(String, &'static str, String), Acc> = BTreeMap::new();
+
+        for call in &self.calls {
+            let key = (
+                project_identity(&call.project),
+                call.provider,
+                raw_project_display(&call.project),
+            );
+            let entry = by_project.entry(key).or_default();
+            entry.calls += 1;
+            entry.cost += call.cost_usd;
+            if let Some(key) = session_key(call) {
+                entry.sessions.insert(key);
+            }
+        }
+
+        by_project
+            .into_iter()
+            .map(|((project, provider, raw_project), acc)| {
+                let label = project_label(&labels, &project);
+                ProjectInventoryRow {
+                    project: label,
+                    provider: provider_short_label(provider),
+                    raw_project,
+                    calls: acc.calls,
+                    sessions: acc.sessions.len() as u64,
+                    cost: format_money(acc.cost),
+                }
+            })
+            .collect()
     }
 }
 
@@ -108,10 +160,12 @@ fn build_dashboard(calls: &[&ParsedCall]) -> DashboardData {
         written: leak(format_compact(total_cache_write)),
     };
 
+    let project_labels = project_label_lookup(calls.iter().map(|call| &call.project));
+
     let daily = aggregate_daily(calls);
-    let projects = aggregate_projects(calls);
-    let project_providers = aggregate_project_providers(calls);
-    let sessions = aggregate_sessions(calls);
+    let projects = aggregate_projects(calls, &project_labels);
+    let project_providers = aggregate_project_providers(calls, &project_labels);
+    let sessions = aggregate_sessions(calls, &project_labels);
     let models = aggregate_models(calls);
     let tools = aggregate_tools(calls);
     let commands = aggregate_commands(calls);
@@ -177,7 +231,10 @@ fn aggregate_daily(calls: &[&ParsedCall]) -> Vec<DailyMetric> {
         .collect()
 }
 
-fn aggregate_projects(calls: &[&ParsedCall]) -> Vec<ProjectMetric> {
+fn aggregate_projects(
+    calls: &[&ParsedCall],
+    project_labels: &HashMap<String, String>,
+) -> Vec<ProjectMetric> {
     #[derive(Default)]
     struct Acc {
         cost: f64,
@@ -186,7 +243,7 @@ fn aggregate_projects(calls: &[&ParsedCall]) -> Vec<ProjectMetric> {
     }
     let mut by_project: HashMap<String, Acc> = HashMap::new();
     for c in calls {
-        let entry = by_project.entry(canonical_project(&c.project)).or_default();
+        let entry = by_project.entry(project_identity(&c.project)).or_default();
         entry.cost += c.cost_usd;
         if let Some(key) = session_key(c) {
             entry.sessions.insert(key);
@@ -205,11 +262,11 @@ fn aggregate_projects(calls: &[&ParsedCall]) -> Vec<ProjectMetric> {
 
     rows.into_iter()
         .take(10)
-        .map(|(name, acc)| {
+        .map(|(project, acc)| {
             let session_count = acc.sessions.len().max(1) as u64;
             let avg = acc.cost / session_count as f64;
             ProjectMetric {
-                name: leak(name),
+                name: leak(project_label(project_labels, &project)),
                 cost: leak(format_money(acc.cost)),
                 avg_per_session: leak(format_money(avg)),
                 sessions: session_count,
@@ -220,7 +277,10 @@ fn aggregate_projects(calls: &[&ParsedCall]) -> Vec<ProjectMetric> {
         .collect()
 }
 
-fn aggregate_project_providers(calls: &[&ParsedCall]) -> Vec<ProjectProviderMetric> {
+fn aggregate_project_providers(
+    calls: &[&ParsedCall],
+    project_labels: &HashMap<String, String>,
+) -> Vec<ProjectProviderMetric> {
     #[derive(Default)]
     struct Acc {
         cost: f64,
@@ -232,7 +292,7 @@ fn aggregate_project_providers(calls: &[&ParsedCall]) -> Vec<ProjectProviderMetr
     let mut by_pair: HashMap<(String, &'static str), Acc> = HashMap::new();
 
     for c in calls {
-        let project = canonical_project(&c.project);
+        let project = project_identity(&c.project);
         *project_totals.entry(project.clone()).or_default() += c.cost_usd;
 
         let entry = by_pair.entry((project, c.provider)).or_default();
@@ -270,7 +330,7 @@ fn aggregate_project_providers(calls: &[&ParsedCall]) -> Vec<ProjectProviderMetr
             let session_count = acc.sessions.len().max(1) as u64;
             let avg = acc.cost / session_count as f64;
             ProjectProviderMetric {
-                project: leak(project),
+                project: leak(project_label(project_labels, &project)),
                 provider: provider_short_label(provider),
                 cost: leak(format_money(acc.cost)),
                 calls: acc.calls,
@@ -282,7 +342,10 @@ fn aggregate_project_providers(calls: &[&ParsedCall]) -> Vec<ProjectProviderMetr
         .collect()
 }
 
-fn aggregate_sessions(calls: &[&ParsedCall]) -> Vec<SessionMetric> {
+fn aggregate_sessions(
+    calls: &[&ParsedCall],
+    project_labels: &HashMap<String, String>,
+) -> Vec<SessionMetric> {
     #[derive(Default)]
     struct Acc {
         cost: f64,
@@ -299,7 +362,7 @@ fn aggregate_sessions(calls: &[&ParsedCall]) -> Vec<SessionMetric> {
         entry.cost += c.cost_usd;
         entry.calls += 1;
         if entry.project.is_empty() {
-            entry.project = canonical_project(&c.project);
+            entry.project = project_identity(&c.project);
         }
         if let Some(ts) = c.timestamp {
             let d = ts.with_timezone(&Local).date_naive();
@@ -323,7 +386,7 @@ fn aggregate_sessions(calls: &[&ParsedCall]) -> Vec<SessionMetric> {
                     .map(|d| d.format("%Y-%m-%d").to_string())
                     .unwrap_or_else(|| "-".into()),
             ),
-            project: leak(acc.project),
+            project: leak(project_label(project_labels, &acc.project)),
             cost: leak(format_money(acc.cost)),
             calls: acc.calls,
             value: scale(acc.cost, max),
@@ -447,15 +510,111 @@ fn session_key(call: &ParsedCall) -> Option<String> {
     }
 }
 
-fn canonical_project(raw: &str) -> String {
+fn project_identity(raw: &str) -> String {
+    let normalized = normalized_project_path(raw);
+    nearest_git_root(&normalized).unwrap_or(normalized)
+}
+
+fn raw_project_display(raw: &str) -> String {
+    normalized_project_path(raw)
+}
+
+fn normalized_project_path(raw: &str) -> String {
     let normalized = raw.trim().replace('\\', "/");
     let trimmed = normalized.trim_end_matches('/');
-    let display = short_project(trimmed);
-    if display.is_empty() {
+    if trimmed.is_empty() {
         "(unknown)".into()
     } else {
-        display
+        trimmed.to_string()
     }
+}
+
+fn nearest_git_root(project: &str) -> Option<String> {
+    let path = Path::new(project);
+    if !path.is_absolute() {
+        return None;
+    }
+
+    path.ancestors()
+        .find(|ancestor| ancestor.join(".git").exists())
+        .map(path_to_project_string)
+}
+
+fn path_to_project_string(path: &Path) -> String {
+    let normalized = path.to_string_lossy().replace('\\', "/");
+    let trimmed = normalized.trim_end_matches('/');
+    if trimmed.is_empty() {
+        normalized
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn project_label_lookup<I, S>(raw_projects: I) -> HashMap<String, String>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let identities: BTreeSet<String> = raw_projects
+        .into_iter()
+        .map(|raw| project_identity(raw.as_ref()))
+        .collect();
+
+    identities
+        .iter()
+        .map(|identity| {
+            (
+                identity.clone(),
+                shortest_unique_project_label(identity, &identities),
+            )
+        })
+        .collect()
+}
+
+fn project_label(labels: &HashMap<String, String>, identity: &str) -> String {
+    labels.get(identity).cloned().unwrap_or_else(|| {
+        shortest_unique_project_label(identity, &BTreeSet::from([identity.to_string()]))
+    })
+}
+
+fn shortest_unique_project_label(identity: &str, identities: &BTreeSet<String>) -> String {
+    let parts = project_parts(identity);
+    if parts.is_empty() {
+        return "(unknown)".into();
+    }
+
+    for suffix_len in 1..=parts.len() {
+        let candidate = project_suffix(&parts, suffix_len);
+        let conflicts = identities
+            .iter()
+            .filter(|other| other.as_str() != identity)
+            .any(|other| {
+                let other_parts = project_parts(other);
+                other_parts.len() >= suffix_len
+                    && project_suffix(&other_parts, suffix_len) == candidate
+            });
+
+        if !conflicts {
+            return candidate;
+        }
+    }
+
+    parts.join("/")
+}
+
+fn project_parts(identity: &str) -> Vec<&str> {
+    if identity == "(unknown)" {
+        return vec![identity];
+    }
+    identity
+        .trim_start_matches('/')
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect()
+}
+
+fn project_suffix(parts: &[&str], suffix_len: usize) -> String {
+    parts[parts.len().saturating_sub(suffix_len)..].join("/")
 }
 
 fn format_provider_mix(providers: &HashMap<&'static str, f64>) -> String {
@@ -502,16 +661,6 @@ fn scale(value: f64, max: f64) -> u64 {
     }
     let v = (value / max * 100.0).round() as i64;
     v.clamp(1, 100) as u64
-}
-
-fn short_project(raw: &str) -> String {
-    let cleaned = raw.trim_start_matches('/').replace("/Users/", "");
-    let parts: Vec<&str> = cleaned.split('/').filter(|s| !s.is_empty()).collect();
-    if parts.len() <= 3 {
-        return parts.join("/");
-    }
-    let tail = &parts[parts.len() - 3..];
-    tail.join("/")
 }
 
 fn format_money(amount: f64) -> String {
@@ -573,6 +722,34 @@ fn leak(s: String) -> &'static str {
 mod tests {
     use super::*;
 
+    struct TempDir(std::path::PathBuf);
+
+    impl TempDir {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "tokenuse-ingest-{}-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos(),
+                name
+            ));
+            std::fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+
+        fn path(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     fn mk_call(provider: &'static str, ts: &str, cost: f64) -> ParsedCall {
         ParsedCall {
             provider,
@@ -618,10 +795,13 @@ mod tests {
     }
 
     #[test]
-    fn short_project_keeps_tail_three() {
+    fn project_labels_use_leaf_names_when_unique() {
+        let raw = "/Users/me/Code/ai-commit-dev".to_string();
+        let labels = project_label_lookup([&raw]);
+
         assert_eq!(
-            short_project("/Users/me/Code/asciinema/to/svg"),
-            "asciinema/to/svg"
+            labels.get("/Users/me/Code/ai-commit-dev").unwrap(),
+            "ai-commit-dev"
         );
     }
 
@@ -630,7 +810,7 @@ mod tests {
         let ingested = Ingested {
             calls: vec![
                 mk_project_call("claude-code", "s1", "/Users/me/Code/widgets", 2.0),
-                mk_project_call("codex", "s1", "me/Code/widgets", 3.0),
+                mk_project_call("codex", "s1", "/Users/me/Code/widgets", 3.0),
                 mk_project_call("cursor", "s2", "/Users/me/Code/widgets", 5.0),
             ],
         };
@@ -638,13 +818,104 @@ mod tests {
         let data = ingested.dashboard(Period::AllTime, Provider::All);
 
         assert_eq!(data.projects.len(), 1);
-        assert_eq!(data.projects[0].name, "me/Code/widgets");
+        assert_eq!(data.projects[0].name, "widgets");
         assert_eq!(data.projects[0].cost, "$10.00");
         assert_eq!(data.projects[0].sessions, 3);
         assert!(data.projects[0].provider_mix.contains("Cursor $5.00"));
         assert!(data.projects[0].provider_mix.contains("Codex $3.00"));
         assert!(data.projects[0].provider_mix.contains("Claude $2.00"));
         assert_eq!(data.project_providers.len(), 3);
+    }
+
+    #[test]
+    fn project_costs_roll_up_claude_codex_real_cwd_with_hyphens() {
+        let ingested = Ingested {
+            calls: vec![
+                mk_project_call("claude-code", "s1", "/Users/me/Code/ai-commit-dev", 2.0),
+                mk_project_call("codex", "s2", "/Users/me/Code/ai-commit-dev", 3.0),
+            ],
+        };
+
+        let data = ingested.dashboard(Period::AllTime, Provider::All);
+
+        assert_eq!(data.projects.len(), 1);
+        assert_eq!(data.projects[0].name, "ai-commit-dev");
+        assert_eq!(data.projects[0].cost, "$5.00");
+        assert_eq!(data.project_providers.len(), 2);
+    }
+
+    #[test]
+    fn project_inventory_uses_compact_labels_and_trims_raw_projects() {
+        let ingested = Ingested {
+            calls: vec![
+                mk_project_call("claude-code", "s1", "/Users/me/Code/widgets", 2.0),
+                mk_project_call("codex", "s2", "/Users/me/Code/widgets", 3.0),
+                mk_project_call("codex", "s3", "/Users/me/Code/widgets/", 5.0),
+            ],
+        };
+
+        let rows = ingested.project_inventory();
+
+        assert_eq!(rows.len(), 2);
+        assert!(rows.iter().all(|row| row.project == "widgets"));
+        assert!(rows
+            .iter()
+            .any(|row| row.provider == "Claude" && row.raw_project == "/Users/me/Code/widgets"));
+        assert!(rows
+            .iter()
+            .any(|row| row.provider == "Codex" && row.raw_project == "/Users/me/Code/widgets"));
+    }
+
+    #[test]
+    fn project_labels_disambiguate_leaf_collisions_with_shortest_suffixes() {
+        let ingested = Ingested {
+            calls: vec![
+                mk_project_call("claude-code", "s1", "/Users/me/Code/tokens", 2.0),
+                mk_project_call("codex", "s2", "/Users/me/Code/dvr/tokens", 3.0),
+            ],
+        };
+
+        let data = ingested.dashboard(Period::AllTime, Provider::All);
+        let names: HashSet<&str> = data.projects.iter().map(|project| project.name).collect();
+
+        assert_eq!(data.projects.len(), 2);
+        assert!(names.contains("Code/tokens"));
+        assert!(names.contains("dvr/tokens"));
+    }
+
+    #[test]
+    fn project_identity_uses_existing_git_root_for_nested_cwd() {
+        let tmp = TempDir::new("git-root");
+        let dvr = tmp.path().join("dvr");
+        let nested_dvr = dvr.join("tokens");
+        let tokens = tmp.path().join("tokens");
+        std::fs::create_dir_all(dvr.join(".git")).unwrap();
+        std::fs::create_dir_all(&nested_dvr).unwrap();
+        std::fs::create_dir_all(tokens.join(".git")).unwrap();
+
+        let nested_dvr = path_to_project_string(&nested_dvr);
+        let dvr = path_to_project_string(&dvr);
+        let tokens = path_to_project_string(&tokens);
+
+        assert_eq!(project_identity(&nested_dvr), dvr);
+
+        let ingested = Ingested {
+            calls: vec![
+                mk_project_call("codex", "s1", &nested_dvr, 2.0),
+                mk_project_call("claude-code", "s2", &tokens, 3.0),
+            ],
+        };
+
+        let data = ingested.dashboard(Period::AllTime, Provider::All);
+        let names: HashSet<&str> = data.projects.iter().map(|project| project.name).collect();
+        assert_eq!(data.projects.len(), 2);
+        assert!(names.contains("dvr"));
+        assert!(names.contains("tokens"));
+
+        let rows = ingested.project_inventory();
+        assert!(rows
+            .iter()
+            .any(|row| row.project == "dvr" && row.raw_project == nested_dvr));
     }
 
     #[test]
@@ -694,11 +965,11 @@ mod tests {
 
         let data = ingested.dashboard(Period::AllTime, Provider::All);
 
-        assert_eq!(data.project_providers[0].project, "me/Code/a");
+        assert_eq!(data.project_providers[0].project, "a");
         assert_eq!(data.project_providers[0].provider, "Codex");
-        assert_eq!(data.project_providers[1].project, "me/Code/a");
+        assert_eq!(data.project_providers[1].project, "a");
         assert_eq!(data.project_providers[1].provider, "Claude");
-        assert_eq!(data.project_providers[2].project, "me/Code/b");
+        assert_eq!(data.project_providers[2].project, "b");
         assert_eq!(data.project_providers[2].provider, "Cursor");
     }
 }

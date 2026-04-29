@@ -28,19 +28,10 @@ WHERE key LIKE 'bubbleId:%'
 ORDER BY ROWID ASC
 ";
 
-const AGENT_KV_QUERY: &str = "
-SELECT
-  key,
-  json_extract(value, '$.role')                              AS role,
-  json_extract(value, '$.content')                           AS content,
-  json_extract(value, '$.providerOptions.cursor.requestId')  AS request_id
-FROM cursorDiskKV
-WHERE key LIKE 'agentKv:blob:%'
-  AND hex(substr(value, 1, 1)) = '7B'
-ORDER BY ROWID ASC
-";
-
-pub fn parse_session(source: &SessionSource, seen: &mut HashSet<String>) -> Result<Vec<ParsedCall>> {
+pub fn parse_session(
+    source: &SessionSource,
+    seen: &mut HashSet<String>,
+) -> Result<Vec<ParsedCall>> {
     let uri = format!("file:{}?immutable=1", source.path.display());
     let conn = match Connection::open_with_flags(
         &uri,
@@ -61,8 +52,11 @@ fn parse_with_conn(
         return Ok(Vec::new());
     }
 
-    let mut calls = parse_bubbles(conn, source, seen)?;
-    calls.extend(parse_agent_kv(conn, source, seen)?);
+    let fallback_project =
+        single_agent_workspace_path(conn).unwrap_or_else(|| source.project.clone());
+
+    let mut calls = parse_bubbles(conn, &fallback_project, seen)?;
+    calls.extend(parse_agent_kv(conn, &fallback_project, seen)?);
     Ok(calls)
 }
 
@@ -89,7 +83,7 @@ struct BubbleRow {
 
 fn parse_bubbles(
     conn: &Connection,
-    source: &SessionSource,
+    fallback_project: &str,
     seen: &mut HashSet<String>,
 ) -> Result<Vec<ParsedCall>> {
     let mut stmt = match conn.prepare(BUBBLE_QUERY) {
@@ -132,7 +126,10 @@ fn parse_bubbles(
             }
         }
 
-        let conversation_id = row.conversation_id.clone().unwrap_or_else(|| "unknown".into());
+        let conversation_id = row
+            .conversation_id
+            .clone()
+            .unwrap_or_else(|| "unknown".into());
         let created_at = row.created_at.clone().unwrap_or_default();
         let dedup_key = format!(
             "cursor:{}:{}:{}:{}",
@@ -144,6 +141,11 @@ fn parse_bubbles(
 
         let display_model = display_model_for(row.model.as_deref());
         let timestamp = parse_timestamp(&created_at);
+        let project = row
+            .user_text
+            .as_deref()
+            .and_then(extract_workspace_path)
+            .unwrap_or_else(|| fallback_project.to_string());
         let user_message = row.user_text.unwrap_or_default();
 
         let mut call = ParsedCall {
@@ -156,7 +158,7 @@ fn parse_bubbles(
             dedup_key,
             user_message,
             session_id: conversation_id,
-            project: source.project.clone(),
+            project,
             ..ParsedCall::default()
         };
         call.cost_usd = pricing::cost(&display_model, &call, Speed::Standard);
@@ -168,8 +170,8 @@ fn parse_bubbles(
 
 #[derive(Debug)]
 struct AgentKvRow {
-    role: Option<String>,
-    content: Option<String>,
+    role: String,
+    content: String,
     request_id: Option<String>,
 }
 
@@ -179,25 +181,20 @@ struct AgentKvSession {
     output_chars: usize,
     model: Option<String>,
     user_text: String,
+    project: Option<String>,
 }
 
 fn parse_agent_kv(
     conn: &Connection,
-    source: &SessionSource,
+    fallback_project: &str,
     seen: &mut HashSet<String>,
 ) -> Result<Vec<ParsedCall>> {
-    let mut stmt = match conn.prepare(AGENT_KV_QUERY) {
+    let mut stmt = match conn.prepare(config::AGENT_KV_QUERY) {
         Ok(s) => s,
         Err(_) => return Ok(Vec::new()),
     };
 
-    let rows = stmt.query_map([], |r| {
-        Ok(AgentKvRow {
-            role: r.get::<_, Option<String>>(1)?,
-            content: r.get::<_, Option<String>>(2)?,
-            request_id: r.get::<_, Option<String>>(3)?,
-        })
-    });
+    let rows = stmt.query_map([], |r| column_as_string(r, 1));
 
     let rows = match rows {
         Ok(rows) => rows,
@@ -209,15 +206,19 @@ fn parse_agent_kv(
     let mut current_request_id = "unknown".to_string();
 
     for row in rows.flatten() {
-        let Some(role) = row.role else { continue };
-        let Some(content_str) = row.content else { continue };
+        let Some(row) = row else {
+            continue;
+        };
+        let Some(row) = parse_agent_kv_row(&row) else {
+            continue;
+        };
 
         let request_id = row.request_id.unwrap_or_else(|| current_request_id.clone());
         if request_id != current_request_id {
             current_request_id = request_id.clone();
         }
 
-        let (text_length, model_from_content, first_text) = analyze_content(&content_str);
+        let (text_length, model_from_content, first_text) = analyze_content(&row.content);
 
         let entry = if let Some(s) = sessions.get_mut(&request_id) {
             s
@@ -226,11 +227,16 @@ fn parse_agent_kv(
             sessions.entry(request_id.clone()).or_default()
         };
 
-        match role.as_str() {
+        if entry.project.is_none() {
+            let context_text = first_text.as_deref().unwrap_or(&row.content);
+            entry.project = extract_workspace_path(context_text);
+        }
+
+        match row.role.as_str() {
             "user" => {
                 entry.input_chars += text_length;
                 if entry.user_text.is_empty() {
-                    let candidate = first_text.unwrap_or_else(|| content_str.clone());
+                    let candidate = first_text.unwrap_or_else(|| row.content.clone());
                     entry.user_text = extract_user_query(&candidate);
                 }
             }
@@ -249,7 +255,9 @@ fn parse_agent_kv(
 
     let mut calls = Vec::new();
     for request_id in order {
-        let Some(session) = sessions.remove(&request_id) else { continue };
+        let Some(session) = sessions.remove(&request_id) else {
+            continue;
+        };
         if session.input_chars == 0 && session.output_chars == 0 {
             continue;
         }
@@ -261,6 +269,9 @@ fn parse_agent_kv(
         }
 
         let display_model = display_model_for(session.model.as_deref());
+        let project = session
+            .project
+            .unwrap_or_else(|| fallback_project.to_string());
         let mut call = ParsedCall {
             provider: config::PROVIDER_ID,
             model: display_model.clone(),
@@ -271,7 +282,7 @@ fn parse_agent_kv(
             dedup_key,
             user_message: session.user_text,
             session_id: request_id,
-            project: source.project.clone(),
+            project,
             ..ParsedCall::default()
         };
         call.cost_usd = pricing::cost(&display_model, &call, Speed::Standard);
@@ -279,6 +290,54 @@ fn parse_agent_kv(
     }
 
     Ok(calls)
+}
+
+fn parse_agent_kv_row(raw: &str) -> Option<AgentKvRow> {
+    let value = serde_json::from_str::<serde_json::Value>(raw).ok()?;
+    let role = value.get("role").and_then(|v| v.as_str())?.to_string();
+    let content_value = value.get("content")?;
+    let content = content_value
+        .as_str()
+        .map(ToString::to_string)
+        .unwrap_or_else(|| content_value.to_string());
+    let request_id = value
+        .pointer("/providerOptions/cursor/requestId")
+        .and_then(|v| v.as_str())
+        .map(ToString::to_string);
+    Some(AgentKvRow {
+        role,
+        content,
+        request_id,
+    })
+}
+
+fn single_agent_workspace_path(conn: &Connection) -> Option<String> {
+    let mut stmt = conn.prepare(config::AGENT_KV_QUERY).ok()?;
+    let rows = stmt.query_map([], |r| column_as_string(r, 1)).ok()?;
+
+    let mut found: Option<String> = None;
+    for row in rows.flatten() {
+        let Some(row) = row else {
+            continue;
+        };
+        let Some(row) = parse_agent_kv_row(&row) else {
+            continue;
+        };
+        if !matches!(row.role.as_str(), "user" | "system") {
+            continue;
+        }
+        let (_, _, first_text) = analyze_content(&row.content);
+        let context_text = first_text.as_deref().unwrap_or(&row.content);
+        let Some(path) = extract_workspace_path(context_text) else {
+            continue;
+        };
+        match &found {
+            None => found = Some(path),
+            Some(existing) if existing == &path => {}
+            Some(_) => return None,
+        }
+    }
+    found
 }
 
 fn analyze_content(raw: &str) -> (usize, Option<String>, Option<String>) {
@@ -320,6 +379,24 @@ fn extract_user_query(text: &str) -> String {
     truncate(text, 500)
 }
 
+fn extract_workspace_path(text: &str) -> Option<String> {
+    for line in text.lines() {
+        let trimmed = line.trim();
+        let lower = trimmed.to_ascii_lowercase();
+        let Some(rest) = lower
+            .strip_prefix("workspace path:")
+            .map(|_| &trimmed["Workspace Path:".len()..])
+        else {
+            continue;
+        };
+        let value = rest.trim();
+        if value.starts_with('/') || value.starts_with('~') || value.contains(":\\") {
+            return Some(value.to_string());
+        }
+    }
+    None
+}
+
 fn truncate(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         return s.to_string();
@@ -335,10 +412,7 @@ fn display_model_for(raw: Option<&str>) -> String {
     }
 }
 
-fn column_as_string(
-    row: &rusqlite::Row<'_>,
-    idx: usize,
-) -> rusqlite::Result<Option<String>> {
+fn column_as_string(row: &rusqlite::Row<'_>, idx: usize) -> rusqlite::Result<Option<String>> {
     use rusqlite::types::ValueRef;
     match row.get_ref(idx)? {
         ValueRef::Null => Ok(None),
@@ -384,6 +458,14 @@ mod tests {
         .unwrap();
     }
 
+    fn insert_blob(conn: &Connection, key: &str, value: &str) {
+        conn.execute(
+            "INSERT INTO cursorDiskKV(key, value) VALUES (?1, ?2)",
+            rusqlite::params![key, value.as_bytes()],
+        )
+        .unwrap();
+    }
+
     fn source() -> SessionSource {
         SessionSource {
             path: std::path::PathBuf::from(":memory:"),
@@ -420,12 +502,12 @@ mod tests {
             r#"{"type":0,"createdAt":"2026-04-26T10:00:02Z","conversationId":"conv-1","tokenCount":{"inputTokens":0,"outputTokens":0},"modelInfo":{"modelName":"default"},"text":"abcdefghij"}"#,
         );
         // AgentKv conversation: user + assistant.
-        insert(
+        insert_blob(
             &conn,
             "agentKv:blob:r1:1",
-            r#"{"role":"user","content":[{"type":"text","text":"<user_query>fix typo</user_query>"}],"providerOptions":{"cursor":{"requestId":"req-1"}}}"#,
+            r#"{"role":"user","content":[{"type":"text","text":"<user_info>\nWorkspace Path: /Users/me/Code/blog\n</user_info>\n<user_query>fix typo</user_query>"}],"providerOptions":{"cursor":{"requestId":"req-1"}}}"#,
         );
-        insert(
+        insert_blob(
             &conn,
             "agentKv:blob:r1:2",
             r#"{"role":"assistant","content":[{"type":"text","text":"sure here is the patch","providerOptions":{"cursor":{"modelName":"gpt-5"}}}],"providerOptions":{"cursor":{"requestId":"req-1"}}}"#,
@@ -433,12 +515,18 @@ mod tests {
 
         let mut seen = HashSet::new();
         let calls = parse_with_conn(&conn, &source(), &mut seen).unwrap();
-        assert_eq!(calls.len(), 4, "3 bubbles + 1 agentKv session, got {:?}", calls.iter().map(|c| &c.dedup_key).collect::<Vec<_>>());
+        assert_eq!(
+            calls.len(),
+            4,
+            "3 bubbles + 1 agentKv session, got {:?}",
+            calls.iter().map(|c| &c.dedup_key).collect::<Vec<_>>()
+        );
 
         let assistant = &calls[0];
         assert_eq!(assistant.input_tokens, 120);
         assert_eq!(assistant.output_tokens, 80);
         assert_eq!(assistant.model, "claude-sonnet-4-5");
+        assert_eq!(assistant.project, "/Users/me/Code/blog");
         assert!(assistant.cost_usd > 0.0);
 
         let user = &calls[1];
@@ -455,6 +543,7 @@ mod tests {
         assert_eq!(agent.session_id, "req-1");
         assert!(agent.dedup_key.starts_with("cursor:agentKv:"));
         assert_eq!(agent.user_message, "fix typo");
+        assert_eq!(agent.project, "/Users/me/Code/blog");
         assert_eq!(agent.model, "gpt-5");
         assert!(agent.input_tokens > 0);
         assert!(agent.output_tokens > 0);
@@ -482,5 +571,17 @@ mod tests {
             "real question"
         );
         assert_eq!(extract_user_query("no tags here"), "no tags here");
+    }
+
+    #[test]
+    fn extract_workspace_path_finds_user_info_value() {
+        assert_eq!(
+            extract_workspace_path(
+                "<user_info>\nWorkspace Path: /Users/me/Code/blog\n</user_info>"
+            )
+            .as_deref(),
+            Some("/Users/me/Code/blog")
+        );
+        assert_eq!(extract_workspace_path("Terminals folder: /tmp"), None);
     }
 }

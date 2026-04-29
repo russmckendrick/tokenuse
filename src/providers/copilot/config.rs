@@ -6,6 +6,7 @@ pub const PROVIDER_ID: &str = "copilot";
 pub const DISPLAY_NAME: &str = "Copilot";
 pub const LEGACY_DIR: &str = ".copilot/session-state";
 pub const LEGACY_EVENTS: &str = "events.jsonl";
+pub const WORKSPACE_FILE: &str = "workspace.yaml";
 pub const VSCODE_EXTENSION_DIR: &str = "GitHub.copilot-chat/transcripts";
 pub const VSCODE_PRODUCER: &str = "copilot-agent";
 pub const CHARS_PER_TOKEN: f64 = 4.0;
