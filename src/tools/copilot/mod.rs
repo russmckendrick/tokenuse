@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use color_eyre::Result;
 
-use super::{ParsedCall, Provider, SessionSource};
+use super::{ParsedCall, SessionSource, ToolAdapter};
 
 pub mod config;
 pub mod discovery;
@@ -10,9 +10,9 @@ pub mod parser;
 
 pub struct Copilot;
 
-impl Provider for Copilot {
+impl ToolAdapter for Copilot {
     fn id(&self) -> &'static str {
-        config::PROVIDER_ID
+        config::TOOL_ID
     }
 
     fn display_name(&self) -> &'static str {
@@ -23,11 +23,7 @@ impl Provider for Copilot {
         discovery::discover()
     }
 
-    fn parse(
-        &self,
-        source: &SessionSource,
-        seen: &mut HashSet<String>,
-    ) -> Result<Vec<ParsedCall>> {
+    fn parse(&self, source: &SessionSource, seen: &mut HashSet<String>) -> Result<Vec<ParsedCall>> {
         parser::parse_session(source, seen)
     }
 }

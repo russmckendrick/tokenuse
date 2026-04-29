@@ -5,7 +5,7 @@ pub struct DashboardData {
     pub summary: Summary,
     pub daily: Vec<DailyMetric>,
     pub projects: Vec<ProjectMetric>,
-    pub project_providers: Vec<ProjectProviderMetric>,
+    pub project_tools: Vec<ProjectToolMetric>,
     pub sessions: Vec<SessionMetric>,
     pub models: Vec<ModelMetric>,
     pub tools: Vec<CountMetric>,
@@ -39,14 +39,14 @@ pub struct ProjectMetric {
     pub cost: &'static str,
     pub avg_per_session: &'static str,
     pub sessions: u64,
-    pub provider_mix: &'static str,
+    pub tool_mix: &'static str,
     pub value: u64,
 }
 
 #[derive(Debug, Clone)]
-pub struct ProjectProviderMetric {
+pub struct ProjectToolMetric {
     pub project: &'static str,
-    pub provider: &'static str,
+    pub tool: &'static str,
     pub cost: &'static str,
     pub calls: u64,
     pub sessions: u64,
@@ -127,15 +127,15 @@ pub fn dashboard_data(period: Period, tool: Tool, project_filter: &ProjectFilter
                 cost: "$12.48",
                 avg_per_session: "$2.08",
                 sessions: 6,
-                provider_mix: "Copilot $7.1  Codex $5.4",
+                tool_mix: "Copilot $7.1  Codex $5.4",
                 value: 28,
             },
         );
-        data.project_providers.insert(
+        data.project_tools.insert(
             3,
-            ProjectProviderMetric {
+            ProjectToolMetric {
                 project: "openai/sidecar",
-                provider: "Copilot",
+                tool: "Copilot",
                 cost: "$7.10",
                 calls: 64,
                 sessions: 4,
@@ -143,11 +143,11 @@ pub fn dashboard_data(period: Period, tool: Tool, project_filter: &ProjectFilter
                 value: 18,
             },
         );
-        data.project_providers.insert(
+        data.project_tools.insert(
             4,
-            ProjectProviderMetric {
+            ProjectToolMetric {
                 project: "openai/sidecar",
-                provider: "Codex",
+                tool: "Codex",
                 cost: "$5.38",
                 calls: 41,
                 sessions: 2,
@@ -171,7 +171,7 @@ pub fn project_options(period: Period, tool: Tool) -> Vec<ProjectOption> {
 
     options.extend(data.projects.iter().map(|project| {
         let calls = data
-            .project_providers
+            .project_tools
             .iter()
             .filter(|row| row.project == project.name)
             .map(|row| row.calls)
@@ -194,7 +194,7 @@ fn apply_project_filter(data: &mut DashboardData, project_filter: &ProjectFilter
 
     if let Some(project) = data.projects.iter().find(|project| project.name == label) {
         let calls: u64 = data
-            .project_providers
+            .project_tools
             .iter()
             .filter(|row| row.project == label)
             .map(|row| row.calls)
@@ -210,7 +210,7 @@ fn apply_project_filter(data: &mut DashboardData, project_filter: &ProjectFilter
     }
 
     data.projects.retain(|project| project.name == label);
-    data.project_providers.retain(|row| row.project == label);
+    data.project_tools.retain(|row| row.project == label);
     data.sessions.retain(|row| row.project == label);
 }
 
@@ -272,7 +272,7 @@ fn week_data() -> DashboardData {
                 cost: "$59.03",
                 avg_per_session: "$11.81",
                 sessions: 5,
-                provider_mix: "Claude $59.0",
+                tool_mix: "Claude $59.0",
                 value: 100,
             },
             ProjectMetric {
@@ -280,7 +280,7 @@ fn week_data() -> DashboardData {
                 cost: "$3.80",
                 avg_per_session: "$1.90",
                 sessions: 2,
-                provider_mix: "Claude $2.6  Codex $1.2",
+                tool_mix: "Claude $2.6  Codex $1.2",
                 value: 12,
             },
             ProjectMetric {
@@ -288,7 +288,7 @@ fn week_data() -> DashboardData {
                 cost: "$2.41",
                 avg_per_session: "$0.603",
                 sessions: 4,
-                provider_mix: "Claude $1.8  Copilot $0.61",
+                tool_mix: "Claude $1.8  Copilot $0.61",
                 value: 8,
             },
             ProjectMetric {
@@ -296,59 +296,59 @@ fn week_data() -> DashboardData {
                 cost: "$0.624",
                 avg_per_session: "$0.624",
                 sessions: 1,
-                provider_mix: "Codex $0.62",
+                tool_mix: "Codex $0.62",
                 value: 3,
             },
         ],
-        project_providers: vec![
-            ProjectProviderMetric {
+        project_tools: vec![
+            ProjectToolMetric {
                 project: "asciinema/to/svg",
-                provider: "Claude",
+                tool: "Claude",
                 cost: "$59.03",
                 calls: 442,
                 sessions: 5,
                 avg_per_session: "$11.81",
                 value: 100,
             },
-            ProjectProviderMetric {
+            ProjectToolMetric {
                 project: "mckendrick/Code/skills",
-                provider: "Claude",
+                tool: "Claude",
                 cost: "$2.60",
                 calls: 31,
                 sessions: 1,
                 avg_per_session: "$2.60",
                 value: 4,
             },
-            ProjectProviderMetric {
+            ProjectToolMetric {
                 project: "mckendrick/Code/skills",
-                provider: "Codex",
+                tool: "Codex",
                 cost: "$1.20",
                 calls: 22,
                 sessions: 1,
                 avg_per_session: "$1.20",
                 value: 2,
             },
-            ProjectProviderMetric {
+            ProjectToolMetric {
                 project: "mckendrick/Code/blog",
-                provider: "Claude",
+                tool: "Claude",
                 cost: "$1.80",
                 calls: 30,
                 sessions: 3,
                 avg_per_session: "$0.600",
                 value: 3,
             },
-            ProjectProviderMetric {
+            ProjectToolMetric {
                 project: "mckendrick/Code/blog",
-                provider: "Copilot",
+                tool: "Copilot",
                 cost: "$0.610",
                 calls: 10,
                 sessions: 1,
                 avg_per_session: "$0.610",
                 value: 1,
             },
-            ProjectProviderMetric {
+            ProjectToolMetric {
                 project: "Code/russ/fm",
-                provider: "Codex",
+                tool: "Codex",
                 cost: "$0.624",
                 calls: 16,
                 sessions: 1,
@@ -540,7 +540,7 @@ fn today_data() -> DashboardData {
         value: 100,
     }];
     data.projects.truncate(3);
-    data.project_providers.truncate(4);
+    data.project_tools.truncate(4);
     data.sessions.truncate(3);
     data
 }
@@ -668,7 +668,7 @@ fn all_time_data() -> DashboardData {
             cost: "$117.91",
             avg_per_session: "$6.21",
             sessions: 19,
-            provider_mix: "Claude $78  Codex $40",
+            tool_mix: "Claude $78  Codex $40",
             value: 100,
         },
         ProjectMetric {
@@ -676,7 +676,7 @@ fn all_time_data() -> DashboardData {
             cost: "$115.49",
             avg_per_session: "$9.62",
             sessions: 12,
-            provider_mix: "Claude $82  Cursor $33",
+            tool_mix: "Claude $82  Cursor $33",
             value: 98,
         },
         ProjectMetric {
@@ -684,7 +684,7 @@ fn all_time_data() -> DashboardData {
             cost: "$68.17",
             avg_per_session: "$0.897",
             sessions: 76,
-            provider_mix: "Claude $39  Copilot $18  Codex $11",
+            tool_mix: "Claude $39  Copilot $18  Codex $11",
             value: 58,
         },
         ProjectMetric {
@@ -692,7 +692,7 @@ fn all_time_data() -> DashboardData {
             cost: "$59.03",
             avg_per_session: "$11.81",
             sessions: 5,
-            provider_mix: "Claude $59",
+            tool_mix: "Claude $59",
             value: 50,
         },
         ProjectMetric {
@@ -700,7 +700,7 @@ fn all_time_data() -> DashboardData {
             cost: "$42.24",
             avg_per_session: "$2.01",
             sessions: 21,
-            provider_mix: "Cursor $28  Copilot $14",
+            tool_mix: "Cursor $28  Copilot $14",
             value: 36,
         },
         ProjectMetric {
@@ -708,7 +708,7 @@ fn all_time_data() -> DashboardData {
             cost: "$41.52",
             avg_per_session: "$1.54",
             sessions: 27,
-            provider_mix: "Claude $42",
+            tool_mix: "Claude $42",
             value: 35,
         },
         ProjectMetric {
@@ -716,7 +716,7 @@ fn all_time_data() -> DashboardData {
             cost: "$37.59",
             avg_per_session: "$1.45",
             sessions: 26,
-            provider_mix: "Codex $25  Copilot $13",
+            tool_mix: "Codex $25  Copilot $13",
             value: 32,
         },
         ProjectMetric {
@@ -724,95 +724,95 @@ fn all_time_data() -> DashboardData {
             cost: "$30.63",
             avg_per_session: "$3.40",
             sessions: 9,
-            provider_mix: "Codex $31",
+            tool_mix: "Codex $31",
             value: 26,
         },
     ];
-    data.project_providers = vec![
-        ProjectProviderMetric {
+    data.project_tools = vec![
+        ProjectToolMetric {
             project: "ai/commit/dev",
-            provider: "Claude",
+            tool: "Claude",
             cost: "$78.20",
             calls: 961,
             sessions: 12,
             avg_per_session: "$6.52",
             value: 95,
         },
-        ProjectProviderMetric {
+        ProjectToolMetric {
             project: "ai/commit/dev",
-            provider: "Codex",
+            tool: "Codex",
             cost: "$39.71",
             calls: 623,
             sessions: 7,
             avg_per_session: "$5.67",
             value: 48,
         },
-        ProjectProviderMetric {
+        ProjectToolMetric {
             project: "Code/russ/fm",
-            provider: "Claude",
+            tool: "Claude",
             cost: "$82.61",
             calls: 545,
             sessions: 4,
             avg_per_session: "$20.65",
             value: 100,
         },
-        ProjectProviderMetric {
+        ProjectToolMetric {
             project: "Code/russ/fm",
-            provider: "Cursor",
+            tool: "Cursor",
             cost: "$32.88",
             calls: 514,
             sessions: 8,
             avg_per_session: "$4.11",
             value: 40,
         },
-        ProjectProviderMetric {
+        ProjectToolMetric {
             project: "mckendrick/Code/blog",
-            provider: "Claude",
+            tool: "Claude",
             cost: "$39.04",
             calls: 991,
             sessions: 41,
             avg_per_session: "$0.952",
             value: 47,
         },
-        ProjectProviderMetric {
+        ProjectToolMetric {
             project: "mckendrick/Code/blog",
-            provider: "Copilot",
+            tool: "Copilot",
             cost: "$18.40",
             calls: 682,
             sessions: 23,
             avg_per_session: "$0.800",
             value: 22,
         },
-        ProjectProviderMetric {
+        ProjectToolMetric {
             project: "mckendrick/Code/blog",
-            provider: "Codex",
+            tool: "Codex",
             cost: "$10.73",
             calls: 341,
             sessions: 12,
             avg_per_session: "$0.894",
             value: 13,
         },
-        ProjectProviderMetric {
+        ProjectToolMetric {
             project: "asciinema/to/svg",
-            provider: "Claude",
+            tool: "Claude",
             cost: "$59.03",
             calls: 442,
             sessions: 5,
             avg_per_session: "$11.81",
             value: 71,
         },
-        ProjectProviderMetric {
+        ProjectToolMetric {
             project: "Code/dvr",
-            provider: "Cursor",
+            tool: "Cursor",
             cost: "$28.15",
             calls: 455,
             sessions: 14,
             avg_per_session: "$2.01",
             value: 34,
         },
-        ProjectProviderMetric {
+        ProjectToolMetric {
             project: "Code/dvr",
-            provider: "Copilot",
+            tool: "Copilot",
             cost: "$14.09",
             calls: 188,
             sessions: 7,

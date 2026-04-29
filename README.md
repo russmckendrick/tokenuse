@@ -79,4 +79,4 @@ cargo fmt --check
 cargo test
 ```
 
-Sample dashboard data lives in `src/data.rs`. Live ingestion is loaded from local files at startup and normalized through the adapters in `src/providers/`.
+Sample dashboard data lives in `src/data.rs`. Live ingestion is loaded from local files at startup and normalized through the adapters in `src/tools/`.

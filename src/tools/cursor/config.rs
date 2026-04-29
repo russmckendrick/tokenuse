@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use crate::providers::paths;
+use crate::tools::paths;
 
-pub const PROVIDER_ID: &str = "cursor";
+pub const TOOL_ID: &str = "cursor";
 pub const DISPLAY_NAME: &str = "Cursor";
 pub const STATE_DB: &str = "state.vscdb";
 pub const CACHE_FILE: &str = "cursor-results.json";

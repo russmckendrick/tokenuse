@@ -5,7 +5,7 @@ use color_eyre::Result;
 use rusqlite::{Connection, OpenFlags};
 
 use crate::pricing;
-use crate::providers::{ParsedCall, SessionSource, Speed};
+use crate::tools::{ParsedCall, SessionSource, Speed};
 
 use super::config;
 
@@ -149,7 +149,7 @@ fn parse_bubbles(
         let user_message = row.user_text.unwrap_or_default();
 
         let mut call = ParsedCall {
-            provider: config::PROVIDER_ID,
+            tool: config::TOOL_ID,
             model: display_model.clone(),
             input_tokens,
             output_tokens,
@@ -273,7 +273,7 @@ fn parse_agent_kv(
             .project
             .unwrap_or_else(|| fallback_project.to_string());
         let mut call = ParsedCall {
-            provider: config::PROVIDER_ID,
+            tool: config::TOOL_ID,
             model: display_model.clone(),
             input_tokens,
             output_tokens,
@@ -470,7 +470,7 @@ mod tests {
         SessionSource {
             path: std::path::PathBuf::from(":memory:"),
             project: "cursor-workspace".into(),
-            provider: config::PROVIDER_ID,
+            tool: config::TOOL_ID,
         }
     }
 

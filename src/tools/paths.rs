@@ -13,5 +13,7 @@ pub fn cache_dir() -> Option<PathBuf> {
 }
 
 pub fn env_path(var: &str) -> Option<PathBuf> {
-    std::env::var_os(var).map(PathBuf::from).filter(|p| !p.as_os_str().is_empty())
+    std::env::var_os(var)
+        .map(PathBuf::from)
+        .filter(|p| !p.as_os_str().is_empty())
 }

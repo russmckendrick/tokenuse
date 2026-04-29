@@ -2,7 +2,7 @@
 
 Claude Code records every assistant message — including token usage and tool calls — to JSONL files on disk. `tokenuse` reads these directly.
 
-> Status: implemented (`src/providers/claude_code/`).
+> Status: implemented (`src/tools/claude_code/`).
 
 ## Where the data lives
 
@@ -19,7 +19,7 @@ Subagent transcripts live in a `subagents/` subdirectory under each project and 
 
 Claude entries include a top-level `cwd` field, and that is the authoritative project path for parsed calls. The project directory name is only a lossy fallback: names like `-Users-me-Code-ai-commit-dev` cannot distinguish path separators from real hyphens, so never treat the directory-derived value as canonical when `cwd` is present.
 
-**Discovery rules** (`src/providers/claude_code/discovery.rs`):
+**Discovery rules** (`src/tools/claude_code/discovery.rs`):
 - Enumerate immediate subdirectories of `~/.claude/projects/`.
 - Walk the Desktop sessions tree to depth 8 looking for any directory named `projects`; treat each child as a session source.
 - Skip `node_modules` and `.git` while walking.
@@ -109,7 +109,7 @@ Re-reading the same JSONL across runs is normal; the shared `seen: &mut HashSet<
 
 Walk `message.content[]` and collect `name` from every `{ "type": "tool_use" }` block.
 - `mcp__server__tool` names are kept in `tools` and surface separately in the dashboard's MCP servers panel (split on `__`).
-- For `Bash` and `BashOutput` tool calls, parse `input.command` and split on unquoted `;`, `|`, `&&`, `||`. Each split is a separate command (`providers::jsonl::split_bash_commands`). The dashboard then groups by first word (`first_word`).
+- For `Bash` and `BashOutput` tool calls, parse `input.command` and split on unquoted `;`, `|`, `&&`, `||`. Each split is a separate command (`tools::jsonl::split_bash_commands`). The dashboard then groups by first word (`first_word`).
 
 ```mermaid
 flowchart LR

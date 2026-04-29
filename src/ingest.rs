@@ -7,9 +7,9 @@ use color_eyre::Result;
 use crate::app::{Period, ProjectFilter, Tool};
 use crate::data::{
     CountMetric, DailyMetric, DashboardData, ModelMetric, ProjectMetric, ProjectOption,
-    ProjectProviderMetric, SessionMetric, Summary,
+    ProjectToolMetric, SessionMetric, Summary,
 };
-use crate::providers::{self, ParsedCall};
+use crate::tools::{self, ParsedCall};
 
 pub struct Ingested {
     pub calls: Vec<ParsedCall>,
@@ -18,7 +18,7 @@ pub struct Ingested {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectInventoryRow {
     pub project: String,
-    pub provider: &'static str,
+    pub tool: &'static str,
     pub raw_project: String,
     pub calls: u64,
     pub sessions: u64,
@@ -29,13 +29,13 @@ pub fn load() -> Result<Ingested> {
     let mut seen: HashSet<String> = HashSet::new();
     let mut calls: Vec<ParsedCall> = Vec::new();
 
-    for provider in providers::registry() {
-        let sources = match provider.discover() {
+    for tool in tools::registry() {
+        let sources = match tool.discover() {
             Ok(s) => s,
             Err(_) => continue,
         };
         for source in sources {
-            match provider.parse(&source, &mut seen) {
+            match tool.parse(&source, &mut seen) {
                 Ok(mut more) => calls.append(&mut more),
                 Err(_) => continue,
             }
@@ -93,7 +93,7 @@ impl Ingested {
         for call in &self.calls {
             let key = (
                 project_identity(&call.project),
-                call.provider,
+                call.tool,
                 raw_project_display(&call.project),
             );
             let entry = by_project.entry(key).or_default();
@@ -106,11 +106,11 @@ impl Ingested {
 
         by_project
             .into_iter()
-            .map(|((project, provider, raw_project), acc)| {
+            .map(|((project, tool, raw_project), acc)| {
                 let label = project_label(&labels, &project);
                 ProjectInventoryRow {
                     project: label,
-                    provider: provider_short_label(provider),
+                    tool: tool_short_label(tool),
                     raw_project,
                     calls: acc.calls,
                     sessions: acc.sessions.len() as u64,
@@ -124,10 +124,10 @@ impl Ingested {
 fn matches_tool(call: &ParsedCall, tool: Tool) -> bool {
     match tool {
         Tool::All => true,
-        Tool::ClaudeCode => call.provider == "claude-code",
-        Tool::Cursor => call.provider == "cursor",
-        Tool::Codex => call.provider == "codex",
-        Tool::Copilot => call.provider == "copilot",
+        Tool::ClaudeCode => call.tool == "claude-code",
+        Tool::Cursor => call.tool == "cursor",
+        Tool::Codex => call.tool == "codex",
+        Tool::Copilot => call.tool == "copilot",
     }
 }
 
@@ -190,7 +190,7 @@ fn build_dashboard(calls: &[&ParsedCall]) -> DashboardData {
 
     let daily = aggregate_daily(calls);
     let projects = aggregate_projects(calls, &project_labels);
-    let project_providers = aggregate_project_providers(calls, &project_labels);
+    let project_tools = aggregate_project_tools(calls, &project_labels);
     let sessions = aggregate_sessions(calls, &project_labels);
     let models = aggregate_models(calls);
     let tools = aggregate_tools(calls);
@@ -201,7 +201,7 @@ fn build_dashboard(calls: &[&ParsedCall]) -> DashboardData {
         summary,
         daily,
         projects,
-        project_providers,
+        project_tools,
         sessions,
         models,
         tools,
@@ -224,7 +224,7 @@ fn empty_dashboard() -> DashboardData {
         },
         daily: Vec::new(),
         projects: Vec::new(),
-        project_providers: Vec::new(),
+        project_tools: Vec::new(),
         sessions: Vec::new(),
         models: Vec::new(),
         tools: Vec::new(),
@@ -310,7 +310,7 @@ fn aggregate_projects(
     struct Acc {
         cost: f64,
         sessions: HashSet<String>,
-        providers: HashMap<&'static str, f64>,
+        tools: HashMap<&'static str, f64>,
     }
     let mut by_project: HashMap<String, Acc> = HashMap::new();
     for c in calls {
@@ -319,7 +319,7 @@ fn aggregate_projects(
         if let Some(key) = session_key(c) {
             entry.sessions.insert(key);
         }
-        *entry.providers.entry(c.provider).or_default() += c.cost_usd;
+        *entry.tools.entry(c.tool).or_default() += c.cost_usd;
     }
 
     let mut rows: Vec<(String, Acc)> = by_project.into_iter().collect();
@@ -341,17 +341,17 @@ fn aggregate_projects(
                 cost: leak(format_money(acc.cost)),
                 avg_per_session: leak(format_money(avg)),
                 sessions: session_count,
-                provider_mix: leak(format_provider_mix(&acc.providers)),
+                tool_mix: leak(format_tool_mix(&acc.tools)),
                 value: scale(acc.cost, max),
             }
         })
         .collect()
 }
 
-fn aggregate_project_providers(
+fn aggregate_project_tools(
     calls: &[&ParsedCall],
     project_labels: &HashMap<String, String>,
-) -> Vec<ProjectProviderMetric> {
+) -> Vec<ProjectToolMetric> {
     #[derive(Default)]
     struct Acc {
         cost: f64,
@@ -366,7 +366,7 @@ fn aggregate_project_providers(
         let project = project_identity(&c.project);
         *project_totals.entry(project.clone()).or_default() += c.cost_usd;
 
-        let entry = by_pair.entry((project, c.provider)).or_default();
+        let entry = by_pair.entry((project, c.tool)).or_default();
         entry.cost += c.cost_usd;
         entry.calls += 1;
         if let Some(key) = session_key(c) {
@@ -376,9 +376,9 @@ fn aggregate_project_providers(
 
     let mut rows: Vec<(String, &'static str, f64, Acc)> = by_pair
         .into_iter()
-        .map(|((project, provider), acc)| {
+        .map(|((project, tool), acc)| {
             let total = *project_totals.get(&project).unwrap_or(&0.0);
-            (project, provider, total, acc)
+            (project, tool, total, acc)
         })
         .collect();
 
@@ -391,18 +391,18 @@ fn aggregate_project_providers(
                     .unwrap_or(std::cmp::Ordering::Equal)
             })
             .then_with(|| a.0.cmp(&b.0))
-            .then_with(|| provider_short_label(a.1).cmp(provider_short_label(b.1)))
+            .then_with(|| tool_short_label(a.1).cmp(tool_short_label(b.1)))
     });
     let max = rows.iter().map(|r| r.3.cost).fold(0.0_f64, f64::max);
 
     rows.into_iter()
         .take(12)
-        .map(|(project, provider, _, acc)| {
+        .map(|(project, tool, _, acc)| {
             let session_count = acc.sessions.len().max(1) as u64;
             let avg = acc.cost / session_count as f64;
-            ProjectProviderMetric {
+            ProjectToolMetric {
                 project: leak(project_label(project_labels, &project)),
-                provider: provider_short_label(provider),
+                tool: tool_short_label(tool),
                 cost: leak(format_money(acc.cost)),
                 calls: acc.calls,
                 sessions: session_count,
@@ -473,8 +473,8 @@ fn aggregate_models(calls: &[&ParsedCall]) -> Vec<ModelMetric> {
         cache_read: u64,
         input: u64,
     }
-    let registry = providers::registry();
-    let mut display_lookup: HashMap<&'static str, Box<dyn providers::Provider>> = HashMap::new();
+    let registry = tools::registry();
+    let mut display_lookup: HashMap<&'static str, Box<dyn tools::ToolAdapter>> = HashMap::new();
     for p in registry {
         display_lookup.insert(p.id(), p);
     }
@@ -482,7 +482,7 @@ fn aggregate_models(calls: &[&ParsedCall]) -> Vec<ModelMetric> {
     let mut by_model: HashMap<String, Acc> = HashMap::new();
     for c in calls {
         let display = display_lookup
-            .get(c.provider)
+            .get(c.tool)
             .map(|p| p.model_display(&c.model))
             .unwrap_or_else(|| c.model.clone());
         let entry = by_model.entry(display).or_default();
@@ -532,7 +532,7 @@ fn aggregate_commands(calls: &[&ParsedCall]) -> Vec<CountMetric> {
     let mut counts: HashMap<String, u64> = HashMap::new();
     for c in calls {
         for cmd in &c.bash_commands {
-            let head = providers::jsonl::first_word(cmd);
+            let head = tools::jsonl::first_word(cmd);
             if head.is_empty() {
                 continue;
             }
@@ -577,7 +577,7 @@ fn session_key(call: &ParsedCall) -> Option<String> {
     if call.session_id.is_empty() {
         None
     } else {
-        Some(format!("{}:{}", call.provider, call.session_id))
+        Some(format!("{}:{}", call.tool, call.session_id))
     }
 }
 
@@ -688,15 +688,13 @@ fn project_suffix(parts: &[&str], suffix_len: usize) -> String {
     parts[parts.len().saturating_sub(suffix_len)..].join("/")
 }
 
-fn format_provider_mix(providers: &HashMap<&'static str, f64>) -> String {
-    let mut rows: Vec<(&'static str, f64)> = providers
-        .iter()
-        .map(|(provider, cost)| (*provider, *cost))
-        .collect();
+fn format_tool_mix(tools: &HashMap<&'static str, f64>) -> String {
+    let mut rows: Vec<(&'static str, f64)> =
+        tools.iter().map(|(tool, cost)| (*tool, *cost)).collect();
     rows.sort_by(|a, b| {
         b.1.partial_cmp(&a.1)
             .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| provider_short_label(a.0).cmp(provider_short_label(b.0)))
+            .then_with(|| tool_short_label(a.0).cmp(tool_short_label(b.0)))
     });
 
     if rows.is_empty() {
@@ -705,19 +703,13 @@ fn format_provider_mix(providers: &HashMap<&'static str, f64>) -> String {
 
     rows.into_iter()
         .take(3)
-        .map(|(provider, cost)| {
-            format!(
-                "{} {}",
-                provider_short_label(provider),
-                format_money_short(cost)
-            )
-        })
+        .map(|(tool, cost)| format!("{} {}", tool_short_label(tool), format_money_short(cost)))
         .collect::<Vec<_>>()
         .join("  ")
 }
 
-fn provider_short_label(provider: &str) -> &'static str {
-    match provider {
+fn tool_short_label(tool: &str) -> &'static str {
+    match tool {
         "claude-code" => "Claude",
         "cursor" => "Cursor",
         "codex" => "Codex",
@@ -821,9 +813,9 @@ mod tests {
         }
     }
 
-    fn mk_call(provider: &'static str, ts: &str, cost: f64) -> ParsedCall {
+    fn mk_call(tool: &'static str, ts: &str, cost: f64) -> ParsedCall {
         ParsedCall {
-            provider,
+            tool,
             timestamp: DateTime::parse_from_rfc3339(ts)
                 .ok()
                 .map(|d| d.with_timezone(&chrono::Utc)),
@@ -836,13 +828,13 @@ mod tests {
     }
 
     fn mk_project_call(
-        provider: &'static str,
+        tool: &'static str,
         session_id: &str,
         project: &str,
         cost: f64,
     ) -> ParsedCall {
         ParsedCall {
-            provider,
+            tool,
             timestamp: DateTime::parse_from_rfc3339("2026-04-29T08:00:00Z")
                 .ok()
                 .map(|d| d.with_timezone(&chrono::Utc)),
@@ -877,7 +869,7 @@ mod tests {
     }
 
     #[test]
-    fn project_costs_roll_up_across_providers() {
+    fn project_costs_roll_up_across_tools() {
         let ingested = Ingested {
             calls: vec![
                 mk_project_call("claude-code", "s1", "/Users/me/Code/widgets", 2.0),
@@ -892,10 +884,10 @@ mod tests {
         assert_eq!(data.projects[0].name, "widgets");
         assert_eq!(data.projects[0].cost, "$10.00");
         assert_eq!(data.projects[0].sessions, 3);
-        assert!(data.projects[0].provider_mix.contains("Cursor $5.00"));
-        assert!(data.projects[0].provider_mix.contains("Codex $3.00"));
-        assert!(data.projects[0].provider_mix.contains("Claude $2.00"));
-        assert_eq!(data.project_providers.len(), 3);
+        assert!(data.projects[0].tool_mix.contains("Cursor $5.00"));
+        assert!(data.projects[0].tool_mix.contains("Codex $3.00"));
+        assert!(data.projects[0].tool_mix.contains("Claude $2.00"));
+        assert_eq!(data.project_tools.len(), 3);
     }
 
     #[test]
@@ -912,7 +904,7 @@ mod tests {
         assert_eq!(data.projects.len(), 1);
         assert_eq!(data.projects[0].name, "ai-commit-dev");
         assert_eq!(data.projects[0].cost, "$5.00");
-        assert_eq!(data.project_providers.len(), 2);
+        assert_eq!(data.project_tools.len(), 2);
     }
 
     #[test]
@@ -931,10 +923,10 @@ mod tests {
         assert!(rows.iter().all(|row| row.project == "widgets"));
         assert!(rows
             .iter()
-            .any(|row| row.provider == "Claude" && row.raw_project == "/Users/me/Code/widgets"));
+            .any(|row| row.tool == "Claude" && row.raw_project == "/Users/me/Code/widgets"));
         assert!(rows
             .iter()
-            .any(|row| row.provider == "Codex" && row.raw_project == "/Users/me/Code/widgets"));
+            .any(|row| row.tool == "Codex" && row.raw_project == "/Users/me/Code/widgets"));
     }
 
     #[test]
@@ -1022,9 +1014,9 @@ mod tests {
 
         assert_eq!(data.projects.len(), 1);
         assert_eq!(data.projects[0].cost, "$3.00");
-        assert_eq!(data.projects[0].provider_mix, "Codex $3.00");
-        assert_eq!(data.project_providers.len(), 1);
-        assert_eq!(data.project_providers[0].provider, "Codex");
+        assert_eq!(data.projects[0].tool_mix, "Codex $3.00");
+        assert_eq!(data.project_tools.len(), 1);
+        assert_eq!(data.project_tools[0].tool, "Codex");
     }
 
     #[test]
@@ -1066,7 +1058,7 @@ mod tests {
     }
 
     #[test]
-    fn session_counts_are_provider_qualified() {
+    fn session_counts_are_tool_qualified() {
         let ingested = Ingested {
             calls: vec![
                 mk_project_call("claude-code", "shared", "/Users/me/Code/widgets", 1.0),
@@ -1083,7 +1075,7 @@ mod tests {
     }
 
     #[test]
-    fn project_provider_rows_sort_by_project_total_then_provider_cost() {
+    fn project_tool_rows_sort_by_project_total_then_tool_cost() {
         let ingested = Ingested {
             calls: vec![
                 mk_project_call("claude-code", "a1", "/Users/me/Code/a", 2.0),
@@ -1094,11 +1086,11 @@ mod tests {
 
         let data = ingested.dashboard(Period::AllTime, Tool::All, &ProjectFilter::All);
 
-        assert_eq!(data.project_providers[0].project, "a");
-        assert_eq!(data.project_providers[0].provider, "Codex");
-        assert_eq!(data.project_providers[1].project, "a");
-        assert_eq!(data.project_providers[1].provider, "Claude");
-        assert_eq!(data.project_providers[2].project, "b");
-        assert_eq!(data.project_providers[2].provider, "Cursor");
+        assert_eq!(data.project_tools[0].project, "a");
+        assert_eq!(data.project_tools[0].tool, "Codex");
+        assert_eq!(data.project_tools[1].project, "a");
+        assert_eq!(data.project_tools[1].tool, "Claude");
+        assert_eq!(data.project_tools[2].project, "b");
+        assert_eq!(data.project_tools[2].tool, "Cursor");
     }
 }

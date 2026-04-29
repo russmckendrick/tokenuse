@@ -7,7 +7,7 @@ use color_eyre::Result;
 use serde_json::Value;
 
 use crate::pricing;
-use crate::providers::{jsonl, ParsedCall, SessionSource, Speed};
+use crate::tools::{jsonl, ParsedCall, SessionSource, Speed};
 
 use super::config;
 
@@ -132,7 +132,7 @@ fn parse_legacy(
                     .and_then(parse_timestamp);
 
                 let mut call = ParsedCall {
-                    provider: config::PROVIDER_ID,
+                    tool: config::TOOL_ID,
                     model: current_model.clone(),
                     input_tokens: 0,
                     output_tokens,
@@ -248,7 +248,7 @@ fn parse_transcript(
             .and_then(parse_timestamp);
 
         let mut call = ParsedCall {
-            provider: config::PROVIDER_ID,
+            tool: config::TOOL_ID,
             model: model.clone(),
             input_tokens,
             output_tokens,
@@ -448,7 +448,7 @@ mod tests {
         let source = SessionSource {
             path: events.clone(),
             project: "demo".into(),
-            provider: config::PROVIDER_ID,
+            tool: config::TOOL_ID,
         };
         let mut seen = HashSet::new();
         let calls = parse_session(&source, &mut seen).unwrap();
@@ -483,7 +483,7 @@ mod tests {
         let source = SessionSource {
             path: events,
             project: "demo".into(),
-            provider: config::PROVIDER_ID,
+            tool: config::TOOL_ID,
         };
         let mut seen = HashSet::new();
         let calls = parse_session(&source, &mut seen).unwrap();
@@ -517,7 +517,7 @@ mod tests {
         let source = SessionSource {
             path: transcript.clone(),
             project: "vscode-ws".into(),
-            provider: config::PROVIDER_ID,
+            tool: config::TOOL_ID,
         };
         let mut seen = HashSet::new();
         let calls = parse_session(&source, &mut seen).unwrap();
@@ -556,7 +556,7 @@ mod tests {
         let source = SessionSource {
             path: dir.path().to_path_buf(),
             project: "ws".into(),
-            provider: config::PROVIDER_ID,
+            tool: config::TOOL_ID,
         };
         let mut seen = HashSet::new();
         let calls = parse_session(&source, &mut seen).unwrap();

@@ -12,17 +12,13 @@ pub mod types;
 
 pub use types::{ParsedCall, SessionSource, Speed};
 
-pub trait Provider: Send + Sync {
+pub trait ToolAdapter: Send + Sync {
     fn id(&self) -> &'static str;
     fn display_name(&self) -> &'static str;
 
     fn discover(&self) -> Result<Vec<SessionSource>>;
 
-    fn parse(
-        &self,
-        source: &SessionSource,
-        seen: &mut HashSet<String>,
-    ) -> Result<Vec<ParsedCall>>;
+    fn parse(&self, source: &SessionSource, seen: &mut HashSet<String>) -> Result<Vec<ParsedCall>>;
 
     fn model_display(&self, model: &str) -> String {
         model.to_string()
@@ -33,7 +29,7 @@ pub trait Provider: Send + Sync {
     }
 }
 
-pub fn registry() -> Vec<Box<dyn Provider>> {
+pub fn registry() -> Vec<Box<dyn ToolAdapter>> {
     vec![
         Box::new(claude_code::ClaudeCode),
         Box::new(cursor::Cursor),

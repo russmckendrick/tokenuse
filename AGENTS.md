@@ -14,8 +14,8 @@
 
 ## Tool Adapter Conventions
 
-- User-facing docs and UI call Claude Code, Cursor, Codex, and Copilot **tools**. The Rust adapter trait is still named `Provider` and lives under `src/providers/`.
-- Each tool adapter lives in `src/providers/<name>/{mod,config,discovery,parser}.rs`. **All paths, env vars, globs, and SQL queries belong in that adapter's `config.rs`** - not in a shared top-level config.
-- Adding a tool: write the four adapter files, register it in `providers::registry()` (`src/providers/mod.rs`), add a variant to `app::Tool`, update `ingest::matches_tool`, update display labels such as `provider_short_label`, and write `docs/tools/<name>.md`.
-- `config::PROVIDER_ID` must match the literal `ingest::matches_tool` compares against - they are stringly typed across the boundary.
+- User-facing docs and UI call Claude Code, Cursor, Codex, and Copilot **tools**. The Rust adapter trait is named `ToolAdapter` and lives under `src/tools/`.
+- Each tool adapter lives in `src/tools/<name>/{mod,config,discovery,parser}.rs`. **All paths, env vars, globs, and SQL queries belong in that adapter's `config.rs`** - not in a shared top-level config.
+- Adding a tool: write the four adapter files, register it in `tools::registry()` (`src/tools/mod.rs`), add a variant to `app::Tool`, update `ingest::matches_tool`, update display labels such as `tool_short_label`, and write `docs/tools/<name>.md`.
+- `config::TOOL_ID` must match the literal `ingest::matches_tool` compares against - they are stringly typed across the boundary.
 - Claude Code, Cursor, Codex, and Copilot all have implemented parsers. Read `docs/tools/<name>.md` for the source schema and parser caveats before changing one.

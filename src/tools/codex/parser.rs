@@ -6,7 +6,7 @@ use color_eyre::Result;
 use serde::Deserialize;
 
 use crate::pricing;
-use crate::providers::{jsonl, ParsedCall, SessionSource, Speed};
+use crate::tools::{jsonl, ParsedCall, SessionSource, Speed};
 
 use super::config;
 
@@ -80,7 +80,10 @@ struct ExecArgs {
     cmd: Option<String>,
 }
 
-pub fn parse_session(source: &SessionSource, seen: &mut HashSet<String>) -> Result<Vec<ParsedCall>> {
+pub fn parse_session(
+    source: &SessionSource,
+    seen: &mut HashSet<String>,
+) -> Result<Vec<ParsedCall>> {
     let lines = match jsonl::read_lines(&source.path) {
         Ok(l) => l,
         Err(_) => return Ok(Vec::new()),
@@ -200,7 +203,7 @@ pub fn parse_session(source: &SessionSource, seen: &mut HashSet<String>) -> Resu
                 let output_tokens = last.output_tokens + last.reasoning_output_tokens;
 
                 let mut call = ParsedCall {
-                    provider: config::PROVIDER_ID,
+                    tool: config::TOOL_ID,
                     model: model.clone(),
                     input_tokens,
                     output_tokens,
@@ -261,7 +264,7 @@ mod tests {
         SessionSource {
             path,
             project: "2026/03/29".into(),
-            provider: config::PROVIDER_ID,
+            tool: config::TOOL_ID,
         }
     }
 

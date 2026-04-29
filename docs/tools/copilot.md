@@ -1,6 +1,6 @@
 # GitHub Copilot
 
-Copilot has two supported on-disk layouts: the legacy CLI agent under `~/.copilot/` and VS Code Copilot Chat transcripts under workspace storage. `tokenuse` reads both through `src/providers/copilot/`.
+Copilot has two supported on-disk layouts: the legacy CLI agent under `~/.copilot/` and VS Code Copilot Chat transcripts under workspace storage. `tokenuse` reads both through `src/tools/copilot/`.
 
 > Status: implemented.
 
@@ -156,7 +156,7 @@ Walk `data.toolRequests[]` and normalize each `name`:
 | `github_repo` | `GitHub` |
 | `memory` | `Memory` |
 
-For Bash-class calls, parse `arguments` as a JSON string and split `command` or `cmd` with `providers::jsonl::split_bash_commands`.
+For Bash-class calls, parse `arguments` as a JSON string and split `command` or `cmd` with `tools::jsonl::split_bash_commands`.
 
 ```mermaid
 flowchart LR

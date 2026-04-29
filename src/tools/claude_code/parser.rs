@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::pricing;
-use crate::providers::{jsonl, ParsedCall, SessionSource, Speed};
+use crate::tools::{jsonl, ParsedCall, SessionSource, Speed};
 
 use super::config;
 
@@ -127,7 +127,7 @@ pub fn parse_session(
                     let (tools, bash_commands) = extract_tools(msg.content.as_ref());
 
                     let mut call = ParsedCall {
-                        provider: config::PROVIDER_ID,
+                        tool: config::TOOL_ID,
                         model: model.clone(),
                         input_tokens: usage.input_tokens,
                         output_tokens: usage.output_tokens,
@@ -286,7 +286,7 @@ mod tests {
         let source = SessionSource {
             path: dir.path().to_path_buf(),
             project: "test/project".into(),
-            provider: config::PROVIDER_ID,
+            tool: config::TOOL_ID,
         };
         let mut seen = HashSet::new();
         let calls = parse_session(&source, &mut seen).unwrap();
@@ -317,7 +317,7 @@ mod tests {
         let source = SessionSource {
             path: dir.path().to_path_buf(),
             project: "/Users/russ/mckendrick/Code/ai/commit/dev".into(),
-            provider: config::PROVIDER_ID,
+            tool: config::TOOL_ID,
         };
         let mut seen = HashSet::new();
         let calls = parse_session(&source, &mut seen).unwrap();

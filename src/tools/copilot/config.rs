@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use crate::providers::paths;
+use crate::tools::paths;
 
-pub const PROVIDER_ID: &str = "copilot";
+pub const TOOL_ID: &str = "copilot";
 pub const DISPLAY_NAME: &str = "Copilot";
 pub const LEGACY_DIR: &str = ".copilot/session-state";
 pub const LEGACY_EVENTS: &str = "events.jsonl";

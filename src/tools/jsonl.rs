@@ -76,7 +76,10 @@ mod tests {
     #[test]
     fn splits_pipe_and_semicolon() {
         let got = split_bash_commands("ls -la | grep foo; cat README.md && echo done");
-        assert_eq!(got, vec!["ls -la", "grep foo", "cat README.md", "echo done"]);
+        assert_eq!(
+            got,
+            vec!["ls -la", "grep foo", "cat README.md", "echo done"]
+        );
     }
 
     #[test]

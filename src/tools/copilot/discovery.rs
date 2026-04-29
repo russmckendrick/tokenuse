@@ -3,7 +3,7 @@ use std::fs;
 use color_eyre::Result;
 use walkdir::WalkDir;
 
-use crate::providers::SessionSource;
+use crate::tools::SessionSource;
 
 use super::config;
 
@@ -18,7 +18,7 @@ pub fn discover() -> Result<Vec<SessionSource>> {
                     sources.push(SessionSource {
                         project: entry.file_name().to_string_lossy().to_string(),
                         path,
-                        provider: config::PROVIDER_ID,
+                        tool: config::TOOL_ID,
                     });
                 }
             }
@@ -46,7 +46,7 @@ pub fn discover() -> Result<Vec<SessionSource>> {
                             .map(|c| c.as_os_str().to_string_lossy().to_string())
                             .unwrap_or_else(|| "vscode-workspace".into()),
                         path: entry.path().to_path_buf(),
-                        provider: config::PROVIDER_ID,
+                        tool: config::TOOL_ID,
                     });
                 }
             }

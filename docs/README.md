@@ -24,4 +24,4 @@ flowchart LR
 
 The UI and user docs say **tool**: Claude Code, Cursor, Codex, and GitHub Copilot are the tools being analyzed.
 
-The Rust code still uses an internal `Provider` trait in `src/providers/`. In docs, "adapter" usually means that internal provider implementation.
+The Rust code uses an internal `ToolAdapter` trait in `src/tools/`. In docs, "adapter" means that internal implementation for one tool's local files.

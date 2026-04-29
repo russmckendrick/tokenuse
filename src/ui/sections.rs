@@ -8,7 +8,7 @@ use ratatui::{
 use crate::{
     app::{App, Period},
     data::{
-        CountMetric, DailyMetric, ModelMetric, ProjectMetric, ProjectProviderMetric, SessionMetric,
+        CountMetric, DailyMetric, ModelMetric, ProjectMetric, ProjectToolMetric, SessionMetric,
         Summary,
     },
     theme,
@@ -134,7 +134,7 @@ pub(super) fn render_projects(frame: &mut Frame<'_>, area: Rect, rows: &[Project
             Cell::from(item.cost).style(theme::money()),
             Cell::from(item.avg_per_session).style(theme::money()),
             Cell::from(item.sessions.to_string()).style(theme::base()),
-            Cell::from(item.provider_mix).style(theme::base().fg(theme::BLUE_SOFT)),
+            Cell::from(item.tool_mix).style(theme::base().fg(theme::BLUE_SOFT)),
         ])
     });
 
@@ -197,16 +197,12 @@ pub(super) fn render_sessions(frame: &mut Frame<'_>, area: Rect, rows: &[Session
     frame.render_widget(table, area);
 }
 
-pub(super) fn render_project_providers(
-    frame: &mut Frame<'_>,
-    area: Rect,
-    rows: &[ProjectProviderMetric],
-) {
+pub(super) fn render_project_tools(frame: &mut Frame<'_>, area: Rect, rows: &[ProjectToolMetric]) {
     let table_rows = rows.iter().map(|item| {
         Row::new(vec![
             bar_cell(item.value),
             Cell::from(item.project).style(theme::muted()),
-            Cell::from(item.provider).style(theme::base().fg(theme::YELLOW_SOFT)),
+            Cell::from(item.tool).style(theme::base().fg(theme::YELLOW_SOFT)),
             Cell::from(item.cost).style(theme::money()),
             Cell::from(item.calls.to_string()).style(theme::base()),
             Cell::from(item.sessions.to_string()).style(theme::base()),

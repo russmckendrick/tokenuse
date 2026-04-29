@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use crate::providers::paths;
+use crate::tools::paths;
 
-pub const PROVIDER_ID: &str = "claude-code";
+pub const TOOL_ID: &str = "claude-code";
 pub const DISPLAY_NAME: &str = "Claude Code";
 pub const SESSION_GLOB_EXT: &str = "jsonl";
 pub const SUBAGENTS_DIR: &str = "subagents";

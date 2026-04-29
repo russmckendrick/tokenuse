@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use color_eyre::Result;
 use walkdir::WalkDir;
 
-use crate::providers::SessionSource;
+use crate::tools::SessionSource;
 
 use super::config;
 
@@ -37,7 +37,7 @@ fn list_project_dirs(root: &Path) -> Vec<SessionSource> {
         out.push(SessionSource {
             project: config::unsanitize_project(&name),
             path,
-            provider: config::PROVIDER_ID,
+            tool: config::TOOL_ID,
         });
     }
     out

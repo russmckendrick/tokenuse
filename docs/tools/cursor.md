@@ -2,7 +2,7 @@
 
 Cursor stores its conversation history in a single SQLite database per install. `tokenuse` reads it via `rusqlite` (bundled — no system SQLite required).
 
-> Status: implemented (`src/providers/cursor/`).
+> Status: implemented (`src/tools/cursor/`).
 
 ## Where the data lives
 

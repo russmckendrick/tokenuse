@@ -3,7 +3,7 @@ use std::sync::OnceLock;
 
 use serde::Deserialize;
 
-use crate::providers::{ParsedCall, Speed};
+use crate::tools::{ParsedCall, Speed};
 
 #[cfg(feature = "refresh-prices")]
 pub mod refresh;

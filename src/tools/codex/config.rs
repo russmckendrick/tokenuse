@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use crate::providers::paths;
+use crate::tools::paths;
 
-pub const PROVIDER_ID: &str = "codex";
+pub const TOOL_ID: &str = "codex";
 pub const DISPLAY_NAME: &str = "Codex";
 pub const ENV_OVERRIDE: &str = "CODEX_HOME";
 pub const SESSIONS_SUBDIR: &str = "sessions";

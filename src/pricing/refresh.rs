@@ -48,12 +48,7 @@ pub fn run(output: &Path) -> Result<()> {
             &mut out,
             "cache_write",
         );
-        copy_f64(
-            entry,
-            "cache_read_input_token_cost",
-            &mut out,
-            "cache_read",
-        );
+        copy_f64(entry, "cache_read_input_token_cost", &mut out, "cache_read");
         out.entry("web_search".into()).or_insert(0.01);
         if key.starts_with("claude-opus") {
             out.insert("fast_multiplier".into(), 6.0);
@@ -83,7 +78,12 @@ pub fn run(output: &Path) -> Result<()> {
     Ok(())
 }
 
-fn copy_f64(src: &Map<String, Value>, src_key: &str, dst: &mut HashMap<String, f64>, dst_key: &str) {
+fn copy_f64(
+    src: &Map<String, Value>,
+    src_key: &str,
+    dst: &mut HashMap<String, f64>,
+    dst_key: &str,
+) {
     if let Some(v) = src.get(src_key).and_then(|v| v.as_f64()) {
         dst.insert(dst_key.into(), v);
     }
@@ -94,7 +94,9 @@ fn to_obj(map: HashMap<String, f64>) -> Map<String, Value> {
     for (k, v) in map {
         obj.insert(
             k,
-            serde_json::Number::from_f64(v).map(Value::Number).unwrap_or(Value::Null),
+            serde_json::Number::from_f64(v)
+                .map(Value::Number)
+                .unwrap_or(Value::Null),
         );
     }
     obj

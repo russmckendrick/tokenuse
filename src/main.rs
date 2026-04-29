@@ -101,7 +101,7 @@ fn print_project_inventory() -> Result<()> {
         .unwrap_or("project".len());
     let agent_w = rows
         .iter()
-        .map(|row| row.provider.len())
+        .map(|row| row.tool.len())
         .chain(std::iter::once("agent".len()))
         .max()
         .unwrap_or("agent".len());
@@ -142,7 +142,7 @@ fn print_project_inventory() -> Result<()> {
         println!(
             "{:<project_w$}  {:<agent_w$}  {:>calls_w$}  {:>sessions_w$}  {:>cost_w$}  {}",
             row.project,
-            row.provider,
+            row.tool,
             row.calls,
             row.sessions,
             row.cost,

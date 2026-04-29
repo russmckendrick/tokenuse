@@ -18,12 +18,12 @@ impl Default for Speed {
 pub struct SessionSource {
     pub path: PathBuf,
     pub project: String,
-    pub provider: &'static str,
+    pub tool: &'static str,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct ParsedCall {
-    pub provider: &'static str,
+    pub tool: &'static str,
     pub model: String,
     pub input_tokens: u64,
     pub output_tokens: u64,

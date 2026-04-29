@@ -25,11 +25,11 @@ Individual adapter discovery or parse errors are skipped so one malformed source
 
 ## Normalized Record
 
-Every adapter emits `ParsedCall` from `src/providers/types.rs`. The important fields are:
+Every adapter emits `ParsedCall` from `src/tools/types.rs`. The important fields are:
 
 | Field | Meaning |
 | --- | --- |
-| `provider` | Stable internal tool id such as `claude-code`, `cursor`, `codex`, or `copilot` |
+| `tool` | Stable internal tool id such as `claude-code`, `cursor`, `codex`, or `copilot` |
 | `model` | Raw or inferred model name before display shortening |
 | `input_tokens`, `output_tokens` | Billable input/output buckets after adapter-specific normalization |
 | `cache_creation_input_tokens`, `cache_read_input_tokens` | Cache write/read buckets when the tool exposes them |
@@ -61,10 +61,10 @@ flowchart LR
 
 The dashboard panels are built from the filtered call set:
 
-- Summary: cost, call count, provider-qualified session count, cache hit rate, input, output, cache reads, and cache writes.
+- Summary: cost, call count, tool-qualified session count, cache hit rate, input, output, cache reads, and cache writes.
 - Daily Activity: cost and calls by local date.
 - By Project: top projects by cost, average cost per session, and top tool spend mix.
-- Top Sessions: highest-cost sessions, keyed by `provider:session_id`.
+- Top Sessions: highest-cost sessions, keyed by `tool:session_id`.
 - Project Spend by Tool: project/tool rows sorted by project total, then tool spend.
 - By Model: model display name, cost, calls, and cache percentage.
 - Core Tools: normalized assistant tool calls.
@@ -92,7 +92,7 @@ A single shared `HashSet<String>` is passed through every adapter during a run. 
 - Codex: rollout path, token event timestamp, and cumulative token totals
 - Copilot: session id and message id
 
-Session counts are provider-qualified, so `claude-code:s1` and `codex:s1` remain separate sessions even if the raw session id text matches.
+Session counts are tool-qualified, so `claude-code:s1` and `codex:s1` remain separate sessions even if the raw session id text matches.
 
 ## Pricing
 
@@ -112,7 +112,7 @@ flowchart LR
     G --> H
 ```
 
-Canonicalization lowercases model names, drops a provider prefix such as `anthropic/`, strips an `@pin` suffix, and removes trailing `-YYYYMMDD` date stamps. Aliases such as `cursor-auto`, `anthropic-auto`, and `openai-auto` resolve through the snapshot.
+Canonicalization lowercases model names, drops a vendor prefix such as `anthropic/`, strips an `@pin` suffix, and removes trailing `-YYYYMMDD` date stamps. Aliases such as `cursor-auto`, `anthropic-auto`, and `openai-auto` resolve through the snapshot.
 
 The pricing formula is:
 

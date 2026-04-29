@@ -13,7 +13,7 @@ use crate::{app::App, theme};
 use components::{centered_rect, two_columns};
 use sections::{
     render_counts, render_daily, render_footer, render_models, render_nav, render_project_modal,
-    render_project_providers, render_projects, render_sessions, render_summary,
+    render_project_tools, render_projects, render_sessions, render_summary,
 };
 
 pub fn render(frame: &mut Frame<'_>, app: &App) {
@@ -63,7 +63,7 @@ pub fn render(frame: &mut Frame<'_>, app: &App) {
     render_sessions(frame, sections[5], &data.sessions);
 
     let middle = two_columns(sections[7]);
-    render_project_providers(frame, middle[0], &data.project_providers);
+    render_project_tools(frame, middle[0], &data.project_tools);
     render_models(frame, middle[1], &data.models);
 
     let lower = two_columns(sections[9]);
@@ -142,7 +142,7 @@ mod tests {
         assert!(rendered.contains("q quit"));
         assert!(rendered.contains("t tool"));
         assert!(rendered.contains("p project"));
-        assert!(!rendered.contains("p provider"));
+        assert!(!rendered.contains("p tool"));
         assert!(!rendered.contains("switch"));
         assert!(!rendered.contains("optimize"));
         assert!(!rendered.contains("compare"));

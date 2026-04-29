@@ -1,7 +1,7 @@
 use color_eyre::Result;
 use walkdir::WalkDir;
 
-use crate::providers::SessionSource;
+use crate::tools::SessionSource;
 
 use super::config;
 
@@ -13,7 +13,11 @@ pub fn discover() -> Result<Vec<SessionSource>> {
         return Ok(Vec::new());
     }
     let mut out = Vec::new();
-    for entry in WalkDir::new(&root).follow_links(false).into_iter().flatten() {
+    for entry in WalkDir::new(&root)
+        .follow_links(false)
+        .into_iter()
+        .flatten()
+    {
         if !entry.file_type().is_file() {
             continue;
         }
@@ -34,7 +38,7 @@ pub fn discover() -> Result<Vec<SessionSource>> {
         out.push(SessionSource {
             path: path.to_path_buf(),
             project,
-            provider: config::PROVIDER_ID,
+            tool: config::TOOL_ID,
         });
     }
     Ok(out)

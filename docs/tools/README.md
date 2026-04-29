@@ -2,7 +2,7 @@
 
 `tokenuse` reads usage data **directly from local files** written by AI coding tools. There is no proxy, no API key, no telemetry endpoint, and no live watcher.
 
-The UI calls these sources **tools**. Internally each tool is implemented as a `Provider` adapter under `src/providers/<name>/`.
+The UI calls these sources **tools**. Internally each one is implemented as a `ToolAdapter` under `src/tools/<name>/`.
 
 ## Supported Tools
 
@@ -30,10 +30,10 @@ The same `seen: &mut HashSet<String>` is shared across every tool adapter during
 
 ## Internal Adapter Contract
 
-All tool adapters implement the same trait in `src/providers/mod.rs`:
+All tool adapters implement the same trait in `src/tools/mod.rs`:
 
 ```rust
-pub trait Provider: Send + Sync {
+pub trait ToolAdapter: Send + Sync {
     fn id(&self) -> &'static str;
     fn display_name(&self) -> &'static str;
     fn discover(&self) -> Result<Vec<SessionSource>>;
@@ -48,7 +48,7 @@ pub trait Provider: Send + Sync {
 }
 ```
 
-`ParsedCall` from `src/providers/types.rs` is the normalized record every adapter emits and every dashboard aggregator consumes. See [architecture.md](../architecture.md) for field meanings and aggregation behavior.
+`ParsedCall` from `src/tools/types.rs` is the normalized record every adapter emits and every dashboard aggregator consumes. See [architecture.md](../architecture.md) for field meanings and aggregation behavior.
 
 ## Pricing
 
@@ -74,11 +74,11 @@ cargo run --features refresh-prices -- --refresh-prices
 
 ## Adding a New Tool
 
-1. Create `src/providers/<name>/{mod.rs, config.rs, discovery.rs, parser.rs}`.
+1. Create `src/tools/<name>/{mod.rs, config.rs, discovery.rs, parser.rs}`.
 2. Put every path, env var, glob, SQL query, and source constant in `config.rs`.
-3. Implement `Provider` in `mod.rs` and register it in `providers::registry()`.
+3. Implement `ToolAdapter` in `mod.rs` and register it in `tools::registry()`.
 4. Add a variant to `app::Tool`, update its label and cycle order, and update `ingest::matches_tool`.
-5. Add display names in aggregation helpers such as `provider_short_label` when needed.
+5. Add display names in aggregation helpers such as `tool_short_label` when needed.
 6. Write `docs/tools/<name>.md` and add it to the supported tools table above.
 7. Add parser tests for source validation, token mapping, deduplication, project detection, and tool/bash extraction.
 

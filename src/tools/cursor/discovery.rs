@@ -1,6 +1,6 @@
 use color_eyre::Result;
 
-use crate::providers::SessionSource;
+use crate::tools::SessionSource;
 
 use super::config;
 
@@ -14,6 +14,6 @@ pub fn discover() -> Result<Vec<SessionSource>> {
     Ok(vec![SessionSource {
         path: db,
         project: "cursor-workspace".into(),
-        provider: config::PROVIDER_ID,
+        tool: config::TOOL_ID,
     }])
 }

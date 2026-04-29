@@ -2,7 +2,7 @@
 
 OpenAI Codex writes one JSONL "rollout" file per session under a year/month/day tree. Every entry has the shape `{ "timestamp": "...", "type": "...", "payload": { ... } }`; the first line is always a `session_meta` envelope and per-turn usage is reported via `event_msg` events of inner type `token_count`.
 
-> Status: implemented (`src/providers/codex/`).
+> Status: implemented (`src/tools/codex/`).
 
 ## Where the data lives
 
@@ -14,7 +14,7 @@ OpenAI Codex writes one JSONL "rollout" file per session under a year/month/day 
 
 **Validation:** the parser reads the first line of each file and treats it as a Codex rollout only if `type == "session_meta"` and `payload.originator` contains `"codex"` (case-insensitive — the real desktop app emits `"Codex Desktop"`). Anything else is skipped to avoid ingesting unrelated JSONL.
 
-**Discovery rules** (`src/providers/codex/discovery.rs`):
+**Discovery rules** (`src/tools/codex/discovery.rs`):
 - Walk `sessions_root()` recursively (no max depth — the date tree is shallow).
 - Match files whose name starts with `rollout-` and ends with `.jsonl`.
 - Use the relative directory (`YYYY/MM/DD`) as the project label fallback.
@@ -104,7 +104,7 @@ Including the cumulative totals from `total_token_usage` prevents two consecutiv
 
 ## Tools / bash extraction
 
-`response_item` entries between successive `token_count` events are accumulated into `tools` (and `bash_commands` for `exec_command`). The arguments string is JSON-decoded and the inner `cmd` field is split via `providers::jsonl::split_bash_commands`. On each emitted `ParsedCall` the buffers are drained (so the next turn starts empty); duplicate `token_count` entries that lose to the `seen` dedup set also clear the buffer to avoid leaking tool calls into the following turn.
+`response_item` entries between successive `token_count` events are accumulated into `tools` (and `bash_commands` for `exec_command`). The arguments string is JSON-decoded and the inner `cmd` field is split via `tools::jsonl::split_bash_commands`. On each emitted `ParsedCall` the buffers are drained (so the next turn starts empty); duplicate `token_count` entries that lose to the `seen` dedup set also clear the buffer to avoid leaking tool calls into the following turn.
 
 ```mermaid
 flowchart LR
