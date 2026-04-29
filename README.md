@@ -1,4 +1,4 @@
-# tokenuse
+# Token Use
 
 `tokenuse` is a Rust TUI prototype for exploring AI token and cost usage. This MVP uses dummy data and focuses on the dashboard layout, terminal styling, and basic keyboard interaction shown in the reference screens.
 
