@@ -149,11 +149,7 @@ impl CurrencyFormatter {
             return format_usd(amount_usd);
         }
 
-        format!(
-            "{} {}",
-            self.code,
-            format_non_usd(amount_usd * self.rate, false)
-        )
+        self.format_converted(amount_usd, false)
     }
 
     pub fn format_money_short(&self, amount_usd: f64) -> String {
@@ -161,11 +157,16 @@ impl CurrencyFormatter {
             return format_usd_short(amount_usd);
         }
 
-        format!(
-            "{} {}",
-            self.code,
-            format_non_usd(amount_usd * self.rate, true)
-        )
+        self.format_converted(amount_usd, true)
+    }
+
+    fn format_converted(&self, amount_usd: f64, short: bool) -> String {
+        let amount = format_non_usd(amount_usd * self.rate, short);
+        match currency_prefix(&self.code) {
+            Some(prefix) if prefix.compact => format!("{}{amount}", prefix.text),
+            Some(prefix) => format!("{} {amount}", prefix.text),
+            None => format!("{} {}", self.code, amount),
+        }
     }
 }
 
@@ -245,6 +246,110 @@ fn format_non_usd(amount: f64, short: bool) -> String {
     }
 }
 
+struct CurrencyPrefix {
+    text: &'static str,
+    compact: bool,
+}
+
+fn compact(text: &'static str) -> CurrencyPrefix {
+    CurrencyPrefix {
+        text,
+        compact: true,
+    }
+}
+
+fn spaced(text: &'static str) -> CurrencyPrefix {
+    CurrencyPrefix {
+        text,
+        compact: false,
+    }
+}
+
+fn currency_prefix(code: &str) -> Option<CurrencyPrefix> {
+    match code {
+        "AED" => Some(spaced("د.إ")),
+        "AFN" => Some(compact("؋")),
+        "ALL" => Some(spaced("L")),
+        "AMD" => Some(compact("֏")),
+        "ANG" | "AWG" => Some(compact("ƒ")),
+        "ARS" => Some(compact("AR$")),
+        "AUD" => Some(compact("A$")),
+        "AZN" => Some(compact("₼")),
+        "BAM" => Some(spaced("KM")),
+        "BBD" | "BMD" | "BSD" | "BZD" | "KYD" | "XCD" => Some(compact("$")),
+        "BDT" => Some(compact("৳")),
+        "BGN" => Some(spaced("лв")),
+        "BHD" => Some(spaced("BD")),
+        "BND" => Some(compact("B$")),
+        "BOB" => Some(spaced("Bs")),
+        "BRL" => Some(compact("R$")),
+        "CAD" => Some(compact("C$")),
+        "CHF" => Some(spaced("CHF")),
+        "CLP" => Some(compact("CLP$")),
+        "CNH" | "CNY" => Some(compact("¥")),
+        "COP" => Some(compact("COL$")),
+        "CRC" => Some(compact("₡")),
+        "CUP" => Some(compact("$")),
+        "CZK" => Some(spaced("Kč")),
+        "DKK" | "NOK" | "SEK" => Some(spaced("kr")),
+        "DOP" => Some(compact("RD$")),
+        "EGP" | "FKP" | "GIP" | "GGP" | "IMP" | "JEP" | "LBP" | "SHP" | "SYP" => Some(compact("£")),
+        "EUR" => Some(compact("€")),
+        "FJD" => Some(compact("FJ$")),
+        "GBP" => Some(compact("£")),
+        "GEL" => Some(compact("₾")),
+        "GHS" => Some(compact("₵")),
+        "GTQ" => Some(spaced("Q")),
+        "GYD" => Some(compact("G$")),
+        "HKD" => Some(compact("HK$")),
+        "HNL" => Some(spaced("L")),
+        "HRK" => Some(spaced("kn")),
+        "HUF" => Some(spaced("Ft")),
+        "IDR" => Some(spaced("Rp")),
+        "ILS" => Some(compact("₪")),
+        "INR" => Some(compact("₹")),
+        "IRR" | "OMR" | "QAR" | "SAR" | "YER" => Some(compact("﷼")),
+        "ISK" => Some(spaced("kr")),
+        "JMD" => Some(compact("J$")),
+        "JPY" => Some(compact("¥")),
+        "KHR" => Some(compact("៛")),
+        "KRW" => Some(compact("₩")),
+        "KZT" => Some(compact("₸")),
+        "LAK" => Some(compact("₭")),
+        "LKR" => Some(spaced("Rs")),
+        "LYD" => Some(spaced("LD")),
+        "MAD" => Some(spaced("DH")),
+        "MDL" | "RON" => Some(spaced("lei")),
+        "MKD" | "RSD" => Some(spaced("дин")),
+        "MNT" => Some(compact("₮")),
+        "MOP" => Some(compact("MOP$")),
+        "MUR" | "NPR" | "PKR" | "SCR" => Some(spaced("Rs")),
+        "MXN" => Some(compact("MX$")),
+        "MYR" => Some(spaced("RM")),
+        "NGN" => Some(compact("₦")),
+        "NZD" => Some(compact("NZ$")),
+        "PEN" => Some(compact("S/")),
+        "PHP" => Some(compact("₱")),
+        "PLN" => Some(spaced("zł")),
+        "PYG" => Some(compact("₲")),
+        "RUB" => Some(compact("₽")),
+        "SGD" => Some(compact("S$")),
+        "THB" => Some(compact("฿")),
+        "TRY" => Some(compact("₺")),
+        "TTD" => Some(compact("TT$")),
+        "TWD" => Some(compact("NT$")),
+        "UAH" => Some(compact("₴")),
+        "USD" => Some(compact("$")),
+        "UYU" => Some(compact("$U")),
+        "VES" => Some(spaced("Bs")),
+        "VND" => Some(compact("₫")),
+        "XAF" | "XOF" => Some(spaced("CFA")),
+        "XPF" => Some(spaced("CFPF")),
+        "ZAR" => Some(spaced("R")),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -265,8 +370,38 @@ mod tests {
             rate: 0.74092,
         };
 
-        assert_eq!(formatter.format_money(10.0), "GBP 7.41");
-        assert_eq!(formatter.format_money_short(100.0), "GBP 74.1");
+        assert_eq!(formatter.format_money(10.0), "£7.41");
+        assert_eq!(formatter.format_money_short(100.0), "£74.1");
+    }
+
+    #[test]
+    fn uses_prefixed_symbols_for_ambiguous_dollar_codes() {
+        let formatter = CurrencyFormatter {
+            code: "CAD".into(),
+            rate: 1.3656,
+        };
+
+        assert_eq!(formatter.format_money(10.0), "C$13.66");
+    }
+
+    #[test]
+    fn falls_back_to_code_when_no_symbol_is_known() {
+        let formatter = CurrencyFormatter {
+            code: "XYZ".into(),
+            rate: 2.0,
+        };
+
+        assert_eq!(formatter.format_money(10.0), "XYZ 20.00");
+    }
+
+    #[test]
+    fn spaces_alphabetic_currency_prefixes() {
+        let formatter = CurrencyFormatter {
+            code: "CHF".into(),
+            rate: 0.78969,
+        };
+
+        assert_eq!(formatter.format_money(10.0), "CHF 7.90");
     }
 
     #[test]
