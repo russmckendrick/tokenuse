@@ -2,7 +2,7 @@
 
 Cursor stores its conversation history in a single SQLite database per install. `tokenuse` reads it via `rusqlite` (bundled — no system SQLite required).
 
-> Status: discovery + config implemented (`src/providers/cursor/`). Parser is a scaffold; this doc is the implementation plan.
+> Status: implemented (`src/providers/cursor/`).
 
 ## Where the data lives
 
@@ -12,7 +12,18 @@ Cursor stores its conversation history in a single SQLite database per install. 
 | Linux | `~/.config/Cursor/User/globalStorage/state.vscdb` |
 | Windows | `%APPDATA%/Cursor/User/globalStorage/state.vscdb` |
 
-`tokenuse` caches parse results at `~/.cache/tokenuse/cursor-results.json` keyed on the database's mtime. Re-parse only when `state.vscdb` is newer than the cache.
+The current parser reads `state.vscdb` directly on startup via a read-only immutable SQLite URI. A cache file helper exists in `config.rs`, but parse caching is not currently wired into the provider.
+
+```mermaid
+flowchart TD
+    A[state.vscdb] --> B[cursorDiskKV]
+    B --> C[bubbleId rows]
+    B --> D[agentKv blob rows]
+    C --> E[explicit tokens or chars per 4 fallback]
+    D --> F[group rows by requestId]
+    E --> G[ParsedCall]
+    F --> G
+```
 
 ## Record format
 
@@ -51,9 +62,9 @@ These rows carry a series of `{role, content}` pairs without explicit token coun
 | `input_tokens` | `tokenCount.inputTokens` (or `chars / 4` for AgentKv) |
 | `output_tokens` | `tokenCount.outputTokens` (or `chars / 4` for AgentKv) |
 | `cache_*` | `0` — Cursor does not surface cache breakdown |
-| `model` | `modelInfo.modelName` after alias resolution |
-| `timestamp` | `DateTime::from_timestamp_millis(createdAt)` |
-| `tools` | `codeBlocks[].language` (treated as informational, not tool calls) |
+| `model` | `modelInfo.modelName`, with empty / `default` falling back to `cursor-auto` |
+| `timestamp` | `DateTime::from_timestamp_millis(createdAt)` or parsed RFC3339 when present |
+| `tools` | empty — the current parser does not populate tool names from Cursor rows |
 
 **Token quirk:** Cursor v3 sometimes records zero tokens. When `tokenCount.inputTokens + tokenCount.outputTokens == 0`, fall back to character-count estimation.
 
@@ -64,10 +75,10 @@ These rows carry a series of `{role, content}` pairs without explicit token coun
 
 ## Deduplication
 
-- V2 bubbles: `cursor:bubble:<key>` (the full `bubbleId:...` row key).
+- V2 bubbles: `cursor:<conversation_id>:<created_at>:<input_tokens>:<output_tokens>`.
 - AgentKv: `cursor:agentKv:<requestId>`.
 
-A single Cursor row is one user message *or* one assistant message; only assistant rows produce `ParsedCall`s.
+A single Cursor row is one user message *or* one assistant message, and the current parser emits `ParsedCall`s for both bubble types when they carry usage or a chars/4 fallback.
 
 ## Tools / bash extraction
 
