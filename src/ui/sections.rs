@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    prelude::{Color, Frame, Line, Modifier, Span, Style},
+    prelude::{Color, Frame, Line, Modifier, Span},
     text::Text,
     widgets::{Cell, Paragraph, Row, Table, Widget},
 };
@@ -8,8 +8,8 @@ use ratatui::{
 use crate::{
     app::{App, Period},
     data::{
-        ActivityAccent, ActivityMetric, CountMetric, DailyMetric, ModelMetric, ProjectMetric,
-        SessionMetric, Summary,
+        CountMetric, DailyMetric, ModelMetric, ProjectMetric, ProjectProviderMetric, SessionMetric,
+        Summary,
     },
     theme,
 };
@@ -50,14 +50,9 @@ pub(super) fn render_nav(frame: &mut Frame<'_>, area: Rect, app: &App) {
 }
 
 pub(super) fn render_summary(frame: &mut Frame<'_>, area: Rect, app: &App, summary: &Summary) {
-    let base = match app.view {
-        crate::app::View::Dashboard => "tokenuse",
-        crate::app::View::Optimize => "tokenuse Optimize",
-        crate::app::View::Compare => "tokenuse Compare",
-    };
     let title_owned = match &app.status {
-        Some(s) => format!("{base}  ·  {s}"),
-        None => base.to_string(),
+        Some(s) => format!("tokenuse  ·  {s}"),
+        None => "tokenuse".to_string(),
     };
     let title: &str = &title_owned;
 
@@ -137,7 +132,7 @@ pub(super) fn render_projects(frame: &mut Frame<'_>, area: Rect, rows: &[Project
             Cell::from(item.cost).style(theme::money()),
             Cell::from(item.avg_per_session).style(theme::money()),
             Cell::from(item.sessions.to_string()).style(theme::base()),
-            Cell::from(item.overhead).style(Style::default().fg(theme::BLUE_SOFT)),
+            Cell::from(item.provider_mix).style(theme::base().fg(theme::BLUE_SOFT)),
         ])
     });
 
@@ -146,10 +141,10 @@ pub(super) fn render_projects(frame: &mut Frame<'_>, area: Rect, rows: &[Project
         [
             Constraint::Length(BAR_WIDTH as u16),
             Constraint::Min(24),
-            Constraint::Length(10),
             Constraint::Length(9),
-            Constraint::Length(6),
-            Constraint::Length(10),
+            Constraint::Length(8),
+            Constraint::Length(5),
+            Constraint::Length(24),
         ],
     )
     .header(Row::new(vec![
@@ -158,7 +153,7 @@ pub(super) fn render_projects(frame: &mut Frame<'_>, area: Rect, rows: &[Project
         Cell::from("cost").style(theme::dim()),
         Cell::from("avg/s").style(theme::dim()),
         Cell::from("sess").style(theme::dim()),
-        Cell::from("overhead").style(theme::dim()),
+        Cell::from("providers").style(theme::dim()),
     ]))
     .column_spacing(1)
     .block(theme::panel_block("By Project", theme::GREEN));
@@ -200,20 +195,20 @@ pub(super) fn render_sessions(frame: &mut Frame<'_>, area: Rect, rows: &[Session
     frame.render_widget(table, area);
 }
 
-pub(super) fn render_activities(frame: &mut Frame<'_>, area: Rect, rows: &[ActivityMetric]) {
+pub(super) fn render_project_providers(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    rows: &[ProjectProviderMetric],
+) {
     let table_rows = rows.iter().map(|item| {
-        let one_shot_style = if item.one_shot.ends_with('%') {
-            theme::base().fg(theme::PRIMARY)
-        } else {
-            theme::dim()
-        };
-
         Row::new(vec![
             bar_cell(item.value),
-            Cell::from(item.name).style(theme::base().fg(activity_color(item.accent))),
+            Cell::from(item.project).style(theme::muted()),
+            Cell::from(item.provider).style(theme::base().fg(theme::YELLOW_SOFT)),
             Cell::from(item.cost).style(theme::money()),
-            Cell::from(item.turns.to_string()).style(theme::base()),
-            Cell::from(item.one_shot).style(one_shot_style),
+            Cell::from(item.calls.to_string()).style(theme::base()),
+            Cell::from(item.sessions.to_string()).style(theme::base()),
+            Cell::from(item.avg_per_session).style(theme::money()),
         ])
     });
 
@@ -221,21 +216,28 @@ pub(super) fn render_activities(frame: &mut Frame<'_>, area: Rect, rows: &[Activ
         table_rows,
         [
             Constraint::Length(BAR_WIDTH as u16),
-            Constraint::Min(16),
-            Constraint::Length(10),
-            Constraint::Length(7),
+            Constraint::Min(14),
+            Constraint::Length(8),
+            Constraint::Length(9),
+            Constraint::Length(6),
+            Constraint::Length(5),
             Constraint::Length(8),
         ],
     )
     .header(Row::new(vec![
         Cell::from(""),
-        Cell::from(""),
+        Cell::from("project").style(theme::dim()),
+        Cell::from("prov").style(theme::dim()),
         Cell::from("cost").style(theme::dim()),
-        Cell::from("turns").style(theme::dim()),
-        Cell::from("1-shot").style(theme::dim()),
+        Cell::from("calls").style(theme::dim()),
+        Cell::from("sess").style(theme::dim()),
+        Cell::from("avg/s").style(theme::dim()),
     ]))
     .column_spacing(1)
-    .block(theme::panel_block("By Activity", theme::YELLOW));
+    .block(theme::panel_block(
+        "Project Spend by Provider",
+        theme::YELLOW,
+    ));
 
     frame.render_widget(table, area);
 }
@@ -310,8 +312,6 @@ pub(super) fn render_counts(
 
 pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let commands = Line::from(vec![
-        Span::styled("<>", theme::key()),
-        Span::styled(" switch    ", theme::muted()),
         Span::styled("q", theme::key()),
         Span::styled(" quit    ", theme::muted()),
         footer_period("1", "today", app.period == Period::Today),
@@ -324,10 +324,6 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Span::raw("    "),
         footer_period("5", "all time", app.period == Period::AllTime),
         Span::raw("    "),
-        Span::styled("o", theme::key()),
-        Span::styled(" optimize    ", theme::muted()),
-        Span::styled("c", theme::key()),
-        Span::styled(" compare    ", theme::muted()),
         Span::styled("p", theme::key()),
         Span::styled(" provider", theme::muted()),
     ]);
@@ -342,16 +338,4 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
 fn footer_period<'a>(key: &'a str, label: &'a str, active: bool) -> Span<'a> {
     let style = if active { theme::key() } else { theme::muted() };
     Span::styled(format!("{key} {label}"), style)
-}
-
-fn activity_color(accent: ActivityAccent) -> Color {
-    match accent {
-        ActivityAccent::Blue => theme::BLUE,
-        ActivityAccent::Green => theme::GREEN,
-        ActivityAccent::Muted => theme::MUTED,
-        ActivityAccent::Cyan => theme::CYAN,
-        ActivityAccent::Yellow => theme::YELLOW,
-        ActivityAccent::Red => theme::RED,
-        ActivityAccent::Magenta => theme::MAGENTA,
-    }
 }

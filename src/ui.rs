@@ -12,8 +12,8 @@ use crate::{app::App, theme};
 
 use components::{centered_rect, two_columns};
 use sections::{
-    render_activities, render_counts, render_daily, render_footer, render_models, render_nav,
-    render_projects, render_sessions, render_summary,
+    render_counts, render_daily, render_footer, render_models, render_nav,
+    render_project_providers, render_projects, render_sessions, render_summary,
 };
 
 pub fn render(frame: &mut Frame<'_>, app: &App) {
@@ -42,12 +42,12 @@ pub fn render(frame: &mut Frame<'_>, app: &App) {
             Constraint::Length(1),
             Constraint::Length(8),
             Constraint::Length(1),
-            Constraint::Length(10),
+            Constraint::Min(10),
             Constraint::Length(1),
             Constraint::Length(10),
             Constraint::Length(1),
             Constraint::Length(5),
-            Constraint::Min(3),
+            Constraint::Length(3),
         ])
         .split(area);
 
@@ -63,7 +63,7 @@ pub fn render(frame: &mut Frame<'_>, app: &App) {
     render_sessions(frame, sections[5], &data.sessions);
 
     let middle = two_columns(sections[7]);
-    render_activities(frame, middle[0], &data.activities);
+    render_project_providers(frame, middle[0], &data.project_providers);
     render_models(frame, middle[1], &data.models);
 
     let lower = two_columns(sections[9]);
@@ -136,6 +136,11 @@ mod tests {
 
         assert!(rendered.contains("tokenuse"));
         assert!(rendered.contains("Daily Activity"));
+        assert!(rendered.contains("Project Spend by Provider"));
         assert!(rendered.contains("q quit"));
+        assert!(rendered.contains("p provider"));
+        assert!(!rendered.contains("switch"));
+        assert!(!rendered.contains("optimize"));
+        assert!(!rendered.contains("compare"));
     }
 }
