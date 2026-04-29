@@ -41,6 +41,12 @@ jobs:
         with:
           components: clippy, rustfmt
 
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfontconfig1-dev
+
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
 
@@ -88,6 +94,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfontconfig1-dev
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
