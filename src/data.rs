@@ -5,8 +5,8 @@ pub struct DashboardData {
     pub summary: Summary,
     pub daily: Vec<DailyMetric>,
     pub projects: Vec<ProjectMetric>,
+    pub project_providers: Vec<ProjectProviderMetric>,
     pub sessions: Vec<SessionMetric>,
-    pub activities: Vec<ActivityMetric>,
     pub models: Vec<ModelMetric>,
     pub tools: Vec<CountMetric>,
     pub commands: Vec<CountMetric>,
@@ -39,7 +39,18 @@ pub struct ProjectMetric {
     pub cost: &'static str,
     pub avg_per_session: &'static str,
     pub sessions: u64,
-    pub overhead: &'static str,
+    pub provider_mix: &'static str,
+    pub value: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProjectProviderMetric {
+    pub project: &'static str,
+    pub provider: &'static str,
+    pub cost: &'static str,
+    pub calls: u64,
+    pub sessions: u64,
+    pub avg_per_session: &'static str,
     pub value: u64,
 }
 
@@ -50,27 +61,6 @@ pub struct SessionMetric {
     pub cost: &'static str,
     pub calls: u64,
     pub value: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct ActivityMetric {
-    pub name: &'static str,
-    pub cost: &'static str,
-    pub turns: u64,
-    pub one_shot: &'static str,
-    pub value: u64,
-    pub accent: ActivityAccent,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum ActivityAccent {
-    Blue,
-    Green,
-    Muted,
-    Cyan,
-    Yellow,
-    Red,
-    Magenta,
 }
 
 #[derive(Debug, Clone)]
@@ -109,8 +99,32 @@ pub fn dashboard_data(period: Period, provider: Provider) -> DashboardData {
                 cost: "$12.48",
                 avg_per_session: "$2.08",
                 sessions: 6,
-                overhead: "10.8K",
+                provider_mix: "Copilot $7.1  Codex $5.4",
                 value: 28,
+            },
+        );
+        data.project_providers.insert(
+            3,
+            ProjectProviderMetric {
+                project: "openai/sidecar",
+                provider: "Copilot",
+                cost: "$7.10",
+                calls: 64,
+                sessions: 4,
+                avg_per_session: "$1.78",
+                value: 18,
+            },
+        );
+        data.project_providers.insert(
+            4,
+            ProjectProviderMetric {
+                project: "openai/sidecar",
+                provider: "Codex",
+                cost: "$5.38",
+                calls: 41,
+                sessions: 2,
+                avg_per_session: "$2.69",
+                value: 14,
             },
         );
     }
@@ -150,7 +164,7 @@ fn week_data() -> DashboardData {
                 cost: "$59.03",
                 avg_per_session: "$11.81",
                 sessions: 5,
-                overhead: "11.6K",
+                provider_mix: "Claude $59.0",
                 value: 100,
             },
             ProjectMetric {
@@ -158,7 +172,7 @@ fn week_data() -> DashboardData {
                 cost: "$3.80",
                 avg_per_session: "$1.90",
                 sessions: 2,
-                overhead: "11.6K",
+                provider_mix: "Claude $2.6  Codex $1.2",
                 value: 12,
             },
             ProjectMetric {
@@ -166,7 +180,7 @@ fn week_data() -> DashboardData {
                 cost: "$2.41",
                 avg_per_session: "$0.603",
                 sessions: 4,
-                overhead: "12.1K",
+                provider_mix: "Claude $1.8  Copilot $0.61",
                 value: 8,
             },
             ProjectMetric {
@@ -174,8 +188,64 @@ fn week_data() -> DashboardData {
                 cost: "$0.624",
                 avg_per_session: "$0.624",
                 sessions: 1,
-                overhead: "11.9K",
+                provider_mix: "Codex $0.62",
                 value: 3,
+            },
+        ],
+        project_providers: vec![
+            ProjectProviderMetric {
+                project: "asciinema/to/svg",
+                provider: "Claude",
+                cost: "$59.03",
+                calls: 442,
+                sessions: 5,
+                avg_per_session: "$11.81",
+                value: 100,
+            },
+            ProjectProviderMetric {
+                project: "mckendrick/Code/skills",
+                provider: "Claude",
+                cost: "$2.60",
+                calls: 31,
+                sessions: 1,
+                avg_per_session: "$2.60",
+                value: 4,
+            },
+            ProjectProviderMetric {
+                project: "mckendrick/Code/skills",
+                provider: "Codex",
+                cost: "$1.20",
+                calls: 22,
+                sessions: 1,
+                avg_per_session: "$1.20",
+                value: 2,
+            },
+            ProjectProviderMetric {
+                project: "mckendrick/Code/blog",
+                provider: "Claude",
+                cost: "$1.80",
+                calls: 30,
+                sessions: 3,
+                avg_per_session: "$0.600",
+                value: 3,
+            },
+            ProjectProviderMetric {
+                project: "mckendrick/Code/blog",
+                provider: "Copilot",
+                cost: "$0.610",
+                calls: 10,
+                sessions: 1,
+                avg_per_session: "$0.610",
+                value: 1,
+            },
+            ProjectProviderMetric {
+                project: "Code/russ/fm",
+                provider: "Codex",
+                cost: "$0.624",
+                calls: 16,
+                sessions: 1,
+                avg_per_session: "$0.624",
+                value: 1,
             },
         ],
         sessions: vec![
@@ -213,64 +283,6 @@ fn week_data() -> DashboardData {
                 cost: "$0.624",
                 calls: 16,
                 value: 2,
-            },
-        ],
-        activities: vec![
-            ActivityMetric {
-                name: "Coding",
-                cost: "$58.62",
-                turns: 14,
-                one_shot: "60%",
-                value: 100,
-                accent: ActivityAccent::Blue,
-            },
-            ActivityMetric {
-                name: "Feature Dev",
-                cost: "$2.47",
-                turns: 4,
-                one_shot: "100%",
-                value: 10,
-                accent: ActivityAccent::Green,
-            },
-            ActivityMetric {
-                name: "Planning",
-                cost: "$2.32",
-                turns: 2,
-                one_shot: "-",
-                value: 9,
-                accent: ActivityAccent::Blue,
-            },
-            ActivityMetric {
-                name: "Debugging",
-                cost: "$0.871",
-                turns: 2,
-                one_shot: "100%",
-                value: 4,
-                accent: ActivityAccent::Red,
-            },
-            ActivityMetric {
-                name: "Conversation",
-                cost: "$0.768",
-                turns: 3,
-                one_shot: "-",
-                value: 3,
-                accent: ActivityAccent::Muted,
-            },
-            ActivityMetric {
-                name: "Exploration",
-                cost: "$0.510",
-                turns: 3,
-                one_shot: "-",
-                value: 2,
-                accent: ActivityAccent::Cyan,
-            },
-            ActivityMetric {
-                name: "Brainstorming",
-                cost: "$0.307",
-                turns: 3,
-                one_shot: "-",
-                value: 1,
-                accent: ActivityAccent::Magenta,
             },
         ],
         models: vec![
@@ -420,6 +432,7 @@ fn today_data() -> DashboardData {
         value: 100,
     }];
     data.projects.truncate(3);
+    data.project_providers.truncate(4);
     data.sessions.truncate(3);
     data
 }
@@ -547,7 +560,7 @@ fn all_time_data() -> DashboardData {
             cost: "$117.91",
             avg_per_session: "$6.21",
             sessions: 19,
-            overhead: "11.5K",
+            provider_mix: "Claude $78  Codex $40",
             value: 100,
         },
         ProjectMetric {
@@ -555,7 +568,7 @@ fn all_time_data() -> DashboardData {
             cost: "$115.49",
             avg_per_session: "$9.62",
             sessions: 12,
-            overhead: "11.9K",
+            provider_mix: "Claude $82  Cursor $33",
             value: 98,
         },
         ProjectMetric {
@@ -563,7 +576,7 @@ fn all_time_data() -> DashboardData {
             cost: "$68.17",
             avg_per_session: "$0.897",
             sessions: 76,
-            overhead: "12.1K",
+            provider_mix: "Claude $39  Copilot $18  Codex $11",
             value: 58,
         },
         ProjectMetric {
@@ -571,7 +584,7 @@ fn all_time_data() -> DashboardData {
             cost: "$59.03",
             avg_per_session: "$11.81",
             sessions: 5,
-            overhead: "11.6K",
+            provider_mix: "Claude $59",
             value: 50,
         },
         ProjectMetric {
@@ -579,7 +592,7 @@ fn all_time_data() -> DashboardData {
             cost: "$42.24",
             avg_per_session: "$2.01",
             sessions: 21,
-            overhead: "-",
+            provider_mix: "Cursor $28  Copilot $14",
             value: 36,
         },
         ProjectMetric {
@@ -587,7 +600,7 @@ fn all_time_data() -> DashboardData {
             cost: "$41.52",
             avg_per_session: "$1.54",
             sessions: 27,
-            overhead: "11.6K",
+            provider_mix: "Claude $42",
             value: 35,
         },
         ProjectMetric {
@@ -595,7 +608,7 @@ fn all_time_data() -> DashboardData {
             cost: "$37.59",
             avg_per_session: "$1.45",
             sessions: 26,
-            overhead: "-",
+            provider_mix: "Codex $25  Copilot $13",
             value: 32,
         },
         ProjectMetric {
@@ -603,8 +616,100 @@ fn all_time_data() -> DashboardData {
             cost: "$30.63",
             avg_per_session: "$3.40",
             sessions: 9,
-            overhead: "-",
+            provider_mix: "Codex $31",
             value: 26,
+        },
+    ];
+    data.project_providers = vec![
+        ProjectProviderMetric {
+            project: "ai/commit/dev",
+            provider: "Claude",
+            cost: "$78.20",
+            calls: 961,
+            sessions: 12,
+            avg_per_session: "$6.52",
+            value: 95,
+        },
+        ProjectProviderMetric {
+            project: "ai/commit/dev",
+            provider: "Codex",
+            cost: "$39.71",
+            calls: 623,
+            sessions: 7,
+            avg_per_session: "$5.67",
+            value: 48,
+        },
+        ProjectProviderMetric {
+            project: "Code/russ/fm",
+            provider: "Claude",
+            cost: "$82.61",
+            calls: 545,
+            sessions: 4,
+            avg_per_session: "$20.65",
+            value: 100,
+        },
+        ProjectProviderMetric {
+            project: "Code/russ/fm",
+            provider: "Cursor",
+            cost: "$32.88",
+            calls: 514,
+            sessions: 8,
+            avg_per_session: "$4.11",
+            value: 40,
+        },
+        ProjectProviderMetric {
+            project: "mckendrick/Code/blog",
+            provider: "Claude",
+            cost: "$39.04",
+            calls: 991,
+            sessions: 41,
+            avg_per_session: "$0.952",
+            value: 47,
+        },
+        ProjectProviderMetric {
+            project: "mckendrick/Code/blog",
+            provider: "Copilot",
+            cost: "$18.40",
+            calls: 682,
+            sessions: 23,
+            avg_per_session: "$0.800",
+            value: 22,
+        },
+        ProjectProviderMetric {
+            project: "mckendrick/Code/blog",
+            provider: "Codex",
+            cost: "$10.73",
+            calls: 341,
+            sessions: 12,
+            avg_per_session: "$0.894",
+            value: 13,
+        },
+        ProjectProviderMetric {
+            project: "asciinema/to/svg",
+            provider: "Claude",
+            cost: "$59.03",
+            calls: 442,
+            sessions: 5,
+            avg_per_session: "$11.81",
+            value: 71,
+        },
+        ProjectProviderMetric {
+            project: "Code/dvr",
+            provider: "Cursor",
+            cost: "$28.15",
+            calls: 455,
+            sessions: 14,
+            avg_per_session: "$2.01",
+            value: 34,
+        },
+        ProjectProviderMetric {
+            project: "Code/dvr",
+            provider: "Copilot",
+            cost: "$14.09",
+            calls: 188,
+            sessions: 7,
+            avg_per_session: "$2.01",
+            value: 17,
         },
     ];
     data.sessions = vec![
@@ -642,96 +747,6 @@ fn all_time_data() -> DashboardData {
             cost: "$27.94",
             calls: 230,
             value: 34,
-        },
-    ];
-    data.activities = vec![
-        ActivityMetric {
-            name: "Coding",
-            cost: "$267.52",
-            turns: 2053,
-            one_shot: "85%",
-            value: 100,
-            accent: ActivityAccent::Blue,
-        },
-        ActivityMetric {
-            name: "Feature Dev",
-            cost: "$70.98",
-            turns: 126,
-            one_shot: "86%",
-            value: 27,
-            accent: ActivityAccent::Green,
-        },
-        ActivityMetric {
-            name: "Conversation",
-            cost: "$70.37",
-            turns: 2079,
-            one_shot: "-",
-            value: 26,
-            accent: ActivityAccent::Muted,
-        },
-        ActivityMetric {
-            name: "Exploration",
-            cost: "$50.91",
-            turns: 148,
-            one_shot: "-",
-            value: 19,
-            accent: ActivityAccent::Cyan,
-        },
-        ActivityMetric {
-            name: "Delegation",
-            cost: "$34.17",
-            turns: 13,
-            one_shot: "63%",
-            value: 13,
-            accent: ActivityAccent::Yellow,
-        },
-        ActivityMetric {
-            name: "Debugging",
-            cost: "$33.63",
-            turns: 70,
-            one_shot: "89%",
-            value: 13,
-            accent: ActivityAccent::Red,
-        },
-        ActivityMetric {
-            name: "Refactoring",
-            cost: "$18.20",
-            turns: 17,
-            one_shot: "60%",
-            value: 7,
-            accent: ActivityAccent::Yellow,
-        },
-        ActivityMetric {
-            name: "Brainstorming",
-            cost: "$4.00",
-            turns: 41,
-            one_shot: "-",
-            value: 2,
-            accent: ActivityAccent::Magenta,
-        },
-        ActivityMetric {
-            name: "Testing",
-            cost: "$3.24",
-            turns: 51,
-            one_shot: "-",
-            value: 1,
-            accent: ActivityAccent::Magenta,
-        },
-        ActivityMetric {
-            name: "Planning",
-            cost: "$2.32",
-            turns: 2,
-            one_shot: "-",
-            value: 1,
-            accent: ActivityAccent::Blue,
-        },
-        ActivityMetric {
-            name: "Build/Deploy",
-            cost: "$0.582",
-            turns: 5,
-            one_shot: "-",
-            value: 1,
-            accent: ActivityAccent::Green,
         },
     ];
     data.models = vec![
