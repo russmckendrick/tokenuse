@@ -30,4 +30,23 @@ impl Provider for Codex {
     ) -> Result<Vec<ParsedCall>> {
         parser::parse_session(source, seen)
     }
+
+    fn model_display(&self, model: &str) -> String {
+        let lower = model.trim().to_lowercase();
+        for (key, name) in SHORT_NAMES {
+            if lower.starts_with(key) {
+                return (*name).to_string();
+            }
+        }
+        model.to_string()
+    }
 }
+
+const SHORT_NAMES: &[(&str, &str)] = &[
+    ("gpt-5.4", "GPT-5.4"),
+    ("gpt-5-mini", "GPT-5 Mini"),
+    ("gpt-5", "GPT-5"),
+    ("gpt-4o-mini", "GPT-4o Mini"),
+    ("gpt-4o", "GPT-4o"),
+    ("o3", "o3"),
+];

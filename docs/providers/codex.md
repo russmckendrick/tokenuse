@@ -1,8 +1,8 @@
 # Codex
 
-OpenAI Codex writes one JSONL "rollout" file per session under a year/month/day tree. Each rollout starts with a `session_meta` envelope and ends with a `token_count` event carrying the final usage.
+OpenAI Codex writes one JSONL "rollout" file per session under a year/month/day tree. Every entry has the shape `{ "timestamp": "...", "type": "...", "payload": { ... } }`; the first line is always a `session_meta` envelope and per-turn usage is reported via `event_msg` events of inner type `token_count`.
 
-> Status: discovery + config implemented (`src/providers/codex/`). Parser is a scaffold; this doc is the implementation plan.
+> Status: implemented (`src/providers/codex/`).
 
 ## Where the data lives
 
@@ -12,80 +12,90 @@ OpenAI Codex writes one JSONL "rollout" file per session under a year/month/day 
 
 **Env var override:** `CODEX_HOME` replaces `~/.codex`.
 
-**Validation:** before parsing, read the first line of each file. Treat it as a Codex rollout only if it has `type: "session_meta"` and the originator field identifies Codex (some other tools have copied the format). This avoids ingesting unrelated JSONL.
+**Validation:** the parser reads the first line of each file and treats it as a Codex rollout only if `type == "session_meta"` and `payload.originator` contains `"codex"` (case-insensitive — the real desktop app emits `"Codex Desktop"`). Anything else is skipped to avoid ingesting unrelated JSONL.
 
 **Discovery rules** (`src/providers/codex/discovery.rs`):
-- Walk `sessions_root()` recursively (no max depth — date tree is shallow).
+- Walk `sessions_root()` recursively (no max depth — the date tree is shallow).
 - Match files whose name starts with `rollout-` and ends with `.jsonl`.
-- Use the `YYYY/MM/DD` portion of the relative path as the project label.
+- Use the relative directory (`YYYY/MM/DD`) as the project label fallback.
 
 ## Record format
 
-A rollout is heterogeneous JSONL. The interesting entry types:
+A rollout is heterogeneous JSONL. The interesting types:
 
 ```jsonc
-// Session envelope (must be first line)
-{ "type": "session_meta", "session_id": "...", "cwd": "/Users/me/widgets",
-  "info": { "originator": "codex", "model": "gpt-5", "model_name": "gpt-5" } }
+// Envelope (must be the first line)
+{ "timestamp": "2026-03-29T15:04:01.475Z", "type": "session_meta",
+  "payload": { "id": "...", "cwd": "/Users/me/proj",
+               "originator": "Codex Desktop", "model_provider": "openai" } }
 
-// Mid-session model change
-{ "type": "turn_context", "model": "o3" }
+// Model selection — emitted at the start and on every model change
+{ "timestamp": "...", "type": "turn_context",
+  "payload": { "model": "gpt-5.4", "approval_policy": "...", "sandbox_policy": { ... } } }
 
-// Tool call
-{ "type": "response_item", "name": "exec_command", "arguments": { "command": "cargo test" } }
-{ "type": "response_item", "name": "read_file",   "arguments": { "path": "src/lib.rs" } }
-{ "type": "response_item", "name": "apply_patch", "arguments": { /* ... */ } }
+// Tool calls — payload.type is "function_call" or "custom_tool_call"; arguments is a JSON-encoded string
+{ "timestamp": "...", "type": "response_item",
+  "payload": { "type": "function_call", "name": "exec_command",
+               "arguments": "{\"cmd\":\"cargo test\",\"workdir\":\"/Users/me/proj\"}",
+               "call_id": "call_..." } }
+{ "timestamp": "...", "type": "response_item",
+  "payload": { "type": "custom_tool_call", "name": "apply_patch",
+               "arguments": "{ ... }", "call_id": "call_..." } }
 
-// Usage events — the source of token counts
-{ "type": "event_msg", "msg": { "type": "token_count",
-    "last_token_usage":      { "input_tokens": 12000, "cached_input_tokens": 8000,
-                                "output_tokens": 800,  "reasoning_output_tokens": 200 },
-    "total_token_usage":     { "input_tokens": 80000, "output_tokens": 4200 } } }
+// Usage events — info may be null on the very first emission of a session
+{ "timestamp": "...", "type": "event_msg",
+  "payload": { "type": "token_count",
+               "info": { "last_token_usage":  { "input_tokens": 18193, "cached_input_tokens": 10624,
+                                                "output_tokens": 371, "reasoning_output_tokens": 38,
+                                                "total_tokens": 18564 },
+                         "total_token_usage": { "input_tokens": 18193, "cached_input_tokens": 10624,
+                                                "output_tokens": 371, "reasoning_output_tokens": 38,
+                                                "total_tokens": 18564 },
+                         "model_context_window": 258400 } } }
 ```
 
-`response_item` names map to canonical tool names:
+`response_item` names map to canonical tool labels:
 
-| Codex name | Normalized |
+| Codex `payload.name` | Normalized |
 | --- | --- |
 | `exec_command` | `Bash` |
 | `read_file` | `Read` |
 | `write_file`, `apply_diff`, `apply_patch` | `Edit` |
 | `web_search` | `WebSearch` |
+| anything else | passed through unchanged |
 
 ## Token & cost mapping
 
-Two parsing modes — pick one consistently:
+One `ParsedCall` is emitted per `event_msg/token_count` whose `info.last_token_usage` is non-null. Tokens come straight from `last_token_usage` (the per-turn delta).
 
-**Mode A (preferred): per-call from `last_token_usage`.**
-Each `event_msg/token_count` is one `ParsedCall`. Tokens come straight from `last_token_usage`.
-
-**Mode B: cumulative from `total_token_usage`.**
-Diff successive `total_token_usage` snapshots to recover per-turn deltas. Used when `last_token_usage` is missing.
-
-| `ParsedCall` field | Source (Mode A) |
+| `ParsedCall` field | Source |
 | --- | --- |
-| `input_tokens` | `last_token_usage.input_tokens` − `last_token_usage.cached_input_tokens` |
-| `output_tokens` | `last_token_usage.output_tokens` |
-| `cached_input_tokens` | `last_token_usage.cached_input_tokens` |
-| `cache_read_input_tokens` | `last_token_usage.cached_input_tokens` (priced as cache read) |
-| `reasoning_tokens` | `last_token_usage.reasoning_output_tokens` |
-| `model` | most recent `turn_context.model`, falling back to `session_meta.info.model` then `info.model_name`, then `gpt-5` |
+| `input_tokens` | `last.input_tokens` − `last.cached_input_tokens` |
+| `output_tokens` | `last.output_tokens` + `last.reasoning_output_tokens` |
+| `cached_input_tokens` | `last.cached_input_tokens` |
+| `cache_read_input_tokens` | `last.cached_input_tokens` (priced as cache read) |
+| `cache_creation_input_tokens` | always `0` (OpenAI doesn't expose cache writes) |
+| `reasoning_tokens` | `last.reasoning_output_tokens` |
+| `model` | most recent `turn_context.payload.model`, or `"gpt-5"` if no `turn_context` has appeared yet |
+| `speed` | always `Speed::Standard` (Codex has no fast/standard split) |
 
-**Critical quirk:** OpenAI reports cached tokens **inside** `input_tokens`. Subtract `cached_input_tokens` from `input_tokens` before pricing or the cache read is double-billed.
+**Critical quirk:** OpenAI reports cached tokens **inside** `input_tokens`. The parser subtracts `cached_input_tokens` before pricing or the cache read would be double-billed.
+
+**Reasoning tokens** are folded into `output_tokens` and priced at the output rate, matching the bundled snapshot schema (which has no separate reasoning rate). They are also preserved in `reasoning_tokens` for future per-rate breakouts.
 
 ## Deduplication
 
-`dedup_key = format!("codex:{path}:{timestamp}:{cumulative_total_input + cumulative_total_output}")`
+`dedup_key = format!("codex:{path}:{timestamp}:{total.input_tokens}+{total.output_tokens}")`
 
-Including the cumulative total prevents collapsing two consecutive turns that happen to share a timestamp, while still catching re-reads of the same file.
+Including the cumulative totals from `total_token_usage` prevents two consecutive turns that share a timestamp from collapsing, while still catching re-reads of the same file.
 
 ## Tools / bash extraction
 
-Walk `response_item` entries between `token_count` events. Aggregate the normalized names into `tools`. For `exec_command`, run `arguments.command` through `providers::jsonl::split_bash_commands` and collect each piece into `bash_commands`.
+`response_item` entries between successive `token_count` events are accumulated into `tools` (and `bash_commands` for `exec_command`). The arguments string is JSON-decoded and the inner `cmd` field is split via `providers::jsonl::split_bash_commands`. On each emitted `ParsedCall` the buffers are drained (so the next turn starts empty); duplicate `token_count` entries that lose to the `seen` dedup set also clear the buffer to avoid leaking tool calls into the following turn.
 
 ## Known limitations
 
 - Files use UTC timestamps with millisecond precision — `chrono::DateTime::parse_from_rfc3339` is sufficient.
-- `session_meta.cwd` is the only reliable project signal. If absent, fall back to the date label.
-- Codex rolls models mid-session (`turn_context`); the parser must track the most-recently-set model so each turn is priced correctly.
-- Reasoning tokens are billed at the output rate by OpenAI — pricing currently includes them in the `output_tokens` bucket via the `output_per_token` rate. If you want them accounted separately, add a `reasoning_per_token` field to the snapshot schema first.
+- `payload.cwd` from `session_meta` is the only reliable project signal; absent that, the parser falls back to the `YYYY/MM/DD` discovery label.
+- Codex rolls models mid-session via `turn_context`; the parser tracks the most-recently-set model so each turn is priced correctly. Variants like `gpt-5.4` resolve through the pricing table's prefix fallback (`PriceTable::lookup`) onto the bundled `gpt-5` entry.
+- Cache-creation tokens are not exposed by OpenAI, so `cache_creation_input_tokens` is always zero. The "Cache Written" tile will read 0 for Codex.
