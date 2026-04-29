@@ -2,6 +2,8 @@
 
 Claude Code records every assistant message — including token usage and tool calls — to JSONL files on disk. `tokenuse` reads these directly.
 
+> Status: implemented (`src/providers/claude_code/`).
+
 ## Where the data lives
 
 | Platform | Path |

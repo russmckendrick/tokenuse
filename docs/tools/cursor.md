@@ -12,7 +12,7 @@ Cursor stores its conversation history in a single SQLite database per install. 
 | Linux | `~/.config/Cursor/User/globalStorage/state.vscdb` |
 | Windows | `%APPDATA%/Cursor/User/globalStorage/state.vscdb` |
 
-The current parser reads `state.vscdb` directly on startup via a read-only immutable SQLite URI. A cache file helper exists in `config.rs`, but parse caching is not currently wired into the provider.
+The current parser reads `state.vscdb` directly on startup via a read-only immutable SQLite URI. A cache file helper exists in `config.rs`, but parse caching is not currently wired into the adapter.
 
 ```mermaid
 flowchart TD

@@ -1,0 +1,27 @@
+# Documentation
+
+This folder is the long-form companion to the short project README.
+
+```mermaid
+flowchart LR
+    A[README.md] --> B[Tool ingestion docs]
+    A --> C[Architecture docs]
+    B --> D[Claude Code]
+    B --> E[Cursor]
+    B --> F[Codex]
+    B --> G[GitHub Copilot]
+    C --> H[Startup flow]
+    C --> I[Aggregation]
+    C --> J[Pricing]
+```
+
+## Start Here
+
+- [Tool ingestion](tools/README.md): what local files each AI coding tool writes, how `tokenuse` discovers them, and how fields are normalized.
+- [Architecture](architecture.md): startup flow, dashboard aggregation, project identity, deduplication, and pricing behavior.
+
+## Terminology
+
+The UI and user docs say **tool**: Claude Code, Cursor, Codex, and GitHub Copilot are the tools being analyzed.
+
+The Rust code still uses an internal `Provider` trait in `src/providers/`. In docs, "adapter" usually means that internal provider implementation.
