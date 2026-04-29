@@ -9,3 +9,14 @@ license = "MIT"
 color-eyre = "0.6"
 crossterm = "0.28"
 ratatui = "0.29"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+dirs = "5"
+walkdir = "2"
+rusqlite = { version = "0.31", features = ["bundled"] }
+ureq = { version = "2", features = ["json"], optional = true }
+
+[features]
+default = []
+refresh-prices = ["ureq"]
