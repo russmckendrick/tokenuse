@@ -373,7 +373,7 @@ fn extract_user_query(text: &str) -> String {
         if let Some(end) = text[start..].find("</user_query>") {
             let inner_start = start + "<user_query>".len();
             let inner_end = start + end;
-            return truncate(&text[inner_start..inner_end].trim(), 500);
+            return truncate(text[inner_start..inner_end].trim(), 500);
         }
     }
     truncate(text, 500)

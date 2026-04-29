@@ -193,7 +193,11 @@ pub fn write(ingested: &Ingested) -> Result<()> {
         version: CACHE_VERSION,
         written_at: Utc::now(),
         calls: ingested.calls.iter().map(WireParsedCall::from).collect(),
-        limits: ingested.limits.iter().map(WireLimitSnapshot::from).collect(),
+        limits: ingested
+            .limits
+            .iter()
+            .map(WireLimitSnapshot::from)
+            .collect(),
     };
     let bytes = serde_json::to_vec(&payload)?;
 

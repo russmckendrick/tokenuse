@@ -5,7 +5,7 @@ use std::path::Path;
 pub fn read_lines(path: &Path) -> std::io::Result<impl Iterator<Item = String>> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
-    Ok(reader.lines().filter_map(|line| line.ok()))
+    Ok(reader.lines().map_while(Result::ok))
 }
 
 pub fn split_bash_commands(input: &str) -> Vec<String> {
@@ -33,10 +33,9 @@ pub fn split_bash_commands(input: &str) -> Vec<String> {
                 }
             }
             '|' | ';' | '&' if !in_single && !in_double => {
-                if c == '&' && chars.peek() == Some(&'&') {
-                    chars.next();
-                    push_command(&mut out, &mut current);
-                } else if c == '|' && chars.peek() == Some(&'|') {
+                let is_double_op = (c == '&' && chars.peek() == Some(&'&'))
+                    || (c == '|' && chars.peek() == Some(&'|'));
+                if is_double_op {
                     chars.next();
                     push_command(&mut out, &mut current);
                 } else if c == ';' || c == '|' {
@@ -61,12 +60,7 @@ fn push_command(out: &mut Vec<String>, current: &mut String) {
 }
 
 pub fn first_word(command: &str) -> String {
-    command
-        .trim()
-        .split_whitespace()
-        .next()
-        .unwrap_or("")
-        .to_string()
+    command.split_whitespace().next().unwrap_or("").to_string()
 }
 
 #[cfg(test)]

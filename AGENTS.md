@@ -13,6 +13,13 @@
 - `DashboardData` fields are `&'static str`. Sample data uses string literals; ingested data is leaked via the `leak()` helper in `src/ingest.rs`. Do not change these to `String` without auditing every renderer.
 - The dashboard reads local files directly - no API keys, no proxy, no telemetry. Don't add network calls outside the `refresh-prices` feature.
 
+## Documentation
+
+- Add or update release notes in `docs/releases/` for user-visible changes that affect shipped behavior or documented workflows. One file per version (`docs/releases/<version>.md`), modelled on the existing notes — highlights, install instructions, and notes sections.
+- The current released version lives in `Cargo.toml`. Bump it in the same change that lands the release notes; CI tags off `v*` and publishes that version, so the `Cargo.toml` version and the matching `docs/releases/<version>.md` file should always land together.
+- Keep `docs/architecture.md`, `docs/usage.md`, and the `docs/tools/<name>.md` files in sync with the code they describe. If you change page routing, ingestion behavior, or a tool adapter's source schema, update the matching doc in the same change.
+- Update `docs/README.md` whenever a new top-level doc lands so the index stays current.
+
 ## Tool Adapter Conventions
 
 - User-facing docs and UI call Claude Code, Cursor, Codex, and Copilot **tools**. The Rust adapter trait is named `ToolAdapter` and lives under `src/tools/`.

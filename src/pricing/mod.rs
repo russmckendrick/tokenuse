@@ -161,8 +161,10 @@ mod tests {
 
     #[test]
     fn fast_multiplier_only_applies_to_opus() {
-        let mut call = ParsedCall::default();
-        call.input_tokens = 1_000_000;
+        let call = ParsedCall {
+            input_tokens: 1_000_000,
+            ..ParsedCall::default()
+        };
         let standard = cost("claude-sonnet-4-5", &call, Speed::Fast);
         let opus_std = cost("claude-opus-4-7", &call, Speed::Standard);
         let opus_fast = cost("claude-opus-4-7", &call, Speed::Fast);

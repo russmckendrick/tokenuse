@@ -1,0 +1,138 @@
+name: Update Homebrew Tap
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        required: false
+        type: string
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to submit. Defaults to the latest GitHub release.
+        required: false
+        type: string
+
+jobs:
+  update-tap:
+    name: Update Homebrew Tap
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get release version
+        id: version
+        run: |
+          VERSION="${{ inputs.release_tag }}"
+
+          if [ -z "${VERSION}" ]; then
+            VERSION=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name)
+          fi
+
+          if [ -z "${VERSION}" ] || [ "${VERSION}" = "null" ]; then
+            echo "Unable to determine release version" >&2
+            exit 1
+          fi
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Using version: ${VERSION}"
+
+      - name: Download checksums
+        run: |
+          mkdir -p build
+          VERSION=${{ steps.version.outputs.version }}
+
+          for file in tokenuse-darwin-amd64.sha256 tokenuse-darwin-arm64.sha256 tokenuse-linux-amd64.sha256 tokenuse-linux-arm64.sha256; do
+            for attempt in 1 2 3 4 5; do
+              if curl -L --fail -o "build/${file}" "https://github.com/${{ github.repository }}/releases/download/${VERSION}/${file}"; then
+                break
+              fi
+
+              if [ "${attempt}" -eq 5 ]; then
+                echo "Failed to download ${file} after ${attempt} attempts" >&2
+                exit 1
+              fi
+
+              echo "${file} not ready yet, retrying..."
+              sleep 5
+            done
+          done
+
+      - name: Clone homebrew-tap
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.repository_owner }}/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update formula
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          DARWIN_AMD64_SHA=$(cut -d' ' -f1 build/tokenuse-darwin-amd64.sha256)
+          DARWIN_ARM64_SHA=$(cut -d' ' -f1 build/tokenuse-darwin-arm64.sha256)
+          LINUX_AMD64_SHA=$(cut -d' ' -f1 build/tokenuse-linux-amd64.sha256)
+          LINUX_ARM64_SHA=$(cut -d' ' -f1 build/tokenuse-linux-arm64.sha256)
+
+          cd homebrew-tap
+          mkdir -p Formula
+
+          cat > Formula/tokenuse.rb << EOF
+          class Tokenuse < Formula
+            desc "Local-only Rust TUI for AI coding tool token and cost usage"
+            homepage "https://github.com/${{ github.repository }}"
+            version "${VERSION#v}"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/${{ github.repository }}/releases/download/${VERSION}/tokenuse-darwin-arm64"
+                sha256 "${DARWIN_ARM64_SHA}"
+              else
+                url "https://github.com/${{ github.repository }}/releases/download/${VERSION}/tokenuse-darwin-amd64"
+                sha256 "${DARWIN_AMD64_SHA}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/${{ github.repository }}/releases/download/${VERSION}/tokenuse-linux-arm64"
+                sha256 "${LINUX_ARM64_SHA}"
+              else
+                url "https://github.com/${{ github.repository }}/releases/download/${VERSION}/tokenuse-linux-amd64"
+                sha256 "${LINUX_AMD64_SHA}"
+              end
+            end
+
+            def install
+              on_macos do
+                if Hardware::CPU.arm?
+                  bin.install "tokenuse-darwin-arm64" => "tokenuse"
+                else
+                  bin.install "tokenuse-darwin-amd64" => "tokenuse"
+                end
+              end
+
+              on_linux do
+                if Hardware::CPU.arm?
+                  bin.install "tokenuse-linux-arm64" => "tokenuse"
+                else
+                  bin.install "tokenuse-linux-amd64" => "tokenuse"
+                end
+              end
+            end
+
+            test do
+              assert_match "tokenuse", shell_output("#{bin}/tokenuse --version")
+            end
+          end
+          EOF
+
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+          git add Formula/tokenuse.rb
+
+          if git diff --cached --quiet; then
+            echo "Formula already up to date"
+            exit 0
+          fi
+
+          git commit -m "Update tokenuse to ${VERSION}"
+          git push

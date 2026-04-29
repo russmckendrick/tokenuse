@@ -106,6 +106,16 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, mut app: App) -> Resul
 fn handle_subcommand() -> Result<bool> {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
+    if args.iter().any(|arg| arg == "--version" || arg == "-V") {
+        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+        return Ok(true);
+    }
+
+    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
+        print_help();
+        return Ok(true);
+    }
+
     if args.iter().any(|arg| arg == "--list-projects") {
         print_project_inventory()?;
         return Ok(true);
@@ -122,6 +132,28 @@ fn handle_subcommand() -> Result<bool> {
     }
 
     Ok(false)
+}
+
+fn print_help() {
+    println!(
+        "{name} {version}
+{description}
+
+USAGE:
+    {name} [FLAGS]
+
+FLAGS:
+    -h, --help                     Print this help message
+    -V, --version                  Print version information
+        --list-projects            Print the ingested project inventory and exit
+        --refresh-prices           Refresh embedded pricing snapshot (requires --features refresh-prices)
+        --generate-currency-json   Regenerate embedded currency rates (requires --features refresh-currency)
+
+Run with no flags to launch the interactive dashboard.",
+        name = env!("CARGO_PKG_NAME"),
+        version = env!("CARGO_PKG_VERSION"),
+        description = env!("CARGO_PKG_DESCRIPTION"),
+    );
 }
 
 fn print_project_inventory() -> Result<()> {

@@ -40,23 +40,18 @@ Project names are normalized across tools. Absolute paths are folded to the near
 
 ## Keyboard
 
-- `q` or `Esc`: quit
-- `1`: today
-- `2`: 7 days
-- `3`: 30 days
-- `4`: this month
-- `5`: all time
+- `q`: quit · `Esc`: close modal / back from sub-page
+- `1`–`5`: period (today, 7 days, 30 days, this month, all time)
 - `t`: cycle tool filter
 - `p`: open project picker (type to search; Backspace to clear last char; Ctrl-U to clear)
-- `c`: open configuration
-- `s`: open session picker (drill into a single session's calls)
-- `u`: open usage page
+- `Tab` / `Shift-Tab`: cycle main tabs (Overview ↔ Deep Dive ↔ Usage)
+- `o`: Overview · `d`: Deep Dive · `u`: Usage / rate limits
+- `c`: open configuration · `s`: open session picker (drill into a single session's calls)
 - `e`: export current view (JSON, CSV, SVG, PNG) to `<config dir>/exports/`
 - `r`: reload (re-run ingest in place; keeps prior data on failure)
 - `h` or `?`: open the keybinding reference (full list of shortcuts)
-- In the session page: `Up`/`Down`, `PgUp`/`PgDn`, `Home`/`End`, `Esc`/`d` back to dashboard
-- In the project picker: `Up` / `Down`, `Home`, `End`, `Enter`, `Esc`
-- In configuration: `Up` / `Down`, `Home`, `End`, `Enter`, `Esc`
+- In the session page: `Up`/`Down`, `PgUp`/`PgDn`, `Home`/`End`, `Esc`/`d` back to Deep Dive
+- In pickers and configuration: `Up`/`Down`, `Home`/`End`, `Enter`, `Esc`
 
 ## Configuration
 
@@ -101,6 +96,8 @@ Do not hand-edit `src/pricing/snapshot.json` or `currency/rates.json`; use the r
 - [Documentation index](docs/README.md)
 - [Tool ingestion details](docs/tools/README.md)
 - [Architecture and data flow](docs/architecture.md)
+- [Usage page (rolling 24h utilisation)](docs/usage.md)
+- [Release notes](docs/releases/)
 
 ## Development
 

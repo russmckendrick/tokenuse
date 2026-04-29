@@ -223,8 +223,6 @@ fn format_usd_short(amount: f64) -> String {
         format!("${amount:.0}")
     } else if amount >= 10.0 {
         format!("${amount:.1}")
-    } else if amount >= 1.0 {
-        format!("${amount:.2}")
     } else if amount >= 0.01 {
         format!("${amount:.2}")
     } else {

@@ -75,29 +75,42 @@ The dashboard panels are built from the filtered call set:
 
 ## Pages And Modals
 
-The TUI is a small state machine over four pages plus five overlay modals. All routing lives in `src/app.rs`; rendering is dispatched from `src/ui.rs`.
+The TUI is a small state machine over five pages (Overview, Deep Dive, Usage, Config, Session) plus five overlay modals. The first three pages are reachable through the tab strip via `Tab` / `Shift-Tab` or their direct keys; Config and Session are sub-pages opened from any tab. All routing lives in `src/app.rs`; rendering is dispatched from `src/ui.rs`.
 
 ```mermaid
 flowchart LR
-    D[Dashboard] -- c --> Cfg[Config]
-    D -- u --> U[Usage]
-    D -- s --> S[Session picker]
-    S -- Enter --> Sess[Session page]
-    Cfg -- Esc/c/d --> D
-    U -- Esc/u/d --> D
-    Sess -- Esc/d --> D
-    D -- p --> Pick[Project picker]
-    D -- e --> Exp[Export picker]
+    O[Overview] -- d / Tab --> DD[Deep Dive]
+    O -- u --> U[Usage]
+    O -- c --> Cfg[Config]
+    O -- s --> SP[Session picker]
+    SP -- Enter --> Sess[Session page]
+    DD -- o / Shift-Tab --> O
+    DD -- u --> U
+    DD -- s --> SP
+    DD -- c --> Cfg
+    U -- o --> O
+    U -- d --> DD
+    U -- c --> Cfg
+    Cfg -- Esc/d --> DD
+    Cfg -- o --> O
+    Cfg -- u --> O
+    Sess -- Esc/d --> DD
+    O -- p --> Pick[Project picker]
+    DD -- p --> Pick
+    O -- e --> Exp[Export picker]
+    DD -- e --> Exp
     Cfg -- Enter on currency --> Curr[Currency picker]
-    D -- h --> Help[Help modal]
-    U -- h --> Help
-    Sess -- h --> Help
-    Cfg -- h --> Help
+    O -- h/? --> Help[Help modal]
+    DD -- h/? --> Help
+    U -- h/? --> Help
+    Sess -- h/? --> Help
+    Cfg -- h/? --> Help
 ```
 
-- **Dashboard** (`Page::Dashboard`): default landing page with all 9 panels listed under [Aggregation](#aggregation).
-- **Usage** (`Page::Usage`): per-tool 24-hour activity histogram + plan-side rate limit windows. Built from `Ingested::limits` over the same `ParsedCall` set plus `LimitSnapshot` records.
-- **Session** (`Page::Session`): drill-down for one `tool:session_id`. Rendered from `SessionDetailView`, which is computed by filtering `Ingested.calls` by `session_key(call) == key` and sorting by timestamp. Live data shows per-call timestamp, model, cost, in/out tokens, cache, tools used, and a 120-char single-line prompt snippet. Sample mode shows a privacy note since per-call records are not bundled.
+- **Overview** (`Page::Overview`): default landing page. Compact KPI strip plus daily activity, models, project/tool spend, shell commands, and MCP servers. Acts as the at-a-glance landing for everyday use.
+- **Deep Dive** (`Page::DeepDive`): every panel listed under [Aggregation](#aggregation), including top sessions and core tool counts that are not on Overview.
+- **Usage** (`Page::Usage`): per-tool 24-hour activity histogram, optional plan-side rate limit windows, and top-3 models per tool. Built from `Ingested::limits` over the same `ParsedCall` set plus `LimitSnapshot` records. Period and project filters are deliberately ignored. See [`docs/usage.md`](usage.md).
+- **Session** (`Page::Session`): drill-down for one `tool:session_id`. Rendered from `SessionDetailView`, computed by filtering `Ingested.calls` by `session_key(call) == key` and sorting by timestamp. Live data shows per-call timestamp, model, cost, in/out tokens, cache, tools used, and a 120-char single-line prompt snippet. Sample mode shows a privacy note since per-call records are not bundled.
 - **Config** (`Page::Config`): currency override + local data refresh actions (rates, LiteLLM pricing).
 - **Project picker, Currency picker, Session picker** (`*Modal` structs): each holds `options`, a typeable `query`, and a `filtered: Vec<usize>` mapping; all three share the same case-insensitive substring filter pattern. The project picker pins `All` regardless of query.
 - **Export picker** (`ExportModal`): four-row chooser (`JSON`, `CSV`, `SVG`, `PNG`); on `Enter` it calls `export::write` with the active period, tool, and project filter.

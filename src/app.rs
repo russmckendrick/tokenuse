@@ -116,16 +116,14 @@ impl Tool {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ProjectFilter {
+    #[default]
     All,
-    Selected { identity: String, label: String },
-}
-
-impl Default for ProjectFilter {
-    fn default() -> Self {
-        Self::All
-    }
+    Selected {
+        identity: String,
+        label: String,
+    },
 }
 
 impl ProjectFilter {
@@ -230,6 +228,12 @@ impl CurrencyModal {
 pub struct ExportModal {
     pub options: Vec<ExportFormat>,
     pub selected: usize,
+}
+
+impl Default for ExportModal {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ExportModal {
@@ -1197,11 +1201,13 @@ mod tests {
 
     #[test]
     fn usage_ignores_period_and_project_filters() {
-        let mut app = App::default();
-        app.period = Period::Today;
-        app.project_filter = ProjectFilter::Selected {
-            identity: "missing".into(),
-            label: "missing".into(),
+        let mut app = App {
+            period: Period::Today,
+            project_filter: ProjectFilter::Selected {
+                identity: "missing".into(),
+                label: "missing".into(),
+            },
+            ..App::default()
         };
 
         app.handle_key(key(KeyCode::Char('u')));
@@ -1260,8 +1266,10 @@ mod tests {
     fn reload_without_refresher_is_a_noop() {
         // App::default() doesn't spawn a refresher (only with_runtime does),
         // so reload + poll_reload should leave state untouched.
-        let mut app = App::default();
-        app.status = Some("untouched".into());
+        let mut app = App {
+            status: Some("untouched".into()),
+            ..App::default()
+        };
         app.reload();
         assert_eq!(app.status.as_deref(), Some("untouched"));
         app.poll_reload();

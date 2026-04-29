@@ -109,12 +109,7 @@ pub(super) fn render_title_bar(frame: &mut Frame<'_>, area: Rect, app: &App) {
     .render(columns[2], frame.buffer_mut());
 }
 
-pub(super) fn render_kpi_strip(
-    frame: &mut Frame<'_>,
-    area: Rect,
-    app: &App,
-    summary: &Summary,
-) {
+pub(super) fn render_kpi_strip(frame: &mut Frame<'_>, area: Rect, app: &App, summary: &Summary) {
     let cells = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -852,10 +847,7 @@ pub(super) fn render_help_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
         ),
         (
             "Pages",
-            vec![
-                ("c", "configuration"),
-                ("s", "session drill-down"),
-            ],
+            vec![("c", "configuration"), ("s", "session drill-down")],
         ),
         (
             "Actions",

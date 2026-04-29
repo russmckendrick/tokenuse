@@ -579,6 +579,7 @@ where
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_panel<DB, F>(
     root: &DrawingArea<DB, plotters::coord::Shift>,
     x: i32,
@@ -678,6 +679,7 @@ where
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_summary_panel<DB>(
     root: &DrawingArea<DB, plotters::coord::Shift>,
     x: i32,
