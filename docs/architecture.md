@@ -9,7 +9,7 @@ flowchart TD
     A[cargo run] --> B[handle CLI flags]
     B -->|--list-projects| C[load ingestion and print inventory]
     B -->|--refresh-prices| D[refresh pricing snapshot when feature is enabled]
-    B -->|--refresh-currency| L[refresh currency snapshot when feature is enabled]
+    B -->|--generate-currency-json| L[generate currency snapshot when feature is enabled]
     B -->|no flag| E[ingest::load]
     E --> F[discover sources for each tool adapter]
     F --> G[parse local files into ParsedCall records]
@@ -140,7 +140,7 @@ cargo run --features refresh-prices -- --refresh-prices
 The snapshot is generated from Frankfurter's USD-based v2 rates endpoint, filtered to fiat display currencies, and refreshed by a nightly GitHub Action:
 
 ```bash
-cargo run --features refresh-currency -- --refresh-currency
+cargo run --features refresh-currency -- --generate-currency-json
 ```
 
 The default build does not include this networked refresh path.

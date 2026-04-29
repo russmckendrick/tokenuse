@@ -67,7 +67,7 @@ cargo run --features refresh-prices -- --refresh-prices
 Refresh the checked-in Frankfurter-derived currency snapshot:
 
 ```bash
-cargo run --features refresh-currency -- --refresh-currency
+cargo run --features refresh-currency -- --generate-currency-json
 ```
 
 Do not hand-edit `src/pricing/snapshot.json` or `currency/rates.json`; use the refresh commands so generated data stays consistent.

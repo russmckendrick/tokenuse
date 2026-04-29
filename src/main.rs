@@ -70,7 +70,7 @@ fn handle_subcommand() -> Result<bool> {
         return Ok(true);
     }
 
-    if args.iter().any(|arg| arg == "--refresh-currency") {
+    if args.iter().any(|arg| arg == "--generate-currency-json") {
         refresh_currency()?;
         return Ok(true);
     }
@@ -187,7 +187,7 @@ fn refresh_currency() -> Result<()> {
 
 #[cfg(not(feature = "refresh-currency"))]
 fn refresh_currency() -> Result<()> {
-    eprintln!("--refresh-currency requires building with --features refresh-currency");
+    eprintln!("--generate-currency-json requires building with --features refresh-currency");
     Ok(())
 }
 
