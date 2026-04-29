@@ -1117,18 +1117,17 @@ fn aggregate_mcp(calls: &[&ParsedCall]) -> Vec<CountMetric> {
 
 fn top_counts(counts: HashMap<String, u64>, limit: usize) -> Vec<CountMetric> {
     let mut rows: Vec<(String, u64)> = counts.into_iter().collect();
-    rows.sort_by(|a, b| b.1.cmp(&a.1));
+    rows.sort_by_key(|row| std::cmp::Reverse(row.1));
     let max = rows.first().map(|r| r.1).unwrap_or(0);
     rows.into_iter()
         .take(limit)
         .map(|(name, calls)| CountMetric {
             name: leak(name),
             calls,
-            value: if max == 0 {
-                0
-            } else {
-                (calls * 100 / max).max(1)
-            },
+            value: (calls * 100)
+                .checked_div(max)
+                .map(|v| v.max(1))
+                .unwrap_or(0),
         })
         .collect()
 }

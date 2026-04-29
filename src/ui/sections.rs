@@ -731,7 +731,7 @@ fn render_session_calls(frame: &mut Frame<'_>, area: Rect, app: &App) {
 
     let inner_height = area.height.saturating_sub(3) as usize; // header + table header + 1 buffer
     let total = view.calls.len();
-    let start = app.session_scroll.min(total.saturating_sub(1).max(0));
+    let start = app.session_scroll.min(total.saturating_sub(1));
     let end = (start + inner_height.max(1)).min(total);
 
     let rows = view.calls[start..end].iter().map(|call| {
