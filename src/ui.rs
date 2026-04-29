@@ -8,12 +8,16 @@ use ratatui::{
     widgets::{Block, Paragraph, Widget},
 };
 
-use crate::{app::App, theme};
+use crate::{
+    app::{App, Page},
+    theme,
+};
 
 use components::{centered_rect, two_columns};
 use sections::{
-    render_counts, render_daily, render_footer, render_models, render_nav, render_project_modal,
-    render_project_tools, render_projects, render_sessions, render_summary,
+    render_config, render_counts, render_currency_modal, render_daily, render_footer,
+    render_models, render_nav, render_project_modal, render_project_tools, render_projects,
+    render_sessions, render_summary,
 };
 
 pub fn render(frame: &mut Frame<'_>, app: &App) {
@@ -32,6 +36,13 @@ pub fn render(frame: &mut Frame<'_>, app: &App) {
         vertical: 1,
     });
 
+    match app.page {
+        Page::Dashboard => render_dashboard(frame, area, root, app),
+        Page::Config => render_config(frame, area, root, app),
+    }
+}
+
+fn render_dashboard(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
     let sections = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -85,6 +96,7 @@ pub fn render(frame: &mut Frame<'_>, app: &App) {
     );
     render_footer(frame, sections[12], app);
     render_project_modal(frame, root, app);
+    render_currency_modal(frame, root, app);
 }
 
 fn render_small_terminal_notice(frame: &mut Frame<'_>, area: Rect) {
@@ -142,6 +154,7 @@ mod tests {
         assert!(rendered.contains("q quit"));
         assert!(rendered.contains("t tool"));
         assert!(rendered.contains("p project"));
+        assert!(rendered.contains("c config"));
         assert!(!rendered.contains("p tool"));
         assert!(!rendered.contains("switch"));
         assert!(!rendered.contains("optimize"));
@@ -170,5 +183,55 @@ mod tests {
         assert!(rendered.contains("All"));
         assert!(rendered.contains("cost"));
         assert!(rendered.contains("calls"));
+    }
+
+    #[test]
+    fn config_page_render_smoke_test() {
+        let backend = TestBackend::new(170, 64);
+        let mut terminal = Terminal::new(backend).expect("create terminal");
+        let mut app = App::default();
+        app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE));
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("draw config page");
+
+        let buffer = terminal.backend().buffer();
+        let rendered = buffer
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+
+        assert!(rendered.contains("Configuration"));
+        assert!(rendered.contains("currency override"));
+        assert!(rendered.contains("rates.json"));
+        assert!(rendered.contains("LiteLLM prices"));
+        assert!(rendered.contains("Local Files"));
+        assert!(rendered.contains("Esc dashboard"));
+    }
+
+    #[test]
+    fn currency_modal_render_smoke_test() {
+        let backend = TestBackend::new(170, 64);
+        let mut terminal = Terminal::new(backend).expect("create terminal");
+        let mut app = App::default();
+        app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("draw currency modal");
+
+        let buffer = terminal.backend().buffer();
+        let rendered = buffer
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+
+        assert!(rendered.contains("Currency 1/"));
+        assert!(rendered.contains("USD"));
+        assert!(rendered.contains("per USD"));
     }
 }

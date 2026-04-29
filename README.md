@@ -48,7 +48,25 @@ Project names are normalized across tools. Absolute paths are folded to the near
 - `5`: all time
 - `t`: cycle tool filter
 - `p`: open project picker
+- `c`: open configuration
 - In the project picker: `Up` / `Down`, `Home`, `End`, `Enter`, `Esc`
+- In configuration: `Up` / `Down`, `Home`, `End`, `Enter`, `Esc`
+
+## Configuration
+
+The dashboard stores user settings and downloaded data in the platform config directory under `tokenuse`. The files are:
+
+- `config.json`: user overrides, currently the display currency
+- `rates.json`: latest downloaded published currency snapshot
+- `pricing-snapshot.json`: latest downloaded LiteLLM-derived pricing snapshot
+
+USD remains the default. Costs are calculated and stored internally as USD, then converted for display using the configured currency. Open the TUI configuration page with `c` to pick a currency or pull the latest local data. Pulling `rates.json` updates display rates immediately; pulling LiteLLM pricing applies to newly ingested runs after restart.
+
+The in-app pull actions are available only when built with the matching feature:
+
+```bash
+cargo run --features refresh-currency,refresh-prices
+```
 
 ## CLI Helpers
 

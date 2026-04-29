@@ -6,7 +6,7 @@ use ratatui::{
 };
 
 use crate::{
-    app::{App, Period},
+    app::{App, Page, Period},
     data::{
         CountMetric, DailyMetric, ModelMetric, ProjectMetric, ProjectToolMetric, SessionMetric,
         Summary,
@@ -305,7 +305,136 @@ pub(super) fn render_counts(
     frame.render_widget(table, area);
 }
 
+pub(super) fn render_config(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(8),
+            Constraint::Length(1),
+            Constraint::Length(9),
+            Constraint::Min(1),
+            Constraint::Length(3),
+        ])
+        .split(area);
+
+    Paragraph::new(Line::from(vec![
+        Span::styled("[ Configuration ]", theme::key()),
+        Span::raw("    "),
+        Span::styled("Dashboard", theme::dim()),
+    ]))
+    .style(theme::base())
+    .render(sections[0], frame.buffer_mut());
+
+    render_config_rows(frame, sections[2], app);
+    render_config_paths(frame, sections[4], app);
+    render_footer(frame, sections[6], app);
+    render_currency_modal(frame, root, app);
+}
+
+fn render_config_rows(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let rows_data = app.config_rows();
+    let rows = rows_data.iter().enumerate().map(|(idx, row)| {
+        let is_selected = idx == app.config_selected;
+        let bg = if is_selected {
+            theme::SURFACE
+        } else {
+            theme::BACKGROUND
+        };
+        let marker = if is_selected { ">" } else { " " };
+        Row::new(vec![
+            Cell::from(marker).style(theme::key().bg(bg)),
+            Cell::from(row.name).style(if is_selected {
+                theme::key().bg(bg)
+            } else {
+                theme::muted().bg(bg)
+            }),
+            Cell::from(row.value.as_str()).style(theme::base().bg(bg)),
+            Cell::from(row.action).style(theme::money().bg(bg)),
+        ])
+    });
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(2),
+            Constraint::Length(22),
+            Constraint::Min(36),
+            Constraint::Length(8),
+        ],
+    )
+    .header(Row::new(vec![
+        Cell::from(""),
+        Cell::from("setting").style(theme::dim()),
+        Cell::from("value").style(theme::dim()),
+        Cell::from("enter").style(theme::dim()),
+    ]))
+    .column_spacing(1)
+    .block(theme::panel_block("Configuration", theme::PRIMARY));
+
+    frame.render_widget(table, area);
+}
+
+fn render_config_paths(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let mut lines = Vec::new();
+    if let Some(status) = app.status.as_ref() {
+        lines.push(Line::from(vec![
+            Span::styled("status ", theme::key()),
+            Span::styled(status.as_str(), theme::muted()),
+        ]));
+    }
+    lines.extend([
+        path_line("config dir", app.paths.dir.display().to_string()),
+        path_line("config file", app.paths.config_file.display().to_string()),
+        path_line(
+            "rates data",
+            app.paths.currency_rates_file.display().to_string(),
+        ),
+        path_line(
+            "pricing data",
+            app.paths.pricing_snapshot_file.display().to_string(),
+        ),
+    ]);
+    lines.push(Line::from(vec![
+        Span::styled("rates source ", theme::key()),
+        Span::styled(app.currency_table.source().label(), theme::muted()),
+    ]));
+
+    Paragraph::new(Text::from(lines))
+        .block(theme::panel_block("Local Files", theme::CYAN))
+        .style(theme::base())
+        .render(area, frame.buffer_mut());
+}
+
+fn path_line(label: &'static str, value: String) -> Line<'static> {
+    Line::from(vec![
+        Span::styled(format!("{label:<12}"), theme::key()),
+        Span::styled(value, theme::muted()),
+    ])
+}
+
 pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    if app.page == Page::Config {
+        let commands = Line::from(vec![
+            Span::styled("q", theme::key()),
+            Span::styled(" quit    ", theme::muted()),
+            Span::styled("Esc", theme::key()),
+            Span::styled(" dashboard    ", theme::muted()),
+            Span::styled("Up/Down", theme::key()),
+            Span::styled(" move    ", theme::muted()),
+            Span::styled("Enter", theme::key()),
+            Span::styled(" select", theme::muted()),
+        ]);
+
+        Paragraph::new(commands)
+            .alignment(Alignment::Center)
+            .block(theme::panel_block("", theme::DIM))
+            .style(theme::base())
+            .render(area, frame.buffer_mut());
+        return;
+    }
+
     let commands = Line::from(vec![
         Span::styled("q", theme::key()),
         Span::styled(" quit    ", theme::muted()),
@@ -322,7 +451,9 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Span::styled("t", theme::key()),
         Span::styled(" tool    ", theme::muted()),
         Span::styled("p", theme::key()),
-        Span::styled(" project", theme::muted()),
+        Span::styled(" project    ", theme::muted()),
+        Span::styled("c", theme::key()),
+        Span::styled(" config", theme::muted()),
     ]);
 
     Paragraph::new(commands)
@@ -402,6 +533,84 @@ pub(super) fn render_project_modal(frame: &mut Frame<'_>, area: Rect, app: &App)
         Cell::from("project").style(theme::dim()),
         Cell::from("cost").style(theme::dim()),
         Cell::from("calls").style(theme::dim()),
+    ]))
+    .column_spacing(1);
+
+    frame.render_widget(table, inner);
+}
+
+pub(super) fn render_currency_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let Some(modal) = app.currency_modal.as_ref() else {
+        return;
+    };
+
+    let width = 58.min(area.width.saturating_sub(4)).max(40);
+    let height = (modal.options.len() as u16 + 3)
+        .min(area.height.saturating_sub(4))
+        .max(9);
+    let modal_area = centered_rect(width, height, area);
+    Clear.render(modal_area, frame.buffer_mut());
+
+    let title = format!(
+        "Currency {}/{}",
+        modal.selected.saturating_add(1),
+        modal.options.len().max(1)
+    );
+    let block = theme::panel_block(&title, theme::PRIMARY);
+    let inner = block.inner(modal_area);
+    block.render(modal_area, frame.buffer_mut());
+
+    let row_capacity = inner.height.saturating_sub(1).max(1) as usize;
+    let selected = modal.selected.min(modal.options.len().saturating_sub(1));
+    let start = selected.saturating_add(1).saturating_sub(row_capacity);
+    let end = (start + row_capacity).min(modal.options.len());
+
+    let rows = modal.options[start..end]
+        .iter()
+        .enumerate()
+        .map(|(offset, code)| {
+            let idx = start + offset;
+            let is_selected = idx == modal.selected;
+            let is_active = code == app.currency().code();
+            let bg = if is_selected {
+                theme::SURFACE
+            } else {
+                theme::BACKGROUND
+            };
+            let marker = if is_selected { ">" } else { " " };
+            let active = if is_active { "active" } else { "" };
+            let rate = app
+                .currency_table
+                .rate(code)
+                .map(|rate| format!("{rate:.6}"))
+                .unwrap_or_else(|| "-".into());
+
+            Row::new(vec![
+                Cell::from(marker).style(theme::key().bg(bg)),
+                Cell::from(code.as_str()).style(if is_selected {
+                    theme::key().bg(bg)
+                } else {
+                    theme::muted().bg(bg)
+                }),
+                Cell::from(rate).style(theme::base().bg(bg)),
+                Cell::from(active).style(theme::money().bg(bg)),
+            ])
+        });
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(2),
+            Constraint::Length(8),
+            Constraint::Length(14),
+            Constraint::Length(8),
+        ],
+    )
+    .header(Row::new(vec![
+        Cell::from(""),
+        Cell::from("code").style(theme::dim()),
+        Cell::from("per USD").style(theme::dim()),
+        Cell::from(""),
     ]))
     .column_spacing(1);
 

@@ -5,11 +5,8 @@ use std::path::Path;
 use color_eyre::{eyre::eyre, Result};
 use serde_json::{Map, Value};
 
-const LITELLM_URL: &str =
-    "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
-
 pub fn run(output: &Path) -> Result<()> {
-    let body: Value = ureq::get(LITELLM_URL)
+    let body: Value = ureq::get(crate::config::LITELLM_PRICING_URL)
         .call()
         .map_err(|e| eyre!("fetch litellm prices: {e}"))?
         .into_json()
@@ -73,7 +70,11 @@ pub fn run(output: &Path) -> Result<()> {
     root.insert("aliases".into(), Value::Object(alias_map));
     root.insert("fallback".into(), Value::String("claude-sonnet-4-5".into()));
 
-    let pretty = serde_json::to_string_pretty(&Value::Object(root))?;
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut pretty = serde_json::to_string_pretty(&Value::Object(root))?;
+    pretty.push('\n');
     fs::write(output, pretty)?;
     Ok(())
 }

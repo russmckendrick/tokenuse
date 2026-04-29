@@ -1,4 +1,5 @@
 use crate::app::{Period, ProjectFilter, Tool};
+use crate::currency::CurrencyFormatter;
 
 #[derive(Debug, Clone)]
 pub struct DashboardData {
@@ -107,7 +108,12 @@ impl ProjectOption {
     }
 }
 
-pub fn dashboard_data(period: Period, tool: Tool, project_filter: &ProjectFilter) -> DashboardData {
+pub fn dashboard_data(
+    period: Period,
+    tool: Tool,
+    project_filter: &ProjectFilter,
+    currency: &CurrencyFormatter,
+) -> DashboardData {
     let mut data = match period {
         Period::Today => today_data(),
         Period::Week => week_data(),
@@ -158,12 +164,17 @@ pub fn dashboard_data(period: Period, tool: Tool, project_filter: &ProjectFilter
     }
 
     apply_project_filter(&mut data, project_filter);
+    apply_currency(&mut data, currency);
 
     data
 }
 
-pub fn project_options(period: Period, tool: Tool) -> Vec<ProjectOption> {
-    let data = dashboard_data(period, tool, &ProjectFilter::All);
+pub fn project_options(
+    period: Period,
+    tool: Tool,
+    currency: &CurrencyFormatter,
+) -> Vec<ProjectOption> {
+    let data = dashboard_data(period, tool, &ProjectFilter::All, currency);
     let mut options = vec![ProjectOption::all(
         data.summary.cost.into(),
         parse_count(data.summary.calls),
@@ -212,6 +223,80 @@ fn apply_project_filter(data: &mut DashboardData, project_filter: &ProjectFilter
     data.projects.retain(|project| project.name == label);
     data.project_tools.retain(|row| row.project == label);
     data.sessions.retain(|row| row.project == label);
+}
+
+fn apply_currency(data: &mut DashboardData, currency: &CurrencyFormatter) {
+    if currency.is_usd() {
+        return;
+    }
+
+    data.summary.cost = convert_money_text(data.summary.cost, currency, false);
+    for row in &mut data.daily {
+        row.cost = convert_money_text(row.cost, currency, false);
+    }
+    for row in &mut data.projects {
+        row.cost = convert_money_text(row.cost, currency, false);
+        row.avg_per_session = convert_money_text(row.avg_per_session, currency, false);
+        row.tool_mix = convert_money_text(row.tool_mix, currency, true);
+    }
+    for row in &mut data.project_tools {
+        row.cost = convert_money_text(row.cost, currency, false);
+        row.avg_per_session = convert_money_text(row.avg_per_session, currency, false);
+    }
+    for row in &mut data.sessions {
+        row.cost = convert_money_text(row.cost, currency, false);
+    }
+    for row in &mut data.models {
+        row.cost = convert_money_text(row.cost, currency, false);
+    }
+}
+
+fn convert_money_text(
+    value: &'static str,
+    currency: &CurrencyFormatter,
+    short: bool,
+) -> &'static str {
+    let mut out = String::with_capacity(value.len() + 8);
+    let mut chars = value.chars().peekable();
+    let mut changed = false;
+
+    while let Some(ch) = chars.next() {
+        if ch != '$' {
+            out.push(ch);
+            continue;
+        }
+
+        let mut number = String::new();
+        while let Some(next) = chars.peek() {
+            if next.is_ascii_digit() || *next == '.' {
+                number.push(*next);
+                chars.next();
+            } else {
+                break;
+            }
+        }
+
+        match number.parse::<f64>() {
+            Ok(amount) => {
+                changed = true;
+                if short {
+                    out.push_str(&currency.format_money_short(amount));
+                } else {
+                    out.push_str(&currency.format_money(amount));
+                }
+            }
+            Err(_) => {
+                out.push('$');
+                out.push_str(&number);
+            }
+        }
+    }
+
+    if changed {
+        leak(out)
+    } else {
+        value
+    }
 }
 
 fn parse_count(value: &str) -> u64 {

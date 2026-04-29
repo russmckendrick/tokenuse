@@ -10,7 +10,8 @@ flowchart TD
     B -->|--list-projects| C[load ingestion and print inventory]
     B -->|--refresh-prices| D[refresh pricing snapshot when feature is enabled]
     B -->|--generate-currency-json| L[generate currency snapshot when feature is enabled]
-    B -->|no flag| E[ingest::load]
+    B -->|no flag| M[load config.json and rates.json]
+    M --> E[ingest::load]
     E --> F[discover sources for each tool adapter]
     F --> G[parse local files into ParsedCall records]
     G --> H{any calls?}
@@ -37,7 +38,7 @@ Every adapter emits `ParsedCall` from `src/tools/types.rs`. The important fields
 | `cached_input_tokens` | Cached input reported inside `input_tokens`, currently used for OpenAI-style records |
 | `reasoning_tokens` | Reasoning bucket when exposed or estimated |
 | `web_search_requests` | Server-side web search request count when exposed |
-| `cost_usd` | Calculated from the embedded pricing snapshot |
+| `cost_usd` | Calculated from the configured pricing snapshot, embedded by default |
 | `tools`, `bash_commands` | Tool call names and split shell commands |
 | `timestamp`, `session_id`, `project` | Aggregation and filtering keys |
 | `dedup_key` | Per-call key used by the shared run-level dedup set |
@@ -97,7 +98,7 @@ Session counts are tool-qualified, so `claude-code:s1` and `codex:s1` remain sep
 
 ## Pricing
 
-`src/pricing/snapshot.json` is embedded at compile time and loaded through `PriceTable::embedded()`.
+`src/pricing/snapshot.json` is embedded at compile time. At runtime, `PriceTable::configured()` first looks for a local `pricing-snapshot.json` in the tokenuse config directory, then falls back to the embedded snapshot.
 
 ```mermaid
 flowchart LR
@@ -127,20 +128,36 @@ cost = multiplier * (
 )
 ```
 
-Claude Opus fast mode uses the model row's `fast_multiplier` when present. The refresh command fetches LiteLLM pricing, filters to relevant model families, adds local aliases, and rewrites the embedded snapshot:
+Claude Opus fast mode uses the model row's `fast_multiplier` when present. The CLI refresh command fetches LiteLLM pricing, filters to relevant model families, adds local aliases, and rewrites the embedded snapshot:
 
 ```bash
 cargo run --features refresh-prices -- --refresh-prices
 ```
 
-## Currency Snapshot
+The TUI configuration page can also pull the LiteLLM-derived snapshot into the local config directory when built with `refresh-prices`. Because ingestion runs once at startup and parser records only the calculated `cost_usd`, newly pulled pricing applies after restarting the app.
 
-`currency/rates.json` is a checked-in generated snapshot for future currency display. The running dashboard does not call an exchange-rate API and still stores calculated spend as `cost_usd`.
+## Configuration And Currency
+
+Runtime settings live in the platform config directory under `tokenuse`:
+
+| File | Purpose |
+| --- | --- |
+| `config.json` | User overrides, currently the display currency |
+| `rates.json` | Locally downloaded copy of the published currency snapshot |
+| `pricing-snapshot.json` | Locally downloaded LiteLLM-derived pricing snapshot |
+
+USD is the default display currency. The dashboard still stores calculated spend as `cost_usd`; aggregation sums USD and formats the final display values through the active currency table.
+
+`currency/rates.json` is the embedded fallback snapshot. The TUI configuration page can pull the latest published copy from:
+
+```text
+https://raw.githubusercontent.com/russmckendrick/tokenuse/refs/heads/main/currency/rates.json
+```
+
+That local rates pull is enabled only when built with `refresh-currency`; the default build remains local-only and has no network dependency.
 
 The snapshot is generated from Frankfurter's USD-based v2 rates endpoint, filtered to fiat display currencies, and refreshed by a nightly GitHub Action:
 
 ```bash
 cargo run --features refresh-currency -- --generate-currency-json
 ```
-
-The default build does not include this networked refresh path.

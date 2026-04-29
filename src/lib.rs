@@ -1,6 +1,5 @@
 pub mod app;
-#[cfg(feature = "refresh-currency")]
-#[path = "../currency/mod.rs"]
+pub mod config;
 pub mod currency;
 pub mod data;
 pub mod ingest;

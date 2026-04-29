@@ -5,6 +5,7 @@ use chrono::{DateTime, Datelike, Duration, Local, NaiveDate};
 use color_eyre::Result;
 
 use crate::app::{Period, ProjectFilter, Tool};
+use crate::currency::CurrencyFormatter;
 use crate::data::{
     CountMetric, DailyMetric, DashboardData, ModelMetric, ProjectMetric, ProjectOption,
     ProjectToolMetric, SessionMetric, Summary,
@@ -51,6 +52,7 @@ impl Ingested {
         period: Period,
         tool: Tool,
         project_filter: &ProjectFilter,
+        currency: &CurrencyFormatter,
     ) -> DashboardData {
         let now = Local::now();
         let filtered: Vec<&ParsedCall> = self
@@ -62,17 +64,22 @@ impl Ingested {
                     && in_period(c, period, now)
             })
             .collect();
-        build_dashboard(&filtered)
+        build_dashboard(&filtered, currency)
     }
 
-    pub fn project_options(&self, period: Period, tool: Tool) -> Vec<ProjectOption> {
+    pub fn project_options(
+        &self,
+        period: Period,
+        tool: Tool,
+        currency: &CurrencyFormatter,
+    ) -> Vec<ProjectOption> {
         let now = Local::now();
         let filtered: Vec<&ParsedCall> = self
             .calls
             .iter()
             .filter(|c| matches_tool(c, tool) && in_period(c, period, now))
             .collect();
-        build_project_options(&filtered)
+        build_project_options(&filtered, currency)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -108,13 +115,14 @@ impl Ingested {
             .into_iter()
             .map(|((project, tool, raw_project), acc)| {
                 let label = project_label(&labels, &project);
+                let currency = CurrencyFormatter::usd();
                 ProjectInventoryRow {
                     project: label,
                     tool: tool_short_label(tool),
                     raw_project,
                     calls: acc.calls,
                     sessions: acc.sessions.len() as u64,
-                    cost: format_money(acc.cost),
+                    cost: currency.format_money(acc.cost),
                 }
             })
             .collect()
@@ -155,9 +163,9 @@ fn in_period(call: &ParsedCall, period: Period, now: DateTime<Local>) -> bool {
     }
 }
 
-fn build_dashboard(calls: &[&ParsedCall]) -> DashboardData {
+fn build_dashboard(calls: &[&ParsedCall], currency: &CurrencyFormatter) -> DashboardData {
     if calls.is_empty() {
-        return empty_dashboard();
+        return empty_dashboard(currency);
     }
 
     let total_cost: f64 = calls.iter().map(|c| c.cost_usd).sum();
@@ -176,7 +184,7 @@ fn build_dashboard(calls: &[&ParsedCall]) -> DashboardData {
     let sessions_set: HashSet<String> = calls.iter().filter_map(|c| session_key(c)).collect();
 
     let summary = Summary {
-        cost: leak(format_money(total_cost)),
+        cost: leak(currency.format_money(total_cost)),
         calls: leak(format_int(calls.len() as u64)),
         sessions: leak(format_int(sessions_set.len() as u64)),
         cache_hit: leak(format!("{:.1}%", cache_hit_pct)),
@@ -188,11 +196,11 @@ fn build_dashboard(calls: &[&ParsedCall]) -> DashboardData {
 
     let project_labels = project_label_lookup(calls.iter().map(|call| &call.project));
 
-    let daily = aggregate_daily(calls);
-    let projects = aggregate_projects(calls, &project_labels);
-    let project_tools = aggregate_project_tools(calls, &project_labels);
-    let sessions = aggregate_sessions(calls, &project_labels);
-    let models = aggregate_models(calls);
+    let daily = aggregate_daily(calls, currency);
+    let projects = aggregate_projects(calls, &project_labels, currency);
+    let project_tools = aggregate_project_tools(calls, &project_labels, currency);
+    let sessions = aggregate_sessions(calls, &project_labels, currency);
+    let models = aggregate_models(calls, currency);
     let tools = aggregate_tools(calls);
     let commands = aggregate_commands(calls);
     let mcp_servers = aggregate_mcp(calls);
@@ -210,10 +218,10 @@ fn build_dashboard(calls: &[&ParsedCall]) -> DashboardData {
     }
 }
 
-fn empty_dashboard() -> DashboardData {
+fn empty_dashboard(currency: &CurrencyFormatter) -> DashboardData {
     DashboardData {
         summary: Summary {
-            cost: "$0.00",
+            cost: leak(currency.format_money(0.0)),
             calls: "0",
             sessions: "0",
             cache_hit: "-",
@@ -233,7 +241,10 @@ fn empty_dashboard() -> DashboardData {
     }
 }
 
-fn build_project_options(calls: &[&ParsedCall]) -> Vec<ProjectOption> {
+fn build_project_options(
+    calls: &[&ParsedCall],
+    currency: &CurrencyFormatter,
+) -> Vec<ProjectOption> {
     #[derive(Default)]
     struct Acc {
         cost: f64,
@@ -269,16 +280,16 @@ fn build_project_options(calls: &[&ParsedCall]) -> Vec<ProjectOption> {
     });
 
     let mut options = vec![ProjectOption::all(
-        format_money(total_cost),
+        currency.format_money(total_cost),
         calls.len() as u64,
     )];
     options.extend(rows.into_iter().map(|(identity, label, acc)| {
-        ProjectOption::selected(identity, label, format_money(acc.cost), acc.calls)
+        ProjectOption::selected(identity, label, currency.format_money(acc.cost), acc.calls)
     }));
     options
 }
 
-fn aggregate_daily(calls: &[&ParsedCall]) -> Vec<DailyMetric> {
+fn aggregate_daily(calls: &[&ParsedCall], currency: &CurrencyFormatter) -> Vec<DailyMetric> {
     let mut by_day: BTreeMap<NaiveDate, (f64, u64)> = BTreeMap::new();
     for c in calls {
         let Some(ts) = c.timestamp else { continue };
@@ -295,7 +306,7 @@ fn aggregate_daily(calls: &[&ParsedCall]) -> Vec<DailyMetric> {
         .into_iter()
         .map(|(date, (cost, calls))| DailyMetric {
             day: leak(date.format("%m-%d").to_string()),
-            cost: leak(format_money(cost)),
+            cost: leak(currency.format_money(cost)),
             calls,
             value: scale(cost, max),
         })
@@ -305,6 +316,7 @@ fn aggregate_daily(calls: &[&ParsedCall]) -> Vec<DailyMetric> {
 fn aggregate_projects(
     calls: &[&ParsedCall],
     project_labels: &HashMap<String, String>,
+    currency: &CurrencyFormatter,
 ) -> Vec<ProjectMetric> {
     #[derive(Default)]
     struct Acc {
@@ -338,10 +350,10 @@ fn aggregate_projects(
             let avg = acc.cost / session_count as f64;
             ProjectMetric {
                 name: leak(project_label(project_labels, &project)),
-                cost: leak(format_money(acc.cost)),
-                avg_per_session: leak(format_money(avg)),
+                cost: leak(currency.format_money(acc.cost)),
+                avg_per_session: leak(currency.format_money(avg)),
                 sessions: session_count,
-                tool_mix: leak(format_tool_mix(&acc.tools)),
+                tool_mix: leak(format_tool_mix(&acc.tools, currency)),
                 value: scale(acc.cost, max),
             }
         })
@@ -351,6 +363,7 @@ fn aggregate_projects(
 fn aggregate_project_tools(
     calls: &[&ParsedCall],
     project_labels: &HashMap<String, String>,
+    currency: &CurrencyFormatter,
 ) -> Vec<ProjectToolMetric> {
     #[derive(Default)]
     struct Acc {
@@ -403,10 +416,10 @@ fn aggregate_project_tools(
             ProjectToolMetric {
                 project: leak(project_label(project_labels, &project)),
                 tool: tool_short_label(tool),
-                cost: leak(format_money(acc.cost)),
+                cost: leak(currency.format_money(acc.cost)),
                 calls: acc.calls,
                 sessions: session_count,
-                avg_per_session: leak(format_money(avg)),
+                avg_per_session: leak(currency.format_money(avg)),
                 value: scale(acc.cost, max),
             }
         })
@@ -416,6 +429,7 @@ fn aggregate_project_tools(
 fn aggregate_sessions(
     calls: &[&ParsedCall],
     project_labels: &HashMap<String, String>,
+    currency: &CurrencyFormatter,
 ) -> Vec<SessionMetric> {
     #[derive(Default)]
     struct Acc {
@@ -458,14 +472,14 @@ fn aggregate_sessions(
                     .unwrap_or_else(|| "-".into()),
             ),
             project: leak(project_label(project_labels, &acc.project)),
-            cost: leak(format_money(acc.cost)),
+            cost: leak(currency.format_money(acc.cost)),
             calls: acc.calls,
             value: scale(acc.cost, max),
         })
         .collect()
 }
 
-fn aggregate_models(calls: &[&ParsedCall]) -> Vec<ModelMetric> {
+fn aggregate_models(calls: &[&ParsedCall], currency: &CurrencyFormatter) -> Vec<ModelMetric> {
     #[derive(Default)]
     struct Acc {
         cost: f64,
@@ -503,7 +517,7 @@ fn aggregate_models(calls: &[&ParsedCall]) -> Vec<ModelMetric> {
     rows.into_iter()
         .map(|(name, acc)| ModelMetric {
             name: leak(name),
-            cost: leak(format_money(acc.cost)),
+            cost: leak(currency.format_money(acc.cost)),
             cache: leak(if acc.input == 0 {
                 "-".into()
             } else {
@@ -688,7 +702,7 @@ fn project_suffix(parts: &[&str], suffix_len: usize) -> String {
     parts[parts.len().saturating_sub(suffix_len)..].join("/")
 }
 
-fn format_tool_mix(tools: &HashMap<&'static str, f64>) -> String {
+fn format_tool_mix(tools: &HashMap<&'static str, f64>, currency: &CurrencyFormatter) -> String {
     let mut rows: Vec<(&'static str, f64)> =
         tools.iter().map(|(tool, cost)| (*tool, *cost)).collect();
     rows.sort_by(|a, b| {
@@ -703,7 +717,13 @@ fn format_tool_mix(tools: &HashMap<&'static str, f64>) -> String {
 
     rows.into_iter()
         .take(3)
-        .map(|(tool, cost)| format!("{} {}", tool_short_label(tool), format_money_short(cost)))
+        .map(|(tool, cost)| {
+            format!(
+                "{} {}",
+                tool_short_label(tool),
+                currency.format_money_short(cost)
+            )
+        })
         .collect::<Vec<_>>()
         .join("  ")
 }
@@ -724,32 +744,6 @@ fn scale(value: f64, max: f64) -> u64 {
     }
     let v = (value / max * 100.0).round() as i64;
     v.clamp(1, 100) as u64
-}
-
-fn format_money(amount: f64) -> String {
-    if amount >= 100.0 {
-        format!("${:.2}", amount)
-    } else if amount >= 1.0 {
-        format!("${:.2}", amount)
-    } else if amount >= 0.01 {
-        format!("${:.3}", amount)
-    } else {
-        format!("${:.4}", amount)
-    }
-}
-
-fn format_money_short(amount: f64) -> String {
-    if amount >= 100.0 {
-        format!("${:.0}", amount)
-    } else if amount >= 10.0 {
-        format!("${:.1}", amount)
-    } else if amount >= 1.0 {
-        format!("${:.2}", amount)
-    } else if amount >= 0.01 {
-        format!("${:.2}", amount)
-    } else {
-        format!("${:.4}", amount)
-    }
 }
 
 fn format_int(n: u64) -> String {
@@ -878,7 +872,12 @@ mod tests {
             ],
         };
 
-        let data = ingested.dashboard(Period::AllTime, Tool::All, &ProjectFilter::All);
+        let data = ingested.dashboard(
+            Period::AllTime,
+            Tool::All,
+            &ProjectFilter::All,
+            &CurrencyFormatter::usd(),
+        );
 
         assert_eq!(data.projects.len(), 1);
         assert_eq!(data.projects[0].name, "widgets");
@@ -899,7 +898,12 @@ mod tests {
             ],
         };
 
-        let data = ingested.dashboard(Period::AllTime, Tool::All, &ProjectFilter::All);
+        let data = ingested.dashboard(
+            Period::AllTime,
+            Tool::All,
+            &ProjectFilter::All,
+            &CurrencyFormatter::usd(),
+        );
 
         assert_eq!(data.projects.len(), 1);
         assert_eq!(data.projects[0].name, "ai-commit-dev");
@@ -939,7 +943,8 @@ mod tests {
             ],
         };
 
-        let options = ingested.project_options(Period::AllTime, Tool::All);
+        let options =
+            ingested.project_options(Period::AllTime, Tool::All, &CurrencyFormatter::usd());
 
         assert_eq!(options.len(), 2);
         assert_eq!(options[0].identity, None);
@@ -958,7 +963,12 @@ mod tests {
             ],
         };
 
-        let data = ingested.dashboard(Period::AllTime, Tool::All, &ProjectFilter::All);
+        let data = ingested.dashboard(
+            Period::AllTime,
+            Tool::All,
+            &ProjectFilter::All,
+            &CurrencyFormatter::usd(),
+        );
         let names: HashSet<&str> = data.projects.iter().map(|project| project.name).collect();
 
         assert_eq!(data.projects.len(), 2);
@@ -989,7 +999,12 @@ mod tests {
             ],
         };
 
-        let data = ingested.dashboard(Period::AllTime, Tool::All, &ProjectFilter::All);
+        let data = ingested.dashboard(
+            Period::AllTime,
+            Tool::All,
+            &ProjectFilter::All,
+            &CurrencyFormatter::usd(),
+        );
         let names: HashSet<&str> = data.projects.iter().map(|project| project.name).collect();
         assert_eq!(data.projects.len(), 2);
         assert!(names.contains("dvr"));
@@ -1010,7 +1025,12 @@ mod tests {
             ],
         };
 
-        let data = ingested.dashboard(Period::AllTime, Tool::Codex, &ProjectFilter::All);
+        let data = ingested.dashboard(
+            Period::AllTime,
+            Tool::Codex,
+            &ProjectFilter::All,
+            &CurrencyFormatter::usd(),
+        );
 
         assert_eq!(data.projects.len(), 1);
         assert_eq!(data.projects[0].cost, "$3.00");
@@ -1039,7 +1059,12 @@ mod tests {
             label: "widgets".into(),
         };
 
-        let data = ingested.dashboard(Period::AllTime, Tool::All, &filter);
+        let data = ingested.dashboard(
+            Period::AllTime,
+            Tool::All,
+            &filter,
+            &CurrencyFormatter::usd(),
+        );
 
         assert_eq!(data.summary.calls, "1");
         assert_eq!(data.summary.cost, "$2.00");
@@ -1067,7 +1092,12 @@ mod tests {
             ],
         };
 
-        let data = ingested.dashboard(Period::AllTime, Tool::All, &ProjectFilter::All);
+        let data = ingested.dashboard(
+            Period::AllTime,
+            Tool::All,
+            &ProjectFilter::All,
+            &CurrencyFormatter::usd(),
+        );
 
         assert_eq!(data.summary.sessions, "2");
         assert_eq!(data.projects[0].sessions, 2);
@@ -1084,7 +1114,12 @@ mod tests {
             ],
         };
 
-        let data = ingested.dashboard(Period::AllTime, Tool::All, &ProjectFilter::All);
+        let data = ingested.dashboard(
+            Period::AllTime,
+            Tool::All,
+            &ProjectFilter::All,
+            &CurrencyFormatter::usd(),
+        );
 
         assert_eq!(data.project_tools[0].project, "a");
         assert_eq!(data.project_tools[0].tool, "Codex");

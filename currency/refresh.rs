@@ -8,8 +8,7 @@ use color_eyre::{
     Result,
 };
 use serde::{Deserialize, Serialize};
-
-pub const FRANKFURTER_URL: &str = "https://api.frankfurter.dev/v2/rates?base=USD";
+use serde_json::Value;
 
 const BASE_CURRENCY: &str = "USD";
 const EXCLUDED_NON_FIAT_CODES: [&str; 5] = ["XAG", "XAU", "XDR", "XPD", "XPT"];
@@ -39,7 +38,7 @@ struct SnapshotSource {
 }
 
 pub fn run(output: &Path) -> Result<()> {
-    let rows: Vec<FrankfurterRate> = ureq::get(FRANKFURTER_URL)
+    let rows: Vec<FrankfurterRate> = ureq::get(crate::config::FRANKFURTER_RATES_URL)
         .call()
         .map_err(|e| eyre!("fetch frankfurter currency rates: {e}"))?
         .into_json()
@@ -48,6 +47,20 @@ pub fn run(output: &Path) -> Result<()> {
     let generated_at = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
     let snapshot = build_snapshot(rows, generated_at)?;
     write_snapshot(output, &snapshot)
+}
+
+pub fn download_published_snapshot(output: &Path) -> Result<()> {
+    let raw = ureq::get(crate::config::CURRENCY_RATES_URL)
+        .call()
+        .map_err(|e| eyre!("fetch published currency rates: {e}"))?
+        .into_string()
+        .map_err(|e| eyre!("read published currency rates: {e}"))?;
+
+    super::CurrencyTable::from_json_str(&raw, super::RateSource::Local(output.to_path_buf()))?;
+
+    let parsed: Value =
+        serde_json::from_str(&raw).map_err(|e| eyre!("parse published currency json: {e}"))?;
+    write_json_value(output, &parsed)
 }
 
 fn build_snapshot(rows: Vec<FrankfurterRate>, generated_at: String) -> Result<CurrencySnapshot> {
@@ -93,7 +106,7 @@ fn build_snapshot(rows: Vec<FrankfurterRate>, generated_at: String) -> Result<Cu
         generated_at,
         source: SnapshotSource {
             name: "Frankfurter",
-            url: FRANKFURTER_URL,
+            url: crate::config::FRANKFURTER_RATES_URL,
             coverage: "fiat",
         },
         rates,
@@ -105,6 +118,16 @@ fn write_snapshot(output: &Path, snapshot: &CurrencySnapshot) -> Result<()> {
         fs::create_dir_all(parent).wrap_err_with(|| format!("create {}", parent.display()))?;
     }
     let mut pretty = serde_json::to_string_pretty(snapshot)?;
+    pretty.push('\n');
+    fs::write(output, pretty).wrap_err_with(|| format!("write {}", output.display()))?;
+    Ok(())
+}
+
+fn write_json_value(output: &Path, value: &Value) -> Result<()> {
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent).wrap_err_with(|| format!("create {}", parent.display()))?;
+    }
+    let mut pretty = serde_json::to_string_pretty(value)?;
     pretty.push('\n');
     fs::write(output, pretty).wrap_err_with(|| format!("write {}", output.display()))?;
     Ok(())

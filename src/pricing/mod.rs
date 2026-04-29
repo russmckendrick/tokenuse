@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fs;
 use std::sync::OnceLock;
 
 use serde::Deserialize;
@@ -40,17 +41,14 @@ pub struct PriceTable {
 }
 
 impl PriceTable {
+    pub fn configured() -> &'static Self {
+        static TABLE: OnceLock<PriceTable> = OnceLock::new();
+        TABLE.get_or_init(|| Self::local().unwrap_or_else(Self::from_embedded))
+    }
+
     pub fn embedded() -> &'static Self {
         static TABLE: OnceLock<PriceTable> = OnceLock::new();
-        TABLE.get_or_init(|| {
-            let snap: Snapshot = serde_json::from_str(EMBEDDED_SNAPSHOT)
-                .expect("embedded pricing snapshot must be valid JSON");
-            PriceTable {
-                models: snap.models,
-                aliases: snap.aliases,
-                fallback_key: snap.fallback,
-            }
-        })
+        TABLE.get_or_init(Self::from_embedded)
     }
 
     pub fn lookup(&self, model: &str) -> &ModelPrice {
@@ -71,6 +69,25 @@ impl PriceTable {
         self.models
             .get(&self.fallback_key)
             .expect("fallback model present in snapshot")
+    }
+
+    fn local() -> Option<Self> {
+        let paths = crate::config::ConfigPaths::default();
+        let raw = fs::read_to_string(paths.pricing_snapshot_file).ok()?;
+        Self::from_json(&raw).ok()
+    }
+
+    fn from_embedded() -> Self {
+        Self::from_json(EMBEDDED_SNAPSHOT).expect("embedded pricing snapshot must be valid JSON")
+    }
+
+    fn from_json(raw: &str) -> Result<Self, serde_json::Error> {
+        let snap: Snapshot = serde_json::from_str(raw)?;
+        Ok(PriceTable {
+            models: snap.models,
+            aliases: snap.aliases,
+            fallback_key: snap.fallback,
+        })
     }
 }
 
@@ -101,7 +118,10 @@ fn strip_date_suffix(model: &str) -> Option<String> {
 }
 
 pub fn cost(model: &str, call: &ParsedCall, speed: Speed) -> f64 {
+    #[cfg(test)]
     let price = PriceTable::embedded().lookup(model);
+    #[cfg(not(test))]
+    let price = PriceTable::configured().lookup(model);
     let multiplier = match (speed, price.fast_multiplier) {
         (Speed::Fast, Some(m)) => m,
         _ => 1.0,

@@ -13,6 +13,8 @@ use crossterm::{
 use ratatui::{backend::CrosstermBackend, Terminal};
 use tokenuse::{
     app::{App, DataSource},
+    config::{ConfigPaths, UserConfig},
+    currency::CurrencyTable,
     ingest, ui,
 };
 
@@ -23,7 +25,24 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let (source, status) = match ingest::load() {
+    let paths = ConfigPaths::default();
+    let mut status_messages = Vec::new();
+    let settings = match UserConfig::load_or_create(&paths) {
+        Ok(settings) => settings,
+        Err(e) => {
+            status_messages.push(format!("config failed · defaults ({e})"));
+            UserConfig::default()
+        }
+    };
+    let currency_table = match CurrencyTable::load(&paths) {
+        Ok(table) => table,
+        Err(e) => {
+            status_messages.push(format!("currency rates failed · embedded ({e})"));
+            CurrencyTable::embedded().expect("embedded currency rates must be valid JSON")
+        }
+    };
+
+    let (source, ingest_status) = match ingest::load() {
         Ok(ingested) if !ingested.is_empty() => (DataSource::Live(ingested), None),
         Ok(_) => (
             DataSource::Sample,
@@ -34,9 +53,20 @@ fn main() -> Result<()> {
             Some(format!("ingest failed · sample data ({e})")),
         ),
     };
+    if let Some(status) = ingest_status {
+        status_messages.push(status);
+    }
+    let status = if status_messages.is_empty() {
+        None
+    } else {
+        Some(status_messages.join(" · "))
+    };
 
     let mut session = TerminalSession::new()?;
-    run(session.terminal(), App::with_source(source, status))
+    run(
+        session.terminal(),
+        App::with_runtime(source, status, settings, paths, currency_table),
+    )
 }
 
 fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, mut app: App) -> Result<()> {
