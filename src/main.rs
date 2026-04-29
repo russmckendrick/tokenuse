@@ -15,7 +15,7 @@ use tokenuse::{
     app::{App, DataSource},
     config::{ConfigPaths, UserConfig},
     currency::CurrencyTable,
-    ingest, ui,
+    ingest, ingest_cache, ui,
 };
 
 fn main() -> Result<()> {
@@ -42,16 +42,28 @@ fn main() -> Result<()> {
         }
     };
 
-    let (source, ingest_status) = match ingest::load() {
-        Ok(ingested) if !ingested.is_empty() => (DataSource::Live(ingested), None),
-        Ok(_) => (
-            DataSource::Sample,
-            Some("no local sessions found · sample data".into()),
-        ),
-        Err(e) => (
-            DataSource::Sample,
-            Some(format!("ingest failed · sample data ({e})")),
-        ),
+    let (source, ingest_status, cache_age) = match ingest_cache::read() {
+        Some(hit) if hit.age <= ingest_cache::TTL => {
+            // Fresh cache: skip the synchronous ingest, let the refresher
+            // thread top us up at TTL minus current age.
+            (DataSource::Live(hit.ingested), None, Some(hit.age))
+        }
+        _ => match ingest::load() {
+            Ok(ingested) if !ingested.is_empty() => {
+                let _ = ingest_cache::write(&ingested);
+                (DataSource::Live(ingested), None, None)
+            }
+            Ok(_) => (
+                DataSource::Sample,
+                Some("no local sessions found · sample data".into()),
+                None,
+            ),
+            Err(e) => (
+                DataSource::Sample,
+                Some(format!("ingest failed · sample data ({e})")),
+                None,
+            ),
+        },
     };
     if let Some(status) = ingest_status {
         status_messages.push(status);
@@ -65,7 +77,7 @@ fn main() -> Result<()> {
     let mut session = TerminalSession::new()?;
     run(
         session.terminal(),
-        App::with_runtime(source, status, settings, paths, currency_table),
+        App::with_runtime(source, status, settings, paths, currency_table, cache_age),
     )
 }
 

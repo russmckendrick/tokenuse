@@ -1,5 +1,7 @@
-use std::sync::mpsc::{Receiver, TryRecvError};
+use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
+use std::time::Duration;
 
+use color_eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::config::{ConfigPaths, UserConfig};
@@ -7,6 +9,7 @@ use crate::currency::{CurrencyFormatter, CurrencyTable};
 use crate::data::{DashboardData, LimitsData, ProjectOption, SessionDetailView, SessionOption};
 use crate::export::ExportFormat;
 use crate::ingest::Ingested;
+use crate::ingest_cache;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Period {
@@ -290,14 +293,59 @@ pub enum DataSource {
     Sample,
 }
 
-pub enum ReloadState {
-    Idle,
-    Pending(Receiver<color_eyre::Result<Ingested>>),
+/// Channel pair used to talk to the long-lived refresher thread. The thread
+/// sleeps for `ingest_cache::TTL`, then reruns ingest, writes the cache, and
+/// sends the result. `signal_tx` lets the UI request an out-of-cycle refresh
+/// (e.g. the 'r' key); `result_rx` receives finished snapshots tagged with
+/// whether they came from a manual or timer-driven trigger.
+pub struct Refresher {
+    signal_tx: Sender<()>,
+    result_rx: Receiver<RefreshOutcome>,
 }
 
-impl Default for ReloadState {
-    fn default() -> Self {
-        Self::Idle
+#[derive(Clone, Copy)]
+enum RefreshKind {
+    Manual,
+    Auto,
+}
+
+struct RefreshOutcome {
+    kind: RefreshKind,
+    result: Result<Ingested>,
+}
+
+impl Refresher {
+    /// Spawn the refresher thread. `initial_delay` sets how long to wait
+    /// before the first auto refresh - on a warm cache hit, callers pass
+    /// `TTL - cache_age` so the next refresh lines up with the cache's age.
+    /// On a cold start, callers pass `TTL` since ingest just ran.
+    pub fn spawn(initial_delay: Duration) -> Self {
+        let (signal_tx, signal_rx) = mpsc::channel::<()>();
+        let (result_tx, result_rx) = mpsc::channel::<RefreshOutcome>();
+
+        std::thread::spawn(move || {
+            let mut next_delay = initial_delay;
+            loop {
+                let kind = match signal_rx.recv_timeout(next_delay) {
+                    Ok(()) => RefreshKind::Manual,
+                    Err(mpsc::RecvTimeoutError::Timeout) => RefreshKind::Auto,
+                    Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                };
+                let result = crate::ingest::load();
+                if let Ok(ref ing) = result {
+                    let _ = ingest_cache::write(ing);
+                }
+                if result_tx.send(RefreshOutcome { kind, result }).is_err() {
+                    return;
+                }
+                next_delay = ingest_cache::TTL;
+            }
+        });
+
+        Self {
+            signal_tx,
+            result_rx,
+        }
     }
 }
 
@@ -313,7 +361,7 @@ pub struct App {
     pub session_view: Option<SessionDetailView>,
     pub session_scroll: usize,
     pub help_open: bool,
-    pub reload_state: ReloadState,
+    pub refresher: Option<Refresher>,
     pub config_selected: usize,
     pub settings: UserConfig,
     pub paths: ConfigPaths,
@@ -337,7 +385,7 @@ impl Default for App {
             session_view: None,
             session_scroll: 0,
             help_open: false,
-            reload_state: ReloadState::Idle,
+            refresher: None,
             config_selected: 0,
             settings: UserConfig::default(),
             paths: ConfigPaths::default(),
@@ -365,13 +413,22 @@ impl App {
         settings: UserConfig,
         paths: ConfigPaths,
         currency_table: CurrencyTable,
+        cache_age: Option<Duration>,
     ) -> Self {
+        // Schedule the first auto-refresh: if we started from a fresh cache,
+        // run again when that cache reaches TTL; otherwise we just ingested,
+        // so wait a full TTL.
+        let initial_delay = cache_age
+            .and_then(|age| ingest_cache::TTL.checked_sub(age))
+            .unwrap_or(ingest_cache::TTL);
+        let refresher = Some(Refresher::spawn(initial_delay));
         Self {
             source,
             status,
             settings,
             paths,
             currency_table,
+            refresher,
             ..Self::default()
         }
     }
@@ -404,48 +461,64 @@ impl App {
         self.currency_table.formatter(&self.settings.currency)
     }
 
-    /// Kick off a background reload. Returns immediately; the result is
-    /// applied later via `poll_reload`. Subsequent presses while a reload is
-    /// already in flight are ignored so we don't pile up worker threads.
+    /// Ask the background refresher to run ingest now (out-of-cycle). The
+    /// thread does one ingest at a time, so a queued signal just runs after
+    /// the in-flight one finishes - no dedup needed here.
     pub fn reload(&mut self) {
-        if matches!(self.reload_state, ReloadState::Pending(_)) {
+        let Some(refresher) = self.refresher.as_ref() else {
             return;
+        };
+        if refresher.signal_tx.send(()).is_ok() {
+            self.status = Some("reloading…".into());
         }
-        let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let _ = tx.send(crate::ingest::load());
-        });
-        self.reload_state = ReloadState::Pending(rx);
-        self.status = Some("reloading…".into());
     }
 
-    /// Drain the result of any pending reload. Called every tick from the
-    /// main loop so the UI stays responsive while ingest is running.
+    /// Drain any results the refresher has produced and apply the most recent
+    /// successful one. Called every tick from the main loop.
     pub fn poll_reload(&mut self) {
-        let result = match &self.reload_state {
-            ReloadState::Idle => return,
-            ReloadState::Pending(rx) => match rx.try_recv() {
-                Ok(result) => Some(result),
-                Err(TryRecvError::Empty) => return,
-                Err(TryRecvError::Disconnected) => None,
-            },
+        let Some(refresher) = self.refresher.as_ref() else {
+            return;
         };
-        self.reload_state = ReloadState::Idle;
+        let mut latest: Option<RefreshOutcome> = None;
+        loop {
+            match refresher.result_rx.try_recv() {
+                Ok(outcome) => latest = Some(outcome),
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    self.refresher = None;
+                    self.status = Some("refresher stopped · prior data kept".into());
+                    return;
+                }
+            }
+        }
+        let Some(outcome) = latest else {
+            return;
+        };
 
-        match result {
-            Some(Ok(ingested)) if !ingested.is_empty() => {
+        let manual = matches!(outcome.kind, RefreshKind::Manual);
+        match outcome.result {
+            Ok(ingested) if !ingested.is_empty() => {
                 let n = ingested.calls.len();
                 self.source = DataSource::Live(ingested);
-                self.status = Some(format!("reloaded · {n} calls"));
+                self.status = Some(if manual {
+                    format!("reloaded · {n} calls")
+                } else {
+                    format!("auto-refreshed · {n} calls")
+                });
             }
-            Some(Ok(_)) => {
-                self.status = Some("reload · no sessions found · prior data kept".into());
+            Ok(_) => {
+                self.status = Some(if manual {
+                    "reload · no sessions found · prior data kept".into()
+                } else {
+                    "auto-refresh · no sessions found · prior data kept".into()
+                });
             }
-            Some(Err(e)) => {
-                self.status = Some(format!("reload failed · prior data kept ({e})"));
-            }
-            None => {
-                self.status = Some("reload thread exited unexpectedly · prior data kept".into());
+            Err(e) => {
+                self.status = Some(if manual {
+                    format!("reload failed · prior data kept ({e})")
+                } else {
+                    format!("auto-refresh failed · prior data kept ({e})")
+                });
             }
         }
 
@@ -1184,50 +1257,77 @@ mod tests {
     }
 
     #[test]
-    fn reload_is_non_blocking_and_idempotent_while_pending() {
+    fn reload_without_refresher_is_a_noop() {
+        // App::default() doesn't spawn a refresher (only with_runtime does),
+        // so reload + poll_reload should leave state untouched.
         let mut app = App::default();
-        assert!(matches!(app.reload_state, ReloadState::Idle));
-
-        app.reload();
-        assert!(matches!(app.reload_state, ReloadState::Pending(_)));
-        assert_eq!(app.status.as_deref(), Some("reloading…"));
-
-        // Pressing r again while a reload is already in flight is a no-op:
-        // status stays as "reloading…" and we don't lose the existing receiver.
         app.status = Some("untouched".into());
         app.reload();
         assert_eq!(app.status.as_deref(), Some("untouched"));
-        assert!(matches!(app.reload_state, ReloadState::Pending(_)));
-    }
-
-    #[test]
-    fn poll_reload_with_idle_state_is_a_noop() {
-        let mut app = App::default();
-        app.status = Some("untouched".into());
         app.poll_reload();
         assert_eq!(app.status.as_deref(), Some("untouched"));
     }
 
     #[test]
     fn poll_reload_drains_a_pre_completed_channel() {
-        // This synthesises the "background thread already finished" case
-        // without actually walking the filesystem, so the test is fast and
-        // deterministic regardless of how much local session data exists.
+        // Synthesise "background refresher already produced a result" without
+        // spawning a thread or walking the filesystem, so the test is fast
+        // and deterministic. We hand-build a Refresher whose result_rx is
+        // already loaded.
         let mut app = App::default();
-        let (tx, rx) = std::sync::mpsc::channel();
+        let (signal_tx, _signal_rx) = mpsc::channel::<()>();
+        let (result_tx, result_rx) = mpsc::channel::<RefreshOutcome>();
         let ingested = crate::ingest::Ingested {
             calls: Vec::new(),
             limits: Vec::new(),
         };
-        tx.send(Ok(ingested)).unwrap();
-        app.reload_state = ReloadState::Pending(rx);
+        result_tx
+            .send(RefreshOutcome {
+                kind: RefreshKind::Manual,
+                result: Ok(ingested),
+            })
+            .unwrap();
+        app.refresher = Some(Refresher {
+            signal_tx,
+            result_rx,
+        });
 
         app.poll_reload();
 
-        assert!(matches!(app.reload_state, ReloadState::Idle));
         assert_eq!(
             app.status.as_deref(),
             Some("reload · no sessions found · prior data kept")
+        );
+    }
+
+    #[test]
+    fn poll_reload_keeps_only_the_latest_result() {
+        // When several refreshes have completed between polls, only the last
+        // one's status message and data should win.
+        let mut app = App::default();
+        let (signal_tx, _signal_rx) = mpsc::channel::<()>();
+        let (result_tx, result_rx) = mpsc::channel::<RefreshOutcome>();
+        for _ in 0..3 {
+            result_tx
+                .send(RefreshOutcome {
+                    kind: RefreshKind::Auto,
+                    result: Ok(crate::ingest::Ingested {
+                        calls: Vec::new(),
+                        limits: Vec::new(),
+                    }),
+                })
+                .unwrap();
+        }
+        app.refresher = Some(Refresher {
+            signal_tx,
+            result_rx,
+        });
+
+        app.poll_reload();
+
+        assert_eq!(
+            app.status.as_deref(),
+            Some("auto-refresh · no sessions found · prior data kept")
         );
     }
 }

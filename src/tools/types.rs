@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Speed {
     Standard,
     Fast,
@@ -34,14 +35,14 @@ pub struct LimitSnapshot {
     pub rate_limit_reached_type: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct LimitWindow {
     pub used_percent: f64,
     pub window_minutes: u64,
     pub resets_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LimitCredits {
     pub has_credits: bool,
     pub unlimited: bool,
