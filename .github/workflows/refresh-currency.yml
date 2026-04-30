@@ -18,6 +18,11 @@ jobs:
       - name: "📥 Check out repository"
         uses: actions/checkout@v6
 
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfontconfig1-dev
+
       - name: "🦀 Install Rust toolchain"
         uses: dtolnay/rust-toolchain@stable
 
