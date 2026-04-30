@@ -16,6 +16,7 @@ pub const LITELLM_PRICING_URL: &str =
 const CONFIG_FILE_NAME: &str = "config.json";
 const LOCAL_RATES_FILE_NAME: &str = "rates.json";
 const LOCAL_PRICING_FILE_NAME: &str = "pricing-snapshot.json";
+const ARCHIVE_DB_FILE_NAME: &str = "archive.db";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigPaths {
@@ -23,6 +24,7 @@ pub struct ConfigPaths {
     pub config_file: PathBuf,
     pub currency_rates_file: PathBuf,
     pub pricing_snapshot_file: PathBuf,
+    pub archive_db_file: PathBuf,
 }
 
 impl ConfigPaths {
@@ -31,6 +33,7 @@ impl ConfigPaths {
             config_file: dir.join(CONFIG_FILE_NAME),
             currency_rates_file: dir.join(LOCAL_RATES_FILE_NAME),
             pricing_snapshot_file: dir.join(LOCAL_PRICING_FILE_NAME),
+            archive_db_file: dir.join(ARCHIVE_DB_FILE_NAME),
             dir,
         }
     }

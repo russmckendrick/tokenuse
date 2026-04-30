@@ -4,12 +4,12 @@ use std::time::Duration;
 use color_eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
+use crate::archive;
 use crate::config::{ConfigPaths, UserConfig};
 use crate::currency::{CurrencyFormatter, CurrencyTable};
 use crate::data::{DashboardData, LimitsData, ProjectOption, SessionDetailView, SessionOption};
 use crate::export::ExportFormat;
 use crate::ingest::Ingested;
-use crate::ingest_cache;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Period {
@@ -298,13 +298,19 @@ pub enum DataSource {
 }
 
 /// Channel pair used to talk to the long-lived refresher thread. The thread
-/// sleeps for `ingest_cache::TTL`, then reruns ingest, writes the cache, and
-/// sends the result. `signal_tx` lets the UI request an out-of-cycle refresh
-/// (e.g. the 'r' key); `result_rx` receives finished snapshots tagged with
-/// whether they came from a manual or timer-driven trigger.
+/// sleeps for `archive::SYNC_INTERVAL`, then syncs the local archive and sends
+/// the resulting in-memory view. `signal_tx` lets the UI request an out-of-cycle
+/// refresh (e.g. the 'r' key); `result_rx` receives finished snapshots tagged
+/// with whether they came from a manual or timer-driven trigger.
 pub struct Refresher {
     signal_tx: Sender<()>,
     result_rx: Receiver<RefreshOutcome>,
+}
+
+#[derive(Clone)]
+pub enum RefreshSource {
+    Archive(ConfigPaths),
+    RawIngest,
 }
 
 #[derive(Clone, Copy)]
@@ -320,10 +326,10 @@ struct RefreshOutcome {
 
 impl Refresher {
     /// Spawn the refresher thread. `initial_delay` sets how long to wait
-    /// before the first auto refresh - on a warm cache hit, callers pass
-    /// `TTL - cache_age` so the next refresh lines up with the cache's age.
-    /// On a cold start, callers pass `TTL` since ingest just ran.
-    pub fn spawn(initial_delay: Duration) -> Self {
+    /// before the first auto refresh. Existing archives pass zero so startup
+    /// can render immediately and sync in the background; cold starts pass the
+    /// regular interval because they just ran a synchronous sync.
+    pub fn spawn(initial_delay: Duration, source: RefreshSource) -> Self {
         let (signal_tx, signal_rx) = mpsc::channel::<()>();
         let (result_tx, result_rx) = mpsc::channel::<RefreshOutcome>();
 
@@ -335,14 +341,14 @@ impl Refresher {
                     Err(mpsc::RecvTimeoutError::Timeout) => RefreshKind::Auto,
                     Err(mpsc::RecvTimeoutError::Disconnected) => return,
                 };
-                let result = crate::ingest::load();
-                if let Ok(ref ing) = result {
-                    let _ = ingest_cache::write(ing);
-                }
+                let result = match &source {
+                    RefreshSource::Archive(paths) => crate::archive::sync_and_load(paths),
+                    RefreshSource::RawIngest => crate::ingest::load(),
+                };
                 if result_tx.send(RefreshOutcome { kind, result }).is_err() {
                     return;
                 }
-                next_delay = ingest_cache::TTL;
+                next_delay = archive::SYNC_INTERVAL;
             }
         });
 
@@ -417,15 +423,10 @@ impl App {
         settings: UserConfig,
         paths: ConfigPaths,
         currency_table: CurrencyTable,
-        cache_age: Option<Duration>,
+        initial_refresh_delay: Duration,
+        refresh_source: RefreshSource,
     ) -> Self {
-        // Schedule the first auto-refresh: if we started from a fresh cache,
-        // run again when that cache reaches TTL; otherwise we just ingested,
-        // so wait a full TTL.
-        let initial_delay = cache_age
-            .and_then(|age| ingest_cache::TTL.checked_sub(age))
-            .unwrap_or(ingest_cache::TTL);
-        let refresher = Some(Refresher::spawn(initial_delay));
+        let refresher = Some(Refresher::spawn(initial_refresh_delay, refresh_source));
         Self {
             source,
             status,

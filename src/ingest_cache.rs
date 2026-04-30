@@ -1,6 +1,6 @@
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
@@ -13,8 +13,8 @@ use crate::tools::{paths, LimitCredits, LimitSnapshot, LimitWindow, ParsedCall, 
 const CACHE_VERSION: u32 = 1;
 const CACHE_FILE: &str = "ingest-cache.json";
 
-/// How long a cached snapshot is considered fresh. The same value drives the
-/// background refresher cadence.
+/// Legacy refresh cadence. The durable archive now owns startup data, but the
+/// existing 15-minute interval still drives background archive syncs.
 pub const TTL: Duration = Duration::from_secs(15 * 60);
 
 #[derive(Serialize, Deserialize)]
@@ -159,12 +159,16 @@ pub fn path() -> Option<PathBuf> {
     paths::cache_dir().map(|d| d.join(CACHE_FILE))
 }
 
-/// Read and validate the cache. Returns `None` if the file is missing,
+/// Read and validate the legacy cache. Returns `None` if the file is missing,
 /// unreadable, malformed, or written by a different schema version - bad
-/// caches must never block startup.
+/// caches must never block archive startup.
 pub fn read() -> Option<CacheHit> {
     let path = path()?;
-    let bytes = fs::read(&path).ok()?;
+    read_path(&path)
+}
+
+pub(crate) fn read_path(path: &Path) -> Option<CacheHit> {
+    let bytes = fs::read(path).ok()?;
     let cached: CachedIngest = serde_json::from_slice(&bytes).ok()?;
     if cached.version != CACHE_VERSION {
         return None;
@@ -182,10 +186,14 @@ pub fn read() -> Option<CacheHit> {
     })
 }
 
-/// Write the snapshot atomically (tmp file + rename). Best-effort: callers
-/// should ignore errors so a read-only cache dir doesn't break startup.
+/// Write the legacy snapshot atomically (tmp file + rename). This remains for
+/// tests and backwards compatibility; normal app startup no longer writes it.
 pub fn write(ingested: &Ingested) -> Result<()> {
     let path = path().ok_or_else(|| color_eyre::eyre::eyre!("no cache directory available"))?;
+    write_path(&path, ingested)
+}
+
+pub(crate) fn write_path(path: &Path, ingested: &Ingested) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -207,7 +215,7 @@ pub fn write(ingested: &Ingested) -> Result<()> {
         f.write_all(&bytes)?;
         f.sync_all()?;
     }
-    fs::rename(&tmp, &path)?;
+    fs::rename(&tmp, path)?;
     Ok(())
 }
 

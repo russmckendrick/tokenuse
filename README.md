@@ -1,8 +1,8 @@
 # Token Use
 
-`tokenuse` is a local-only Rust TUI for exploring AI coding tool token and cost usage. It reads session files already written on your machine, ingests them once at startup, and renders a dense terminal dashboard for spend by day, project, tool, model, shell command, and MCP server.
+`tokenuse` is a local-only Rust TUI for exploring AI coding tool token and cost usage. It reads session files already written on your machine, appends normalized records to its own archive, and renders a dense terminal dashboard for spend by day, project, tool, model, shell command, and MCP server.
 
-There is no API key, proxy, telemetry endpoint, or background watcher. The default build has no network dependency; the only networked paths are the explicit pricing and currency refresh features.
+There is no API key, proxy, telemetry endpoint, daemon, or live file watcher. The default build has no network dependency; the only networked paths are the explicit pricing and currency refresh features.
 
 ## Quick Start
 
@@ -12,7 +12,7 @@ cargo run
 
 Use a terminal at least `120x40`. Smaller terminals show a resize notice instead of the full dashboard.
 
-If no local sessions are found, or ingestion fails before any calls are loaded, the app falls back to bundled sample data and shows that status in the title bar. Re-launch the app to pick up sessions created after startup.
+If no local sessions are found, or archive sync fails before any calls are loaded, the app falls back to bundled sample data and shows that status in the title bar. Press `r` to sync sessions created after startup.
 
 ## Supported Tools
 
@@ -48,7 +48,7 @@ Project names are normalized across tools. Absolute paths are folded to the near
 - `o`: Overview · `d`: Deep Dive · `u`: Usage / rate limits
 - `c`: open configuration · `s`: open session picker (drill into a single session's calls)
 - `e`: export current view (JSON, CSV, SVG, PNG) to `<config dir>/exports/`
-- `r`: reload (re-run ingest in place; keeps prior data on failure)
+- `r`: reload (sync archive in place; keeps prior data on failure)
 - `h` or `?`: open the keybinding reference (full list of shortcuts)
 - In the session page: `Up`/`Down`, `PgUp`/`PgDn`, `Home`/`End`, `Esc`/`d` back to Deep Dive
 - In pickers and configuration: `Up`/`Down`, `Home`/`End`, `Enter`, `Esc`
@@ -58,10 +58,11 @@ Project names are normalized across tools. Absolute paths are folded to the near
 The dashboard stores user settings and downloaded data in the platform config directory under `tokenuse`. The files are:
 
 - `config.json`: user overrides, currently the display currency
+- `archive.db`: durable local usage archive
 - `rates.json`: latest downloaded published currency snapshot
 - `pricing-snapshot.json`: latest downloaded LiteLLM-derived pricing snapshot
 
-USD remains the default. Costs are calculated and stored internally as USD, then converted for display using the configured currency. Open the TUI configuration page with `c` to pick a currency or pull the latest local data. Pulling `rates.json` updates display rates immediately; pulling LiteLLM pricing applies to newly ingested runs after restart.
+USD remains the default. Costs are calculated and stored internally as import-time USD, then converted for display using the configured currency. Open the TUI configuration page with `c` to pick a currency or pull the latest local data. Pulling `rates.json` updates display rates immediately; pulling LiteLLM pricing applies to newly imported calls.
 
 The in-app pull actions are available only when built with the matching feature:
 
@@ -71,7 +72,7 @@ cargo run --features refresh-currency,refresh-prices
 
 ## CLI Helpers
 
-List normalized project/tool rows without opening the TUI:
+Sync the archive and list normalized project/tool rows without opening the TUI:
 
 ```bash
 cargo run -- --list-projects
@@ -106,4 +107,4 @@ cargo fmt --check
 cargo test
 ```
 
-Sample dashboard data lives in `src/data.rs`. Live ingestion is loaded from local files at startup and normalized through the adapters in `src/tools/`.
+Sample dashboard data lives in `src/data.rs`. Live usage is loaded from the local archive in `src/archive.rs`, which syncs source files through the adapters in `src/tools/`.

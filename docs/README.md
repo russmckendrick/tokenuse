@@ -20,7 +20,7 @@ flowchart LR
 ## Start Here
 
 - [Tool ingestion](tools/README.md): what local files each AI coding tool writes, how `tokenuse` discovers them, and how fields are normalized.
-- [Architecture](architecture.md): startup flow, the page/modal state machine (Overview, Deep Dive, Usage, Session drill-down, Config, Help), dashboard aggregation, project identity, deduplication, pricing, and the export pipeline.
+- [Architecture](architecture.md): startup flow, local archive sync, the page/modal state machine (Overview, Deep Dive, Usage, Session drill-down, Config, Help), dashboard aggregation, project identity, deduplication, pricing, and the export pipeline.
 - [Usage page](usage.md): the rolling-24h utilisation page (`u`) — per-tool activity histograms, plan rate-limit windows, and top models. Independent of the period and project filters.
 - [Release notes](releases/): per-version user-visible changes, starting with [`0.0.1`](releases/0.0.1.md).
 

@@ -138,4 +138,4 @@ flowchart LR
 - `payload.cwd` from `session_meta` is the only reliable project signal; absent that, the parser falls back to the `YYYY/MM/DD` discovery label.
 - Codex rolls models mid-session via `turn_context`; the parser tracks the most-recently-set model so each turn is priced correctly. Variants such as `gpt-5.4` resolve through the pricing table's exact, alias, prefix, or fallback lookup path.
 - Cache-creation tokens are not exposed by OpenAI, so `cache_creation_input_tokens` is always zero. The "Cache Written" tile will read 0 for Codex.
-- Limit snapshots are not live API reads. They are the latest local values Codex wrote to session JSONL, and the app still ingests once at startup.
+- Limit snapshots are not live API reads. They are the latest local values Codex wrote to session JSONL, imported during archive sync.

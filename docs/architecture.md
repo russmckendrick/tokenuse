@@ -1,29 +1,36 @@
 # Architecture
 
-`tokenuse` is intentionally simple: read local session files, normalize them to one record shape, aggregate in memory, and render a terminal dashboard. There is no daemon and no file watcher.
+`tokenuse` is intentionally local: read local session files, append normalized records to its own archive, aggregate in memory, and render a terminal dashboard. There is no daemon and no file watcher.
 
 ## Startup Flow
 
 ```mermaid
 flowchart TD
     A[cargo run] --> B[handle CLI flags]
-    B -->|--list-projects| C[load ingestion and print inventory]
+    B -->|--list-projects| C[sync archive and print inventory]
     B -->|--refresh-prices| D[refresh pricing snapshot when feature is enabled]
     B -->|--generate-currency-json| L[generate currency snapshot when feature is enabled]
     B -->|no flag| M[load config.json and rates.json]
-    M --> E[ingest::load]
-    E --> F[discover sources for each tool adapter]
-    F --> G[parse local files into ParsedCall records]
-    G --> H{any calls?}
+    M --> N[open archive.db]
+    N --> O{archive has rows?}
+    O -->|yes| P[load archive into Ingested]
+    O -->|no| Q[import legacy ingest-cache if present]
+    Q --> R[sync local tool sources]
+    R --> S[append new ParsedCall and LimitSnapshot rows]
+    S --> P
+    P --> H{any calls or limits?}
     H -->|yes| I[DataSource::Live]
     H -->|no| J[DataSource::Sample]
     I --> K[render TUI]
     J --> K
+    K --> T[background sync every 15 min and on r]
 ```
 
-`ingest::load()` runs once before the TUI starts. New sessions written while the dashboard is open are not visible until the user explicitly reloads — press `r` (Dashboard, Usage, or Session pages) to re-run `ingest::load()` on a background thread. The dashboard stays responsive: the status bar shows `reloading…` while it runs, the next tick of the main loop drains the result via `App::poll_reload`, and the status flips to `reloaded · N calls`. Pressing `r` again while a reload is in flight is a no-op so worker threads don't pile up. Failures or empty results keep the prior data unchanged.
+The durable archive lives at `<config dir>/tokenuse/archive.db`. If it already has rows, startup loads it immediately and queues an incremental background sync so the dashboard opens without reparsing every source. If the archive is empty, startup imports the legacy `~/.cache/tokenuse/ingest-cache.json` snapshot when present, performs one synchronous source sync, then renders from the archive. If the archive cannot be opened or migrated, the app falls back to raw `ingest::load()` for that run.
 
-Individual adapter discovery or parse errors are skipped so one malformed source does not stop the whole dashboard. If no calls survive ingestion, the UI shows sample data and a status message.
+New sessions written while the dashboard is open are visible after archive sync — press `r` (Dashboard, Usage, or Session pages) to sync on a background thread. The dashboard stays responsive: the status bar shows `reloading…` while it runs, the next tick of the main loop drains completed results via `App::poll_reload`, and the status flips to `reloaded · N calls`. The refresher runs one sync at a time; if several results complete between UI ticks, the latest result wins. Failures or empty sync results keep the prior data unchanged.
+
+Individual adapter discovery or parse errors are skipped so one malformed source does not stop the whole dashboard. If the archive has no calls or limits after sync, the UI shows sample data and a status message.
 
 ## Normalized Record
 
@@ -38,7 +45,7 @@ Every adapter emits `ParsedCall` from `src/tools/types.rs`. The important fields
 | `cached_input_tokens` | Cached input reported inside `input_tokens`, currently used for OpenAI-style records |
 | `reasoning_tokens` | Reasoning bucket when exposed or estimated |
 | `web_search_requests` | Server-side web search request count when exposed |
-| `cost_usd` | Calculated from the configured pricing snapshot, embedded by default |
+| `cost_usd` | Calculated from the configured pricing snapshot at import time |
 | `tools`, `bash_commands` | Tool call names and split shell commands |
 | `timestamp`, `session_id`, `project` | Aggregation and filtering keys |
 | `dedup_key` | Per-call key used by the shared run-level dedup set |
@@ -127,7 +134,15 @@ Raw project strings come from each tool's local data. Before display, `tokenuse`
 3. groups costs by that identity across tools
 4. displays the shortest unique suffix, such as `tokens` or `dvr/tokens`
 
-`cargo run -- --list-projects` prints both the compact project label and the raw project value so ingestion mistakes are easier to spot.
+`cargo run -- --list-projects` syncs the archive, then prints both the compact project label and the raw project value so ingestion mistakes are easier to spot.
+
+## Archive And Sync
+
+`src/archive.rs` owns the SQLite archive. It stores full `ParsedCall` rows, append-only limit snapshots, and per-source fingerprints in `source_state`. Calls are unique on `(tool, dedup_key)`, so a changed source can be reparsed safely without duplicating historical calls. Source deletion never removes archive rows; once tokenuse has imported a call, it remains available even if the original tool history is later cleared.
+
+The source fingerprint hook defaults to file metadata for file-backed sources and recursive directory metadata for directory-backed sources. When a source fingerprint has not changed, sync skips parsing it. When it changes, sync parses the source, inserts only new call keys, stores any new limit snapshots, and updates the fingerprint.
+
+The old JSON ingest cache is now legacy seed input only. New runs do not write `~/.cache/tokenuse/ingest-cache.json`.
 
 ## Deduplication
 
@@ -179,7 +194,7 @@ Claude Opus fast mode uses the model row's `fast_multiplier` when present. The C
 cargo run --features refresh-prices -- --refresh-prices
 ```
 
-The TUI configuration page can also pull the LiteLLM-derived snapshot into the local config directory when built with `refresh-prices`. Because ingestion runs once at startup and parser records only the calculated `cost_usd`, newly pulled pricing applies after restarting the app.
+The TUI configuration page can also pull the LiteLLM-derived snapshot into the local config directory when built with `refresh-prices`. Because the archive stores `cost_usd` at import time, refreshed pricing applies to newly imported calls; existing historical rows keep their original USD cost.
 
 ## Export
 
@@ -205,6 +220,7 @@ Runtime settings live in the platform config directory under `tokenuse`:
 | File / directory | Purpose |
 | --- | --- |
 | `config.json` | User overrides, currently the display currency |
+| `archive.db` | Durable local usage archive loaded by the dashboard |
 | `rates.json` | Locally downloaded copy of the published currency snapshot |
 | `pricing-snapshot.json` | Locally downloaded LiteLLM-derived pricing snapshot |
 | `exports/` | Output directory for `e`-key exports (JSON, CSV, SVG, PNG) |

@@ -124,4 +124,4 @@ flowchart LR
 
 - The user message captured per call is the most recent user turn before the assistant response, truncated to 500 chars. If a user sends multiple messages in rapid succession before any assistant reply, only the last is recorded.
 - Synthetic models (`<synthetic>`, used by Claude Code for placeholder rows) hit the pricing fallback — they cost `$0` because their token counts are zero, but they still count toward call totals.
-- No live file watching: the dashboard ingests once at startup. Re-launch to pick up new sessions.
+- No live file watching: press `r` or wait for the 15-minute background archive sync to pick up new sessions.

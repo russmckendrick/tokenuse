@@ -12,10 +12,11 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 use tokenuse::{
-    app::{App, DataSource},
+    app::{App, DataSource, RefreshSource},
+    archive,
     config::{ConfigPaths, UserConfig},
     currency::CurrencyTable,
-    ingest, ingest_cache, ui,
+    ingest, ui,
 };
 
 fn main() -> Result<()> {
@@ -42,29 +43,74 @@ fn main() -> Result<()> {
         }
     };
 
-    let (source, ingest_status, cache_age) = match ingest_cache::read() {
-        Some(hit) if hit.age <= ingest_cache::TTL => {
-            // Fresh cache: skip the synchronous ingest, let the refresher
-            // thread top us up at TTL minus current age.
-            (DataSource::Live(hit.ingested), None, Some(hit.age))
-        }
-        _ => match ingest::load() {
-            Ok(ingested) if !ingested.is_empty() => {
-                let _ = ingest_cache::write(&ingested);
-                (DataSource::Live(ingested), None, None)
+    let (source, ingest_status, initial_refresh_delay, refresh_source) =
+        match archive::load_startup(&paths) {
+            Ok(startup) => {
+                let mut parts = Vec::new();
+                if startup.legacy_records_imported > 0 {
+                    parts.push(format!(
+                        "legacy cache imported · {} records",
+                        startup.legacy_records_imported
+                    ));
+                }
+                if let Some(stats) = startup.sync_stats {
+                    if stats.calls_inserted > 0 || stats.limits_inserted > 0 {
+                        parts.push(format!(
+                            "archive synced · {} calls · {} limits",
+                            stats.calls_inserted, stats.limits_inserted
+                        ));
+                    }
+                }
+
+                let source = if startup.ingested.is_empty() {
+                    if parts.is_empty() {
+                        parts.push("no local sessions found · sample data".into());
+                    }
+                    DataSource::Sample
+                } else {
+                    DataSource::Live(startup.ingested)
+                };
+                let delay = if startup.loaded_existing_archive {
+                    Duration::from_secs(0)
+                } else {
+                    archive::SYNC_INTERVAL
+                };
+                (
+                    source,
+                    if parts.is_empty() {
+                        None
+                    } else {
+                        Some(parts.join(" · "))
+                    },
+                    delay,
+                    RefreshSource::Archive(paths.clone()),
+                )
             }
-            Ok(_) => (
-                DataSource::Sample,
-                Some("no local sessions found · sample data".into()),
-                None,
-            ),
-            Err(e) => (
-                DataSource::Sample,
-                Some(format!("ingest failed · sample data ({e})")),
-                None,
-            ),
-        },
-    };
+            Err(archive_err) => match ingest::load() {
+                Ok(ingested) if !ingested.is_empty() => (
+                    DataSource::Live(ingested),
+                    Some(format!("archive failed · raw ingest ({archive_err})")),
+                    archive::SYNC_INTERVAL,
+                    RefreshSource::RawIngest,
+                ),
+                Ok(_) => (
+                    DataSource::Sample,
+                    Some(format!(
+                        "archive failed · raw ingest ({archive_err}) · no local sessions found · sample data"
+                    )),
+                    archive::SYNC_INTERVAL,
+                    RefreshSource::RawIngest,
+                ),
+                Err(e) => (
+                    DataSource::Sample,
+                    Some(format!(
+                        "archive failed · raw ingest ({archive_err}) · ingest failed · sample data ({e})"
+                    )),
+                    archive::SYNC_INTERVAL,
+                    RefreshSource::RawIngest,
+                ),
+            },
+        };
     if let Some(status) = ingest_status {
         status_messages.push(status);
     }
@@ -77,7 +123,15 @@ fn main() -> Result<()> {
     let mut session = TerminalSession::new()?;
     run(
         session.terminal(),
-        App::with_runtime(source, status, settings, paths, currency_table, cache_age),
+        App::with_runtime(
+            source,
+            status,
+            settings,
+            paths,
+            currency_table,
+            initial_refresh_delay,
+            refresh_source,
+        ),
     )
 }
 
@@ -90,8 +144,8 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, mut app: App) -> Resul
         }
 
         // Short timeout so reload completion shows up promptly even when the
-        // user isn't pressing keys. ingest::load runs on a background thread
-        // and surfaces its result via App::poll_reload.
+        // user isn't pressing keys. Archive sync/load runs on a background
+        // thread and surfaces its result via App::poll_reload.
         if event::poll(Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
                 app.handle_key(key);
@@ -157,7 +211,14 @@ Run with no flags to launch the interactive dashboard.",
 }
 
 fn print_project_inventory() -> Result<()> {
-    let ingested = ingest::load()?;
+    let paths = ConfigPaths::default();
+    let ingested = match archive::sync_and_load(&paths) {
+        Ok(ingested) => ingested,
+        Err(e) => {
+            eprintln!("archive failed · raw ingest ({e})");
+            ingest::load()?
+        }
+    };
     if ingested.is_empty() {
         println!("no local sessions found");
         return Ok(());

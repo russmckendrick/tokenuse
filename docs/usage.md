@@ -11,7 +11,7 @@ The Usage page (`u`) is a per-tool snapshot of the **last 24 hours** of activity
 | `d` | Back to Deep Dive |
 | `c` | Open Configuration |
 | `Esc` | Back to the previous tab page |
-| `r` | Reload (re-runs `ingest::load()` on a background thread) |
+| `r` | Reload (syncs the local archive on a background thread) |
 | `h` or `?` | Help modal |
 | `q` | Quit |
 
@@ -47,7 +47,7 @@ Calls without a timestamp are skipped. Calls with timestamps in the future are a
 
 ### Limit Rows
 
-Zero or more per tool, derived from `LimitSnapshot` records emitted during ingest. Today only the **Codex** adapter parses plan rate-limit data — see `src/tools/codex/parser.rs`. Other tools show only the usage row and model rows.
+Zero or more per tool, derived from `LimitSnapshot` records emitted by adapters during archive sync. Today only the **Codex** adapter parses plan rate-limit data — see `src/tools/codex/parser.rs`. Other tools show only the usage row and model rows.
 
 When multiple snapshots exist for the same `(tool, limit_id)`, only the latest by `observed_at` is kept (`limit_is_newer`). Each surviving snapshot can contribute up to two rows: one for `primary` and one for `secondary`.
 
@@ -76,13 +76,13 @@ Models are sorted descending by tokens, then cost, then calls, then name. The bi
 
 ## Source Data
 
-Usage data is built from the same `Vec<ParsedCall>` the Dashboard uses, plus the cached `Vec<LimitSnapshot>` from `Ingested.limits`. Both come from `ingest::load()` and from the disk cache at `~/.cache/tokenuse/ingest-cache.json` (TTL 15 min). The page therefore reflects whatever the most recent ingest produced — `r` forces a refresh and updates the page on the next tick.
+Usage data is built from the same `Vec<ParsedCall>` the Dashboard uses, plus the archived `Vec<LimitSnapshot>` from `Ingested.limits`. Both are loaded from `<config dir>/tokenuse/archive.db`. Startup loads an existing archive immediately; `r` forces an archive sync and updates the page on the next tick.
 
 The Usage page **does not** filter by the active period (`1`–`5`) or the active project filter (`p`). The active tool filter (`t`) is also ignored: every supported tool gets its own section regardless. Currency selection from the Config page does flow through the cost columns.
 
 ## Sample Mode
 
-When ingestion finds no local sessions, the dashboard falls back to bundled sample data and the Usage page renders with synthetic values from `data::limits_data` (`src/data.rs`). Sample mode preserves the row shape so screenshots and tests are stable, but the figures are not real and the title bar shows the sample-mode banner.
+When archive sync finds no local sessions, the dashboard falls back to bundled sample data and the Usage page renders with synthetic values from `data::limits_data` (`src/data.rs`). Sample mode preserves the row shape so screenshots and tests are stable, but the figures are not real and the title bar shows the sample-mode banner.
 
 ## Render Path
 

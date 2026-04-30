@@ -44,7 +44,7 @@ pub struct LimitCredits {
     pub balance: Option<f64>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ParsedCall {
     pub tool: &'static str,
     pub model: String,

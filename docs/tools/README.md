@@ -19,14 +19,15 @@ The UI calls these sources **tools**. Internally each one is implemented as a `T
 flowchart LR
     A["local tool files"] --> B["adapter.discover()"]
     B --> C["Vec<SessionSource>"]
-    C --> D["adapter.parse(source, seen)"]
-    D --> E["Vec<ParsedCall>"]
-    E --> F["ingest::load()"]
-    F --> G["DashboardData"]
-    D -. "dedup_key" .-> H["shared seen set"]
+    C --> D["archive source fingerprint"]
+    D -->|changed| E["adapter.parse(source, seen)"]
+    E --> F["append ParsedCall rows"]
+    F --> G["archive.db"]
+    G --> H["DashboardData"]
+    E -. "dedup_key" .-> I["shared seen set"]
 ```
 
-The same `seen: &mut HashSet<String>` is shared across every tool adapter during one run, so re-reading the same local record only contributes once.
+The same `seen: &mut HashSet<String>` is shared across every tool adapter during one sync, so re-reading the same local record only contributes once. The archive also enforces uniqueness on `(tool, dedup_key)`, which lets changed sources be reparsed without duplicating historical calls.
 
 ## Internal Adapter Contract
 
@@ -42,6 +43,8 @@ pub trait ToolAdapter: Send + Sync {
         source: &SessionSource,
         seen: &mut HashSet<String>,
     ) -> Result<Vec<ParsedCall>>;
+    fn parse_limits(&self, source: &SessionSource) -> Result<Vec<LimitSnapshot>> { /* default */ }
+    fn source_fingerprint(&self, source: &SessionSource) -> Result<String> { /* default */ }
 
     fn model_display(&self, model: &str) -> String { /* default */ }
     fn tool_display(&self, tool: &str) -> String { /* default */ }
@@ -79,11 +82,12 @@ cargo run --features refresh-prices -- --refresh-prices
 3. Implement `ToolAdapter` in `mod.rs` and register it in `tools::registry()`.
 4. Add a variant to `app::Tool`, update its label and cycle order, and update `ingest::matches_tool`.
 5. Add display names in aggregation helpers such as `tool_short_label` when needed.
-6. Write `docs/tools/<name>.md` and add it to the supported tools table above.
-7. Add parser tests for source validation, token mapping, deduplication, project detection, and tool/bash extraction.
+6. Override `source_fingerprint` only when the default file/directory metadata fingerprint is too broad or too narrow for the source.
+7. Write `docs/tools/<name>.md` and add it to the supported tools table above.
+8. Add parser tests for source validation, token mapping, deduplication, project detection, and tool/bash extraction.
 
 ## Verification
 
 - `cargo test` runs parser unit tests, pricing lookup tests, aggregation tests, and render smoke tests.
-- `cargo run` launches the TUI and falls back to sample data when no local calls are ingested.
-- `cargo run -- --list-projects` prints normalized project/tool inventory rows for debugging source attribution.
+- `cargo run` launches the TUI and falls back to sample data when the archive has no local calls.
+- `cargo run -- --list-projects` syncs the archive and prints normalized project/tool inventory rows for debugging source attribution.

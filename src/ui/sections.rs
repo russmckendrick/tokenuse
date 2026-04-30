@@ -611,6 +611,10 @@ fn render_config_paths(frame: &mut Frame<'_>, area: Rect, app: &App) {
         path_line("config dir", app.paths.dir.display().to_string()),
         path_line("config file", app.paths.config_file.display().to_string()),
         path_line(
+            "archive db",
+            app.paths.archive_db_file.display().to_string(),
+        ),
+        path_line(
             "rates data",
             app.paths.currency_rates_file.display().to_string(),
         ),
