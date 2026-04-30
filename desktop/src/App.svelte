@@ -279,9 +279,20 @@
   <div class="app-shell" class:is-busy={busy}>
     <header class="topbar">
       <div class="brand">
-        <span class="brand-mark">tokenuse</span>
-        <span class="version">v{snapshot.version}</span>
-        <span class:live={snapshot.source === 'live'} class="source">{snapshot.source}</span>
+        <svg class="brand-bars" viewBox="0 0 440 560" aria-hidden="true">
+          <defs>
+            <linearGradient id="brand-bar-gradient" x1="0" y1="0" x2="0" y2="560" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#ffc06a" />
+              <stop offset="45%" stop-color="#ff9a4d" />
+              <stop offset="100%" stop-color="#f26a3d" />
+            </linearGradient>
+          </defs>
+          <rect x="0" y="280" width="80" height="280" rx="16" fill="url(#brand-bar-gradient)" />
+          <rect x="120" y="160" width="80" height="400" rx="16" fill="url(#brand-bar-gradient)" />
+          <rect x="240" y="0" width="80" height="560" rx="16" fill="url(#brand-bar-gradient)" />
+          <rect x="360" y="120" width="80" height="440" rx="16" fill="url(#brand-bar-gradient)" />
+        </svg>
+        <span class="brand-title">Token Use</span>
       </div>
 
       <nav class="tabs" aria-label="Sections">
@@ -516,7 +527,7 @@
     </div>
   {/if}
 {:else}
-  <div class="loading">tokenuse</div>
+  <div class="loading">Token Use</div>
 {/if}
 
 {#snippet heat(value: number)}

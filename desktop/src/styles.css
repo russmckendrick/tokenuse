@@ -118,25 +118,21 @@ footer,
   gap: 8px;
 }
 
-.brand-mark {
+.brand {
+  min-width: 0;
+}
+
+.brand-bars {
+  display: block;
+  width: 22px;
+  height: 28px;
+  flex: 0 0 auto;
+}
+
+.brand-title {
   color: #ff8f40;
   font-weight: 800;
-}
-
-.version,
-.source {
-  color: #a1a7c3;
-}
-
-.source {
-  border: 1px solid #414866;
-  border-radius: 2px;
-  padding: 2px 5px;
-}
-
-.source.live {
-  color: #4cf2a0;
-  border-color: #4cf2a0;
+  white-space: nowrap;
 }
 
 .tabs,

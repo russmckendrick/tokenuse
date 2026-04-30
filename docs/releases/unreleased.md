@@ -4,7 +4,8 @@ Changes that should be included in the next release go here. Keep this file curr
 
 ## Highlights
 
-- None yet.
+- Desktop builds now regenerate app icons from `desktop/tokenusebars.svg`.
+- The desktop header now uses the bars mark with the `Token Use` title and omits the version and source labels.
 
 ## Notes
 

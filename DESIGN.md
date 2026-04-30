@@ -1,7 +1,7 @@
 ---
 version: "alpha"
-name: "tokenuse TUI"
-description: "A dense dark terminal design system for a token usage analytics dashboard."
+name: "Token Use Console"
+description: "A dense dark terminal and desktop design system for a token usage analytics dashboard."
 colors:
   primary: "#FF8F40"
   secondary: "#62A6FF"
@@ -53,6 +53,18 @@ components:
     typography: "{typography.body}"
     rounded: "{rounded.none}"
     padding: "{spacing.sm}"
+  desktop-topbar:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.primary}"
+    typography: "{typography.display}"
+    rounded: "{rounded.sm}"
+    padding: "{spacing.lg}"
+  brand-title:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.primary}"
+    typography: "{typography.display}"
+    rounded: "{rounded.none}"
+    padding: "{spacing.xs}"
   dashboard-panel:
     backgroundColor: "{colors.neutral}"
     textColor: "{colors.on-surface}"
@@ -117,44 +129,58 @@ components:
 
 ## Overview
 
-tokenuse should feel like a compact operator console for people who care about token spend, model behavior, and workflow efficiency. The interface is dark, dense, and calm, with bright terminal accents used as structural signposts rather than decoration. The desired response is quick orientation: the user should be able to scan costs, calls, hot spots, and command hints without leaving the keyboard.
+Token Use should feel like a compact operator console for people who care about token spend, model behavior, and workflow efficiency. The interface is dark, dense, and calm, with bright terminal accents used as structural signposts rather than decoration. The desired response is quick orientation: the user should be able to scan costs, calls, hot spots, and command hints without leaving the keyboard.
+
+The brand mark is the orange bars symbol from `desktop/tokenusebars.svg`. Desktop chrome should pair the bars-only mark with the product name `Token Use`; reserve `tokenuse` for command names, package identifiers, URLs, and other literal technical strings.
 
 ## Colors
 
-- **Primary (#FF8F40):** active period/provider states, summary borders, and command keys.
+- **Primary (#FF8F40):** active period/provider states, summary borders, brand title text, and command keys.
 - **Secondary (#62A6FF):** informational panels such as Daily Activity.
 - **Tertiary (#4CF2A0):** successful or efficient usage signals.
 - **Warning (#FFD60A):** money, token savings, and metric values that need attention.
 - **Error (#FF5F6D):** risk, high severity optimization items, and Top Sessions.
 - **Cyan (#4DF3E8) and Magenta (#F05AF2):** secondary category accents for tools, models, and MCP-like surfaces.
 - **Surface and Neutral:** layered dark blue-gray backgrounds; hierarchy comes from borders and color, not shadows.
+- **Brand bars:** the icon may use a warm orange gradient within the primary family, from pale amber through orange to coral, but this gradient is limited to the app icon and bars mark.
 
 ## Typography
 
-Use a monospace stack everywhere. Labels and values should align cleanly in columns, with bold reserved for panel titles, active navigation, and important numeric values. Avoid display-scale type inside the dashboard; the interface should stay compact enough for repeated terminal use.
+Use a monospace stack everywhere. Labels and values should align cleanly in columns, with bold reserved for the brand title, panel titles, active navigation, and important numeric values. Avoid display-scale type inside the dashboard; the interface should stay compact enough for repeated terminal use.
 
 ## Layout
 
 The layout is a high-density grid with thin gaps, fixed-height summary/nav/footer bands, and proportional two-column content rows. Panels should preserve predictable column alignment at common terminal widths, degrading by truncating long labels before hiding key metrics.
 
+Desktop topbars should stay quiet: bars mark, `Token Use`, centered navigation, and compact icon buttons. Do not spend topbar space on version labels, live/source badges, or explanatory copy; put status in the status line and data provenance in Config.
+
 ## Elevation & Depth
 
-Use flat depth. Borders, foreground color, and background tone provide hierarchy; shadows and gradients do not belong in the terminal implementation. Heat bars may use stepped color ramps to imply magnitude.
+Use flat depth. Borders, foreground color, and background tone provide hierarchy; shadows do not belong in the terminal implementation. Gradients are reserved for the brand bars asset only; heat bars should use stepped color ramps to imply magnitude.
 
 ## Shapes
 
-Terminal panels use square or nearly square corners. Any rounded interpretation should stay at 2-4px when this system is translated to a graphical surface.
+Terminal panels use square or nearly square corners. Any rounded interpretation should stay at 2-4px when this system is translated to a graphical surface. The bars inside the brand mark may be softly rounded, but the app icon background stays solid and square-cornered.
+
+## Iconography
+
+Use `desktop/tokenusebars.svg` as the source asset for generated app icons. The full icon keeps its dark square background; in app chrome, use only the four orange bars next to `Token Use` so the header stays compact and recognizable.
 
 ## Components
 
 Dashboard panels use one-pixel borders, a colored title, and dense table content. The summary panel uses the primary border and brighter numeric emphasis. Footer commands are inline key/value pairs with orange keys and muted labels.
+
+Desktop topbars use the primary border and surface background. The brand area is a tight horizontal group: bars mark first, `Token Use` second, with no version or source chip beside it.
 
 ## Do's and Don'ts
 
 - Do keep the first screen as the actual dashboard, not a splash or marketing page.
 - Do keep metric values right-aligned and labels left-aligned for fast scanning.
 - Do use color to group panels and severity, but keep the dark surface dominant.
+- Do use `Token Use` for product-facing desktop labels and `tokenuse` only for literal technical identifiers.
+- Do generate desktop app icons from `desktop/tokenusebars.svg` and use the bars-only mark in app chrome.
 - Do prefer native TUI widgets and layout primitives over custom terminal drawing.
 - Don't add decorative backgrounds, oversized type, or large empty hero areas.
 - Don't use rounded card-like styling that makes the terminal feel like a web mockup.
+- Don't show version numbers or live/source badges in the primary topbar.
 - Don't hide keyboard commands behind help text; keep the footer visible.

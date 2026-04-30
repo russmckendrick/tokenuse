@@ -1,0 +1,18 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="barGradient" x1="0" y1="240" x2="0" y2="800" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFC06A"/>
+      <stop offset="45%" stop-color="#FF9A4D"/>
+      <stop offset="100%" stop-color="#F26A3D"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Solid, square-corner background -->
+  <rect width="1024" height="1024" fill="#0F1115"/>
+
+  <!-- Gradient bars retained -->
+  <rect x="272" y="520" width="80" height="280" rx="16" fill="url(#barGradient)"/>
+  <rect x="392" y="400" width="80" height="400" rx="16" fill="url(#barGradient)"/>
+  <rect x="512" y="240" width="80" height="560" rx="16" fill="url(#barGradient)"/>
+  <rect x="632" y="360" width="80" height="440" rx="16" fill="url(#barGradient)"/>
+</svg>
