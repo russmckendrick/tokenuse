@@ -294,6 +294,10 @@ jobs:
               echo "The imported certificate is an Apple Distribution certificate, which is for App Store distribution." >&2
               echo "Direct-download notarized DMGs must be signed with a Developer ID Application certificate." >&2
             fi
+            if printf '%s\n' "${IDENTITIES}" | grep -q '"Developer ID Installer:'; then
+              echo "The imported certificate is a Developer ID Installer certificate, which is for signing .pkg installers." >&2
+              echo "Tauri must codesign the .app bundle with a Developer ID Application certificate before it creates the DMG." >&2
+            fi
             echo "Create a Developer ID Application certificate, then export it from Keychain Access > My Certificates so the .p12 includes its private key." >&2
             exit 1
           fi

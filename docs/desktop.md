@@ -61,7 +61,7 @@ The macOS release job requires these repository secrets:
 
 The workflow imports the `.p12`, verifies that it contains a `Developer ID Application` identity, and passes the discovered identity to Tauri as `APPLE_SIGNING_IDENTITY`. If this step reports no identity, export the certificate from Keychain Access > My Certificates so the `.p12` includes the private key.
 
-Use a `Developer ID Application` certificate for the DMG. An `Apple Distribution` certificate is for App Store distribution and will be rejected by the direct-download DMG signing job. Create the certificate from Apple Developer > Certificates, Identifiers & Profiles > Certificates, choosing `Developer ID Application`; download the `.cer`, install it into Keychain Access, then export the certificate and private key from the `My Certificates` tab as a password-protected `.p12`.
+Use a `Developer ID Application` certificate for the DMG. An `Apple Distribution` certificate is for App Store distribution, and a `Developer ID Installer` certificate is for `.pkg` installers; neither one can codesign the `.app` bundle Tauri puts inside the direct-download DMG. Create the certificate from Apple Developer > Certificates, Identifiers & Profiles > Certificates, choosing `Developer ID Application`; download the `.cer`, install it into Keychain Access, then export the certificate and private key from the `My Certificates` tab as a password-protected `.p12`.
 
 Release tags must match the version in `Cargo.toml`, `desktop/src-tauri/Cargo.toml`, `desktop/package.json`, and `desktop/src-tauri/tauri.conf.json`. When preparing a release, bump all four version fields together before tagging.
 
