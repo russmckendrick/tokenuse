@@ -20,12 +20,14 @@ The dashboard shows:
 
 Project names are normalized across tools. Absolute paths are folded to the nearest existing Git root when possible, then displayed with the shortest unique suffix.
 
+Press `g` to cycle the dashboard sort mode between spend, latest date, and token use. The active sort applies to dashboard tables, pickers, the Usage page ordering, and session call rows.
+
 ## Pages
 
 - **Overview**: the everyday landing page with KPIs, daily activity, models, project/tool spend, shell commands, and MCP servers.
 - **Deep Dive**: the full panel set, including top sessions and core tool counts.
 - **Usage**: rolling 24-hour per-tool activity, optional plan rate-limit windows, and top models.
-- **Session**: drill into one `tool:session_id` and inspect per-call timestamp, model, cost, token buckets, tools, and prompt snippet.
+- **Session**: drill into one `tool:session_id`, inspect per-call timestamp, model, cost, token buckets, tools, and prompt snippet, then open a call detail modal for the full stored prompt and metadata.
 - **Config**: display currency and confirmed local downloads for currency rates and LiteLLM pricing snapshots.
 
 ## Keyboard
@@ -36,6 +38,7 @@ Project names are normalized across tools. Absolute paths are folded to the near
 | `Esc` | Close modal or go back from a sub-page |
 | `1`-`5` | Period: today, 7 days, 30 days, this month, all time |
 | `t` | Cycle tool filter |
+| `g` | Cycle sort mode: spend, latest date, token use |
 | `p` | Open project picker |
 | `Tab` / `Shift-Tab` | Cycle Overview, Deep Dive, and Usage |
 | `o` | Open Overview |
@@ -48,11 +51,12 @@ Project names are normalized across tools. Absolute paths are folded to the near
 | `r` | Sync the local archive in place |
 | `h` or `?` | Open the keybinding reference |
 
-In the session page, use `Up` / `Down`, `PgUp` / `PgDn`, `Home` / `End`, and `Esc` or `d` to return to Deep Dive. In pickers and configuration, use `Up` / `Down`, `Home` / `End`, `Enter`, and `Esc`.
+In the session page, use `Up` / `Down`, `PgUp` / `PgDn`, `Home` / `End` to move through calls, `Enter` or a mouse click to open call details, and `Esc` or `d` to return to Deep Dive. In pickers and configuration, use `Up` / `Down`, `Home` / `End`, `Enter`, and `Esc`.
 
 ## Usage Page
 
 The Usage page is always a rolling 24-hour view. It ignores the active period, project filter, and tool filter so every supported tool gets its own section.
+The active sort mode controls the order of tool sections and model rows; rate-limit rows keep their scope/window order.
 
 Each tool section includes:
 

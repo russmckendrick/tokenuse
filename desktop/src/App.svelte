@@ -16,6 +16,8 @@
     ProjectOption,
     ProjectToolMetric,
     RecentModelMetric,
+    SortId,
+    SessionDetail,
     SessionDetailView,
     SessionMetric,
     SessionOption,
@@ -37,6 +39,7 @@
   let busy = false;
   let error: string | null = null;
   let modal: ModalKind = null;
+  let callDetail: SessionDetail | null = null;
   let query = '';
   let exportFormat: ExportFormatId = 'json';
   let pollTimer: number | undefined;
@@ -89,6 +92,23 @@
     query = '';
   }
 
+  function openCallDetail(call: SessionDetail) {
+    modal = null;
+    query = '';
+    callDetail = call;
+  }
+
+  function closeCallDetail() {
+    callDetail = null;
+  }
+
+  function handleCallRowKey(event: KeyboardEvent, call: SessionDetail) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openCallDetail(call);
+    }
+  }
+
   function handleKey(event: KeyboardEvent) {
     const target = event.target as HTMLElement | null;
     if (target?.tagName === 'INPUT' || target?.tagName === 'SELECT') {
@@ -96,6 +116,11 @@
       return;
     }
     if (!snapshot) return;
+
+    if (callDetail) {
+      if (event.key === 'Escape') closeCallDetail();
+      return;
+    }
 
     if (modal) {
       if (event.key === 'Escape') closeModal();
@@ -105,6 +130,12 @@
     if (event.key === 'Escape' && snapshot.page === 'session') {
       event.preventDefault();
       void commit(() => api.closeSession());
+      return;
+    }
+
+    if (event.key.toLowerCase() === 'g') {
+      event.preventDefault();
+      cycleSort();
       return;
     }
 
@@ -163,9 +194,21 @@
     void commit(() => api.setTool(next.value));
   }
 
+  function cycleSort() {
+    if (!snapshot) return;
+    const idx = snapshot.sorts.findIndex((sort) => sort.value === snapshot?.sort);
+    const next = snapshot.sorts[(idx + 1) % snapshot.sorts.length];
+    void commit(() => api.setSort(next.value));
+  }
+
   function setToolFromEvent(event: Event) {
     const value = (event.currentTarget as HTMLSelectElement).value as ToolId;
     void commit(() => api.setTool(value));
+  }
+
+  function setSortFromEvent(event: Event) {
+    const value = (event.currentTarget as HTMLSelectElement).value as SortId;
+    void commit(() => api.setSort(value));
   }
 
   function filteredProjects(): ProjectOption[] {
@@ -232,6 +275,11 @@
 
   function activePage() {
     return snapshot?.page ?? 'overview';
+  }
+
+  function activeSortLabel() {
+    if (!snapshot) return '';
+    return snapshot.sorts.find((sort) => sort.value === snapshot?.sort)?.label ?? '';
   }
 
   function configAction(row: ConfigRow) {
@@ -339,6 +387,15 @@
         </select>
       </div>
 
+      <div class="segmented tool-strip sort-strip" aria-label="Sort">
+        <span>sort</span>
+        <select aria-label="Sort" onchange={setSortFromEvent}>
+          {#each snapshot.sorts as sort}
+            <option value={sort.value} selected={snapshot.sort === sort.value}>{sort.label}</option>
+          {/each}
+        </select>
+      </div>
+
       <button class="project-pill" type="button" onclick={() => openModal('project')}>
         <span>project</span>
         <strong>{snapshot.project.label}</strong>
@@ -353,93 +410,101 @@
 
     <main>
       {#if activePage() === 'overview'}
-        {@render Kpis(snapshot.dashboard.summary, snapshot.currency)}
-        <section class="grid overview-grid">
-          <Panel title="Daily Activity" tone="blue">
-            {@render DailyTable(snapshot.dashboard.daily, 8)}
-          </Panel>
-          <Panel title="By Model" tone="magenta">
-            {@render ModelTable(snapshot.dashboard.models, 8)}
-          </Panel>
-          <Panel title="Project Spend by Tool" tone="yellow">
-            {@render ProjectToolTable(snapshot.dashboard.project_tools, 10)}
-          </Panel>
-          <div class="stack">
-            <Panel title="Shell Commands" tone="orange">
-              {@render CountTable(snapshot.dashboard.commands, 6)}
+        <section class="page overview-page">
+          {@render Kpis(snapshot.dashboard.summary, snapshot.currency)}
+          <section class="grid overview-grid">
+            <Panel title="Daily Activity" tone="blue">
+              {@render DailyTable(snapshot.dashboard.daily)}
             </Panel>
-            <Panel title="MCP Servers" tone="magenta">
-              {@render CountTable(snapshot.dashboard.mcp_servers, 6)}
+            <Panel title="By Model" tone="magenta">
+              {@render ModelTable(snapshot.dashboard.models)}
             </Panel>
-          </div>
+            <Panel title="Project Spend by Tool" tone="yellow">
+              {@render ProjectToolTable(snapshot.dashboard.project_tools)}
+            </Panel>
+            <div class="stack">
+              <Panel title="Shell Commands" tone="orange">
+                {@render CountTable(snapshot.dashboard.commands)}
+              </Panel>
+              <Panel title="MCP Servers" tone="magenta">
+                {@render CountTable(snapshot.dashboard.mcp_servers)}
+              </Panel>
+            </div>
+          </section>
         </section>
       {:else if activePage() === 'deep-dive'}
-        <section class="grid deep-grid">
-          <Panel title="Daily Activity" tone="blue">
-            {@render DailyTable(snapshot.dashboard.daily, 10)}
-          </Panel>
-          <Panel title="By Project" tone="green">
-            {@render ProjectTable(snapshot.dashboard.projects, 10)}
-          </Panel>
-          <Panel title="Top Sessions" tone="red">
-            <button class="panel-command" type="button" onclick={() => openModal('session')}>Open Session Picker</button>
-            {@render SessionTable(snapshot.dashboard.sessions, 12)}
-          </Panel>
-          <Panel title="Project Spend by Tool" tone="yellow">
-            {@render ProjectToolTable(snapshot.dashboard.project_tools, 14)}
-          </Panel>
-          <div class="stack">
-            <Panel title="By Model" tone="magenta">
-              {@render ModelTable(snapshot.dashboard.models, 7)}
+        <section class="page deep-page">
+          <section class="grid deep-grid">
+            <Panel title="Daily Activity" tone="blue">
+              {@render DailyTable(snapshot.dashboard.daily)}
             </Panel>
-            <Panel title="Core Tools" tone="cyan">
-              {@render CountTable(snapshot.dashboard.tools, 7)}
+            <Panel title="By Project" tone="green">
+              {@render ProjectTable(snapshot.dashboard.projects)}
             </Panel>
-          </div>
-          <Panel title="Shell Commands" tone="orange">
-            {@render CountTable(snapshot.dashboard.commands, 10)}
-          </Panel>
-          <Panel title="MCP Servers" tone="magenta">
-            {@render CountTable(snapshot.dashboard.mcp_servers, 10)}
-          </Panel>
+            <Panel title="Top Sessions" tone="red">
+              <button class="panel-command" type="button" onclick={() => openModal('session')}>Open Session Picker</button>
+              {@render SessionTable(snapshot.dashboard.sessions)}
+            </Panel>
+            <Panel title="Project Spend by Tool" tone="yellow">
+              {@render ProjectToolTable(snapshot.dashboard.project_tools)}
+            </Panel>
+            <div class="stack">
+              <Panel title="By Model" tone="magenta">
+                {@render ModelTable(snapshot.dashboard.models)}
+              </Panel>
+              <Panel title="Core Tools" tone="cyan">
+                {@render CountTable(snapshot.dashboard.tools)}
+              </Panel>
+            </div>
+            <Panel title="Shell Commands" tone="orange">
+              {@render CountTable(snapshot.dashboard.commands)}
+            </Panel>
+            <Panel title="MCP Servers" tone="magenta">
+              {@render CountTable(snapshot.dashboard.mcp_servers)}
+            </Panel>
+          </section>
         </section>
       {:else if activePage() === 'usage'}
-        <section class="usage-grid">
-          {#each snapshot.usage.sections as section}
-            {@render UsagePanel(section)}
-          {/each}
+        <section class="page usage-page">
+          <section class="usage-grid">
+            {#each snapshot.usage.sections as section}
+              {@render UsagePanel(section)}
+            {/each}
+          </section>
         </section>
       {:else if activePage() === 'config'}
-        <section class="config-grid">
-          <Panel title="Configuration" tone="cyan">
-            <table>
-              <thead>
-                <tr><th>setting</th><th>value</th><th></th></tr>
-              </thead>
-              <tbody>
-                {#each snapshot.config_rows as row}
-                  <tr>
-                    <td>{row.name}</td>
-                    <td class="muted-cell">{row.value}</td>
-                    <td class="tight">
-                      <button class="row-action" type="button" onclick={() => configAction(row)}>{row.action}</button>
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </Panel>
-          <Panel title="Local Data" tone="green">
-            <div class="config-facts">
-              <div><span>archive</span><strong>{snapshot.source}</strong></div>
-              <div><span>currency</span><strong>{snapshot.currency}</strong></div>
-              <div><span>exports</span><strong>{snapshot.export_dir}</strong></div>
-            </div>
-            <div class="button-row">
-              <button type="button" onclick={() => commit(() => api.refreshArchive())}><Database size={15} /> Refresh</button>
-              <button type="button" onclick={chooseExportDir}><FolderOpen size={15} /> Folder</button>
-            </div>
-          </Panel>
+        <section class="page config-page">
+          <section class="config-grid">
+            <Panel title="Configuration" tone="cyan">
+              <table>
+                <thead>
+                  <tr><th>setting</th><th>value</th><th></th></tr>
+                </thead>
+                <tbody>
+                  {#each snapshot.config_rows as row}
+                    <tr>
+                      <td>{row.name}</td>
+                      <td class="muted-cell">{row.value}</td>
+                      <td class="tight">
+                        <button class="row-action" type="button" onclick={() => configAction(row)}>{row.action}</button>
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </Panel>
+            <Panel title="Local Data" tone="green">
+              <div class="config-facts">
+                <div><span>archive</span><strong>{snapshot.source}</strong></div>
+                <div><span>currency</span><strong>{snapshot.currency}</strong></div>
+                <div><span>exports</span><strong>{snapshot.export_dir}</strong></div>
+              </div>
+              <div class="button-row">
+                <button type="button" onclick={() => commit(() => api.refreshArchive())}><Database size={15} /> Refresh</button>
+                <button type="button" onclick={chooseExportDir}><FolderOpen size={15} /> Folder</button>
+              </div>
+            </Panel>
+          </section>
         </section>
       {:else if activePage() === 'session'}
         {@render SessionDetailPanel(snapshot.session)}
@@ -449,6 +514,7 @@
     <footer>
       <span><b>1-5</b> period</span>
       <span><b>t</b> tool</span>
+      <span><b>g</b> sort {activeSortLabel()}</span>
       <span><b>p</b> project</span>
       <span><b>s</b> session</span>
       <span><b>e</b> export</span>
@@ -526,6 +592,43 @@
       </section>
     </div>
   {/if}
+
+  {#if callDetail}
+    <div class="scrim" role="presentation">
+      <button class="backdrop" type="button" aria-label="Close call detail" onclick={closeCallDetail}></button>
+      <section class="modal detail-modal" role="dialog" aria-modal="true" tabindex="-1">
+        <div class="modal-head">
+          <div class="modal-title">call detail</div>
+          <button class="icon-button" type="button" title="Close" onclick={closeCallDetail}><X size={16} /></button>
+        </div>
+
+        <div class="detail-grid">
+          <div><span>time</span><strong>{callDetail.timestamp}</strong></div>
+          <div><span>model</span><strong>{callDetail.model}</strong></div>
+          <div><span>cost</span><strong class="money">{callDetail.cost}</strong></div>
+          <div><span>tools</span><strong>{callDetail.tools}</strong></div>
+          <div><span>input</span><strong>{count(callDetail.input_tokens)}</strong></div>
+          <div><span>output</span><strong>{count(callDetail.output_tokens)}</strong></div>
+          <div><span>cache read</span><strong>{count(callDetail.cache_read)}</strong></div>
+          <div><span>cache write</span><strong>{count(callDetail.cache_write)}</strong></div>
+          <div><span>reasoning</span><strong>{count(callDetail.reasoning_tokens)}</strong></div>
+          <div><span>web search</span><strong>{count(callDetail.web_search_requests)}</strong></div>
+        </div>
+
+        {#if callDetail.bash_commands.length}
+          <section class="detail-block">
+            <h3>bash</h3>
+            <pre>{callDetail.bash_commands.join('\n')}</pre>
+          </section>
+        {/if}
+
+        <section class="detail-block">
+          <h3>prompt</h3>
+          <pre>{callDetail.prompt_full || callDetail.prompt || '-'}</pre>
+        </section>
+      </section>
+    </div>
+  {/if}
 {:else}
   <div class="loading">Token Use</div>
 {/if}
@@ -556,22 +659,22 @@
   </section>
 {/snippet}
 
-{#snippet DailyTable(rows: DailyMetric[], limit: number)}
+{#snippet DailyTable(rows: DailyMetric[])}
   <table>
     <thead><tr><th>date</th><th></th><th>cost</th><th>calls</th></tr></thead>
     <tbody>
-      {#each rows.slice(0, limit) as row}
+      {#each rows as row}
         <tr><td>{row.day}</td><td>{@render heat(row.value)}</td><td class="money">{row.cost}</td><td>{count(row.calls)}</td></tr>
       {/each}
     </tbody>
   </table>
 {/snippet}
 
-{#snippet ProjectTable(rows: ProjectMetric[], limit: number)}
+{#snippet ProjectTable(rows: ProjectMetric[])}
   <table>
     <thead><tr><th></th><th>project</th><th>cost</th><th>avg/s</th><th>sess</th><th>tools</th></tr></thead>
     <tbody>
-      {#each rows.slice(0, limit) as row}
+      {#each rows as row}
         <tr>
           <td>{@render heat(row.value)}</td>
           <td>{row.name}</td>
@@ -585,11 +688,11 @@
   </table>
 {/snippet}
 
-{#snippet ProjectToolTable(rows: ProjectToolMetric[], limit: number)}
+{#snippet ProjectToolTable(rows: ProjectToolMetric[])}
   <table>
     <thead><tr><th></th><th>project</th><th>tool</th><th>cost</th><th>calls</th><th>sess</th><th>avg/s</th></tr></thead>
     <tbody>
-      {#each rows.slice(0, limit) as row}
+      {#each rows as row}
         <tr>
           <td>{@render heat(row.value)}</td>
           <td>{row.project}</td>
@@ -604,33 +707,33 @@
   </table>
 {/snippet}
 
-{#snippet SessionTable(rows: SessionMetric[], limit: number)}
+{#snippet SessionTable(rows: SessionMetric[])}
   <table>
     <thead><tr><th></th><th>date</th><th>project</th><th>cost</th><th>calls</th></tr></thead>
     <tbody>
-      {#each rows.slice(0, limit) as row}
+      {#each rows as row}
         <tr><td>{@render heat(row.value)}</td><td>{row.date}</td><td>{row.project}</td><td class="money">{row.cost}</td><td>{count(row.calls)}</td></tr>
       {/each}
     </tbody>
   </table>
 {/snippet}
 
-{#snippet ModelTable(rows: ModelMetric[], limit: number)}
+{#snippet ModelTable(rows: ModelMetric[])}
   <table>
     <thead><tr><th></th><th>model</th><th>cost</th><th>cache</th><th>calls</th></tr></thead>
     <tbody>
-      {#each rows.slice(0, limit) as row}
+      {#each rows as row}
         <tr><td>{@render heat(row.value)}</td><td>{row.name}</td><td class="money">{row.cost}</td><td>{row.cache}</td><td>{count(row.calls)}</td></tr>
       {/each}
     </tbody>
   </table>
 {/snippet}
 
-{#snippet CountTable(rows: CountMetric[], limit: number)}
+{#snippet CountTable(rows: CountMetric[])}
   <table>
     <thead><tr><th></th><th>name</th><th>calls</th></tr></thead>
     <tbody>
-      {#each rows.slice(0, limit) as row}
+      {#each rows as row}
         <tr><td>{@render heat(row.value)}</td><td>{row.name}</td><td>{count(row.calls)}</td></tr>
       {/each}
     </tbody>
@@ -692,28 +795,37 @@
         <div><span>output</span><strong>{session.total_output}</strong><small>tokens</small></div>
         <div><span>cache read</span><strong>{session.total_cache_read}</strong><small>tokens</small></div>
       </section>
-      {#if session.note}<div class="status-line">{session.note}</div>{/if}
-      <Panel title="Calls" tone="red">
-        <table>
-          <thead><tr><th>time</th><th>model</th><th>cost</th><th>in</th><th>out</th><th>cache</th><th>tools</th><th>prompt</th></tr></thead>
-          <tbody>
-            {#each session.calls as call}
-              <tr>
-                <td>{call.timestamp}</td>
-                <td>{call.model}</td>
-                <td class="money">{call.cost}</td>
-                <td>{count(call.input_tokens)}</td>
-                <td>{count(call.output_tokens)}</td>
-                <td>{count(call.cache_read + call.cache_write)}</td>
-                <td>{call.tools}</td>
-                <td class="prompt-cell">{call.prompt}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </Panel>
+      <div class="session-panel-area">
+        {#if session.note}<div class="status-line">{session.note}</div>{/if}
+        <Panel title="Calls" tone="red">
+          <table>
+            <thead><tr><th>time</th><th>model</th><th>cost</th><th>in</th><th>out</th><th>cache</th><th>tools</th><th>prompt</th></tr></thead>
+            <tbody>
+              {#each session.calls as call}
+                <tr
+                  class="click-row"
+                  tabindex="0"
+                  onclick={() => openCallDetail(call)}
+                  onkeydown={(event) => handleCallRowKey(event, call)}
+                >
+                  <td>{call.timestamp}</td>
+                  <td>{call.model}</td>
+                  <td class="money">{call.cost}</td>
+                  <td>{count(call.input_tokens)}</td>
+                  <td>{count(call.output_tokens)}</td>
+                  <td>{count(call.cache_read + call.cache_write)}</td>
+                  <td>{call.tools}</td>
+                  <td class="prompt-cell">{call.prompt}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </Panel>
+      </div>
     {:else}
-      <div class="empty-state">no session selected</div>
+      <div class="session-panel-area">
+        <div class="empty-state">no session selected</div>
+      </div>
     {/if}
   </section>
 {/snippet}

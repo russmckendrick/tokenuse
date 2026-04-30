@@ -4,12 +4,17 @@ use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::time::Duration;
 
 use color_eyre::Result;
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
+use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 
 use crate::archive;
 use crate::config::{ConfigPaths, UserConfig};
 use crate::currency::{CurrencyFormatter, CurrencyTable};
-use crate::data::{DashboardData, LimitsData, ProjectOption, SessionDetailView, SessionOption};
+use crate::data::{
+    DashboardData, LimitsData, ProjectOption, SessionDetail, SessionDetailView, SessionOption,
+};
 use crate::export::ExportFormat;
 use crate::ingest::Ingested;
 
@@ -59,6 +64,33 @@ pub enum Tool {
     Cursor,
     Codex,
     Copilot,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SortMode {
+    Spend,
+    Date,
+    Tokens,
+}
+
+impl SortMode {
+    pub const ALL: [Self; 3] = [Self::Spend, Self::Date, Self::Tokens];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Spend => "Spend",
+            Self::Date => "Date",
+            Self::Tokens => "Tokens",
+        }
+    }
+
+    pub fn next(self) -> Self {
+        match self {
+            Self::Spend => Self::Date,
+            Self::Date => Self::Tokens,
+            Self::Tokens => Self::Spend,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,6 +148,24 @@ impl Tool {
             Self::Copilot => Self::All,
         }
     }
+}
+
+fn session_calls_area(terminal_area: Rect) -> Rect {
+    let area = terminal_area.inner(Margin {
+        horizontal: 1,
+        vertical: 1,
+    });
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(4),
+            Constraint::Length(1),
+            Constraint::Min(8),
+            Constraint::Length(3),
+        ])
+        .split(area);
+    sections[3]
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -532,6 +582,7 @@ pub struct App {
     pub page: Page,
     pub period: Period,
     pub tool: Tool,
+    pub sort: SortMode,
     pub project_filter: ProjectFilter,
     pub project_modal: Option<ProjectModal>,
     pub currency_modal: Option<CurrencyModal>,
@@ -542,6 +593,8 @@ pub struct App {
     pub export_dir: PathBuf,
     pub session_view: Option<SessionDetailView>,
     pub session_scroll: usize,
+    pub session_selected: usize,
+    pub call_detail_index: Option<usize>,
     pub help_open: bool,
     pub refresher: Option<Refresher>,
     pub config_selected: usize,
@@ -561,6 +614,7 @@ impl Default for App {
             page: Page::Overview,
             period: Period::Week,
             tool: Tool::All,
+            sort: SortMode::Spend,
             project_filter: ProjectFilter::All,
             project_modal: None,
             currency_modal: None,
@@ -571,6 +625,8 @@ impl Default for App {
             export_dir,
             session_view: None,
             session_scroll: 0,
+            session_selected: 0,
+            call_detail_index: None,
             help_open: false,
             refresher: None,
             config_selected: 0,
@@ -624,20 +680,28 @@ impl App {
     pub fn dashboard(&self) -> DashboardData {
         let currency = self.currency();
         match &self.source {
-            DataSource::Live(ingested) => {
-                ingested.dashboard(self.period, self.tool, &self.project_filter, &currency)
-            }
-            DataSource::Sample => {
-                crate::data::dashboard_data(self.period, self.tool, &self.project_filter, &currency)
-            }
+            DataSource::Live(ingested) => ingested.dashboard(
+                self.period,
+                self.tool,
+                &self.project_filter,
+                self.sort,
+                &currency,
+            ),
+            DataSource::Sample => crate::data::dashboard_data(
+                self.period,
+                self.tool,
+                &self.project_filter,
+                self.sort,
+                &currency,
+            ),
         }
     }
 
     pub fn usage(&self) -> LimitsData {
         let currency = self.currency();
         match &self.source {
-            DataSource::Live(ingested) => ingested.limits(self.tool, &currency),
-            DataSource::Sample => crate::data::limits_data(self.tool),
+            DataSource::Live(ingested) => ingested.limits(self.tool, self.sort, &currency),
+            DataSource::Sample => crate::data::limits_data(self.tool, self.sort),
         }
     }
 
@@ -709,24 +773,31 @@ impl App {
         if let Some(view) = self.session_view.as_ref() {
             let key = view.key.clone();
             self.session_view = self.lookup_session_view(&key);
+            self.clamp_session_call_state();
         }
     }
 
     pub fn session_options(&self) -> Vec<SessionOption> {
         let currency = self.currency();
         match &self.source {
-            DataSource::Live(ingested) => {
-                ingested.session_options(self.period, self.tool, &self.project_filter, &currency)
+            DataSource::Live(ingested) => ingested.session_options(
+                self.period,
+                self.tool,
+                &self.project_filter,
+                self.sort,
+                &currency,
+            ),
+            DataSource::Sample => {
+                crate::data::session_options(self.period, self.tool, self.sort, &currency)
             }
-            DataSource::Sample => crate::data::session_options(self.period, self.tool, &currency),
         }
     }
 
     pub fn lookup_session_view(&self, key: &str) -> Option<SessionDetailView> {
         let currency = self.currency();
         match &self.source {
-            DataSource::Live(ingested) => ingested.session_detail(key, &currency),
-            DataSource::Sample => crate::data::session_detail(key, &currency),
+            DataSource::Live(ingested) => ingested.session_detail(key, self.sort, &currency),
+            DataSource::Sample => crate::data::session_detail(key, self.sort, &currency),
         }
     }
 
@@ -807,6 +878,8 @@ impl App {
             Some(view) => {
                 self.session_view = Some(view);
                 self.session_scroll = 0;
+                self.session_selected = 0;
+                self.call_detail_index = None;
                 self.page = Page::Session;
             }
             None => {
@@ -819,6 +892,67 @@ impl App {
         self.page = Page::DeepDive;
         self.session_view = None;
         self.session_scroll = 0;
+        self.session_selected = 0;
+        self.call_detail_index = None;
+    }
+
+    pub fn selected_call_detail(&self) -> Option<&SessionDetail> {
+        let view = self.session_view.as_ref()?;
+        let idx = self.call_detail_index?;
+        view.calls.get(idx)
+    }
+
+    pub fn open_session_call_detail(&mut self, idx: usize) {
+        if self
+            .session_view
+            .as_ref()
+            .is_some_and(|view| idx < view.calls.len())
+        {
+            self.session_selected = idx;
+            self.call_detail_index = Some(idx);
+        }
+    }
+
+    fn close_call_detail(&mut self) {
+        self.call_detail_index = None;
+    }
+
+    fn clamp_session_call_state(&mut self) {
+        let row_count = self
+            .session_view
+            .as_ref()
+            .map(|view| view.calls.len())
+            .unwrap_or(0);
+        if row_count == 0 {
+            self.session_scroll = 0;
+            self.session_selected = 0;
+            self.call_detail_index = None;
+            return;
+        }
+
+        let last = row_count - 1;
+        self.session_scroll = self.session_scroll.min(last);
+        self.session_selected = self.session_selected.min(last);
+        if self.call_detail_index.is_some_and(|idx| idx > last) {
+            self.call_detail_index = None;
+        }
+    }
+
+    fn select_session_call(&mut self, idx: usize) {
+        let row_count = self
+            .session_view
+            .as_ref()
+            .map(|view| view.calls.len())
+            .unwrap_or(0);
+        if row_count == 0 {
+            self.session_scroll = 0;
+            self.session_selected = 0;
+            return;
+        }
+
+        let idx = idx.min(row_count - 1);
+        self.session_selected = idx;
+        self.session_scroll = idx;
     }
 
     fn handle_session_page_key(&mut self, key: KeyEvent) {
@@ -832,23 +966,26 @@ impl App {
                 self.page = Page::DeepDive;
                 self.session_view = None;
                 self.session_scroll = 0;
+                self.session_selected = 0;
+                self.call_detail_index = None;
             }
             KeyCode::Up => {
-                self.session_scroll = self.session_scroll.saturating_sub(1);
+                self.select_session_call(self.session_selected.saturating_sub(1));
             }
             KeyCode::Down => {
                 let last = row_count.saturating_sub(1);
-                self.session_scroll = (self.session_scroll + 1).min(last);
+                self.select_session_call((self.session_selected + 1).min(last));
             }
             KeyCode::PageUp => {
-                self.session_scroll = self.session_scroll.saturating_sub(10);
+                self.select_session_call(self.session_selected.saturating_sub(10));
             }
             KeyCode::PageDown => {
                 let last = row_count.saturating_sub(1);
-                self.session_scroll = (self.session_scroll + 10).min(last);
+                self.select_session_call((self.session_selected + 10).min(last));
             }
-            KeyCode::Home => self.session_scroll = 0,
-            KeyCode::End => self.session_scroll = row_count.saturating_sub(1),
+            KeyCode::Home => self.select_session_call(0),
+            KeyCode::End => self.select_session_call(row_count.saturating_sub(1)),
+            KeyCode::Enter => self.open_session_call_detail(self.session_selected),
             KeyCode::Char('r') => self.reload(),
             KeyCode::Char('s') => self.open_session_modal(),
             _ => {}
@@ -1046,6 +1183,15 @@ impl App {
             return;
         }
 
+        if self.call_detail_index.is_some() {
+            match key.code {
+                KeyCode::Esc | KeyCode::Enter => self.close_call_detail(),
+                KeyCode::Char('q') => self.should_quit = true,
+                _ => {}
+            }
+            return;
+        }
+
         if self.currency_modal.is_some() {
             self.handle_currency_modal_key(key);
             return;
@@ -1086,6 +1232,11 @@ impl App {
             return;
         }
 
+        if is_sort_key(key) {
+            self.cycle_sort();
+            return;
+        }
+
         if self.page == Page::Config {
             self.handle_config_key(key);
             return;
@@ -1123,13 +1274,64 @@ impl App {
         }
     }
 
+    pub fn handle_mouse(&mut self, mouse: MouseEvent, terminal_area: Rect) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+
+        if self.call_detail_index.is_some() {
+            self.close_call_detail();
+            return;
+        }
+
+        if self.page != Page::Session {
+            return;
+        }
+
+        if let Some(idx) = self.session_call_index_at(terminal_area, mouse.column, mouse.row) {
+            self.open_session_call_detail(idx);
+        }
+    }
+
+    pub fn session_call_index_at(
+        &self,
+        terminal_area: Rect,
+        column: u16,
+        row: u16,
+    ) -> Option<usize> {
+        let calls_len = self.session_view.as_ref()?.calls.len();
+        if calls_len == 0 || terminal_area.width < 120 || terminal_area.height < 40 {
+            return None;
+        }
+
+        let table_area = session_calls_area(terminal_area);
+        let row_top = table_area.y.saturating_add(2);
+        let row_bottom = table_area
+            .y
+            .saturating_add(table_area.height)
+            .saturating_sub(1);
+
+        if column < table_area.x
+            || column >= table_area.x.saturating_add(table_area.width)
+            || row < row_top
+            || row >= row_bottom
+        {
+            return None;
+        }
+
+        let idx = self.session_scroll + usize::from(row - row_top);
+        (idx < calls_len).then_some(idx)
+    }
+
     pub fn project_options(&self) -> Vec<ProjectOption> {
         let currency = self.currency();
         match &self.source {
             DataSource::Live(ingested) => {
-                ingested.project_options(self.period, self.tool, &currency)
+                ingested.project_options(self.period, self.tool, self.sort, &currency)
             }
-            DataSource::Sample => crate::data::project_options(self.period, self.tool, &currency),
+            DataSource::Sample => {
+                crate::data::project_options(self.period, self.tool, self.sort, &currency)
+            }
         }
     }
 
@@ -1139,6 +1341,19 @@ impl App {
 
     pub fn set_tool(&mut self, tool: Tool) {
         self.tool = tool;
+    }
+
+    pub fn set_sort(&mut self, sort: SortMode) {
+        self.sort = sort;
+        if let Some(view) = self.session_view.as_ref() {
+            let key = view.key.clone();
+            self.session_view = self.lookup_session_view(&key);
+            self.clamp_session_call_state();
+        }
+    }
+
+    fn cycle_sort(&mut self) {
+        self.set_sort(self.sort.next());
     }
 
     pub fn set_project_by_identity(&mut self, identity: Option<&str>) {
@@ -1433,9 +1648,14 @@ impl App {
     }
 }
 
+fn is_sort_key(key: KeyEvent) -> bool {
+    matches!(key.code, KeyCode::Char('g'))
+}
+
 #[cfg(test)]
 mod tests {
-    use crossterm::event::KeyModifiers;
+    use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+    use ratatui::layout::Rect;
 
     use super::*;
 
@@ -1457,6 +1677,45 @@ mod tests {
         path
     }
 
+    fn call(label: &str) -> SessionDetail {
+        SessionDetail {
+            timestamp: "04-29 12:00".into(),
+            model: "gpt-5".into(),
+            cost: "$0.12".into(),
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read: 20,
+            cache_write: 5,
+            reasoning_tokens: 3,
+            web_search_requests: 1,
+            tools: "Bash".into(),
+            bash_commands: vec!["cargo test".into()],
+            prompt: label.into(),
+            prompt_full: format!("{label} full prompt"),
+        }
+    }
+
+    fn app_with_session_calls(count: usize) -> App {
+        App {
+            page: Page::Session,
+            session_view: Some(SessionDetailView {
+                key: "codex:s1".into(),
+                session_id: "s1".into(),
+                project: "tokens".into(),
+                tool: "Codex",
+                date_range: "2026-04-29".into(),
+                total_cost: "$1.00".into(),
+                total_calls: count as u64,
+                total_input: "100".into(),
+                total_output: "50".into(),
+                total_cache_read: "20".into(),
+                calls: (0..count).map(|idx| call(&format!("call {idx}"))).collect(),
+                note: None,
+            }),
+            ..App::default()
+        }
+    }
+
     #[test]
     fn t_cycles_tool_filter() {
         let mut app = App::default();
@@ -1464,6 +1723,20 @@ mod tests {
         app.handle_key(key(KeyCode::Char('t')));
 
         assert_eq!(app.tool, Tool::ClaudeCode);
+    }
+
+    #[test]
+    fn g_cycles_sort_mode() {
+        let mut app = App::default();
+
+        app.handle_key(key(KeyCode::Char('g')));
+        assert_eq!(app.sort, SortMode::Date);
+
+        app.handle_key(key(KeyCode::Char('g')));
+        assert_eq!(app.sort, SortMode::Tokens);
+
+        app.handle_key(key(KeyCode::Char('g')));
+        assert_eq!(app.sort, SortMode::Spend);
     }
 
     #[test]
@@ -1514,6 +1787,46 @@ mod tests {
 
         app.handle_key(key(KeyCode::Char('o')));
         assert_eq!(app.page, Page::Overview);
+    }
+
+    #[test]
+    fn session_enter_opens_and_escape_closes_call_detail() {
+        let mut app = app_with_session_calls(3);
+
+        app.handle_key(key(KeyCode::Down));
+        assert_eq!(app.session_selected, 1);
+        assert_eq!(app.session_scroll, 1);
+
+        app.handle_key(key(KeyCode::Enter));
+        assert_eq!(app.call_detail_index, Some(1));
+        assert_eq!(
+            app.selected_call_detail()
+                .map(|call| call.prompt_full.as_str()),
+            Some("call 1 full prompt")
+        );
+
+        app.handle_key(key(KeyCode::Esc));
+        assert_eq!(app.call_detail_index, None);
+        assert_eq!(app.page, Page::Session);
+    }
+
+    #[test]
+    fn session_mouse_click_opens_visible_call_detail() {
+        let mut app = app_with_session_calls(5);
+        app.session_scroll = 1;
+        let terminal_area = Rect::new(0, 0, 170, 64);
+        let table_area = session_calls_area(terminal_area);
+        let mouse = MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: table_area.x + 2,
+            row: table_area.y + 3,
+            modifiers: KeyModifiers::NONE,
+        };
+
+        app.handle_mouse(mouse, terminal_area);
+
+        assert_eq!(app.call_detail_index, Some(2));
+        assert_eq!(app.session_selected, 2);
     }
 
     #[test]

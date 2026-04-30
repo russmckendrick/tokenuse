@@ -74,17 +74,19 @@ The dashboard panels are built from the filtered call set:
 
 - Summary: cost, call count, tool-qualified session count, cache hit rate, input, output, cache reads, and cache writes.
 - Daily Activity: cost and calls by local date.
-- By Project: top projects by cost, average cost per session, and top tool spend mix.
-- Top Sessions: highest-cost sessions, keyed by `tool:session_id`.
-- Project Spend by Tool: project/tool rows sorted by project total, then tool spend.
+- By Project: projects with cost, average cost per session, and top tool spend mix.
+- Top Sessions: sessions keyed by `tool:session_id`.
+- Project Spend by Tool: project/tool rows with cost, calls, session count, and average cost per session.
 - By Model: model display name, cost, calls, and cache percentage.
 - Core Tools: normalized assistant tool calls.
 - Shell Commands: first word of split Bash commands.
 - MCP Servers: tool names shaped like `mcp__server__tool`, grouped by server.
 
+`App::sort` is a runtime-only `SortMode` (`Spend`, `Date`, `Tokens`) and defaults to spend on launch. Aggregators carry cost, activity tokens (`input + output + cache_creation + cache_read`), and latest timestamp until rows are ordered; count-style tables split a call's cost/tokens evenly across the row occurrences they emit while keeping occurrence counts unchanged. Exports serialize the already-sorted `DashboardData`.
+
 ## Pages And Modals
 
-The TUI is a small state machine over five pages (Overview, Deep Dive, Usage, Config, Session) plus six overlay modals. The first three pages are reachable through the tab strip via `Tab` / `Shift-Tab` or their direct keys; Config and Session are sub-pages opened from any tab. All routing lives in `src/app.rs`; rendering is dispatched from `src/ui.rs`.
+The TUI is a small state machine over five pages (Overview, Deep Dive, Usage, Config, Session) plus six overlay modals. The first three pages are reachable through the tab strip via `Tab` / `Shift-Tab` or their direct keys; Config and Session are sub-pages opened from any tab. `g` cycles the global sort mode. All routing lives in `src/app.rs`; rendering is dispatched from `src/ui.rs`.
 
 ```mermaid
 flowchart LR
@@ -119,8 +121,8 @@ flowchart LR
 
 - **Overview** (`Page::Overview`): default landing page. Compact KPI strip plus daily activity, models, project/tool spend, shell commands, and MCP servers. Acts as the at-a-glance landing for everyday use.
 - **Deep Dive** (`Page::DeepDive`): every panel listed under [Aggregation](#aggregation), including top sessions and core tool counts that are not on Overview.
-- **Usage** (`Page::Usage`): per-tool 24-hour activity histogram, optional plan-side rate limit windows, and top-3 models per tool. Built from `Ingested::limits` over the same `ParsedCall` set plus `LimitSnapshot` records. Period and project filters are deliberately ignored. See [TUI usage](../guides/tui-usage.md#usage-page).
-- **Session** (`Page::Session`): drill-down for one `tool:session_id`. Rendered from `SessionDetailView`, computed by filtering `Ingested.calls` by `session_key(call) == key` and sorting by timestamp. Live data shows per-call timestamp, model, cost, in/out tokens, cache, tools used, and a 120-char single-line prompt snippet. Sample mode shows a privacy note since per-call records are not bundled.
+- **Usage** (`Page::Usage`): per-tool 24-hour activity histogram, optional plan-side rate limit windows, and top-3 models per tool. Built from `Ingested::limits` over the same `ParsedCall` set plus `LimitSnapshot` records. Period and project filters are deliberately ignored, while sort mode controls section/model order. See [TUI usage](../guides/tui-usage.md#usage-page).
+- **Session** (`Page::Session`): drill-down for one `tool:session_id`. Rendered from `SessionDetailView`, computed by filtering `Ingested.calls` by `session_key(call) == key` and sorting calls with the active sort mode. Live data shows per-call timestamp, model, cost, in/out tokens, cache, tools used, and a 120-char single-line prompt snippet; selecting a call opens a modal with the full stored prompt plus reasoning/web-search counts and bash commands. Sample mode shows a privacy note since per-call records are not bundled.
 - **Config** (`Page::Config`): currency override + local data refresh actions (rates, LiteLLM pricing).
 - **Project picker, Currency picker, Session picker** (`*Modal` structs): each holds `options`, a typeable `query`, and a `filtered: Vec<usize>` mapping; all three share the same case-insensitive substring filter pattern. The project picker pins `All` regardless of query.
 - **Export picker** (`ExportModal`): four-row chooser (`JSON`, `CSV`, `SVG`, `PNG`) showing the active session export folder. `Enter` writes to that folder; `f` or `b` opens the folder picker.

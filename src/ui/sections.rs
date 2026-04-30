@@ -2,14 +2,14 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     prelude::{Color, Frame, Line, Modifier, Span, Style},
     text::Text,
-    widgets::{Cell, Clear, Paragraph, Row, Table, Widget},
+    widgets::{Cell, Clear, Paragraph, Row, Table, Widget, Wrap},
 };
 
 use crate::{
     app::{App, ConfigDownload, FolderPickerEntryKind, Page, Period},
     data::{
         CountMetric, DailyMetric, ModelMetric, ProjectMetric, ProjectToolMetric, RecentModelMetric,
-        RecentUsageMetric, SessionMetric, Summary, ToolLimitSection,
+        RecentUsageMetric, SessionDetail, SessionMetric, Summary, ToolLimitSection,
     },
     theme,
 };
@@ -26,14 +26,17 @@ pub(super) fn render_title_bar(frame: &mut Frame<'_>, area: Rect, app: &App) {
         .constraints([
             Constraint::Length(28),
             Constraint::Min(20),
-            Constraint::Length(44),
+            Constraint::Length(58),
         ])
         .split(inner);
 
-    let version = format!("tokenuse · v{}", env!("CARGO_PKG_VERSION"));
-    Paragraph::new(Line::from(Span::styled(version, theme::key())))
-        .style(theme::base())
-        .render(columns[0], frame.buffer_mut());
+    Paragraph::new(Line::from(vec![
+        Span::styled("▂▅█▆", theme::key().add_modifier(Modifier::BOLD)),
+        Span::raw("  "),
+        Span::styled("Token Use", theme::key().add_modifier(Modifier::BOLD)),
+    ]))
+    .style(theme::base())
+    .render(columns[0], frame.buffer_mut());
 
     let mut tab_spans: Vec<Span<'_>> = Vec::new();
     for (i, tab) in Page::TABS.iter().enumerate() {
@@ -59,6 +62,9 @@ pub(super) fn render_title_bar(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Span::styled("  ·  ", theme::dim()),
         Span::styled("[p] ", theme::key()),
         Span::styled(app.project_filter.label().to_string(), theme::muted()),
+        Span::styled("  ·  ", theme::dim()),
+        Span::styled("[g] ", theme::key()),
+        Span::styled(app.sort.label(), theme::muted()),
     ]))
     .alignment(Alignment::Right)
     .style(theme::base())
@@ -370,7 +376,7 @@ pub(super) fn render_limits(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
     render_title_bar(frame, sections[0], app);
 
     Paragraph::new(Line::from(Span::styled(
-        "sorted by 24h usage",
+        format!("sorted by 24h {}", app.sort.label().to_lowercase()),
         theme::muted(),
     )))
     .style(theme::base())
@@ -617,6 +623,7 @@ pub(super) fn render_session_page(frame: &mut Frame<'_>, area: Rect, root: Rect,
     render_session_modal(frame, root, app);
     render_currency_modal(frame, root, app);
     render_project_modal(frame, root, app);
+    render_call_detail_modal(frame, root, app);
 }
 
 fn render_session_header(frame: &mut Frame<'_>, area: Rect, _app: &App) {
@@ -695,19 +702,28 @@ fn render_session_calls(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let start = app.session_scroll.min(total.saturating_sub(1));
     let end = (start + inner_height.max(1)).min(total);
 
-    let rows = view.calls[start..end].iter().map(|call| {
-        Row::new(vec![
-            Cell::from(call.timestamp.clone()).style(theme::muted()),
-            Cell::from(call.model.clone()).style(theme::base()),
-            Cell::from(call.cost.clone()).style(theme::money()),
-            Cell::from(format_compact_u64(call.input_tokens)).style(theme::base()),
-            Cell::from(format_compact_u64(call.output_tokens)).style(theme::base()),
-            Cell::from(format_compact_u64(call.cache_read)).style(theme::muted()),
-            Cell::from(format_compact_u64(call.cache_write)).style(theme::muted()),
-            Cell::from(call.tools.clone()).style(theme::base().fg(theme::BLUE_SOFT)),
-            Cell::from(call.prompt.clone()).style(theme::muted()),
-        ])
-    });
+    let rows = view.calls[start..end]
+        .iter()
+        .enumerate()
+        .map(|(offset, call)| {
+            let idx = start + offset;
+            let bg = if idx == app.session_selected {
+                theme::SURFACE
+            } else {
+                theme::BACKGROUND
+            };
+            Row::new(vec![
+                Cell::from(call.timestamp.clone()).style(theme::muted().bg(bg)),
+                Cell::from(call.model.clone()).style(theme::base().bg(bg)),
+                Cell::from(call.cost.clone()).style(theme::money().bg(bg)),
+                Cell::from(format_compact_u64(call.input_tokens)).style(theme::base().bg(bg)),
+                Cell::from(format_compact_u64(call.output_tokens)).style(theme::base().bg(bg)),
+                Cell::from(format_compact_u64(call.cache_read)).style(theme::muted().bg(bg)),
+                Cell::from(format_compact_u64(call.cache_write)).style(theme::muted().bg(bg)),
+                Cell::from(call.tools.clone()).style(theme::base().fg(theme::BLUE_SOFT).bg(bg)),
+                Cell::from(call.prompt.clone()).style(theme::muted().bg(bg)),
+            ])
+        });
 
     let title = format!(
         "Calls · {}–{} of {}",
@@ -744,6 +760,103 @@ fn render_session_calls(frame: &mut Frame<'_>, area: Rect, app: &App) {
     .block(theme::panel_block(&title, theme::CYAN));
 
     frame.render_widget(table, area);
+}
+
+fn render_call_detail_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let Some(call) = app.selected_call_detail() else {
+        return;
+    };
+
+    let width = 110.min(area.width.saturating_sub(4)).max(70);
+    let height = 30.min(area.height.saturating_sub(4)).max(18);
+    let modal_area = centered_rect(width, height, area);
+    Clear.render(modal_area, frame.buffer_mut());
+
+    let title = format!(
+        "Call Detail · {}",
+        app.call_detail_index
+            .map(|idx| idx.saturating_add(1).to_string())
+            .unwrap_or_else(|| "-".into())
+    );
+    let block = theme::panel_block(&title, theme::PRIMARY);
+    let inner = block.inner(modal_area);
+    block.render(modal_area, frame.buffer_mut());
+
+    let lines = call_detail_lines(call);
+    Paragraph::new(Text::from(lines))
+        .style(theme::base())
+        .wrap(Wrap { trim: false })
+        .render(inner, frame.buffer_mut());
+}
+
+fn call_detail_lines(call: &SessionDetail) -> Vec<Line<'static>> {
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled("time ", theme::dim()),
+            Span::styled(call.timestamp.clone(), theme::muted()),
+            Span::raw("   "),
+            Span::styled("model ", theme::dim()),
+            Span::styled(call.model.clone(), theme::base()),
+            Span::raw("   "),
+            Span::styled("cost ", theme::dim()),
+            Span::styled(
+                call.cost.clone(),
+                theme::money().add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("in ", theme::dim()),
+            Span::styled(format_compact_u64(call.input_tokens), theme::base()),
+            Span::raw("   "),
+            Span::styled("out ", theme::dim()),
+            Span::styled(format_compact_u64(call.output_tokens), theme::base()),
+            Span::raw("   "),
+            Span::styled("cache r ", theme::dim()),
+            Span::styled(format_compact_u64(call.cache_read), theme::muted()),
+            Span::raw("   "),
+            Span::styled("cache w ", theme::dim()),
+            Span::styled(format_compact_u64(call.cache_write), theme::muted()),
+            Span::raw("   "),
+            Span::styled("reasoning ", theme::dim()),
+            Span::styled(format_compact_u64(call.reasoning_tokens), theme::muted()),
+            Span::raw("   "),
+            Span::styled("web ", theme::dim()),
+            Span::styled(format_compact_u64(call.web_search_requests), theme::muted()),
+        ]),
+        Line::from(vec![
+            Span::styled("tools ", theme::dim()),
+            Span::styled(call.tools.clone(), theme::base().fg(theme::BLUE_SOFT)),
+        ]),
+    ];
+
+    if !call.bash_commands.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![Span::styled("bash", theme::key())]));
+        for command in &call.bash_commands {
+            lines.push(Line::from(vec![
+                Span::styled("$ ", theme::dim()),
+                Span::styled(command.clone(), theme::muted()),
+            ]));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![Span::styled("prompt", theme::key())]));
+    lines.push(Line::from(Span::styled(
+        if call.prompt_full.is_empty() {
+            "-".to_string()
+        } else {
+            call.prompt_full.clone()
+        },
+        theme::muted(),
+    )));
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("Esc/Enter", theme::key()),
+        Span::styled(" close", theme::muted()),
+    ]));
+
+    lines
 }
 
 fn format_compact_u64(n: u64) -> String {
@@ -795,7 +908,11 @@ pub(super) fn render_help_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
         ),
         (
             "Filter",
-            vec![("t", "cycle tool"), ("p", "project picker (typeable)")],
+            vec![
+                ("t", "cycle tool"),
+                ("g", "cycle sort mode"),
+                ("p", "project picker (typeable)"),
+            ],
         ),
         (
             "Tabs",
@@ -831,7 +948,8 @@ pub(super) fn render_help_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
         (
             "Session page",
             vec![
-                ("Up/Down  PgUp/PgDn", "scroll calls"),
+                ("Up/Down  PgUp/PgDn", "select calls"),
+                ("Enter / click", "call details"),
                 ("Home/End", "jump to ends"),
                 ("d  Esc", "back to dashboard"),
             ],
@@ -1217,9 +1335,13 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
             Span::styled("Esc/d", theme::key()),
             Span::styled(" dashboard    ", theme::muted()),
             Span::styled("Up/Down", theme::key()),
-            Span::styled(" scroll    ", theme::muted()),
+            Span::styled(" move    ", theme::muted()),
+            Span::styled("Enter", theme::key()),
+            Span::styled(" detail    ", theme::muted()),
             Span::styled("s", theme::key()),
             Span::styled(" pick    ", theme::muted()),
+            Span::styled("g", theme::key()),
+            Span::styled(" sort    ", theme::muted()),
             Span::styled("h", theme::key()),
             Span::styled(" help", theme::muted()),
         ]);
@@ -1242,6 +1364,8 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
             Span::styled(" overview/deep    ", theme::muted()),
             Span::styled("c", theme::key()),
             Span::styled(" config    ", theme::muted()),
+            Span::styled("g", theme::key()),
+            Span::styled(" sort    ", theme::muted()),
             Span::styled("h", theme::key()),
             Span::styled(" help", theme::muted()),
         ]);
@@ -1268,6 +1392,9 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
         footer_period("4", "month", app.period == Period::Month),
         Span::raw("    "),
         footer_period("5", "all", app.period == Period::AllTime),
+        Span::raw("    "),
+        Span::styled("g", theme::key()),
+        Span::styled(" sort", theme::muted()),
         Span::raw("    "),
         Span::styled("h", theme::key()),
         Span::styled(" help", theme::muted()),

@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::app::{Period, ProjectFilter, Tool};
+use crate::app::{Period, ProjectFilter, SortMode, Tool};
 use crate::currency::CurrencyFormatter;
 
 #[derive(Debug, Clone, Serialize)]
@@ -152,8 +152,12 @@ pub struct SessionDetail {
     pub output_tokens: u64,
     pub cache_read: u64,
     pub cache_write: u64,
+    pub reasoning_tokens: u64,
+    pub web_search_requests: u64,
     pub tools: String,
+    pub bash_commands: Vec<String>,
     pub prompt: String,
+    pub prompt_full: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -196,6 +200,7 @@ pub fn dashboard_data(
     period: Period,
     tool: Tool,
     project_filter: &ProjectFilter,
+    sort: SortMode,
     currency: &CurrencyFormatter,
 ) -> DashboardData {
     let mut data = match period {
@@ -248,6 +253,7 @@ pub fn dashboard_data(
     }
 
     apply_project_filter(&mut data, project_filter);
+    apply_sample_sort(&mut data, sort);
     apply_currency(&mut data, currency);
 
     data
@@ -256,9 +262,10 @@ pub fn dashboard_data(
 pub fn project_options(
     period: Period,
     tool: Tool,
+    sort: SortMode,
     currency: &CurrencyFormatter,
 ) -> Vec<ProjectOption> {
-    let data = dashboard_data(period, tool, &ProjectFilter::All, currency);
+    let data = dashboard_data(period, tool, &ProjectFilter::All, sort, currency);
     let mut options = vec![ProjectOption::all(
         data.summary.cost.into(),
         parse_count(data.summary.calls),
@@ -285,9 +292,10 @@ pub fn project_options(
 pub fn session_options(
     period: Period,
     tool: Tool,
+    sort: SortMode,
     currency: &CurrencyFormatter,
 ) -> Vec<SessionOption> {
-    let data = dashboard_data(period, tool, &ProjectFilter::All, currency);
+    let data = dashboard_data(period, tool, &ProjectFilter::All, sort, currency);
     data.sessions
         .iter()
         .enumerate()
@@ -303,7 +311,11 @@ pub fn session_options(
         .collect()
 }
 
-pub fn session_detail(key: &str, _currency: &CurrencyFormatter) -> Option<SessionDetailView> {
+pub fn session_detail(
+    key: &str,
+    _sort: SortMode,
+    _currency: &CurrencyFormatter,
+) -> Option<SessionDetailView> {
     if !key.starts_with("sample:") {
         return None;
     }
@@ -326,7 +338,7 @@ pub fn session_detail(key: &str, _currency: &CurrencyFormatter) -> Option<Sessio
     })
 }
 
-pub fn limits_data(_tool: Tool) -> LimitsData {
+pub fn limits_data(_tool: Tool, sort: SortMode) -> LimitsData {
     let codex_limits = vec![
         LimitMetric {
             tool: "Codex",
@@ -367,12 +379,12 @@ pub fn limits_data(_tool: Tool) -> LimitsData {
     ];
 
     LimitsData {
-        sections: sample_limit_sections(codex_limits),
+        sections: sample_limit_sections(codex_limits, sort),
     }
 }
 
-fn sample_limit_sections(codex_limits: Vec<LimitMetric>) -> Vec<ToolLimitSection> {
-    vec![
+fn sample_limit_sections(codex_limits: Vec<LimitMetric>, sort: SortMode) -> Vec<ToolLimitSection> {
+    let mut sections = vec![
         ToolLimitSection {
             tool: "Codex",
             limits: codex_limits,
@@ -482,7 +494,94 @@ fn sample_limit_sections(codex_limits: Vec<LimitMetric>) -> Vec<ToolLimitSection
                 },
             ],
         },
-    ]
+    ];
+
+    sections.sort_by(|a, b| {
+        sample_usage_sort_value(&b.usage, sort)
+            .cmp(&sample_usage_sort_value(&a.usage, sort))
+            .then_with(|| a.tool.cmp(b.tool))
+    });
+    sections
+}
+
+fn apply_sample_sort(data: &mut DashboardData, sort: SortMode) {
+    match sort {
+        SortMode::Spend => {}
+        SortMode::Date => {
+            data.daily.sort_by(|a, b| b.day.cmp(a.day));
+            data.sessions
+                .sort_by(|a, b| b.date.cmp(a.date).then_with(|| a.project.cmp(b.project)));
+        }
+        SortMode::Tokens => {
+            data.daily.sort_by(|a, b| b.value.cmp(&a.value));
+            data.projects
+                .sort_by(|a, b| b.value.cmp(&a.value).then_with(|| a.name.cmp(b.name)));
+            data.project_tools.sort_by(|a, b| {
+                b.value
+                    .cmp(&a.value)
+                    .then_with(|| a.project.cmp(b.project))
+                    .then_with(|| a.tool.cmp(b.tool))
+            });
+            data.sessions.sort_by(|a, b| {
+                b.value
+                    .cmp(&a.value)
+                    .then_with(|| b.calls.cmp(&a.calls))
+                    .then_with(|| a.project.cmp(b.project))
+            });
+            data.models
+                .sort_by(|a, b| b.value.cmp(&a.value).then_with(|| a.name.cmp(b.name)));
+            data.tools
+                .sort_by(|a, b| b.value.cmp(&a.value).then_with(|| a.name.cmp(b.name)));
+            data.commands
+                .sort_by(|a, b| b.value.cmp(&a.value).then_with(|| a.name.cmp(b.name)));
+            data.mcp_servers
+                .sort_by(|a, b| b.value.cmp(&a.value).then_with(|| a.name.cmp(b.name)));
+        }
+    }
+}
+
+fn sample_usage_sort_value(usage: &RecentUsageMetric, sort: SortMode) -> u64 {
+    match sort {
+        SortMode::Spend => parse_money_sort_value(usage.cost),
+        SortMode::Date => last_seen_sort_value(usage.last_seen),
+        SortMode::Tokens => parse_compact_sort_value(usage.tokens),
+    }
+}
+
+fn parse_money_sort_value(value: &str) -> u64 {
+    let numeric = value
+        .chars()
+        .filter(|c| c.is_ascii_digit() || *c == '.')
+        .collect::<String>();
+    numeric
+        .parse::<f64>()
+        .map(|n| (n * 10_000.0).round() as u64)
+        .unwrap_or(0)
+}
+
+fn parse_compact_sort_value(value: &str) -> u64 {
+    let trimmed = value.trim();
+    let (number, multiplier) = match trimmed.chars().last() {
+        Some('K') => (&trimmed[..trimmed.len().saturating_sub(1)], 1_000.0),
+        Some('M') => (&trimmed[..trimmed.len().saturating_sub(1)], 1_000_000.0),
+        Some('B') => (&trimmed[..trimmed.len().saturating_sub(1)], 1_000_000_000.0),
+        _ => (trimmed, 1.0),
+    };
+    number
+        .parse::<f64>()
+        .map(|n| (n * multiplier).round() as u64)
+        .unwrap_or(0)
+}
+
+fn last_seen_sort_value(value: &str) -> u64 {
+    match value {
+        "now" => u64::MAX,
+        "-" => 0,
+        _ if value.ends_with('m') => 1_000_000_u64.saturating_sub(parse_count(value)),
+        _ if value.ends_with('h') => 100_000_u64.saturating_sub(parse_count(value)),
+        _ if value.ends_with('d') => 10_000_u64.saturating_sub(parse_count(value)),
+        _ => 0,
+    }
 }
 
 fn apply_project_filter(data: &mut DashboardData, project_filter: &ProjectFilter) {

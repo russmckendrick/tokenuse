@@ -5,6 +5,7 @@ import type {
   ExportResponse,
   PageId,
   PeriodId,
+  SortId,
   ToolId
 } from './types';
 
@@ -13,6 +14,7 @@ export const api = {
   setPage: (page: PageId) => invoke<DesktopSnapshot>('set_page', { page }),
   setPeriod: (period: PeriodId) => invoke<DesktopSnapshot>('set_period', { period }),
   setTool: (tool: ToolId) => invoke<DesktopSnapshot>('set_tool', { tool }),
+  setSort: (sort: SortId) => invoke<DesktopSnapshot>('set_sort', { sort }),
   setProject: (identity: string | null) => invoke<DesktopSnapshot>('set_project', { identity }),
   openSession: (key: string) => invoke<DesktopSnapshot>('open_session', { key }),
   closeSession: () => invoke<DesktopSnapshot>('close_session'),

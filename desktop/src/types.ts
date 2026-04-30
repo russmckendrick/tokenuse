@@ -1,6 +1,7 @@
 export type PageId = 'overview' | 'deep-dive' | 'usage' | 'config' | 'session';
 export type PeriodId = 'today' | 'week' | 'thirty-days' | 'month' | 'all-time';
 export type ToolId = 'all' | 'claude-code' | 'cursor' | 'codex' | 'copilot';
+export type SortId = 'spend' | 'date' | 'tokens';
 export type ExportFormatId = 'json' | 'csv' | 'svg' | 'png';
 
 export type OptionItem<T extends string = string> = {
@@ -141,8 +142,12 @@ export type SessionDetail = {
   output_tokens: number;
   cache_read: number;
   cache_write: number;
+  reasoning_tokens: number;
+  web_search_requests: number;
   tools: string;
+  bash_commands: string[];
   prompt: string;
+  prompt_full: string;
 };
 
 export type SessionDetailView = {
@@ -180,6 +185,8 @@ export type DesktopSnapshot = {
   periods: OptionItem<PeriodId>[];
   tool: ToolId;
   tools: OptionItem<ToolId>[];
+  sort: SortId;
+  sorts: OptionItem<SortId>[];
   project: ProjectState;
   dashboard: DashboardData;
   usage: LimitsData;

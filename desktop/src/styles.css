@@ -173,7 +173,7 @@ footer,
 
 .filter-strip {
   display: grid;
-  grid-template-columns: auto minmax(180px, 240px) minmax(220px, 320px);
+  grid-template-columns: auto minmax(160px, 220px) minmax(160px, 220px) minmax(220px, 320px);
   align-items: center;
   gap: 10px;
   padding: 6px 7px;
@@ -191,6 +191,10 @@ footer,
 
 .tool-strip span {
   color: #a1a7c3;
+}
+
+.sort-strip span {
+  width: 52px;
 }
 
 .tool-strip::after {
@@ -250,23 +254,49 @@ th {
 
 main {
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
+}
+
+.page {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.overview-page {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.deep-page,
+.usage-page,
+.config-page {
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .grid {
   display: grid;
   gap: 8px;
+  min-height: 0;
 }
 
 .overview-grid {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  grid-auto-rows: minmax(210px, auto);
-  margin-top: 8px;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .deep-grid {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  grid-auto-rows: minmax(210px, auto);
+  grid-auto-rows: minmax(220px, 36vh);
+  align-content: start;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: #414866 #202438;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
 }
 
 .deep-grid > .panel:nth-child(3),
@@ -281,6 +311,14 @@ main {
   min-height: 0;
 }
 
+.overview-grid > .panel,
+.overview-grid > .stack,
+.deep-grid > .panel,
+.deep-grid > .stack,
+.stack > .panel {
+  min-height: 0;
+}
+
 .panel {
   min-width: 0;
   min-height: 0;
@@ -288,6 +326,8 @@ main {
   border-radius: 3px;
   background: #202438;
   overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .panel h2 {
@@ -332,6 +372,32 @@ main {
   min-height: 0;
   overflow: auto;
   padding: 6px;
+  overscroll-behavior: contain;
+  scrollbar-color: #414866 #202438;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.panel-body::-webkit-scrollbar,
+.deep-grid::-webkit-scrollbar,
+.usage-grid::-webkit-scrollbar,
+.config-grid::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.panel-body::-webkit-scrollbar-thumb,
+.deep-grid::-webkit-scrollbar-thumb,
+.usage-grid::-webkit-scrollbar-thumb,
+.config-grid::-webkit-scrollbar-thumb {
+  background: #414866;
+}
+
+.panel-body::-webkit-scrollbar-track,
+.deep-grid::-webkit-scrollbar-track,
+.usage-grid::-webkit-scrollbar-track,
+.config-grid::-webkit-scrollbar-track {
+  background: #202438;
 }
 
 .kpis {
@@ -368,8 +434,8 @@ main {
 }
 
 .session-kpis {
+  flex: 0 0 auto;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-bottom: 8px;
 }
 
 table {
@@ -393,11 +459,33 @@ th {
   height: 24px;
   font-size: 12px;
   font-weight: 700;
+  background: #202438;
+}
+
+.panel-body thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 td:first-child,
 th:first-child {
   width: 86px;
+}
+
+.click-row {
+  cursor: default;
+}
+
+.click-row:hover td,
+.click-row:focus td {
+  background: #25293d;
+  color: #ffffff;
+}
+
+.click-row:focus {
+  outline: 1px solid #ff8f40;
+  outline-offset: -1px;
 }
 
 .money {
@@ -489,6 +577,20 @@ th:first-child {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: #414866 #202438;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.usage-grid {
+  align-content: start;
+}
+
+.usage-grid > .panel {
+  max-height: min(360px, calc(100vh - 190px));
 }
 
 .usage-row {
@@ -514,6 +616,12 @@ th:first-child {
 
 .config-grid {
   grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  height: 100%;
+  overflow: hidden;
+}
+
+.config-grid > .panel {
+  max-height: 100%;
 }
 
 .config-facts {
@@ -535,8 +643,12 @@ th:first-child {
 }
 
 .session-page {
-  display: grid;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+  overflow: hidden;
 }
 
 .session-head {
@@ -573,6 +685,24 @@ th:first-child {
   color: #ff8f40;
   background: #202438;
   font-weight: 800;
+}
+
+.session-panel-area {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.session-panel-area > .panel {
+  flex: 1 1 auto;
+}
+
+.session-panel-area .empty-state {
+  min-height: 0;
+  height: 100%;
 }
 
 footer {
@@ -622,6 +752,11 @@ footer b {
   background: #202438;
   padding: 10px;
   overflow: hidden;
+}
+
+.detail-modal {
+  width: min(920px, calc(100vw - 36px));
+  max-height: min(760px, calc(100vh - 36px));
 }
 
 .modal-head,
@@ -698,6 +833,63 @@ footer b {
   font-weight: 800;
 }
 
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.detail-grid div {
+  min-width: 0;
+  min-height: 54px;
+  border: 1px solid #414866;
+  border-radius: 3px;
+  padding: 6px 7px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  background: #202438;
+}
+
+.detail-grid span,
+.detail-block h3 {
+  color: #a1a7c3;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+
+.detail-grid strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-block {
+  min-height: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.detail-block h3 {
+  margin: 0;
+  font-weight: 800;
+}
+
+.detail-block pre {
+  max-height: 250px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #cbd4f2;
+  background: #25293d;
+  border: 1px solid #414866;
+  border-radius: 3px;
+  padding: 8px;
+  font: inherit;
+}
+
 @media (max-width: 1120px) {
   .topbar,
   .filter-strip,
@@ -712,13 +904,39 @@ footer b {
     grid-column: auto;
   }
 
+  .overview-grid,
+  .deep-grid,
+  .config-grid {
+    overflow: auto;
+  }
+
+  .overview-grid {
+    grid-template-rows: none;
+    grid-auto-rows: minmax(220px, 38vh);
+    align-content: start;
+  }
+
+  .deep-grid {
+    grid-auto-rows: minmax(220px, 38vh);
+  }
+
+  .config-grid {
+    height: auto;
+    align-content: start;
+  }
+
+  .config-grid > .panel {
+    max-height: min(420px, calc(100vh - 190px));
+  }
+
   .tabs,
   .actions {
     justify-content: flex-start;
   }
 
   .kpis,
-  .session-kpis {
+  .session-kpis,
+  .detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

@@ -242,6 +242,41 @@ mod tests {
 
     use super::*;
 
+    fn session_app_with_call_detail() -> App {
+        let mut app = App::default();
+        app.page = Page::Session;
+        app.session_view = Some(crate::data::SessionDetailView {
+            key: "codex:s1".into(),
+            session_id: "s1".into(),
+            project: "tokens".into(),
+            tool: "Codex",
+            date_range: "2026-04-29".into(),
+            total_cost: "$0.12".into(),
+            total_calls: 1,
+            total_input: "100".into(),
+            total_output: "50".into(),
+            total_cache_read: "20".into(),
+            calls: vec![crate::data::SessionDetail {
+                timestamp: "04-29 12:00".into(),
+                model: "gpt-5".into(),
+                cost: "$0.12".into(),
+                input_tokens: 100,
+                output_tokens: 50,
+                cache_read: 20,
+                cache_write: 5,
+                reasoning_tokens: 7,
+                web_search_requests: 2,
+                tools: "exec_command".into(),
+                bash_commands: vec!["cargo test".into()],
+                prompt: "run checks".into(),
+                prompt_full: "run the checks and show me failures".into(),
+            }],
+            note: None,
+        });
+        app.call_detail_index = Some(0);
+        app
+    }
+
     #[test]
     fn dashboard_render_smoke_test() {
         let backend = TestBackend::new(170, 64);
@@ -260,13 +295,16 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
 
-        assert!(rendered.contains("tokenuse"));
+        assert!(rendered.contains("Token Use"));
+        assert!(rendered.contains("▂▅█▆"));
+        assert!(!rendered.contains("v0.0.2"));
         assert!(rendered.contains("Daily Activity"));
         assert!(rendered.contains("Project Spend by Tool"));
         assert!(rendered.contains("q quit"));
         assert!(rendered.contains("h help"));
         assert!(rendered.contains("[t]"));
         assert!(rendered.contains("[p]"));
+        assert!(rendered.contains("[g]"));
         assert!(rendered.contains("Tab"));
         assert!(!rendered.contains("p tool"));
         assert!(!rendered.contains("switch"));
@@ -315,7 +353,7 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
 
-        assert!(rendered.contains("tokenuse"));
+        assert!(rendered.contains("Token Use"));
         assert!(rendered.contains("Overview"));
         assert!(rendered.contains("Deep Dive"));
         assert!(rendered.contains("Usage"));
@@ -467,7 +505,7 @@ mod tests {
         assert!(rendered.contains("Cursor"));
         assert!(rendered.contains("Copilot"));
         assert!(rendered.contains("tokens"));
-        assert!(rendered.contains("sorted by 24h usage"));
+        assert!(rendered.contains("sorted by 24h spend"));
         assert!(rendered.contains("c config"));
     }
 
@@ -493,5 +531,29 @@ mod tests {
         assert!(rendered.contains("Currency 1/"));
         assert!(rendered.contains("USD"));
         assert!(rendered.contains("per USD"));
+    }
+
+    #[test]
+    fn session_call_detail_modal_render_smoke_test() {
+        let backend = TestBackend::new(170, 64);
+        let mut terminal = Terminal::new(backend).expect("create terminal");
+        let app = session_app_with_call_detail();
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("draw session call detail modal");
+
+        let rendered = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+
+        assert!(rendered.contains("Call Detail"));
+        assert!(rendered.contains("gpt-5"));
+        assert!(rendered.contains("cargo test"));
+        assert!(rendered.contains("run the checks and show me failures"));
     }
 }

@@ -4,8 +4,12 @@ Changes that should be included in the next release go here. Keep this file curr
 
 ## Highlights
 
+- Added a runtime sort mode for both TUI and desktop dashboards, cycling between spend, latest date, and token use.
+- Session call rows now open a detail modal in both desktop and TUI, showing the full stored prompt, tool metadata, shell commands, and token breakouts.
+- The TUI header now uses the bars mark with the `Token Use` title and omits the version label.
 - Desktop builds now regenerate app icons from `desktop/tokenusebars.svg`.
 - The desktop header now uses the bars mark with the `Token Use` title and omits the version and source labels.
+- Desktop dashboard sections now render all rows and scroll overflowing data inside each section.
 
 ## Notes
 

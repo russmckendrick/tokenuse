@@ -1,10 +1,11 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
-use chrono::{DateTime, Datelike, Duration, Local, NaiveDate};
+use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, Utc};
 use color_eyre::Result;
 
-use crate::app::{Period, ProjectFilter, Tool};
+use crate::app::{Period, ProjectFilter, SortMode, Tool};
 use crate::currency::CurrencyFormatter;
 use crate::data::{
     CountMetric, DailyMetric, DashboardData, LimitMetric, LimitsData, ModelMetric, ProjectMetric,
@@ -57,6 +58,7 @@ impl Ingested {
         period: Period,
         tool: Tool,
         project_filter: &ProjectFilter,
+        sort: SortMode,
         currency: &CurrencyFormatter,
     ) -> DashboardData {
         let now = Local::now();
@@ -69,13 +71,14 @@ impl Ingested {
                     && in_period(c, period, now)
             })
             .collect();
-        build_dashboard(&filtered, currency)
+        build_dashboard(&filtered, sort, currency)
     }
 
     pub fn project_options(
         &self,
         period: Period,
         tool: Tool,
+        sort: SortMode,
         currency: &CurrencyFormatter,
     ) -> Vec<ProjectOption> {
         let now = Local::now();
@@ -84,11 +87,11 @@ impl Ingested {
             .iter()
             .filter(|c| matches_tool(c, tool) && in_period(c, period, now))
             .collect();
-        build_project_options(&filtered, currency)
+        build_project_options(&filtered, sort, currency)
     }
 
-    pub fn limits(&self, tool: Tool, currency: &CurrencyFormatter) -> LimitsData {
-        build_limits_data(&self.limits, &self.calls, tool, currency)
+    pub fn limits(&self, tool: Tool, sort: SortMode, currency: &CurrencyFormatter) -> LimitsData {
+        build_limits_data(&self.limits, &self.calls, tool, sort, currency)
     }
 
     pub fn session_options(
@@ -96,6 +99,7 @@ impl Ingested {
         period: Period,
         tool: Tool,
         project_filter: &ProjectFilter,
+        sort: SortMode,
         currency: &CurrencyFormatter,
     ) -> Vec<SessionOption> {
         let now = Local::now();
@@ -108,12 +112,13 @@ impl Ingested {
                     && in_period(c, period, now)
             })
             .collect();
-        build_session_options(&filtered, currency)
+        build_session_options(&filtered, sort, currency)
     }
 
     pub fn session_detail(
         &self,
         key: &str,
+        sort: SortMode,
         currency: &CurrencyFormatter,
     ) -> Option<SessionDetailView> {
         let matching: Vec<&ParsedCall> = self
@@ -124,7 +129,7 @@ impl Ingested {
         if matching.is_empty() {
             return None;
         }
-        Some(build_session_detail(key, &matching, currency))
+        Some(build_session_detail(key, &matching, sort, currency))
     }
 
     pub fn is_empty(&self) -> bool {
@@ -212,6 +217,7 @@ fn build_limits_data(
     limits: &[LimitSnapshot],
     calls: &[ParsedCall],
     _tool: Tool,
+    sort: SortMode,
     currency: &CurrencyFormatter,
 ) -> LimitsData {
     let mut latest: HashMap<(&'static str, String), &LimitSnapshot> = HashMap::new();
@@ -250,7 +256,111 @@ fn build_limits_data(
     }
 
     LimitsData {
-        sections: build_tool_limit_sections(calls, limits_by_tool, currency),
+        sections: build_tool_limit_sections(calls, limits_by_tool, sort, currency),
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct SortStats {
+    cost: f64,
+    tokens: f64,
+    latest: Option<DateTime<Utc>>,
+}
+
+impl SortStats {
+    fn add_call(&mut self, call: &ParsedCall) {
+        self.cost += call.cost_usd;
+        self.tokens += activity_tokens(call) as f64;
+        self.latest = latest_timestamp(self.latest, call.timestamp);
+    }
+
+    fn add_share(&mut self, call: &ParsedCall, denominator: usize) {
+        if denominator == 0 {
+            return;
+        }
+        let denominator = denominator as f64;
+        self.cost += call.cost_usd / denominator;
+        self.tokens += activity_tokens(call) as f64 / denominator;
+        self.latest = latest_timestamp(self.latest, call.timestamp);
+    }
+}
+
+fn latest_timestamp(
+    current: Option<DateTime<Utc>>,
+    candidate: Option<DateTime<Utc>>,
+) -> Option<DateTime<Utc>> {
+    match (current, candidate) {
+        (Some(current), Some(candidate)) => Some(current.max(candidate)),
+        (None, Some(candidate)) => Some(candidate),
+        (Some(current), None) => Some(current),
+        (None, None) => None,
+    }
+}
+
+fn compare_sort_stats(a: &SortStats, b: &SortStats, sort: SortMode) -> Ordering {
+    let primary = match sort {
+        SortMode::Spend => cmp_f64_desc(a.cost, b.cost),
+        SortMode::Date => cmp_date_desc(a.latest, b.latest),
+        SortMode::Tokens => cmp_f64_desc(a.tokens, b.tokens),
+    };
+    if primary != Ordering::Equal {
+        return primary;
+    }
+
+    match sort {
+        SortMode::Spend => {
+            cmp_f64_desc(a.tokens, b.tokens).then_with(|| cmp_date_desc(a.latest, b.latest))
+        }
+        SortMode::Date => {
+            cmp_f64_desc(a.cost, b.cost).then_with(|| cmp_f64_desc(a.tokens, b.tokens))
+        }
+        SortMode::Tokens => {
+            cmp_f64_desc(a.cost, b.cost).then_with(|| cmp_date_desc(a.latest, b.latest))
+        }
+    }
+}
+
+fn compare_labeled_stats(
+    a: &SortStats,
+    b: &SortStats,
+    a_label: &str,
+    b_label: &str,
+    sort: SortMode,
+) -> Ordering {
+    compare_sort_stats(a, b, sort).then_with(|| a_label.cmp(b_label))
+}
+
+fn cmp_f64_desc(a: f64, b: f64) -> Ordering {
+    b.partial_cmp(&a).unwrap_or(Ordering::Equal)
+}
+
+fn cmp_date_desc(a: Option<DateTime<Utc>>, b: Option<DateTime<Utc>>) -> Ordering {
+    b.cmp(&a)
+}
+
+fn max_primary_value<'a, I>(rows: I, sort: SortMode) -> f64
+where
+    I: IntoIterator<Item = &'a SortStats>,
+{
+    match sort {
+        SortMode::Spend => rows.into_iter().map(|stats| stats.cost).fold(0.0, f64::max),
+        SortMode::Tokens => rows
+            .into_iter()
+            .map(|stats| stats.tokens)
+            .fold(0.0, f64::max),
+        SortMode::Date => 0.0,
+    }
+}
+
+fn sort_bar_value(stats: &SortStats, sort: SortMode, max: f64, rank: usize, total: usize) -> u64 {
+    match sort {
+        SortMode::Spend => scale(stats.cost, max),
+        SortMode::Tokens => scale(stats.tokens, max),
+        SortMode::Date if stats.latest.is_none() || total == 0 => 0,
+        SortMode::Date => {
+            let value = ((total.saturating_sub(rank) as f64 / total as f64) * 100.0).round();
+            value.clamp(1.0, 100.0) as u64
+        }
     }
 }
 
@@ -259,11 +369,13 @@ struct ModelAcc {
     calls: u64,
     tokens: u64,
     cost: f64,
+    latest: Option<DateTime<Utc>>,
 }
 
 fn build_tool_limit_sections(
     calls: &[ParsedCall],
     mut limits_by_tool: HashMap<&'static str, Vec<LimitMetric>>,
+    sort: SortMode,
     currency: &CurrencyFormatter,
 ) -> Vec<ToolLimitSection> {
     #[derive(Default)]
@@ -273,6 +385,7 @@ fn build_tool_limit_sections(
         tokens: u64,
         cost: f64,
         last_seen: Option<DateTime<Local>>,
+        latest: Option<DateTime<Utc>>,
         models: HashMap<String, ModelAcc>,
     }
 
@@ -311,6 +424,7 @@ fn build_tool_limit_sections(
         acc.tokens = acc.tokens.saturating_add(tokens);
         acc.cost += call.cost_usd;
         acc.last_seen = Some(acc.last_seen.map(|prev| prev.max(local)).unwrap_or(local));
+        acc.latest = latest_timestamp(acc.latest, call.timestamp);
 
         let model = display_lookup
             .get(call.tool)
@@ -320,6 +434,7 @@ fn build_tool_limit_sections(
         model_acc.calls += 1;
         model_acc.tokens = model_acc.tokens.saturating_add(tokens);
         model_acc.cost += call.cost_usd;
+        model_acc.latest = latest_timestamp(model_acc.latest, call.timestamp);
     }
 
     let mut ordered: Vec<(usize, &str, &str, Acc)> = TOOLS
@@ -327,7 +442,19 @@ fn build_tool_limit_sections(
         .enumerate()
         .map(|(idx, (id, label))| (idx, id, label, by_tool.remove(id).unwrap_or_default()))
         .collect();
-    ordered.sort_by(|a, b| b.3.tokens.cmp(&a.3.tokens).then_with(|| a.0.cmp(&b.0)));
+    ordered.sort_by(|a, b| {
+        let a_stats = SortStats {
+            cost: a.3.cost,
+            tokens: a.3.tokens as f64,
+            latest: a.3.latest,
+        };
+        let b_stats = SortStats {
+            cost: b.3.cost,
+            tokens: b.3.tokens as f64,
+            latest: b.3.latest,
+        };
+        compare_sort_stats(&a_stats, &b_stats, sort).then_with(|| a.0.cmp(&b.0))
+    });
 
     ordered
         .into_iter()
@@ -341,7 +468,7 @@ fn build_tool_limit_sections(
                 cost: leak(currency.format_money(acc.cost)),
                 last_seen: leak(format_last_seen(acc.last_seen, now)),
             },
-            models: recent_model_rows(acc.models, currency),
+            models: recent_model_rows(acc.models, sort, currency),
         })
         .collect()
 }
@@ -356,34 +483,52 @@ fn tool_display_lookup() -> HashMap<&'static str, Box<dyn tools::ToolAdapter>> {
 
 fn recent_model_rows(
     models: HashMap<String, ModelAcc>,
+    sort: SortMode,
     currency: &CurrencyFormatter,
 ) -> Vec<RecentModelMetric> {
-    let mut rows: Vec<(String, u64, u64, f64)> = models
-        .into_iter()
-        .map(|(name, acc)| (name, acc.calls, acc.tokens, acc.cost))
-        .collect();
+    let mut rows: Vec<(String, ModelAcc)> = models.into_iter().collect();
     rows.sort_by(|a, b| {
-        b.2.cmp(&a.2)
-            .then_with(|| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal))
-            .then_with(|| b.1.cmp(&a.1))
-            .then_with(|| a.0.cmp(&b.0))
+        let a_stats = SortStats {
+            cost: a.1.cost,
+            tokens: a.1.tokens as f64,
+            latest: a.1.latest,
+        };
+        let b_stats = SortStats {
+            cost: b.1.cost,
+            tokens: b.1.tokens as f64,
+            latest: b.1.latest,
+        };
+        compare_labeled_stats(&a_stats, &b_stats, &a.0, &b.0, sort)
     });
-    let max = rows.first().map(|row| row.2).unwrap_or(0);
+    let max = match sort {
+        SortMode::Spend => rows.iter().map(|row| row.1.cost).fold(0.0, f64::max),
+        SortMode::Tokens => rows
+            .iter()
+            .map(|row| row.1.tokens as f64)
+            .fold(0.0, f64::max),
+        SortMode::Date => 0.0,
+    };
+    let total = rows.len();
 
     rows.into_iter()
         .take(3)
-        .map(|(name, calls, tokens, cost)| RecentModelMetric {
+        .enumerate()
+        .map(|(idx, (name, acc))| RecentModelMetric {
             name: leak(name),
-            calls,
-            tokens: leak(format_compact(tokens)),
-            cost: leak(currency.format_money(cost)),
-            value: if max == 0 {
-                0
-            } else {
-                ((tokens as f64 / max as f64) * 100.0)
-                    .round()
-                    .clamp(1.0, 100.0) as u64
-            },
+            calls: acc.calls,
+            tokens: leak(format_compact(acc.tokens)),
+            cost: leak(currency.format_money(acc.cost)),
+            value: sort_bar_value(
+                &SortStats {
+                    cost: acc.cost,
+                    tokens: acc.tokens as f64,
+                    latest: acc.latest,
+                },
+                sort,
+                max,
+                idx,
+                total,
+            ),
         })
         .collect()
 }
@@ -511,7 +656,11 @@ fn format_plan_type(plan: &str) -> String {
     }
 }
 
-fn build_dashboard(calls: &[&ParsedCall], currency: &CurrencyFormatter) -> DashboardData {
+fn build_dashboard(
+    calls: &[&ParsedCall],
+    sort: SortMode,
+    currency: &CurrencyFormatter,
+) -> DashboardData {
     if calls.is_empty() {
         return empty_dashboard(currency);
     }
@@ -544,14 +693,14 @@ fn build_dashboard(calls: &[&ParsedCall], currency: &CurrencyFormatter) -> Dashb
 
     let project_labels = project_label_lookup(calls.iter().map(|call| &call.project));
 
-    let daily = aggregate_daily(calls, currency);
-    let projects = aggregate_projects(calls, &project_labels, currency);
-    let project_tools = aggregate_project_tools(calls, &project_labels, currency);
-    let sessions = aggregate_sessions(calls, &project_labels, currency);
-    let models = aggregate_models(calls, currency);
-    let tools = aggregate_tools(calls);
-    let commands = aggregate_commands(calls);
-    let mcp_servers = aggregate_mcp(calls);
+    let daily = aggregate_daily(calls, sort, currency);
+    let projects = aggregate_projects(calls, &project_labels, sort, currency);
+    let project_tools = aggregate_project_tools(calls, &project_labels, sort, currency);
+    let sessions = aggregate_sessions(calls, &project_labels, sort, currency);
+    let models = aggregate_models(calls, sort, currency);
+    let tools = aggregate_tools(calls, sort);
+    let commands = aggregate_commands(calls, sort);
+    let mcp_servers = aggregate_mcp(calls, sort);
 
     DashboardData {
         summary,
@@ -591,12 +740,14 @@ fn empty_dashboard(currency: &CurrencyFormatter) -> DashboardData {
 
 fn build_project_options(
     calls: &[&ParsedCall],
+    sort: SortMode,
     currency: &CurrencyFormatter,
 ) -> Vec<ProjectOption> {
     #[derive(Default)]
     struct Acc {
         cost: f64,
         calls: u64,
+        stats: SortStats,
     }
 
     let total_cost: f64 = calls.iter().map(|c| c.cost_usd).sum();
@@ -609,6 +760,7 @@ fn build_project_options(
             .or_default();
         entry.cost += call.cost_usd;
         entry.calls += 1;
+        entry.stats.add_call(call);
     }
 
     let mut rows: Vec<(String, String, Acc)> = by_project
@@ -620,11 +772,8 @@ fn build_project_options(
         .collect();
 
     rows.sort_by(|a, b| {
-        b.2.cost
-            .partial_cmp(&a.2.cost)
-            .unwrap_or(std::cmp::Ordering::Equal)
+        compare_labeled_stats(&a.2.stats, &b.2.stats, &a.1, &b.1, sort)
             .then_with(|| b.2.calls.cmp(&a.2.calls))
-            .then_with(|| a.1.cmp(&b.1))
     });
 
     let mut options = vec![ProjectOption::all(
@@ -637,26 +786,40 @@ fn build_project_options(
     options
 }
 
-fn aggregate_daily(calls: &[&ParsedCall], currency: &CurrencyFormatter) -> Vec<DailyMetric> {
-    let mut by_day: BTreeMap<NaiveDate, (f64, u64)> = BTreeMap::new();
+fn aggregate_daily(
+    calls: &[&ParsedCall],
+    sort: SortMode,
+    currency: &CurrencyFormatter,
+) -> Vec<DailyMetric> {
+    #[derive(Default)]
+    struct Acc {
+        cost: f64,
+        calls: u64,
+        stats: SortStats,
+    }
+
+    let mut by_day: BTreeMap<NaiveDate, Acc> = BTreeMap::new();
     for c in calls {
         let Some(ts) = c.timestamp else { continue };
         let date = ts.with_timezone(&Local).date_naive();
-        let entry = by_day.entry(date).or_insert((0.0, 0));
-        entry.0 += c.cost_usd;
-        entry.1 += 1;
+        let entry = by_day.entry(date).or_default();
+        entry.cost += c.cost_usd;
+        entry.calls += 1;
+        entry.stats.add_call(c);
     }
-    let max = by_day
-        .values()
-        .map(|(cost, _)| *cost)
-        .fold(0.0_f64, f64::max);
-    by_day
-        .into_iter()
-        .map(|(date, (cost, calls))| DailyMetric {
+    let mut rows: Vec<(NaiveDate, Acc)> = by_day.into_iter().collect();
+    rows.sort_by(|a, b| {
+        compare_sort_stats(&a.1.stats, &b.1.stats, sort).then_with(|| b.0.cmp(&a.0))
+    });
+    let max = max_primary_value(rows.iter().map(|row| &row.1.stats), sort);
+    let total = rows.len();
+    rows.into_iter()
+        .enumerate()
+        .map(|(idx, (date, acc))| DailyMetric {
             day: leak(date.format("%m-%d").to_string()),
-            cost: leak(currency.format_money(cost)),
-            calls,
-            value: scale(cost, max),
+            cost: leak(currency.format_money(acc.cost)),
+            calls: acc.calls,
+            value: sort_bar_value(&acc.stats, sort, max, idx, total),
         })
         .collect()
 }
@@ -664,6 +827,7 @@ fn aggregate_daily(calls: &[&ParsedCall], currency: &CurrencyFormatter) -> Vec<D
 fn aggregate_projects(
     calls: &[&ParsedCall],
     project_labels: &HashMap<String, String>,
+    sort: SortMode,
     currency: &CurrencyFormatter,
 ) -> Vec<ProjectMetric> {
     #[derive(Default)]
@@ -671,11 +835,13 @@ fn aggregate_projects(
         cost: f64,
         sessions: HashSet<String>,
         tools: HashMap<&'static str, f64>,
+        stats: SortStats,
     }
     let mut by_project: HashMap<String, Acc> = HashMap::new();
     for c in calls {
         let entry = by_project.entry(project_identity(&c.project)).or_default();
         entry.cost += c.cost_usd;
+        entry.stats.add_call(c);
         if let Some(key) = session_key(c) {
             entry.sessions.insert(key);
         }
@@ -684,16 +850,17 @@ fn aggregate_projects(
 
     let mut rows: Vec<(String, Acc)> = by_project.into_iter().collect();
     rows.sort_by(|a, b| {
-        b.1.cost
-            .partial_cmp(&a.1.cost)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| a.0.cmp(&b.0))
+        let a_label = project_label(project_labels, &a.0);
+        let b_label = project_label(project_labels, &b.0);
+        compare_labeled_stats(&a.1.stats, &b.1.stats, &a_label, &b_label, sort)
     });
-    let max = rows.first().map(|r| r.1.cost).unwrap_or(0.0);
+    let max = max_primary_value(rows.iter().map(|row| &row.1.stats), sort);
+    let total = rows.len();
 
     rows.into_iter()
         .take(10)
-        .map(|(project, acc)| {
+        .enumerate()
+        .map(|(idx, (project, acc))| {
             let session_count = acc.sessions.len().max(1) as u64;
             let avg = acc.cost / session_count as f64;
             ProjectMetric {
@@ -702,7 +869,7 @@ fn aggregate_projects(
                 avg_per_session: leak(currency.format_money(avg)),
                 sessions: session_count,
                 tool_mix: leak(format_tool_mix(&acc.tools, currency)),
-                value: scale(acc.cost, max),
+                value: sort_bar_value(&acc.stats, sort, max, idx, total),
             }
         })
         .collect()
@@ -711,6 +878,7 @@ fn aggregate_projects(
 fn aggregate_project_tools(
     calls: &[&ParsedCall],
     project_labels: &HashMap<String, String>,
+    sort: SortMode,
     currency: &CurrencyFormatter,
 ) -> Vec<ProjectToolMetric> {
     #[derive(Default)]
@@ -718,47 +886,47 @@ fn aggregate_project_tools(
         cost: f64,
         calls: u64,
         sessions: HashSet<String>,
+        stats: SortStats,
     }
 
-    let mut project_totals: HashMap<String, f64> = HashMap::new();
     let mut by_pair: HashMap<(String, &'static str), Acc> = HashMap::new();
 
     for c in calls {
         let project = project_identity(&c.project);
-        *project_totals.entry(project.clone()).or_default() += c.cost_usd;
-
         let entry = by_pair.entry((project, c.tool)).or_default();
         entry.cost += c.cost_usd;
         entry.calls += 1;
+        entry.stats.add_call(c);
         if let Some(key) = session_key(c) {
             entry.sessions.insert(key);
         }
     }
 
-    let mut rows: Vec<(String, &'static str, f64, Acc)> = by_pair
+    let mut rows: Vec<(String, &'static str, Acc)> = by_pair
         .into_iter()
-        .map(|((project, tool), acc)| {
-            let total = *project_totals.get(&project).unwrap_or(&0.0);
-            (project, tool, total, acc)
-        })
+        .map(|((project, tool), acc)| (project, tool, acc))
         .collect();
 
     rows.sort_by(|a, b| {
-        b.2.partial_cmp(&a.2)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| {
-                b.3.cost
-                    .partial_cmp(&a.3.cost)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .then_with(|| a.0.cmp(&b.0))
-            .then_with(|| tool_short_label(a.1).cmp(tool_short_label(b.1)))
+        let a_label = format!(
+            "{} {}",
+            project_label(project_labels, &a.0),
+            tool_short_label(a.1)
+        );
+        let b_label = format!(
+            "{} {}",
+            project_label(project_labels, &b.0),
+            tool_short_label(b.1)
+        );
+        compare_labeled_stats(&a.2.stats, &b.2.stats, &a_label, &b_label, sort)
     });
-    let max = rows.iter().map(|r| r.3.cost).fold(0.0_f64, f64::max);
+    let max = max_primary_value(rows.iter().map(|row| &row.2.stats), sort);
+    let total = rows.len();
 
     rows.into_iter()
         .take(12)
-        .map(|(project, tool, _, acc)| {
+        .enumerate()
+        .map(|(idx, (project, tool, acc))| {
             let session_count = acc.sessions.len().max(1) as u64;
             let avg = acc.cost / session_count as f64;
             ProjectToolMetric {
@@ -768,7 +936,7 @@ fn aggregate_project_tools(
                 calls: acc.calls,
                 sessions: session_count,
                 avg_per_session: leak(currency.format_money(avg)),
-                value: scale(acc.cost, max),
+                value: sort_bar_value(&acc.stats, sort, max, idx, total),
             }
         })
         .collect()
@@ -777,6 +945,7 @@ fn aggregate_project_tools(
 fn aggregate_sessions(
     calls: &[&ParsedCall],
     project_labels: &HashMap<String, String>,
+    sort: SortMode,
     currency: &CurrencyFormatter,
 ) -> Vec<SessionMetric> {
     #[derive(Default)]
@@ -785,6 +954,7 @@ fn aggregate_sessions(
         calls: u64,
         date: Option<NaiveDate>,
         project: String,
+        stats: SortStats,
     }
     let mut by_session: HashMap<String, Acc> = HashMap::new();
     for c in calls {
@@ -794,6 +964,7 @@ fn aggregate_sessions(
         let entry = by_session.entry(key).or_default();
         entry.cost += c.cost_usd;
         entry.calls += 1;
+        entry.stats.add_call(c);
         if entry.project.is_empty() {
             entry.project = project_identity(&c.project);
         }
@@ -805,15 +976,17 @@ fn aggregate_sessions(
 
     let mut rows: Vec<Acc> = by_session.into_values().collect();
     rows.sort_by(|a, b| {
-        b.cost
-            .partial_cmp(&a.cost)
-            .unwrap_or(std::cmp::Ordering::Equal)
+        let a_label = project_label(project_labels, &a.project);
+        let b_label = project_label(project_labels, &b.project);
+        compare_labeled_stats(&a.stats, &b.stats, &a_label, &b_label, sort)
     });
-    let max = rows.first().map(|r| r.cost).unwrap_or(0.0);
+    let max = max_primary_value(rows.iter().map(|row| &row.stats), sort);
+    let total = rows.len();
 
     rows.into_iter()
         .take(10)
-        .map(|acc| SessionMetric {
+        .enumerate()
+        .map(|(idx, acc)| SessionMetric {
             date: leak(
                 acc.date
                     .map(|d| d.format("%Y-%m-%d").to_string())
@@ -822,13 +995,14 @@ fn aggregate_sessions(
             project: leak(project_label(project_labels, &acc.project)),
             cost: leak(currency.format_money(acc.cost)),
             calls: acc.calls,
-            value: scale(acc.cost, max),
+            value: sort_bar_value(&acc.stats, sort, max, idx, total),
         })
         .collect()
 }
 
 fn build_session_options(
     calls: &[&ParsedCall],
+    sort: SortMode,
     currency: &CurrencyFormatter,
 ) -> Vec<SessionOption> {
     #[derive(Default)]
@@ -838,6 +1012,7 @@ fn build_session_options(
         date: Option<NaiveDate>,
         project: String,
         tool: &'static str,
+        stats: SortStats,
     }
     let labels = project_label_lookup(calls.iter().map(|call| call.project.as_str()));
     let mut by_session: HashMap<String, Acc> = HashMap::new();
@@ -848,6 +1023,7 @@ fn build_session_options(
         let entry = by_session.entry(key).or_default();
         entry.cost += c.cost_usd;
         entry.calls += 1;
+        entry.stats.add_call(c);
         if entry.project.is_empty() {
             entry.project = project_identity(&c.project);
         }
@@ -862,15 +1038,17 @@ fn build_session_options(
 
     let mut rows: Vec<(String, Acc)> = by_session.into_iter().collect();
     rows.sort_by(|a, b| {
-        b.1.cost
-            .partial_cmp(&a.1.cost)
-            .unwrap_or(std::cmp::Ordering::Equal)
+        let a_label = project_label(&labels, &a.1.project);
+        let b_label = project_label(&labels, &b.1.project);
+        compare_labeled_stats(&a.1.stats, &b.1.stats, &a_label, &b_label, sort)
             .then_with(|| b.1.calls.cmp(&a.1.calls))
     });
-    let max = rows.first().map(|r| r.1.cost).unwrap_or(0.0);
+    let max = max_primary_value(rows.iter().map(|row| &row.1.stats), sort);
+    let total = rows.len();
 
     rows.into_iter()
-        .map(|(key, acc)| SessionOption {
+        .enumerate()
+        .map(|(idx, (key, acc))| SessionOption {
             key,
             date: acc
                 .date
@@ -880,7 +1058,7 @@ fn build_session_options(
             tool: tool_short_label(acc.tool),
             cost: currency.format_money(acc.cost),
             calls: acc.calls,
-            value: scale(acc.cost, max),
+            value: sort_bar_value(&acc.stats, sort, max, idx, total),
         })
         .collect()
 }
@@ -888,10 +1066,11 @@ fn build_session_options(
 fn build_session_detail(
     key: &str,
     calls: &[&ParsedCall],
+    sort: SortMode,
     currency: &CurrencyFormatter,
 ) -> SessionDetailView {
     let mut sorted: Vec<&ParsedCall> = calls.to_vec();
-    sorted.sort_by_key(|c| c.timestamp);
+    sorted.sort_by(|a, b| compare_calls(a, b, sort));
 
     let display_lookup = tool_display_lookup();
 
@@ -969,8 +1148,12 @@ fn build_session_detail(
                 output_tokens: c.output_tokens,
                 cache_read: c.cache_read_input_tokens,
                 cache_write: c.cache_creation_input_tokens,
+                reasoning_tokens: c.reasoning_tokens,
+                web_search_requests: c.web_search_requests,
                 tools: tools_text,
+                bash_commands: c.bash_commands.clone(),
                 prompt: snippet(&c.user_message, 120),
+                prompt_full: clean_text(&c.user_message),
             }
         })
         .collect();
@@ -991,7 +1174,32 @@ fn build_session_detail(
     }
 }
 
+fn compare_calls(a: &ParsedCall, b: &ParsedCall, sort: SortMode) -> Ordering {
+    let a_stats = SortStats {
+        cost: a.cost_usd,
+        tokens: activity_tokens(a) as f64,
+        latest: a.timestamp,
+    };
+    let b_stats = SortStats {
+        cost: b.cost_usd,
+        tokens: activity_tokens(b) as f64,
+        latest: b.timestamp,
+    };
+    compare_labeled_stats(&a_stats, &b_stats, &a.model, &b.model, sort)
+}
+
 fn snippet(text: &str, max: usize) -> String {
+    let cleaned = clean_text(text);
+    if cleaned.chars().count() <= max {
+        cleaned
+    } else {
+        let mut out: String = cleaned.chars().take(max.saturating_sub(1)).collect();
+        out.push('…');
+        out
+    }
+}
+
+fn clean_text(text: &str) -> String {
     let cleaned: String = text
         .chars()
         .map(|c| {
@@ -1015,23 +1223,21 @@ fn snippet(text: &str, max: usize) -> String {
             last_space = false;
         }
     }
-    let trimmed = compacted.trim();
-    if trimmed.chars().count() <= max {
-        trimmed.to_string()
-    } else {
-        let mut out: String = trimmed.chars().take(max.saturating_sub(1)).collect();
-        out.push('…');
-        out
-    }
+    compacted.trim().to_string()
 }
 
-fn aggregate_models(calls: &[&ParsedCall], currency: &CurrencyFormatter) -> Vec<ModelMetric> {
+fn aggregate_models(
+    calls: &[&ParsedCall],
+    sort: SortMode,
+    currency: &CurrencyFormatter,
+) -> Vec<ModelMetric> {
     #[derive(Default)]
     struct Acc {
         cost: f64,
         calls: u64,
         cache_read: u64,
         input: u64,
+        stats: SortStats,
     }
     let registry = tools::registry();
     let mut display_lookup: HashMap<&'static str, Box<dyn tools::ToolAdapter>> = HashMap::new();
@@ -1050,18 +1256,17 @@ fn aggregate_models(calls: &[&ParsedCall], currency: &CurrencyFormatter) -> Vec<
         entry.calls += 1;
         entry.cache_read += c.cache_read_input_tokens;
         entry.input += c.input_tokens + c.cache_read_input_tokens + c.cache_creation_input_tokens;
+        entry.stats.add_call(c);
     }
 
     let mut rows: Vec<(String, Acc)> = by_model.into_iter().collect();
-    rows.sort_by(|a, b| {
-        b.1.cost
-            .partial_cmp(&a.1.cost)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    let max = rows.first().map(|r| r.1.cost).unwrap_or(0.0);
+    rows.sort_by(|a, b| compare_labeled_stats(&a.1.stats, &b.1.stats, &a.0, &b.0, sort));
+    let max = max_primary_value(rows.iter().map(|row| &row.1.stats), sort);
+    let total = rows.len();
 
     rows.into_iter()
-        .map(|(name, acc)| ModelMetric {
+        .enumerate()
+        .map(|(idx, (name, acc))| ModelMetric {
             name: leak(name),
             cost: leak(currency.format_money(acc.cost)),
             cache: leak(if acc.input == 0 {
@@ -1070,64 +1275,80 @@ fn aggregate_models(calls: &[&ParsedCall], currency: &CurrencyFormatter) -> Vec<
                 format!("{:.1}%", (acc.cache_read as f64 / acc.input as f64) * 100.0)
             }),
             calls: acc.calls,
-            value: scale(acc.cost, max),
+            value: sort_bar_value(&acc.stats, sort, max, idx, total),
         })
         .collect()
 }
 
-fn aggregate_tools(calls: &[&ParsedCall]) -> Vec<CountMetric> {
-    let mut counts: HashMap<String, u64> = HashMap::new();
-    for c in calls {
-        for t in &c.tools {
-            if t.starts_with("mcp__") {
-                continue;
-            }
-            *counts.entry(t.clone()).or_default() += 1;
-        }
-    }
-    top_counts(counts, 10)
+#[derive(Default)]
+struct CountAcc {
+    calls: u64,
+    stats: SortStats,
 }
 
-fn aggregate_commands(calls: &[&ParsedCall]) -> Vec<CountMetric> {
-    let mut counts: HashMap<String, u64> = HashMap::new();
+fn aggregate_tools(calls: &[&ParsedCall], sort: SortMode) -> Vec<CountMetric> {
+    let mut counts: HashMap<String, CountAcc> = HashMap::new();
     for c in calls {
-        for cmd in &c.bash_commands {
-            let head = tools::jsonl::first_word(cmd);
-            if head.is_empty() {
-                continue;
-            }
-            *counts.entry(head).or_default() += 1;
+        let names: Vec<&String> = c.tools.iter().filter(|t| !t.starts_with("mcp__")).collect();
+        for t in &names {
+            let entry = counts.entry((*t).clone()).or_default();
+            entry.calls += 1;
+            entry.stats.add_share(c, names.len());
         }
     }
-    top_counts(counts, 10)
+    top_counts(counts, sort, 10)
 }
 
-fn aggregate_mcp(calls: &[&ParsedCall]) -> Vec<CountMetric> {
-    let mut counts: HashMap<String, u64> = HashMap::new();
+fn aggregate_commands(calls: &[&ParsedCall], sort: SortMode) -> Vec<CountMetric> {
+    let mut counts: HashMap<String, CountAcc> = HashMap::new();
     for c in calls {
-        for t in &c.tools {
-            if let Some(rest) = t.strip_prefix("mcp__") {
-                let server = rest.split("__").next().unwrap_or(rest).to_string();
-                *counts.entry(server).or_default() += 1;
-            }
+        let heads: Vec<String> = c
+            .bash_commands
+            .iter()
+            .map(|cmd| tools::jsonl::first_word(cmd))
+            .filter(|head| !head.is_empty())
+            .collect();
+        for head in &heads {
+            let entry = counts.entry(head.clone()).or_default();
+            entry.calls += 1;
+            entry.stats.add_share(c, heads.len());
         }
     }
-    top_counts(counts, 10)
+    top_counts(counts, sort, 10)
 }
 
-fn top_counts(counts: HashMap<String, u64>, limit: usize) -> Vec<CountMetric> {
-    let mut rows: Vec<(String, u64)> = counts.into_iter().collect();
-    rows.sort_by_key(|row| std::cmp::Reverse(row.1));
-    let max = rows.first().map(|r| r.1).unwrap_or(0);
+fn aggregate_mcp(calls: &[&ParsedCall], sort: SortMode) -> Vec<CountMetric> {
+    let mut counts: HashMap<String, CountAcc> = HashMap::new();
+    for c in calls {
+        let servers: Vec<String> = c
+            .tools
+            .iter()
+            .filter_map(|t| {
+                t.strip_prefix("mcp__")
+                    .map(|rest| rest.split("__").next().unwrap_or(rest).to_string())
+            })
+            .collect();
+        for server in &servers {
+            let entry = counts.entry(server.clone()).or_default();
+            entry.calls += 1;
+            entry.stats.add_share(c, servers.len());
+        }
+    }
+    top_counts(counts, sort, 10)
+}
+
+fn top_counts(counts: HashMap<String, CountAcc>, sort: SortMode, limit: usize) -> Vec<CountMetric> {
+    let mut rows: Vec<(String, CountAcc)> = counts.into_iter().collect();
+    rows.sort_by(|a, b| compare_labeled_stats(&a.1.stats, &b.1.stats, &a.0, &b.0, sort));
+    let max = max_primary_value(rows.iter().map(|row| &row.1.stats), sort);
+    let total = rows.len();
     rows.into_iter()
         .take(limit)
-        .map(|(name, calls)| CountMetric {
+        .enumerate()
+        .map(|(idx, (name, acc))| CountMetric {
             name: leak(name),
-            calls,
-            value: (calls * 100)
-                .checked_div(max)
-                .map(|v| v.max(1))
-                .unwrap_or(0),
+            calls: acc.calls,
+            value: sort_bar_value(&acc.stats, sort, max, idx, total),
         })
         .collect()
 }
@@ -1436,6 +1657,29 @@ mod tests {
         }
     }
 
+    fn mk_sort_call(
+        tool: &'static str,
+        session_id: &str,
+        project: &str,
+        model: &str,
+        ts: &str,
+        cost: f64,
+        input_tokens: u64,
+    ) -> ParsedCall {
+        ParsedCall {
+            tool,
+            timestamp: DateTime::parse_from_rfc3339(ts)
+                .ok()
+                .map(|d| d.with_timezone(&chrono::Utc)),
+            cost_usd: cost,
+            input_tokens,
+            session_id: session_id.into(),
+            project: project.into(),
+            model: model.into(),
+            ..ParsedCall::default()
+        }
+    }
+
     #[test]
     fn period_today_filters_correctly() {
         use chrono::TimeZone;
@@ -1468,7 +1712,7 @@ mod tests {
             ],
         };
 
-        let data = ingested.limits(Tool::All, &CurrencyFormatter::usd());
+        let data = ingested.limits(Tool::All, SortMode::Spend, &CurrencyFormatter::usd());
 
         let codex = data
             .sections
@@ -1506,8 +1750,8 @@ mod tests {
             ],
         };
 
-        let codex = ingested.limits(Tool::Codex, &CurrencyFormatter::usd());
-        let claude = ingested.limits(Tool::ClaudeCode, &CurrencyFormatter::usd());
+        let codex = ingested.limits(Tool::Codex, SortMode::Spend, &CurrencyFormatter::usd());
+        let claude = ingested.limits(Tool::ClaudeCode, SortMode::Spend, &CurrencyFormatter::usd());
 
         let codex_section = codex
             .sections
@@ -1542,7 +1786,11 @@ mod tests {
             limits: Vec::new(),
         };
 
-        let data = ingested.limits(Tool::ClaudeCode, &CurrencyFormatter::usd());
+        let data = ingested.limits(
+            Tool::ClaudeCode,
+            SortMode::Tokens,
+            &CurrencyFormatter::usd(),
+        );
         let tools: Vec<&str> = data.sections.iter().map(|row| row.tool).collect();
 
         assert_eq!(tools, vec!["Copilot", "Cursor", "Claude Code", "Codex"]);
@@ -1567,6 +1815,199 @@ mod tests {
     }
 
     #[test]
+    fn dashboard_sort_modes_order_usage_backed_rows() {
+        let ingested = Ingested {
+            calls: vec![
+                mk_sort_call(
+                    "codex",
+                    "spend",
+                    "/Users/me/Code/spend",
+                    "spend-model",
+                    "2026-04-01T08:00:00Z",
+                    10.0,
+                    100,
+                ),
+                mk_sort_call(
+                    "codex",
+                    "date",
+                    "/Users/me/Code/date",
+                    "date-model",
+                    "2026-04-29T08:00:00Z",
+                    5.0,
+                    200,
+                ),
+                mk_sort_call(
+                    "codex",
+                    "tokens",
+                    "/Users/me/Code/tokens",
+                    "tokens-model",
+                    "2026-04-15T08:00:00Z",
+                    1.0,
+                    1_000,
+                ),
+            ],
+            limits: Vec::new(),
+        };
+
+        let spend = ingested.dashboard(
+            Period::AllTime,
+            Tool::All,
+            &ProjectFilter::All,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+        );
+        let date = ingested.dashboard(
+            Period::AllTime,
+            Tool::All,
+            &ProjectFilter::All,
+            SortMode::Date,
+            &CurrencyFormatter::usd(),
+        );
+        let tokens = ingested.dashboard(
+            Period::AllTime,
+            Tool::All,
+            &ProjectFilter::All,
+            SortMode::Tokens,
+            &CurrencyFormatter::usd(),
+        );
+
+        assert_eq!(spend.projects[0].name, "spend");
+        assert_eq!(date.projects[0].name, "date");
+        assert_eq!(tokens.projects[0].name, "tokens");
+        assert_eq!(spend.daily[0].day, "04-01");
+        assert_eq!(date.daily[0].day, "04-29");
+        assert_eq!(tokens.daily[0].day, "04-15");
+        assert_eq!(spend.models[0].name, "spend-model");
+        assert_eq!(date.models[0].name, "date-model");
+        assert_eq!(tokens.models[0].name, "tokens-model");
+        assert_eq!(spend.sessions[0].project, "spend");
+        assert_eq!(date.sessions[0].project, "date");
+        assert_eq!(tokens.sessions[0].project, "tokens");
+    }
+
+    #[test]
+    fn count_tables_sort_by_attributed_spend_and_tokens() {
+        let mut shared = mk_sort_call(
+            "codex",
+            "shared",
+            "/Users/me/Code/widgets",
+            "shared-model",
+            "2026-04-29T08:00:00Z",
+            9.0,
+            900,
+        );
+        shared.tools = vec!["Alpha".into(), "Beta".into()];
+        shared.bash_commands = vec!["alpha run".into(), "beta run".into()];
+
+        let mut single = mk_sort_call(
+            "codex",
+            "single",
+            "/Users/me/Code/widgets",
+            "single-model",
+            "2026-04-28T08:00:00Z",
+            5.0,
+            100,
+        );
+        single.tools = vec!["Gamma".into()];
+        single.bash_commands = vec!["gamma run".into()];
+
+        let ingested = Ingested {
+            calls: vec![shared, single],
+            limits: Vec::new(),
+        };
+
+        let spend = ingested.dashboard(
+            Period::AllTime,
+            Tool::All,
+            &ProjectFilter::All,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+        );
+        let tokens = ingested.dashboard(
+            Period::AllTime,
+            Tool::All,
+            &ProjectFilter::All,
+            SortMode::Tokens,
+            &CurrencyFormatter::usd(),
+        );
+
+        assert_eq!(spend.tools[0].name, "Gamma");
+        assert_eq!(tokens.tools[0].name, "Alpha");
+        assert_eq!(spend.commands[0].name, "gamma");
+        assert_eq!(tokens.commands[0].name, "alpha");
+        assert_eq!(tokens.tools[0].calls, 1);
+    }
+
+    #[test]
+    fn usage_sections_can_sort_by_latest_activity() {
+        let now = chrono::Utc::now();
+        let mut codex = mk_recent_call("codex", 10.0, 100);
+        codex.timestamp = Some(now - chrono::Duration::hours(3));
+        let mut cursor = mk_recent_call("cursor", 1.0, 50);
+        cursor.timestamp = Some(now - chrono::Duration::minutes(5));
+
+        let ingested = Ingested {
+            calls: vec![codex, cursor],
+            limits: Vec::new(),
+        };
+
+        let data = ingested.limits(Tool::All, SortMode::Date, &CurrencyFormatter::usd());
+
+        assert_eq!(data.sections[0].tool, "Cursor");
+        assert_eq!(data.sections[1].tool, "Codex");
+    }
+
+    #[test]
+    fn session_detail_uses_active_sort_mode() {
+        let ingested = Ingested {
+            calls: vec![
+                mk_sort_call(
+                    "other",
+                    "s1",
+                    "/Users/me/Code/widgets",
+                    "spend-model",
+                    "2026-04-01T08:00:00Z",
+                    10.0,
+                    100,
+                ),
+                mk_sort_call(
+                    "other",
+                    "s1",
+                    "/Users/me/Code/widgets",
+                    "date-model",
+                    "2026-04-29T08:00:00Z",
+                    2.0,
+                    200,
+                ),
+                mk_sort_call(
+                    "other",
+                    "s1",
+                    "/Users/me/Code/widgets",
+                    "tokens-model",
+                    "2026-04-15T08:00:00Z",
+                    1.0,
+                    1_000,
+                ),
+            ],
+            limits: Vec::new(),
+        };
+
+        let spend = ingested
+            .session_detail("other:s1", SortMode::Spend, &CurrencyFormatter::usd())
+            .unwrap();
+        let date = ingested
+            .session_detail("other:s1", SortMode::Date, &CurrencyFormatter::usd())
+            .unwrap();
+        let tokens = ingested
+            .session_detail("other:s1", SortMode::Tokens, &CurrencyFormatter::usd())
+            .unwrap();
+
+        assert_eq!(spend.calls[0].model, "spend-model");
+        assert_eq!(date.calls[0].model, "date-model");
+        assert_eq!(tokens.calls[0].model, "tokens-model");
+    }
+
+    #[test]
     fn project_costs_roll_up_across_tools() {
         let ingested = Ingested {
             calls: vec![
@@ -1581,6 +2022,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
 
@@ -1608,6 +2050,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
 
@@ -1615,6 +2058,35 @@ mod tests {
         assert_eq!(data.projects[0].name, "ai-commit-dev");
         assert_eq!(data.projects[0].cost, "$5.00");
         assert_eq!(data.project_tools.len(), 2);
+    }
+
+    #[test]
+    fn session_detail_exposes_modal_call_fields() {
+        let mut call = mk_project_call("codex", "s1", "/Users/me/Code/widgets", 1.0);
+        call.input_tokens = 100;
+        call.output_tokens = 50;
+        call.cache_read_input_tokens = 20;
+        call.cache_creation_input_tokens = 5;
+        call.reasoning_tokens = 7;
+        call.web_search_requests = 2;
+        call.tools = vec!["exec_command".into()];
+        call.bash_commands = vec!["cargo test".into()];
+        call.user_message = "run the checks\nand show me failures".into();
+        let ingested = Ingested {
+            calls: vec![call],
+            limits: Vec::new(),
+        };
+
+        let detail = ingested
+            .session_detail("codex:s1", SortMode::Spend, &CurrencyFormatter::usd())
+            .unwrap();
+        let call = &detail.calls[0];
+
+        assert_eq!(call.reasoning_tokens, 7);
+        assert_eq!(call.web_search_requests, 2);
+        assert_eq!(call.bash_commands, vec!["cargo test"]);
+        assert_eq!(call.prompt_full, "run the checks and show me failures");
+        assert_eq!(call.prompt, "run the checks and show me failures");
     }
 
     #[test]
@@ -1651,8 +2123,12 @@ mod tests {
             limits: Vec::new(),
         };
 
-        let options =
-            ingested.project_options(Period::AllTime, Tool::All, &CurrencyFormatter::usd());
+        let options = ingested.project_options(
+            Period::AllTime,
+            Tool::All,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+        );
 
         assert_eq!(options.len(), 2);
         assert_eq!(options[0].identity, None);
@@ -1676,6 +2152,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
         let names: HashSet<&str> = data.projects.iter().map(|project| project.name).collect();
@@ -1713,6 +2190,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
         let names: HashSet<&str> = data.projects.iter().map(|project| project.name).collect();
@@ -1740,6 +2218,7 @@ mod tests {
             Period::AllTime,
             Tool::Codex,
             &ProjectFilter::All,
+            SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
 
@@ -1775,6 +2254,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &filter,
+            SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
 
@@ -1809,6 +2289,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
 
@@ -1818,7 +2299,7 @@ mod tests {
     }
 
     #[test]
-    fn project_tool_rows_sort_by_project_total_then_tool_cost() {
+    fn project_tool_rows_sort_by_row_spend() {
         let ingested = Ingested {
             calls: vec![
                 mk_project_call("claude-code", "a1", "/Users/me/Code/a", 2.0),
@@ -1832,14 +2313,15 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
 
-        assert_eq!(data.project_tools[0].project, "a");
-        assert_eq!(data.project_tools[0].tool, "Codex");
+        assert_eq!(data.project_tools[0].project, "b");
+        assert_eq!(data.project_tools[0].tool, "Cursor");
         assert_eq!(data.project_tools[1].project, "a");
-        assert_eq!(data.project_tools[1].tool, "Claude");
-        assert_eq!(data.project_tools[2].project, "b");
-        assert_eq!(data.project_tools[2].tool, "Cursor");
+        assert_eq!(data.project_tools[1].tool, "Codex");
+        assert_eq!(data.project_tools[2].project, "a");
+        assert_eq!(data.project_tools[2].tool, "Claude");
     }
 }

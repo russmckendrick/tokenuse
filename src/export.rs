@@ -1258,6 +1258,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            crate::app::SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
         (paths, data)

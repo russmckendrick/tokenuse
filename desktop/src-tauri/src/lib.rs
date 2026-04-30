@@ -10,7 +10,7 @@ use tauri::{
 };
 use thiserror::Error;
 use tokenuse::{
-    app::{App, ConfigRowView, DataSource, Page, Period, ProjectFilter, Tool},
+    app::{App, ConfigRowView, DataSource, Page, Period, ProjectFilter, SortMode, Tool},
     data::{DashboardData, LimitsData, ProjectOption, SessionDetailView, SessionOption},
     export::ExportFormat,
     runtime,
@@ -70,6 +70,8 @@ struct DesktopSnapshot {
     periods: Vec<OptionItem>,
     tool: &'static str,
     tools: Vec<OptionItem>,
+    sort: &'static str,
+    sorts: Vec<OptionItem>,
     project: ProjectState,
     dashboard: DashboardData,
     usage: LimitsData,
@@ -124,6 +126,15 @@ async fn set_period(
 async fn set_tool(tool: String, state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
     with_app(state, move |app| {
         app.set_tool(parse_tool(&tool)?);
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn set_sort(sort: String, state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
+    with_app(state, move |app| {
+        app.set_sort(parse_sort(&sort)?);
         Ok(snapshot(app))
     })
     .await
@@ -280,6 +291,14 @@ fn snapshot(app: &App) -> DesktopSnapshot {
             label: tool.label(),
         })
         .collect(),
+        sort: sort_id(app.sort),
+        sorts: SortMode::ALL
+            .into_iter()
+            .map(|sort| OptionItem {
+                value: sort_id(sort),
+                label: sort.label(),
+            })
+            .collect(),
         project: match &app.project_filter {
             ProjectFilter::All => ProjectState {
                 identity: None,
@@ -369,6 +388,23 @@ fn tool_id(tool: Tool) -> &'static str {
         Tool::Cursor => "cursor",
         Tool::Codex => "codex",
         Tool::Copilot => "copilot",
+    }
+}
+
+fn parse_sort(value: &str) -> CommandResult<SortMode> {
+    match value {
+        "spend" => Ok(SortMode::Spend),
+        "date" => Ok(SortMode::Date),
+        "tokens" => Ok(SortMode::Tokens),
+        _ => Err(unknown("sort", value)),
+    }
+}
+
+fn sort_id(sort: SortMode) -> &'static str {
+    match sort {
+        SortMode::Spend => "spend",
+        SortMode::Date => "date",
+        SortMode::Tokens => "tokens",
     }
 }
 
@@ -537,6 +573,7 @@ pub fn run() {
             set_page,
             set_period,
             set_tool,
+            set_sort,
             set_project,
             open_session,
             close_session,
