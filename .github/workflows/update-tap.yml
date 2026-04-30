@@ -1,4 +1,4 @@
-name: Update Homebrew Tap
+name: "🍺 Update Homebrew Tap"
 
 on:
   workflow_call:
@@ -15,11 +15,11 @@ on:
 
 jobs:
   update-tap:
-    name: Update Homebrew Tap
+    name: "🍺 Update Homebrew Tap"
     runs-on: ubuntu-latest
 
     steps:
-      - name: Get release version
+      - name: "🏷️ Get release version"
         id: version
         run: |
           VERSION="${{ inputs.release_tag }}"
@@ -36,7 +36,7 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Using version: ${VERSION}"
 
-      - name: Download checksums
+      - name: "🔐 Download checksums"
         run: |
           mkdir -p build
           VERSION=${{ steps.version.outputs.version }}
@@ -57,14 +57,14 @@ jobs:
             done
           done
 
-      - name: Clone homebrew-tap
+      - name: "📥 Clone homebrew-tap"
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: homebrew-tap
 
-      - name: Update formula
+      - name: "🍻 Update formula"
         run: |
           VERSION=${{ steps.version.outputs.version }}
           DARWIN_AMD64_SHA=$(cut -d' ' -f1 build/tokenuse-darwin-amd64.sha256)

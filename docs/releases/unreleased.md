@@ -4,7 +4,7 @@ Changes that should be included in the next release go here. Keep this file curr
 
 ## Highlights
 
-- No unreleased changes yet.
+- Removed Windows package-manager release automation and install references for now.
 
 ## Notes
 
