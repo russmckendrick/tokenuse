@@ -1,6 +1,6 @@
 # Architecture
 
-`tokenuse` is intentionally local: read local session files, append normalized records to its own archive, aggregate in memory, and render a dashboard. The TUI is the default frontend, and the Tauri desktop app is a second frontend over the same Rust core. There is no daemon and no file watcher.
+`tokenuse` keeps usage ingestion local: read local session files, append normalized records to its own archive, aggregate in memory, and render a dashboard. The TUI is the default frontend, and the Tauri desktop app is a second frontend over the same Rust core. There is no daemon and no file watcher. Network access is limited to explicit confirmed Config-page downloads and maintainer refresh flags.
 
 ## Startup Flow
 
@@ -8,8 +8,8 @@
 flowchart TD
     A[cargo run] --> B[handle CLI flags]
     B -->|--list-projects| C[sync archive and print inventory]
-    B -->|--refresh-prices| D[refresh pricing snapshot when feature is enabled]
-    B -->|--generate-currency-json| L[generate currency snapshot when feature is enabled]
+    B -->|--refresh-prices| D[refresh embedded pricing snapshot]
+    B -->|--generate-currency-json| L[generate embedded currency snapshot]
     B -->|no flag| M[load config.json and rates.json]
     M --> N[open archive.db]
     N --> O{archive has rows?}
@@ -192,13 +192,13 @@ cost = multiplier * (
 )
 ```
 
-Claude Opus fast mode uses the model row's `fast_multiplier` when present. The CLI refresh command fetches LiteLLM pricing, filters to relevant model families, adds local aliases, and rewrites the embedded snapshot:
+Claude Opus fast mode uses the model row's `fast_multiplier` when present. The maintainer CLI refresh command fetches LiteLLM pricing, filters to relevant model families, adds local aliases, and rewrites the embedded snapshot:
 
 ```bash
-cargo run --features refresh-prices -- --refresh-prices
+cargo run -- --refresh-prices
 ```
 
-The TUI configuration page can also pull the LiteLLM-derived snapshot into the local config directory when built with `refresh-prices`. Because the archive stores `cost_usd` at import time, refreshed pricing applies to newly imported calls; existing historical rows keep their original USD cost.
+The TUI and desktop configuration pages can also download the LiteLLM-derived snapshot into the local config directory after confirmation. Because the archive stores `cost_usd` at import time, refreshed pricing applies to newly imported calls; existing historical rows keep their original USD cost. Builds made with `--no-default-features` compile without these download actions.
 
 ## Export
 
@@ -231,16 +231,16 @@ Runtime settings live in the platform config directory under `tokenuse`:
 
 USD is the default display currency. The dashboard still stores calculated spend as `cost_usd`; aggregation sums USD and formats the final display values through the active currency table.
 
-`currency/rates.json` is the embedded fallback snapshot. The TUI configuration page can pull the latest published copy from:
+`currency/rates.json` is the embedded fallback snapshot. The TUI and desktop configuration pages can download the latest published copy after confirmation from:
 
 ```text
 https://raw.githubusercontent.com/russmckendrick/tokenuse/refs/heads/main/currency/rates.json
 ```
 
-That local rates pull is enabled only when built with `refresh-currency`; the default build remains local-only and has no network dependency.
+That local rates download writes `<config dir>/tokenuse/rates.json` and reloads the currency table immediately. Builds made with `--no-default-features` compile without this download action.
 
 The snapshot is generated from Frankfurter's USD-based v2 rates endpoint, filtered to fiat display currencies, and refreshed by a nightly GitHub Action:
 
 ```bash
-cargo run --features refresh-currency -- --generate-currency-json
+cargo run -- --generate-currency-json
 ```

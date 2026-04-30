@@ -62,9 +62,99 @@ jobs:
       - name: "🧪 Test"
         run: cargo test
 
+  desktop-check:
+    name: "🖥️ Desktop Check"
+    runs-on: macos-latest
+
+    steps:
+      - name: "📥 Check out repository"
+        uses: actions/checkout@v6
+
+      - name: "🦀 Install Rust toolchain"
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: "⚡ Restore Rust cache"
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            desktop/src-tauri -> target
+
+      - name: "📦 Set up pnpm"
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: "🟢 Set up Node.js"
+        uses: actions/setup-node@v5
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+
+      - name: "📦 Install desktop dependencies"
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: "🔎 Check desktop frontend"
+        working-directory: desktop
+        run: pnpm run check
+
+      - name: "🏗️ Build desktop frontend"
+        working-directory: desktop
+        run: pnpm run build
+
+      - name: "🔎 Check desktop shell"
+        working-directory: desktop/src-tauri
+        run: cargo check
+
+  release-version:
+    name: "🏷️ Release Version"
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "📥 Check out repository"
+        uses: actions/checkout@v6
+
+      - name: "🏷️ Validate release metadata"
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          ROOT_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          DESKTOP_CARGO_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' desktop/src-tauri/Cargo.toml | head -n 1)
+          DESKTOP_PACKAGE_VERSION=$(python3 -c 'import json; print(json.load(open("desktop/package.json"))["version"])')
+          TAURI_VERSION=$(python3 -c 'import json; print(json.load(open("desktop/src-tauri/tauri.conf.json"))["version"])')
+
+          echo "Tag version: ${TAG_VERSION}"
+          echo "Root Cargo version: ${ROOT_VERSION}"
+          echo "Desktop Cargo version: ${DESKTOP_CARGO_VERSION}"
+          echo "Desktop package version: ${DESKTOP_PACKAGE_VERSION}"
+          echo "Tauri config version: ${TAURI_VERSION}"
+
+          if [ "${ROOT_VERSION}" != "${TAG_VERSION}" ]; then
+            echo "Root Cargo.toml version must match ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+
+          if [ "${DESKTOP_CARGO_VERSION}" != "${TAG_VERSION}" ]; then
+            echo "desktop/src-tauri/Cargo.toml version must match ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+
+          if [ "${DESKTOP_PACKAGE_VERSION}" != "${TAG_VERSION}" ]; then
+            echo "desktop/package.json version must match ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+
+          if [ "${TAURI_VERSION}" != "${TAG_VERSION}" ]; then
+            echo "desktop/src-tauri/tauri.conf.json version must match ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+
   build:
     name: "📦 Build (${{ matrix.artifact }})"
-    needs: check
+    needs: [check, desktop-check, release-version]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ${{ matrix.os }}
     strategy:
@@ -134,9 +224,112 @@ jobs:
             ${{ matrix.artifact }}
             ${{ matrix.artifact }}.sha256
 
+  desktop-build:
+    name: "🖥️ Build Desktop DMG"
+    needs: [check, desktop-check, release-version]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-latest
+
+    env:
+      DESKTOP_DMG: tokenuse-desktop-macos-universal.dmg
+
+    steps:
+      - name: "📥 Check out repository"
+        uses: actions/checkout@v6
+
+      - name: "🦀 Install Rust toolchain"
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: "⚡ Restore Rust cache"
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            desktop/src-tauri -> target
+
+      - name: "📦 Set up pnpm"
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: "🟢 Set up Node.js"
+        uses: actions/setup-node@v5
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+
+      - name: "📦 Install desktop dependencies"
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: "🍎 Import Apple Developer certificate"
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          echo "${APPLE_CERTIFICATE}" | base64 --decode > certificate.p12
+          security create-keychain -p "${KEYCHAIN_PASSWORD}" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "${KEYCHAIN_PASSWORD}" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+          security import certificate.p12 -k build.keychain -P "${APPLE_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${KEYCHAIN_PASSWORD}" build.keychain
+          security find-identity -v -p codesigning build.keychain
+
+      - name: "🍎 Write App Store Connect API key"
+        env:
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          API_KEY_PATH="${RUNNER_TEMP}/AuthKey_${{ secrets.APPLE_API_KEY }}.p8"
+          printf '%s' "${APPLE_API_PRIVATE_KEY}" > "${API_KEY_PATH}"
+          echo "APPLE_API_KEY_PATH=${API_KEY_PATH}" >> "$GITHUB_ENV"
+
+      - name: "🏗️ Build notarized desktop DMG"
+        working-directory: desktop
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: pnpm tauri build --target universal-apple-darwin --bundles dmg --ci
+
+      - name: "🔐 Verify notarized DMG"
+        working-directory: desktop
+        run: |
+          DMG=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name '*.dmg' -type f | head -n 1)
+          if [ -z "${DMG}" ]; then
+            echo "No desktop DMG was produced" >&2
+            exit 1
+          fi
+
+          APP="src-tauri/target/universal-apple-darwin/release/bundle/macos/Token Use.app"
+          codesign --verify --deep --strict --verbose=2 "${APP}"
+          xcrun stapler validate "${DMG}"
+          spctl -a -vv -t open --context context:primary-signature "${DMG}"
+
+      - name: "🏷️ Normalize desktop DMG"
+        working-directory: desktop
+        run: |
+          DMG=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name '*.dmg' -type f | head -n 1)
+          cp "${DMG}" "../${DESKTOP_DMG}"
+          cd ..
+          shasum -a 256 "${DESKTOP_DMG}" > "${DESKTOP_DMG}.sha256"
+
+      - name: "⬆️ Upload desktop artifact"
+        uses: actions/upload-artifact@v6
+        with:
+          name: tokenuse-desktop-macos-universal
+          path: |
+            ${{ env.DESKTOP_DMG }}
+            ${{ env.DESKTOP_DMG }}.sha256
+
   release:
     name: "🚀 Release"
-    needs: build
+    needs: [build, desktop-build]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
 

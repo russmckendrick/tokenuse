@@ -408,6 +408,8 @@ fn about_metadata() -> AboutMetadata<'static> {
     AboutMetadata {
         name: Some(APP_NAME.into()),
         version: Some(version),
+        #[cfg(target_os = "macos")]
+        short_version: Some(String::new()),
         authors: Some(vec![AUTHOR.into()]),
         comments: Some("Local AI token usage analytics.".into()),
         copyright: Some(format!("Author: {AUTHOR}")),

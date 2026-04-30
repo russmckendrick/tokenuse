@@ -413,6 +413,32 @@ mod tests {
     }
 
     #[test]
+    fn config_download_confirmation_modal_render_smoke_test() {
+        let backend = TestBackend::new(170, 64);
+        let mut terminal = Terminal::new(backend).expect("create terminal");
+        let mut app = App::default();
+        app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("draw download confirmation modal");
+
+        let buffer = terminal.backend().buffer();
+        let rendered = buffer
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+
+        assert!(rendered.contains("Download rates.json?"));
+        assert!(rendered.contains("published tokenuse currency snapshot"));
+        assert!(rendered.contains("Enter/y"));
+        assert!(rendered.contains("Esc/n"));
+    }
+
+    #[test]
     fn usage_page_render_smoke_test() {
         let backend = TestBackend::new(170, 64);
         let mut terminal = Terminal::new(backend).expect("create terminal");

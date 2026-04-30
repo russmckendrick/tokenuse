@@ -6,7 +6,7 @@ use ratatui::{
 };
 
 use crate::{
-    app::{App, FolderPickerEntryKind, Page, Period},
+    app::{App, ConfigDownload, FolderPickerEntryKind, Page, Period},
     data::{
         CountMetric, DailyMetric, ModelMetric, ProjectMetric, ProjectToolMetric, RecentModelMetric,
         RecentUsageMetric, SessionMetric, Summary, ToolLimitSection,
@@ -510,6 +510,7 @@ pub(super) fn render_config(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
     render_config_paths(frame, sections[4], app);
     render_footer(frame, sections[6], app);
     render_currency_modal(frame, root, app);
+    render_download_confirm_modal(frame, root, app);
 }
 
 fn render_config_rows(frame: &mut Frame<'_>, area: Rect, app: &App) {
@@ -935,6 +936,56 @@ pub(super) fn render_export_modal(frame: &mut Frame<'_>, area: Rect, app: &App) 
     ]))
     .style(theme::base())
     .render(layout[2], frame.buffer_mut());
+}
+
+pub(super) fn render_download_confirm_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let Some(target) = app.download_confirm else {
+        return;
+    };
+
+    let width = 88.min(area.width.saturating_sub(4)).max(58);
+    let height = 11.min(area.height.saturating_sub(4)).max(9);
+    let modal_area = centered_rect(width, height, area);
+    Clear.render(modal_area, frame.buffer_mut());
+
+    let block = theme::panel_block(target.title(), theme::YELLOW);
+    let inner = block.inner(modal_area);
+    block.render(modal_area, frame.buffer_mut());
+
+    let output = match target {
+        ConfigDownload::CurrencyRates => &app.paths.currency_rates_file,
+        ConfigDownload::PricingSnapshot => &app.paths.pricing_snapshot_file,
+    };
+
+    let lines = vec![
+        Line::from(vec![
+            Span::styled("File   ", theme::key()),
+            Span::styled(target.file_name(), theme::base()),
+        ]),
+        Line::from(vec![
+            Span::styled("Source ", theme::key()),
+            Span::styled(target.source(), theme::muted()),
+        ]),
+        Line::from(vec![
+            Span::styled("Write  ", theme::key()),
+            Span::styled(output.display().to_string(), theme::muted()),
+        ]),
+        Line::from(vec![
+            Span::styled("After  ", theme::key()),
+            Span::styled(target.effect(), theme::muted()),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Enter/y", theme::key()),
+            Span::styled(" download    ", theme::muted()),
+            Span::styled("Esc/n", theme::key()),
+            Span::styled(" cancel", theme::muted()),
+        ]),
+    ];
+
+    Paragraph::new(Text::from(lines))
+        .style(theme::base())
+        .render(inner, frame.buffer_mut());
 }
 
 pub(super) fn render_export_dir_picker_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {

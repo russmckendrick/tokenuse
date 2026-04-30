@@ -102,8 +102,8 @@ FLAGS:
     -h, --help                     Print this help message
     -V, --version                  Print version information
         --list-projects            Print the ingested project inventory and exit
-        --refresh-prices           Refresh embedded pricing snapshot (requires --features refresh-prices)
-        --generate-currency-json   Regenerate embedded currency rates (requires --features refresh-currency)
+        --refresh-prices           Refresh embedded pricing snapshot (requires refresh-prices feature)
+        --generate-currency-json   Regenerate embedded currency rates (requires refresh-currency feature)
 
 Run with no flags to launch the interactive dashboard.",
         name = env!("CARGO_PKG_NAME"),
@@ -214,7 +214,7 @@ fn refresh_prices() -> Result<()> {
 
 #[cfg(not(feature = "refresh-prices"))]
 fn refresh_prices() -> Result<()> {
-    eprintln!("--refresh-prices requires building with --features refresh-prices");
+    eprintln!("--refresh-prices requires the refresh-prices feature");
     Ok(())
 }
 
@@ -228,7 +228,7 @@ fn refresh_currency() -> Result<()> {
 
 #[cfg(not(feature = "refresh-currency"))]
 fn refresh_currency() -> Result<()> {
-    eprintln!("--generate-currency-json requires building with --features refresh-currency");
+    eprintln!("--generate-currency-json requires the refresh-currency feature");
     Ok(())
 }
 

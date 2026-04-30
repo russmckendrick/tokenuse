@@ -248,6 +248,42 @@ impl ExportModal {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigDownload {
+    CurrencyRates,
+    PricingSnapshot,
+}
+
+impl ConfigDownload {
+    pub fn title(self) -> &'static str {
+        match self {
+            Self::CurrencyRates => "Download rates.json?",
+            Self::PricingSnapshot => "Download LiteLLM prices?",
+        }
+    }
+
+    pub fn file_name(self) -> &'static str {
+        match self {
+            Self::CurrencyRates => "rates.json",
+            Self::PricingSnapshot => "pricing-snapshot.json",
+        }
+    }
+
+    pub fn source(self) -> &'static str {
+        match self {
+            Self::CurrencyRates => "published tokenuse currency snapshot",
+            Self::PricingSnapshot => "LiteLLM model price table",
+        }
+    }
+
+    pub fn effect(self) -> &'static str {
+        match self {
+            Self::CurrencyRates => "display rates update immediately",
+            Self::PricingSnapshot => "new prices apply to newly imported calls",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FolderPickerEntryKind {
     UseCurrent,
     Parent,
@@ -499,6 +535,7 @@ pub struct App {
     pub project_filter: ProjectFilter,
     pub project_modal: Option<ProjectModal>,
     pub currency_modal: Option<CurrencyModal>,
+    pub download_confirm: Option<ConfigDownload>,
     pub session_modal: Option<SessionModal>,
     pub export_modal: Option<ExportModal>,
     pub export_dir_picker: Option<FolderPickerModal>,
@@ -527,6 +564,7 @@ impl Default for App {
             project_filter: ProjectFilter::All,
             project_modal: None,
             currency_modal: None,
+            download_confirm: None,
             session_modal: None,
             export_modal: None,
             export_dir_picker: None,
@@ -984,12 +1022,12 @@ impl App {
             ConfigRowView {
                 name: "rates.json",
                 value: rates_value,
-                action: "pull",
+                action: "download",
             },
             ConfigRowView {
                 name: "LiteLLM prices",
                 value: pricing_value,
-                action: "pull",
+                action: "download",
             },
         ]
     }
@@ -1010,6 +1048,11 @@ impl App {
 
         if self.currency_modal.is_some() {
             self.handle_currency_modal_key(key);
+            return;
+        }
+
+        if self.download_confirm.is_some() {
+            self.handle_download_confirm_key(key);
             return;
         }
 
@@ -1240,8 +1283,29 @@ impl App {
     fn activate_config_row(&mut self) {
         match self.config_selected {
             0 => self.open_currency_modal(),
-            1 => self.refresh_currency_rates(),
-            2 => self.refresh_pricing_snapshot(),
+            1 => self.open_download_confirm(ConfigDownload::CurrencyRates),
+            2 => self.open_download_confirm(ConfigDownload::PricingSnapshot),
+            _ => {}
+        }
+    }
+
+    fn open_download_confirm(&mut self, target: ConfigDownload) {
+        self.download_confirm = Some(target);
+    }
+
+    fn handle_download_confirm_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('n') | KeyCode::Char('N') => {
+                self.download_confirm = None;
+            }
+            KeyCode::Enter | KeyCode::Char('y') | KeyCode::Char('Y') => {
+                let target = self.download_confirm.take();
+                match target {
+                    Some(ConfigDownload::CurrencyRates) => self.refresh_currency_rates(),
+                    Some(ConfigDownload::PricingSnapshot) => self.refresh_pricing_snapshot(),
+                    None => {}
+                }
+            }
             _ => {}
         }
     }
@@ -1348,7 +1412,7 @@ impl App {
 
     #[cfg(not(feature = "refresh-currency"))]
     pub fn refresh_currency_rates(&mut self) {
-        self.status = Some("rates refresh requires cargo run --features refresh-currency".into());
+        self.status = Some("rates download unavailable in this build".into());
     }
 
     #[cfg(feature = "refresh-prices")]
@@ -1365,7 +1429,7 @@ impl App {
 
     #[cfg(not(feature = "refresh-prices"))]
     pub fn refresh_pricing_snapshot(&mut self) {
-        self.status = Some("LiteLLM refresh requires cargo run --features refresh-prices".into());
+        self.status = Some("LiteLLM download unavailable in this build".into());
     }
 }
 
@@ -1479,6 +1543,69 @@ mod tests {
 
         assert_eq!(app.page, Page::Usage);
         assert!(!data.sections.is_empty());
+    }
+
+    #[test]
+    fn config_rows_label_download_actions() {
+        let app = App::default();
+        let rows = app.config_rows();
+
+        assert_eq!(rows[1].name, "rates.json");
+        assert_eq!(rows[1].action, "download");
+        assert_eq!(rows[2].name, "LiteLLM prices");
+        assert_eq!(rows[2].action, "download");
+    }
+
+    #[test]
+    fn config_download_confirmation_opens_and_cancels() {
+        let mut app = App::default();
+
+        app.handle_key(key(KeyCode::Char('c')));
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(app.download_confirm, Some(ConfigDownload::CurrencyRates));
+
+        app.handle_key(key(KeyCode::Char('q')));
+        assert_eq!(app.download_confirm, Some(ConfigDownload::CurrencyRates));
+        assert!(!app.should_quit());
+
+        app.handle_key(key(KeyCode::Char('n')));
+        assert_eq!(app.download_confirm, None);
+        assert_eq!(app.status, None);
+    }
+
+    #[test]
+    fn config_download_confirmation_escape_cancels_pricing_download() {
+        let mut app = App::default();
+
+        app.handle_key(key(KeyCode::Char('c')));
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(app.download_confirm, Some(ConfigDownload::PricingSnapshot));
+
+        app.handle_key(key(KeyCode::Esc));
+        assert_eq!(app.download_confirm, None);
+        assert_eq!(app.status, None);
+    }
+
+    #[cfg(not(feature = "refresh-currency"))]
+    #[test]
+    fn confirming_rates_download_reports_when_build_has_no_downloads() {
+        let mut app = App::default();
+
+        app.handle_key(key(KeyCode::Char('c')));
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(app.download_confirm, None);
+        assert_eq!(
+            app.status.as_deref(),
+            Some("rates download unavailable in this build")
+        );
     }
 
     #[test]

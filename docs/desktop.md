@@ -29,9 +29,38 @@ Build a local macOS app bundle:
 pnpm run tauri:build:app
 ```
 
-Unsigned installer packaging remains out of scope for the first desktop pass. Use `pnpm run tauri:build` when preparing platform installers later.
+Build a local macOS DMG:
 
-The desktop app uses Svelte + Vite for the webview and Tauri commands for all local data access. The frontend calls Rust through `@tauri-apps/api/core` `invoke()` calls; native folder selection uses the Tauri dialog plugin.
+```bash
+pnpm run tauri -- build --bundles dmg
+```
+
+The desktop app uses Svelte + Vite for the webview and Tauri commands for all local data access. The frontend calls Rust through `@tauri-apps/api/core` `invoke()` calls; native folder selection and Config-page download confirmations use the Tauri dialog plugin.
+
+## Distribution
+
+Tagged releases build a universal macOS desktop DMG named `tokenuse-desktop-macos-universal.dmg`, sign it with a Developer ID Application certificate, notarize it through App Store Connect, and upload it to the GitHub Release with a `.sha256` checksum.
+
+The release workflow also updates the existing Homebrew tap with a desktop cask. Install the desktop app with:
+
+```bash
+brew install --cask russmckendrick/tap/tokenuse
+```
+
+The macOS release job requires these repository secrets:
+
+| Secret | Purpose |
+| --- | --- |
+| `APPLE_CERTIFICATE` | Base64-encoded Developer ID Application `.p12` certificate |
+| `APPLE_CERTIFICATE_PASSWORD` | Password for the exported certificate |
+| `KEYCHAIN_PASSWORD` | Temporary CI keychain password |
+| `APPLE_SIGNING_IDENTITY` | Developer ID Application signing identity |
+| `APPLE_API_ISSUER` | App Store Connect issuer ID |
+| `APPLE_API_KEY` | App Store Connect key ID |
+| `APPLE_API_PRIVATE_KEY` | App Store Connect `.p8` private key contents |
+| `HOMEBREW_TAP_TOKEN` | Token with push access to `russmckendrick/homebrew-tap` |
+
+Release tags must match the version in `Cargo.toml`, `desktop/src-tauri/Cargo.toml`, `desktop/package.json`, and `desktop/src-tauri/tauri.conf.json`. When preparing a release, bump all four version fields together before tagging.
 
 ## Shared Data
 
@@ -53,7 +82,7 @@ Changing currency or refreshing the local archive in the desktop app affects the
 - `desktop/src-tauri/src/main.rs` is only a thin passthrough to `tokenuse_desktop_lib::run()`.
 - `desktop/src-tauri/capabilities/default.json` grants the narrow default permissions: core Tauri APIs and dialog access.
 - Desktop refresh uses the same background archive refresher as the TUI. The frontend polls snapshots so completed refreshes are applied without blocking the UI.
-- The default build remains local-only. The existing `refresh-currency` and `refresh-prices` feature gates still control network-backed refresh actions.
+- Default desktop builds include confirmed Config-page downloads for `rates.json` and `pricing-snapshot.json`. Build with `--no-default-features` for a no-download desktop binary; the `refresh-currency` and `refresh-prices` feature gates still control whether those network-backed actions compile in.
 
 ## Checks
 

@@ -55,7 +55,7 @@ pub trait ToolAdapter: Send + Sync {
 
 ## Pricing
 
-`src/pricing/snapshot.json` is an embedded LiteLLM-derived price table. The default build never fetches it at runtime.
+`src/pricing/snapshot.json` is an embedded LiteLLM-derived price table. Usage ingestion never fetches pricing; the Config page can download a local `pricing-snapshot.json` override only after confirmation.
 
 ```text
 cost = multiplier * (
@@ -69,10 +69,10 @@ cost = multiplier * (
 
 Model lookup canonicalizes model names, resolves aliases such as `cursor-auto`, `anthropic-auto`, and `openai-auto`, then falls back to a default Sonnet row if no match exists. Claude Opus fast mode applies the row's `fast_multiplier`.
 
-Refresh the embedded snapshot with:
+Refresh the embedded maintainer snapshot with:
 
 ```bash
-cargo run --features refresh-prices -- --refresh-prices
+cargo run -- --refresh-prices
 ```
 
 ## Adding a New Tool

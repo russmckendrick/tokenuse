@@ -1,6 +1,6 @@
 [package]
 name = "tokenuse-desktop"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 
 [lib]
@@ -16,9 +16,9 @@ serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 thiserror = "2"
-tokenuse = { path = "../.." }
+tokenuse = { path = "../..", default-features = false }
 
 [features]
-default = []
+default = ["refresh-currency", "refresh-prices"]
 refresh-currency = ["tokenuse/refresh-currency"]
 refresh-prices = ["tokenuse/refresh-prices"]

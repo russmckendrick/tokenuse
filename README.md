@@ -1,8 +1,8 @@
 # Token Use
 
-`tokenuse` is a local-only Rust TUI for exploring AI coding tool token and cost usage. It reads session files already written on your machine, appends normalized records to its own archive, and renders a dense terminal dashboard for spend by day, project, tool, model, shell command, and MCP server.
+`tokenuse` is a Rust TUI for exploring AI coding tool token and cost usage. It reads session files already written on your machine, appends normalized records to its own archive, and renders a dense terminal dashboard for spend by day, project, tool, model, shell command, and MCP server.
 
-There is no API key, proxy, telemetry endpoint, daemon, or live file watcher. The default build has no network dependency; the only networked paths are the explicit pricing and currency refresh features.
+There is no API key, proxy, telemetry endpoint, daemon, or live file watcher. Usage ingestion stays local-only; outbound network is limited to explicit confirmed Config-page downloads or maintainer refresh flags.
 
 ## Quick Start
 
@@ -74,13 +74,9 @@ The dashboard stores user settings and downloaded data in the platform config di
 - `rates.json`: latest downloaded published currency snapshot
 - `pricing-snapshot.json`: latest downloaded LiteLLM-derived pricing snapshot
 
-USD remains the default. Costs are calculated and stored internally as import-time USD, then converted for display using the configured currency. Open the TUI configuration page with `c` to pick a currency or pull the latest local data. Pulling `rates.json` updates display rates immediately; pulling LiteLLM pricing applies to newly imported calls.
+USD remains the default. Costs are calculated and stored internally as import-time USD, then converted for display using the configured currency. Open the TUI configuration page with `c` to pick a currency or download the latest local data. Downloading `rates.json` asks for confirmation and updates display rates immediately; downloading LiteLLM pricing asks for confirmation and applies to newly imported calls.
 
-The in-app pull actions are available only when built with the matching feature:
-
-```bash
-cargo run --features refresh-currency,refresh-prices
-```
+Default TUI and desktop builds include the confirmed download actions. Build with `--no-default-features` when you need a no-download binary; those builds keep ingestion local-only and report Config-page downloads as unavailable.
 
 ## CLI Helpers
 
@@ -93,13 +89,13 @@ cargo run -- --list-projects
 Refresh the embedded LiteLLM-derived pricing snapshot:
 
 ```bash
-cargo run --features refresh-prices -- --refresh-prices
+cargo run -- --refresh-prices
 ```
 
 Refresh the checked-in Frankfurter-derived currency snapshot:
 
 ```bash
-cargo run --features refresh-currency -- --generate-currency-json
+cargo run -- --generate-currency-json
 ```
 
 Do not hand-edit `src/pricing/snapshot.json` or `currency/rates.json`; use the refresh commands so generated data stays consistent.

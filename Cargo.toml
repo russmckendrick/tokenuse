@@ -1,6 +1,6 @@
 [package]
 name = "tokenuse"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 description = "A terminal dashboard for AI token usage analytics."
 license = "MIT"
@@ -19,6 +19,6 @@ ureq = { version = "2", features = ["json"], optional = true }
 plotters = { version = "0.3", default-features = false, features = ["svg_backend", "bitmap_backend", "bitmap_encoder", "line_series", "ttf"] }
 
 [features]
-default = []
+default = ["refresh-prices", "refresh-currency"]
 refresh-prices = ["ureq"]
 refresh-currency = ["ureq"]

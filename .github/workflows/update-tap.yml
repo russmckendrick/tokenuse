@@ -41,7 +41,7 @@ jobs:
           mkdir -p build
           VERSION=${{ steps.version.outputs.version }}
 
-          for file in tokenuse-darwin-amd64.sha256 tokenuse-darwin-arm64.sha256 tokenuse-linux-amd64.sha256 tokenuse-linux-arm64.sha256; do
+          for file in tokenuse-darwin-amd64.sha256 tokenuse-darwin-arm64.sha256 tokenuse-linux-amd64.sha256 tokenuse-linux-arm64.sha256 tokenuse-desktop-macos-universal.dmg.sha256; do
             for attempt in 1 2 3 4 5; do
               if curl -L --fail -o "build/${file}" "https://github.com/${{ github.repository }}/releases/download/${VERSION}/${file}"; then
                 break
@@ -64,16 +64,17 @@ jobs:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: homebrew-tap
 
-      - name: "🍻 Update formula"
+      - name: "🍻 Update formula and cask"
         run: |
           VERSION=${{ steps.version.outputs.version }}
           DARWIN_AMD64_SHA=$(cut -d' ' -f1 build/tokenuse-darwin-amd64.sha256)
           DARWIN_ARM64_SHA=$(cut -d' ' -f1 build/tokenuse-darwin-arm64.sha256)
           LINUX_AMD64_SHA=$(cut -d' ' -f1 build/tokenuse-linux-amd64.sha256)
           LINUX_ARM64_SHA=$(cut -d' ' -f1 build/tokenuse-linux-arm64.sha256)
+          DESKTOP_DMG_SHA=$(cut -d' ' -f1 build/tokenuse-desktop-macos-universal.dmg.sha256)
 
           cd homebrew-tap
-          mkdir -p Formula
+          mkdir -p Casks Formula
 
           cat > Formula/tokenuse.rb << EOF
           class Tokenuse < Formula
@@ -125,12 +126,31 @@ jobs:
           end
           EOF
 
+          cat > Casks/tokenuse.rb << EOF
+          cask "tokenuse" do
+            version "${VERSION#v}"
+            sha256 "${DESKTOP_DMG_SHA}"
+
+            url "https://github.com/${{ github.repository }}/releases/download/v#{version}/tokenuse-desktop-macos-universal.dmg"
+            name "Token Use"
+            desc "Desktop app for local AI coding tool token and cost usage"
+            homepage "https://github.com/${{ github.repository }}"
+
+            livecheck do
+              url :url
+              strategy :github_latest
+            end
+
+            app "Token Use.app"
+          end
+          EOF
+
           git config user.name "GitHub Action"
           git config user.email "action@github.com"
-          git add Formula/tokenuse.rb
+          git add Casks/tokenuse.rb Formula/tokenuse.rb
 
           if git diff --cached --quiet; then
-            echo "Formula already up to date"
+            echo "Formula and cask already up to date"
             exit 0
           fi
 

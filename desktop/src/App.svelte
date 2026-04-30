@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { open as openDialog } from '@tauri-apps/plugin-dialog';
+  import { confirm, open as openDialog } from '@tauri-apps/plugin-dialog';
   import { ArrowLeft, Database, Download, FolderOpen, RefreshCw, Search, X } from 'lucide-svelte';
   import { api } from './api';
   import Panel from './Panel.svelte';
@@ -235,12 +235,42 @@
   }
 
   function configAction(row: ConfigRow) {
+    void runConfigAction(row);
+  }
+
+  async function runConfigAction(row: ConfigRow) {
     if (row.name === 'currency override') {
       openModal('currency');
     } else if (row.name === 'rates.json') {
-      void commit(() => api.refreshCurrencyRates());
+      const confirmed = await confirmDownload(
+        'Download rates.json?',
+        'This will download the latest published tokenuse currency snapshot into your local config directory.'
+      );
+      if (confirmed) {
+        await commit(() => api.refreshCurrencyRates());
+      }
     } else if (row.name === 'LiteLLM prices') {
-      void commit(() => api.refreshPricingSnapshot());
+      const confirmed = await confirmDownload(
+        'Download LiteLLM prices?',
+        'This will download the latest LiteLLM model price table into your local config directory.'
+      );
+      if (confirmed) {
+        await commit(() => api.refreshPricingSnapshot());
+      }
+    }
+  }
+
+  async function confirmDownload(title: string, message: string) {
+    try {
+      return await confirm(message, {
+        title,
+        kind: 'warning',
+        okLabel: 'Download',
+        cancelLabel: 'Cancel'
+      });
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+      return false;
     }
   }
 </script>
