@@ -82,7 +82,7 @@ The dashboard panels are built from the filtered call set:
 
 ## Pages And Modals
 
-The TUI is a small state machine over five pages (Overview, Deep Dive, Usage, Config, Session) plus five overlay modals. The first three pages are reachable through the tab strip via `Tab` / `Shift-Tab` or their direct keys; Config and Session are sub-pages opened from any tab. All routing lives in `src/app.rs`; rendering is dispatched from `src/ui.rs`.
+The TUI is a small state machine over five pages (Overview, Deep Dive, Usage, Config, Session) plus six overlay modals. The first three pages are reachable through the tab strip via `Tab` / `Shift-Tab` or their direct keys; Config and Session are sub-pages opened from any tab. All routing lives in `src/app.rs`; rendering is dispatched from `src/ui.rs`.
 
 ```mermaid
 flowchart LR
@@ -106,6 +106,7 @@ flowchart LR
     DD -- p --> Pick
     O -- e --> Exp[Export picker]
     DD -- e --> Exp
+    Exp -- f/b --> FPick[Export folder picker]
     Cfg -- Enter on currency --> Curr[Currency picker]
     O -- h/? --> Help[Help modal]
     DD -- h/? --> Help
@@ -120,10 +121,11 @@ flowchart LR
 - **Session** (`Page::Session`): drill-down for one `tool:session_id`. Rendered from `SessionDetailView`, computed by filtering `Ingested.calls` by `session_key(call) == key` and sorting by timestamp. Live data shows per-call timestamp, model, cost, in/out tokens, cache, tools used, and a 120-char single-line prompt snippet. Sample mode shows a privacy note since per-call records are not bundled.
 - **Config** (`Page::Config`): currency override + local data refresh actions (rates, LiteLLM pricing).
 - **Project picker, Currency picker, Session picker** (`*Modal` structs): each holds `options`, a typeable `query`, and a `filtered: Vec<usize>` mapping; all three share the same case-insensitive substring filter pattern. The project picker pins `All` regardless of query.
-- **Export picker** (`ExportModal`): four-row chooser (`JSON`, `CSV`, `SVG`, `PNG`); on `Enter` it calls `export::write` with the active period, tool, and project filter.
+- **Export picker** (`ExportModal`): four-row chooser (`JSON`, `CSV`, `SVG`, `PNG`) showing the active session export folder. `Enter` writes to that folder; `f` or `b` opens the folder picker.
+- **Export folder picker** (`FolderPickerModal`): directory-only picker rooted at the current export folder. `Use this folder` updates `App::export_dir` for the running session; `Esc` cancels without saving to `config.json`.
 - **Help** (`help_open: bool`): full keybinding reference, openable from any page with `h` or `?`. Closes with `h`, `?`, or `Esc`.
 
-The five modals are checked in priority order in `App::handle_key`: help, currency, project, session, then export. Only one is open at a time.
+The modal state is checked in priority order in `App::handle_key`: help, currency, project, session, export folder picker, then export. The folder picker is the only nested modal and sits on top of the export picker.
 
 ## Project Identity
 
@@ -198,7 +200,7 @@ The TUI configuration page can also pull the LiteLLM-derived snapshot into the l
 
 ## Export
 
-Press `e` on the Dashboard to open the export picker. Output lands in `<config dir>/tokenuse/exports/`, never overwriting prior runs — every filename is timestamped with `YYYYMMDDTHHMMSS` and slugged with the active period, tool, and project filter (for example `tokenuse-20260429T160054-week-claude-allprojects.json`).
+Press `e` on the Dashboard to open the export picker. Output defaults to the user's Downloads folder, falling back to `~/Downloads` and then `<config dir>/tokenuse/exports/` if the platform does not expose a Downloads directory. Press `f` or `b` inside the export picker to choose another folder for the current TUI session. Export files never overwrite prior runs — every filename is timestamped with `YYYYMMDDTHHMMSS` and slugged with the active period, tool, and project filter (for example `tokenuse-20260429T160054-week-claude-allprojects.json`).
 
 Exports always reflect the **current filtered view** (period + tool + project). The data shape and the filter slug are computed from the same `DashboardData` the dashboard is rendering.
 
@@ -223,7 +225,7 @@ Runtime settings live in the platform config directory under `tokenuse`:
 | `archive.db` | Durable local usage archive loaded by the dashboard |
 | `rates.json` | Locally downloaded copy of the published currency snapshot |
 | `pricing-snapshot.json` | Locally downloaded LiteLLM-derived pricing snapshot |
-| `exports/` | Output directory for `e`-key exports (JSON, CSV, SVG, PNG) |
+| `exports/` | Fallback output directory when no Downloads folder can be resolved |
 
 USD is the default display currency. The dashboard still stores calculated spend as `cost_usd`; aggregation sums USD and formats the final display values through the active currency table.
 

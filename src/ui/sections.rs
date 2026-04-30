@@ -6,7 +6,7 @@ use ratatui::{
 };
 
 use crate::{
-    app::{App, Page, Period},
+    app::{App, FolderPickerEntryKind, Page, Period},
     data::{
         CountMetric, DailyMetric, ModelMetric, ProjectMetric, ProjectToolMetric, RecentModelMetric,
         RecentUsageMetric, SessionMetric, Summary, ToolLimitSection,
@@ -856,7 +856,8 @@ pub(super) fn render_help_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
         (
             "Actions",
             vec![
-                ("e", "export current view (JSON / CSV / SVG / PNG)"),
+                ("e", "export current view"),
+                ("f/b in export", "browse export folder"),
                 ("r", "reload (re-run ingest)"),
             ],
         ),
@@ -908,10 +909,10 @@ pub(super) fn render_export_modal(frame: &mut Frame<'_>, area: Rect, app: &App) 
         return;
     };
 
-    let width = 60.min(area.width.saturating_sub(4)).max(40);
-    let height = (modal.options.len() as u16 + 4)
+    let width = 84.min(area.width.saturating_sub(4)).max(56);
+    let height = (modal.options.len() as u16 + 6)
         .min(area.height.saturating_sub(4))
-        .max(8);
+        .max(10);
     let modal_area = centered_rect(width, height, area);
     Clear.render(modal_area, frame.buffer_mut());
 
@@ -926,15 +927,22 @@ pub(super) fn render_export_modal(frame: &mut Frame<'_>, area: Rect, app: &App) 
 
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(1)])
+        .constraints([
+            Constraint::Length(2),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
         .split(inner);
 
-    Paragraph::new(Line::from(vec![
-        Span::styled("Format ", theme::key()),
-        Span::styled(
-            "writes to <config dir>/exports · current period & filters apply",
-            theme::dim(),
-        ),
+    Paragraph::new(Text::from(vec![
+        Line::from(vec![
+            Span::styled("Format ", theme::key()),
+            Span::styled("current period & filters apply", theme::dim()),
+        ]),
+        Line::from(vec![
+            Span::styled("Folder ", theme::key()),
+            Span::styled(app.export_dir.display().to_string(), theme::muted()),
+        ]),
     ]))
     .style(theme::base())
     .render(layout[0], frame.buffer_mut());
@@ -960,6 +968,121 @@ pub(super) fn render_export_modal(frame: &mut Frame<'_>, area: Rect, app: &App) 
     let table = Table::new(rows, [Constraint::Length(2), Constraint::Min(20)]).column_spacing(1);
 
     frame.render_widget(table, layout[1]);
+
+    Paragraph::new(Line::from(vec![
+        Span::styled("Enter", theme::key()),
+        Span::styled(" export   ", theme::muted()),
+        Span::styled("f/b", theme::key()),
+        Span::styled(" browse folder   ", theme::muted()),
+        Span::styled("Esc", theme::key()),
+        Span::styled(" close", theme::muted()),
+    ]))
+    .style(theme::base())
+    .render(layout[2], frame.buffer_mut());
+}
+
+pub(super) fn render_export_dir_picker_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let Some(picker) = app.export_dir_picker.as_ref() else {
+        return;
+    };
+
+    let width = 92.min(area.width.saturating_sub(4)).max(60);
+    let height = (picker.entries.len() as u16 + 6)
+        .min(area.height.saturating_sub(4))
+        .max(12);
+    let modal_area = centered_rect(width, height, area);
+    Clear.render(modal_area, frame.buffer_mut());
+
+    let title = format!(
+        "Export Folder {}/{}",
+        picker.selected.saturating_add(1),
+        picker.entries.len().max(1)
+    );
+    let block = theme::panel_block(&title, theme::CYAN);
+    let inner = block.inner(modal_area);
+    block.render(modal_area, frame.buffer_mut());
+
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(3),
+            Constraint::Length(1),
+        ])
+        .split(inner);
+
+    Paragraph::new(Line::from(vec![
+        Span::styled("Current ", theme::key()),
+        Span::styled(picker.current_dir.display().to_string(), theme::muted()),
+    ]))
+    .style(theme::base())
+    .render(layout[0], frame.buffer_mut());
+
+    Paragraph::new(Line::from(vec![
+        Span::styled("Enter", theme::key()),
+        Span::styled(" select/open   ", theme::muted()),
+        Span::styled("Backspace/Left", theme::key()),
+        Span::styled(" parent   ", theme::muted()),
+        Span::styled("Esc", theme::key()),
+        Span::styled(" cancel", theme::muted()),
+    ]))
+    .style(theme::base())
+    .render(layout[1], frame.buffer_mut());
+
+    let visible = layout[2].height as usize;
+    let start = picker.selected.saturating_sub(visible.saturating_sub(1));
+    let rows = picker
+        .entries
+        .iter()
+        .enumerate()
+        .skip(start)
+        .take(visible)
+        .map(|(idx, entry)| {
+            let is_selected = idx == picker.selected;
+            let bg = if is_selected {
+                theme::SURFACE
+            } else {
+                theme::BACKGROUND
+            };
+            let kind = match entry.kind {
+                FolderPickerEntryKind::UseCurrent => "use",
+                FolderPickerEntryKind::Parent => "up",
+                FolderPickerEntryKind::Directory => "dir",
+            };
+            let name_style = if is_selected {
+                theme::key().bg(bg)
+            } else {
+                theme::muted().bg(bg)
+            };
+            Row::new(vec![
+                Cell::from(if is_selected { ">" } else { " " }).style(theme::key().bg(bg)),
+                Cell::from(kind).style(theme::dim().bg(bg)),
+                Cell::from(entry.label.as_str()).style(name_style),
+                Cell::from(entry.path.display().to_string()).style(theme::dim().bg(bg)),
+            ])
+        });
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(2),
+            Constraint::Length(4),
+            Constraint::Length(24),
+            Constraint::Min(20),
+        ],
+    )
+    .column_spacing(1);
+
+    frame.render_widget(table, layout[2]);
+
+    let footer = match picker.error.as_ref() {
+        Some(error) => Line::from(Span::styled(error.as_str(), theme::base().fg(theme::RED))),
+        None => Line::from(Span::styled("hidden folders are not shown", theme::dim())),
+    };
+    Paragraph::new(footer)
+        .style(theme::base())
+        .render(layout[3], frame.buffer_mut());
 }
 
 pub(super) fn render_session_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {

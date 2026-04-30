@@ -47,7 +47,7 @@ Project names are normalized across tools. Absolute paths are folded to the near
 - `Tab` / `Shift-Tab`: cycle main tabs (Overview ↔ Deep Dive ↔ Usage)
 - `o`: Overview · `d`: Deep Dive · `u`: Usage / rate limits
 - `c`: open configuration · `s`: open session picker (drill into a single session's calls)
-- `e`: export current view (JSON, CSV, SVG, PNG) to `<config dir>/exports/`
+- `e`: export current view (JSON, CSV, SVG, PNG) to Downloads; press `f`/`b` in the export modal to choose another folder for this session
 - `r`: reload (sync archive in place; keeps prior data on failure)
 - `h` or `?`: open the keybinding reference (full list of shortcuts)
 - In the session page: `Up`/`Down`, `PgUp`/`PgDn`, `Home`/`End`, `Esc`/`d` back to Deep Dive

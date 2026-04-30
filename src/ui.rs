@@ -15,10 +15,11 @@ use crate::{
 
 use components::{centered_rect, two_columns};
 use sections::{
-    render_config, render_counts, render_currency_modal, render_daily, render_export_modal,
-    render_footer, render_help_modal, render_kpi_strip, render_limits, render_models,
-    render_project_modal, render_project_tools, render_projects, render_session_modal,
-    render_session_page, render_sessions, render_summary, render_title_bar,
+    render_config, render_counts, render_currency_modal, render_daily,
+    render_export_dir_picker_modal, render_export_modal, render_footer, render_help_modal,
+    render_kpi_strip, render_limits, render_models, render_project_modal, render_project_tools,
+    render_projects, render_session_modal, render_session_page, render_sessions, render_summary,
+    render_title_bar,
 };
 
 pub fn render(frame: &mut Frame<'_>, app: &App) {
@@ -98,6 +99,7 @@ fn render_overview(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
     render_currency_modal(frame, root, app);
     render_session_modal(frame, root, app);
     render_export_modal(frame, root, app);
+    render_export_dir_picker_modal(frame, root, app);
 }
 
 fn render_dashboard(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
@@ -157,6 +159,7 @@ fn render_dashboard(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
     render_currency_modal(frame, root, app);
     render_session_modal(frame, root, app);
     render_export_modal(frame, root, app);
+    render_export_dir_picker_modal(frame, root, app);
 }
 
 fn render_small_terminal_notice(frame: &mut Frame<'_>, area: Rect) {

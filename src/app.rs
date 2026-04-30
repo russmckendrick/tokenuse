@@ -1,3 +1,5 @@
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::time::Duration;
 
@@ -245,6 +247,137 @@ impl ExportModal {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FolderPickerEntryKind {
+    UseCurrent,
+    Parent,
+    Directory,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FolderPickerEntry {
+    pub kind: FolderPickerEntryKind,
+    pub label: String,
+    pub path: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+pub struct FolderPickerModal {
+    pub current_dir: PathBuf,
+    pub entries: Vec<FolderPickerEntry>,
+    pub selected: usize,
+    pub error: Option<String>,
+}
+
+impl FolderPickerModal {
+    pub fn new(current_dir: PathBuf) -> Self {
+        let mut modal = Self {
+            current_dir,
+            entries: Vec::new(),
+            selected: 0,
+            error: None,
+        };
+        modal.refresh();
+        modal
+    }
+
+    pub fn refresh(&mut self) {
+        let (entries, error) = folder_picker_entries(&self.current_dir);
+        self.entries = entries;
+        self.error = error;
+        self.selected = self.selected.min(self.entries.len().saturating_sub(1));
+    }
+
+    pub fn current_entry(&self) -> Option<&FolderPickerEntry> {
+        self.entries.get(self.selected)
+    }
+
+    pub fn move_by(&mut self, delta: isize) {
+        let last = self.entries.len().saturating_sub(1);
+        if delta.is_negative() {
+            self.selected = self.selected.saturating_sub(delta.unsigned_abs());
+        } else {
+            self.selected = (self.selected + delta as usize).min(last);
+        }
+    }
+
+    pub fn go_parent(&mut self) {
+        let Some(parent) = self.current_dir.parent().map(Path::to_path_buf) else {
+            return;
+        };
+        self.current_dir = parent;
+        self.selected = 0;
+        self.refresh();
+    }
+
+    pub fn activate(&mut self) -> Option<PathBuf> {
+        let entry = self.current_entry()?.clone();
+        match entry.kind {
+            FolderPickerEntryKind::UseCurrent => Some(entry.path),
+            FolderPickerEntryKind::Parent | FolderPickerEntryKind::Directory => {
+                self.current_dir = entry.path;
+                self.selected = 0;
+                self.refresh();
+                None
+            }
+        }
+    }
+}
+
+fn folder_picker_entries(dir: &Path) -> (Vec<FolderPickerEntry>, Option<String>) {
+    let mut entries = vec![FolderPickerEntry {
+        kind: FolderPickerEntryKind::UseCurrent,
+        label: "Use this folder".into(),
+        path: dir.to_path_buf(),
+    }];
+
+    if let Some(parent) = dir.parent() {
+        entries.push(FolderPickerEntry {
+            kind: FolderPickerEntryKind::Parent,
+            label: "..".into(),
+            path: parent.to_path_buf(),
+        });
+    }
+
+    let read = fs::read_dir(dir);
+    let mut subdirs = Vec::new();
+    let error = match read {
+        Ok(read_dir) => {
+            for entry in read_dir.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if is_hidden_dir_name(&name) {
+                    continue;
+                }
+                let Ok(file_type) = entry.file_type() else {
+                    continue;
+                };
+                if file_type.is_dir() {
+                    subdirs.push(FolderPickerEntry {
+                        kind: FolderPickerEntryKind::Directory,
+                        label: name,
+                        path: entry.path(),
+                    });
+                }
+            }
+            None
+        }
+        Err(e) => Some(format!("could not read folder · {e}")),
+    };
+
+    subdirs.sort_by(|a, b| {
+        a.label
+            .to_ascii_lowercase()
+            .cmp(&b.label.to_ascii_lowercase())
+            .then_with(|| a.label.cmp(&b.label))
+    });
+    entries.extend(subdirs);
+    (entries, error)
+}
+
+fn is_hidden_dir_name(name: &str) -> bool {
+    name.starts_with('.') && name != ".."
+}
+
 #[derive(Debug, Clone)]
 pub struct SessionModal {
     pub options: Vec<SessionOption>,
@@ -368,6 +501,8 @@ pub struct App {
     pub currency_modal: Option<CurrencyModal>,
     pub session_modal: Option<SessionModal>,
     pub export_modal: Option<ExportModal>,
+    pub export_dir_picker: Option<FolderPickerModal>,
+    pub export_dir: PathBuf,
     pub session_view: Option<SessionDetailView>,
     pub session_scroll: usize,
     pub help_open: bool,
@@ -383,6 +518,8 @@ pub struct App {
 
 impl Default for App {
     fn default() -> Self {
+        let paths = ConfigPaths::default();
+        let export_dir = crate::export::default_export_dir(&paths);
         Self {
             page: Page::Overview,
             period: Period::Week,
@@ -392,13 +529,15 @@ impl Default for App {
             currency_modal: None,
             session_modal: None,
             export_modal: None,
+            export_dir_picker: None,
+            export_dir,
             session_view: None,
             session_scroll: 0,
             help_open: false,
             refresher: None,
             config_selected: 0,
             settings: UserConfig::default(),
-            paths: ConfigPaths::default(),
+            paths,
             currency_table: CurrencyTable::embedded()
                 .expect("embedded currency rates must be valid JSON"),
             source: DataSource::Sample,
@@ -427,10 +566,12 @@ impl App {
         refresh_source: RefreshSource,
     ) -> Self {
         let refresher = Some(Refresher::spawn(initial_refresh_delay, refresh_source));
+        let export_dir = crate::export::default_export_dir(&paths);
         Self {
             source,
             status,
             settings,
+            export_dir,
             paths,
             currency_table,
             refresher,
@@ -671,12 +812,18 @@ impl App {
     }
 
     fn open_export_modal(&mut self) {
+        self.export_dir_picker = None;
         self.export_modal = Some(ExportModal::new());
     }
 
     fn handle_export_modal_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Esc => self.export_modal = None,
+            KeyCode::Char('f') | KeyCode::Char('b')
+                if !key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
+                self.open_export_dir_picker();
+            }
             KeyCode::Up => {
                 if let Some(modal) = self.export_modal.as_mut() {
                     modal.selected = modal.selected.saturating_sub(1);
@@ -712,10 +859,67 @@ impl App {
         }
     }
 
+    fn open_export_dir_picker(&mut self) {
+        self.export_dir_picker = Some(FolderPickerModal::new(self.export_dir.clone()));
+    }
+
+    fn handle_export_dir_picker_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => self.export_dir_picker = None,
+            KeyCode::Up => {
+                if let Some(picker) = self.export_dir_picker.as_mut() {
+                    picker.move_by(-1);
+                }
+            }
+            KeyCode::Down => {
+                if let Some(picker) = self.export_dir_picker.as_mut() {
+                    picker.move_by(1);
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(picker) = self.export_dir_picker.as_mut() {
+                    picker.move_by(-10);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(picker) = self.export_dir_picker.as_mut() {
+                    picker.move_by(10);
+                }
+            }
+            KeyCode::Home => {
+                if let Some(picker) = self.export_dir_picker.as_mut() {
+                    picker.selected = 0;
+                }
+            }
+            KeyCode::End => {
+                if let Some(picker) = self.export_dir_picker.as_mut() {
+                    picker.selected = picker.entries.len().saturating_sub(1);
+                }
+            }
+            KeyCode::Backspace | KeyCode::Left => {
+                if let Some(picker) = self.export_dir_picker.as_mut() {
+                    picker.go_parent();
+                }
+            }
+            KeyCode::Enter => {
+                let picked = self
+                    .export_dir_picker
+                    .as_mut()
+                    .and_then(FolderPickerModal::activate);
+                if let Some(dir) = picked {
+                    self.export_dir = dir;
+                    self.export_dir_picker = None;
+                    self.status = Some(format!("export folder · {}", self.export_dir.display()));
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn run_export(&mut self, format: ExportFormat) {
         let data = self.dashboard();
-        match crate::export::write(
-            &self.paths,
+        match crate::export::write_to_dir(
+            &self.export_dir,
             format,
             &data,
             self.period,
@@ -801,6 +1005,11 @@ impl App {
 
         if self.session_modal.is_some() {
             self.handle_session_modal_key(key);
+            return;
+        }
+
+        if self.export_dir_picker.is_some() {
+            self.handle_export_dir_picker_key(key);
             return;
         }
 
@@ -1130,6 +1339,20 @@ mod tests {
         KeyEvent::new(code, KeyModifiers::NONE)
     }
 
+    fn tempdir(name: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "tokenuse-app-{}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+            name
+        ));
+        std::fs::create_dir_all(&path).unwrap();
+        path
+    }
+
     #[test]
     fn t_cycles_tool_filter() {
         let mut app = App::default();
@@ -1261,6 +1484,132 @@ mod tests {
         app.handle_key(key(KeyCode::Char('q')));
 
         assert!(app.should_quit());
+    }
+
+    #[test]
+    fn export_modal_opens_folder_picker_from_browse_key() {
+        let mut app = App::default();
+        let dir = tempdir("browse-open");
+        app.export_dir = dir.clone();
+
+        app.handle_key(key(KeyCode::Char('e')));
+        app.handle_key(key(KeyCode::Char('f')));
+
+        assert!(app.export_modal.is_some());
+        assert_eq!(app.export_dir_picker.as_ref().unwrap().current_dir, dir);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn export_folder_picker_updates_session_destination() {
+        let mut app = App::default();
+        let dir = tempdir("browse-choose");
+        let chosen = dir.join("chosen");
+        std::fs::create_dir_all(&chosen).unwrap();
+        app.export_dir = dir.clone();
+
+        app.handle_key(key(KeyCode::Char('e')));
+        app.handle_key(key(KeyCode::Char('f')));
+        let chosen_idx = app
+            .export_dir_picker
+            .as_ref()
+            .unwrap()
+            .entries
+            .iter()
+            .position(|entry| entry.label == "chosen")
+            .unwrap();
+        app.export_dir_picker.as_mut().unwrap().selected = chosen_idx;
+        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(app.export_dir, chosen);
+        assert!(app.export_dir_picker.is_none());
+        assert!(app.export_modal.is_some());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn export_folder_picker_escape_keeps_existing_destination() {
+        let mut app = App::default();
+        let dir = tempdir("browse-cancel");
+        app.export_dir = dir.clone();
+
+        app.handle_key(key(KeyCode::Char('e')));
+        app.handle_key(key(KeyCode::Char('b')));
+        app.handle_key(key(KeyCode::Esc));
+
+        assert_eq!(app.export_dir, dir);
+        assert!(app.export_dir_picker.is_none());
+        assert!(app.export_modal.is_some());
+        let _ = std::fs::remove_dir_all(app.export_dir);
+    }
+
+    #[test]
+    fn export_writes_to_selected_session_destination() {
+        let mut app = App::default();
+        let dir = tempdir("export-target");
+        app.export_dir = dir.clone();
+
+        app.handle_key(key(KeyCode::Char('e')));
+        app.handle_key(key(KeyCode::Enter));
+
+        let exported: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().collect();
+        assert_eq!(exported.len(), 1);
+        assert!(exported[0]
+            .path()
+            .extension()
+            .is_some_and(|ext| ext == "json"));
+        assert!(app.export_modal.is_none());
+        assert!(app
+            .status
+            .as_deref()
+            .is_some_and(|status| status.contains("exported JSON")));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn folder_picker_lists_sorted_subdirectories_and_hides_dot_dirs() {
+        let dir = tempdir("picker-sort");
+        std::fs::create_dir_all(dir.join("zeta")).unwrap();
+        std::fs::create_dir_all(dir.join("alpha")).unwrap();
+        std::fs::create_dir_all(dir.join(".hidden")).unwrap();
+
+        let picker = FolderPickerModal::new(dir.clone());
+        let labels: Vec<_> = picker
+            .entries
+            .iter()
+            .filter(|entry| entry.kind == FolderPickerEntryKind::Directory)
+            .map(|entry| entry.label.as_str())
+            .collect();
+
+        assert_eq!(labels, vec!["alpha", "zeta"]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn folder_picker_parent_navigation_moves_up_one_directory() {
+        let dir = tempdir("picker-parent");
+        let child = dir.join("child");
+        std::fs::create_dir_all(&child).unwrap();
+        let mut picker = FolderPickerModal::new(child);
+
+        picker.go_parent();
+
+        assert_eq!(picker.current_dir, dir);
+        assert_eq!(picker.selected, 0);
+        let _ = std::fs::remove_dir_all(picker.current_dir);
+    }
+
+    #[test]
+    fn folder_picker_keeps_use_current_available_on_read_error() {
+        let dir = tempdir("picker-error");
+        let missing = dir.join("missing");
+        let picker = FolderPickerModal::new(missing.clone());
+
+        assert!(picker.error.is_some());
+        assert_eq!(picker.entries[0].kind, FolderPickerEntryKind::UseCurrent);
+        assert_eq!(picker.entries[0].path, missing);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

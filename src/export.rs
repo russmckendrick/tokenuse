@@ -84,8 +84,33 @@ pub fn write(
     tool: Tool,
     project_filter: &ProjectFilter,
 ) -> Result<PathBuf> {
-    let exports_root = paths.dir.join("exports");
-    fs::create_dir_all(&exports_root)
+    let exports_root = default_export_dir(paths);
+    write_to_dir(&exports_root, format, data, period, tool, project_filter)
+}
+
+pub fn default_export_dir(paths: &ConfigPaths) -> PathBuf {
+    default_export_dir_from(paths, dirs::download_dir(), dirs::home_dir())
+}
+
+fn default_export_dir_from(
+    paths: &ConfigPaths,
+    download_dir: Option<PathBuf>,
+    home_dir: Option<PathBuf>,
+) -> PathBuf {
+    download_dir
+        .or_else(|| home_dir.map(|home| home.join("Downloads")))
+        .unwrap_or_else(|| paths.dir.join("exports"))
+}
+
+pub fn write_to_dir(
+    exports_root: &Path,
+    format: ExportFormat,
+    data: &DashboardData,
+    period: Period,
+    tool: Tool,
+    project_filter: &ProjectFilter,
+) -> Result<PathBuf> {
+    fs::create_dir_all(exports_root)
         .wrap_err_with(|| format!("create {}", exports_root.display()))?;
 
     let slug = filter_slug(period, tool, project_filter);
@@ -1241,8 +1266,9 @@ mod tests {
     #[test]
     fn json_export_writes_pretty_file_with_summary() {
         let (paths, data) = fixture();
-        let path = write(
-            &paths,
+        let export_root = paths.dir.join("exports");
+        let path = write_to_dir(
+            &export_root,
             ExportFormat::Json,
             &data,
             Period::AllTime,
@@ -1260,8 +1286,9 @@ mod tests {
     #[test]
     fn csv_export_writes_one_file_per_panel() {
         let (paths, data) = fixture();
-        let dir = write(
-            &paths,
+        let export_root = paths.dir.join("exports");
+        let dir = write_to_dir(
+            &export_root,
             ExportFormat::Csv,
             &data,
             Period::AllTime,
@@ -1289,8 +1316,9 @@ mod tests {
     fn svg_export_writes_xml_chart() {
         let _lock = CHART_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let (paths, data) = fixture();
-        let path = write(
-            &paths,
+        let export_root = paths.dir.join("exports");
+        let path = write_to_dir(
+            &export_root,
             ExportFormat::Svg,
             &data,
             Period::AllTime,
@@ -1307,8 +1335,9 @@ mod tests {
     fn png_export_writes_png_signature() {
         let _lock = CHART_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let (paths, data) = fixture();
-        let path = write(
-            &paths,
+        let export_root = paths.dir.join("exports");
+        let path = write_to_dir(
+            &export_root,
             ExportFormat::Png,
             &data,
             Period::AllTime,
@@ -1327,5 +1356,38 @@ mod tests {
         assert_eq!(csv_escape("simple"), "simple");
         assert_eq!(csv_escape("a,b"), "\"a,b\"");
         assert_eq!(csv_escape("she said \"hi\""), "\"she said \"\"hi\"\"\"");
+    }
+
+    #[test]
+    fn default_export_dir_prefers_platform_downloads() {
+        let paths = ConfigPaths::new(PathBuf::from("/tmp/tokenuse-config"));
+        let downloads = PathBuf::from("/tmp/downloads");
+        let home = PathBuf::from("/tmp/home");
+
+        assert_eq!(
+            default_export_dir_from(&paths, Some(downloads.clone()), Some(home)),
+            downloads
+        );
+    }
+
+    #[test]
+    fn default_export_dir_uses_home_downloads_before_config_fallback() {
+        let paths = ConfigPaths::new(PathBuf::from("/tmp/tokenuse-config"));
+        let home = PathBuf::from("/tmp/home");
+
+        assert_eq!(
+            default_export_dir_from(&paths, None, Some(home.clone())),
+            home.join("Downloads")
+        );
+    }
+
+    #[test]
+    fn default_export_dir_falls_back_to_config_exports() {
+        let paths = ConfigPaths::new(PathBuf::from("/tmp/tokenuse-config"));
+
+        assert_eq!(
+            default_export_dir_from(&paths, None, None),
+            PathBuf::from("/tmp/tokenuse-config/exports")
+        );
     }
 }
