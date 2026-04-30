@@ -14,6 +14,18 @@ Use a terminal at least `120x40`. Smaller terminals show a resize notice instead
 
 If no local sessions are found, or archive sync fails before any calls are loaded, the app falls back to bundled sample data and shows that status in the title bar. Press `r` to sync sessions created after startup.
 
+## Desktop App
+
+The TUI remains the default app, and a Tauri v2 desktop shell lives under `desktop/` for macOS, Windows, and Linux local builds. It shares the same archive, config, currency, pricing, and export logic as the TUI.
+
+```bash
+cd desktop
+pnpm install
+pnpm run tauri:dev
+```
+
+See [desktop app docs](docs/desktop.md) for build notes and shared-data behavior.
+
 ## Supported Tools
 
 | Tool | Sources | Notes |
@@ -97,6 +109,7 @@ Do not hand-edit `src/pricing/snapshot.json` or `currency/rates.json`; use the r
 - [Documentation index](docs/README.md)
 - [Tool ingestion details](docs/tools/README.md)
 - [Architecture and data flow](docs/architecture.md)
+- [Desktop app](docs/desktop.md)
 - [Usage page (rolling 24h utilisation)](docs/usage.md)
 - [Release notes](docs/releases/)
 

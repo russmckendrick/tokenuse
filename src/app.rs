@@ -418,7 +418,7 @@ impl SessionModal {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ConfigRowView {
     pub name: &'static str,
     pub value: String,
@@ -674,7 +674,7 @@ impl App {
         }
     }
 
-    fn session_options(&self) -> Vec<SessionOption> {
+    pub fn session_options(&self) -> Vec<SessionOption> {
         let currency = self.currency();
         match &self.source {
             DataSource::Live(ingested) => {
@@ -684,7 +684,7 @@ impl App {
         }
     }
 
-    fn lookup_session_view(&self, key: &str) -> Option<SessionDetailView> {
+    pub fn lookup_session_view(&self, key: &str) -> Option<SessionDetailView> {
         let currency = self.currency();
         match &self.source {
             DataSource::Live(ingested) => ingested.session_detail(key, &currency),
@@ -764,7 +764,7 @@ impl App {
         }
     }
 
-    fn enter_session(&mut self, key: &str) {
+    pub fn enter_session(&mut self, key: &str) {
         match self.lookup_session_view(key) {
             Some(view) => {
                 self.session_view = Some(view);
@@ -775,6 +775,12 @@ impl App {
                 self.status = Some(format!("session not found · {key}"));
             }
         }
+    }
+
+    pub fn leave_session(&mut self) {
+        self.page = Page::DeepDive;
+        self.session_view = None;
+        self.session_scroll = 0;
     }
 
     fn handle_session_page_key(&mut self, key: KeyEvent) {
@@ -916,23 +922,32 @@ impl App {
         }
     }
 
-    fn run_export(&mut self, format: ExportFormat) {
+    pub fn export_current(
+        &mut self,
+        format: ExportFormat,
+    ) -> color_eyre::Result<std::path::PathBuf> {
         let data = self.dashboard();
-        match crate::export::write_to_dir(
+        let path = crate::export::write_to_dir(
             &self.export_dir,
             format,
             &data,
             self.period,
             self.tool,
             &self.project_filter,
-        ) {
-            Ok(path) => {
-                self.status = Some(format!("exported {} · {}", format.label(), path.display()));
-            }
-            Err(e) => {
-                self.status = Some(format!("export failed · {e}"));
-            }
+        )?;
+        self.status = Some(format!("exported {} · {}", format.label(), path.display()));
+        Ok(path)
+    }
+
+    fn run_export(&mut self, format: ExportFormat) {
+        if let Err(e) = self.export_current(format) {
+            self.status = Some(format!("export failed · {e}"));
         }
+    }
+
+    pub fn set_export_dir(&mut self, dir: PathBuf) {
+        self.export_dir = dir;
+        self.status = Some(format!("export folder · {}", self.export_dir.display()));
     }
 
     pub fn config_rows(&self) -> Vec<ConfigRowView> {
@@ -1065,13 +1080,38 @@ impl App {
         }
     }
 
-    fn project_options(&self) -> Vec<ProjectOption> {
+    pub fn project_options(&self) -> Vec<ProjectOption> {
         let currency = self.currency();
         match &self.source {
             DataSource::Live(ingested) => {
                 ingested.project_options(self.period, self.tool, &currency)
             }
             DataSource::Sample => crate::data::project_options(self.period, self.tool, &currency),
+        }
+    }
+
+    pub fn set_period(&mut self, period: Period) {
+        self.period = period;
+    }
+
+    pub fn set_tool(&mut self, tool: Tool) {
+        self.tool = tool;
+    }
+
+    pub fn set_project_by_identity(&mut self, identity: Option<&str>) {
+        match identity {
+            None => self.project_filter = ProjectFilter::All,
+            Some(identity) => {
+                if let Some(option) = self
+                    .project_options()
+                    .into_iter()
+                    .find(|option| option.identity.as_deref() == Some(identity))
+                {
+                    self.project_filter = ProjectFilter::from_option(&option);
+                } else {
+                    self.status = Some(format!("project not found · {identity}"));
+                }
+            }
         }
     }
 
@@ -1279,7 +1319,7 @@ impl App {
         }
     }
 
-    fn set_currency(&mut self, code: &str) {
+    pub fn set_currency(&mut self, code: &str) {
         self.settings.set_currency(code);
         match self.settings.save(&self.paths) {
             Ok(()) => {
@@ -1292,7 +1332,7 @@ impl App {
     }
 
     #[cfg(feature = "refresh-currency")]
-    fn refresh_currency_rates(&mut self) {
+    pub fn refresh_currency_rates(&mut self) {
         match crate::currency::refresh::download_published_snapshot(&self.paths.currency_rates_file)
             .and_then(|_| CurrencyTable::load(&self.paths))
         {
@@ -1307,12 +1347,12 @@ impl App {
     }
 
     #[cfg(not(feature = "refresh-currency"))]
-    fn refresh_currency_rates(&mut self) {
+    pub fn refresh_currency_rates(&mut self) {
         self.status = Some("rates refresh requires cargo run --features refresh-currency".into());
     }
 
     #[cfg(feature = "refresh-prices")]
-    fn refresh_pricing_snapshot(&mut self) {
+    pub fn refresh_pricing_snapshot(&mut self) {
         match crate::pricing::refresh::run(&self.paths.pricing_snapshot_file) {
             Ok(()) => {
                 self.status = Some("LiteLLM prices refreshed · restart to apply".into());
@@ -1324,7 +1364,7 @@ impl App {
     }
 
     #[cfg(not(feature = "refresh-prices"))]
-    fn refresh_pricing_snapshot(&mut self) {
+    pub fn refresh_pricing_snapshot(&mut self) {
         self.status = Some("LiteLLM refresh requires cargo run --features refresh-prices".into());
     }
 }

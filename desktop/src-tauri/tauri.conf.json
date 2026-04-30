@@ -1,0 +1,41 @@
+{
+  "$schema": "./gen/schemas/desktop-schema.json",
+  "productName": "Token Use",
+  "version": "0.0.1",
+  "identifier": "com.russmckendrick.tokenuse",
+  "build": {
+    "beforeDevCommand": "pnpm run dev",
+    "beforeBuildCommand": "pnpm run build",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Token Use",
+        "width": 1280,
+        "height": 860,
+        "minWidth": 1040,
+        "minHeight": 720
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'",
+      "capabilities": ["default"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "publisher": "Russ McKendrick",
+    "homepage": "https://www.tokenuse.app",
+    "copyright": "Copyright 2026 Russ McKendrick",
+    "macOS": {
+      "bundleName": "Token Use",
+      "files": {
+        "Resources/Credits.rtf": "Credits.rtf"
+      }
+    }
+  }
+}

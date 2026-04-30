@@ -16,12 +16,12 @@ pub struct DashboardData {
     pub mcp_servers: Vec<CountMetric>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct LimitsData {
     pub sections: Vec<ToolLimitSection>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ToolLimitSection {
     pub tool: &'static str,
     pub limits: Vec<LimitMetric>,
@@ -29,7 +29,7 @@ pub struct ToolLimitSection {
     pub models: Vec<RecentModelMetric>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct LimitMetric {
     pub tool: &'static str,
     pub scope: &'static str,
@@ -40,7 +40,7 @@ pub struct LimitMetric {
     pub plan: &'static str,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct RecentUsageMetric {
     pub buckets: [u64; 24],
     pub calls: u64,
@@ -49,7 +49,7 @@ pub struct RecentUsageMetric {
     pub last_seen: &'static str,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct RecentModelMetric {
     pub name: &'static str,
     pub calls: u64,
@@ -124,7 +124,7 @@ pub struct CountMetric {
     pub value: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ProjectOption {
     pub identity: Option<String>,
     pub label: String,
@@ -132,7 +132,7 @@ pub struct ProjectOption {
     pub calls: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SessionOption {
     pub key: String,
     pub date: String,
@@ -143,7 +143,7 @@ pub struct SessionOption {
     pub value: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SessionDetail {
     pub timestamp: String,
     pub model: String,
@@ -156,7 +156,7 @@ pub struct SessionDetail {
     pub prompt: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SessionDetailView {
     pub key: String,
     pub session_id: String,
