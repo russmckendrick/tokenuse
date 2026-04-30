@@ -1,35 +1,22 @@
 # Documentation
 
-This folder is the long-form companion to the short project README.
+`tokenuse` docs are split into three sections:
 
-```mermaid
-flowchart LR
-    A[README.md] --> B[Tool ingestion docs]
-    A --> C[Architecture docs]
-    A --> U[Usage page docs]
-    A --> X[Desktop app docs]
-    A --> R[Release notes]
-    B --> D[Claude Code]
-    B --> E[Cursor]
-    B --> F[Codex]
-    B --> G[GitHub Copilot]
-    C --> H[Startup flow]
-    C --> I[Aggregation]
-    C --> J[Pricing]
-```
+## Guides
 
-## Start Here
+- [Installation](guides/installation.md): install the TUI and macOS desktop app from Homebrew, or download Linux and Windows TUI binaries from GitHub Releases.
+- [TUI usage](guides/tui-usage.md): dashboard navigation, filters, keyboard shortcuts, reloads, configuration, session drill-down, export, and the Usage page.
+- [Desktop app usage](guides/desktop-usage.md): install, open, navigate, refresh, configure, and export from the Tauri desktop app.
 
-- [Tool ingestion](tools/README.md): what local files each AI coding tool writes, how `tokenuse` discovers them, and how fields are normalized.
-- [Architecture](architecture.md): startup flow, local archive sync, the page/modal state machine (Overview, Deep Dive, Usage, Session drill-down, Config, Help), dashboard aggregation, project identity, deduplication, pricing, and the export pipeline.
-- [Usage page](usage.md): the rolling-24h utilisation page (`u`) — per-tool activity histograms, plan rate-limit windows, and top models. Independent of the period and project filters.
-- [Desktop app](desktop.md): Tauri v2 desktop setup, shared config/archive behavior, and local build checks.
-- [Release notes](releases/): unreleased changes plus per-version notes, including [`unreleased`](releases/unreleased.md), [`0.0.2`](releases/0.0.2.md), and [`0.0.1`](releases/0.0.1.md).
+## Development
 
-The short [project README](../README.md) covers installation, the keyboard reference (including `h` for help, `s` for the session drill-down, `e` for export, `r` for live reload), and the configuration directory layout.
+- [Development overview](development/README.md): source layout and what to read before changing the project.
+- [Architecture](development/architecture.md): archive, sync, aggregation, pricing, export, and frontend state flow.
+- [Local development](development/local-development.md): commands for Rust, TUI, desktop, pricing, currency, and generated assets.
+- [Source control](development/source-control.md): branch hygiene, generated files, version bumps, and release-prep notes.
+- [Deployments](development/deployments.md): release workflows, binary assets, desktop notarization, and Homebrew tap updates.
+- [Tool parsers](development/tools/README.md): parser contracts for Claude Code, Codex, Cursor, and GitHub Copilot.
 
-## Terminology
+## Project
 
-The UI and user docs say **tool**: Claude Code, Cursor, Codex, and GitHub Copilot are the tools being analyzed.
-
-The Rust code uses an internal `ToolAdapter` trait in `src/tools/`. In docs, "adapter" means that internal implementation for one tool's local files.
+Release pages on the website are sourced from GitHub Releases. The checked-in [release notes](releases/) remain maintainer source material, but the website does not copy this folder into product docs.

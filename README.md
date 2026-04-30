@@ -24,7 +24,7 @@ pnpm install
 pnpm run tauri:dev
 ```
 
-See [desktop app docs](docs/desktop.md) for build notes and shared-data behavior.
+See [desktop app usage](docs/guides/desktop-usage.md) for shared-data behavior, and [local development](docs/development/local-development.md) for build notes.
 
 ## Supported Tools
 
@@ -35,7 +35,7 @@ See [desktop app docs](docs/desktop.md) for build notes and shared-data behavior
 | Codex | `~/.codex/sessions/**/rollout-*.jsonl` | Per-turn `token_count` events, cached input, reasoning output, tool calls |
 | GitHub Copilot | `~/.copilot/session-state/` and VS Code Copilot Chat transcripts | Legacy output tokens when present; transcript usage is estimated |
 
-Details for each parser live under [docs/tools](docs/tools/README.md).
+Details for each parser live under [docs/development/tools](docs/development/tools/README.md).
 
 ## Dashboard
 
@@ -103,10 +103,10 @@ Do not hand-edit `src/pricing/snapshot.json` or `currency/rates.json`; use the r
 ## Documentation
 
 - [Documentation index](docs/README.md)
-- [Tool ingestion details](docs/tools/README.md)
-- [Architecture and data flow](docs/architecture.md)
-- [Desktop app](docs/desktop.md)
-- [Usage page (rolling 24h utilisation)](docs/usage.md)
+- [Tool ingestion details](docs/development/tools/README.md)
+- [Architecture and data flow](docs/development/architecture.md)
+- [Desktop app usage](docs/guides/desktop-usage.md)
+- [Usage page (rolling 24h utilisation)](docs/guides/tui-usage.md#usage-page)
 - [Release notes](docs/releases/)
 
 ## Development

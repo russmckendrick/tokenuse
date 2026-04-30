@@ -83,7 +83,7 @@ cargo run -- --refresh-prices
 4. Add a variant to `app::Tool`, update its label and cycle order, and update `ingest::matches_tool`.
 5. Add display names in aggregation helpers such as `tool_short_label` when needed.
 6. Override `source_fingerprint` only when the default file/directory metadata fingerprint is too broad or too narrow for the source.
-7. Write `docs/tools/<name>.md` and add it to the supported tools table above.
+7. Write `docs/development/tools/<name>.md` and add it to the supported tools table above.
 8. Add parser tests for source validation, token mapping, deduplication, project detection, and tool/bash extraction.
 
 ## Verification
