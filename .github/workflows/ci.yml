@@ -353,10 +353,22 @@ jobs:
             exit 1
           fi
 
-          APP="src-tauri/target/universal-apple-darwin/release/bundle/macos/Token Use.app"
+          codesign --verify --verbose=2 "${DMG}"
+
+          MOUNT_DIR=$(mktemp -d "${RUNNER_TEMP}/tokenuse-dmg.XXXXXX")
+          hdiutil attach "${DMG}" -readonly -nobrowse -mountpoint "${MOUNT_DIR}"
+          trap 'hdiutil detach "${MOUNT_DIR}" -quiet || true' EXIT
+
+          APP="${MOUNT_DIR}/Token Use.app"
+          if [ ! -d "${APP}" ]; then
+            echo "Mounted DMG does not contain Token Use.app" >&2
+            find "${MOUNT_DIR}" -maxdepth 2 -print >&2
+            exit 1
+          fi
+
           codesign --verify --deep --strict --verbose=2 "${APP}"
-          xcrun stapler validate "${DMG}"
-          spctl -a -vv -t open --context context:primary-signature "${DMG}"
+          xcrun stapler validate "${APP}"
+          spctl -a -vv -t execute "${APP}"
 
       - name: "🏷️ Normalize desktop DMG"
         working-directory: desktop
@@ -398,6 +410,8 @@ jobs:
           files: release/*
           draft: false
           prerelease: false
+          fail_on_unmatched_files: true
+          overwrite_files: true
           generate_release_notes: true
 
   update-tap:
