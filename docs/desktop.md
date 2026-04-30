@@ -59,9 +59,13 @@ The macOS release job requires these repository secrets:
 | `APPLE_API_PRIVATE_KEY` | App Store Connect `.p8` private key contents |
 | `HOMEBREW_TAP_TOKEN` | Token with push access to `russmckendrick/homebrew-tap` |
 
+These values must be repository or organization secrets available to tag workflows. If they are environment secrets, the job must explicitly use that GitHub environment or they will resolve as empty strings.
+
 The workflow imports the `.p12`, verifies that it contains a `Developer ID Application` identity, and passes the discovered identity to Tauri as `APPLE_SIGNING_IDENTITY`. If this step reports no identity, export the certificate from Keychain Access > My Certificates so the `.p12` includes the private key.
 
 Use a `Developer ID Application` certificate for the DMG. An `Apple Distribution` certificate is for App Store distribution, and a `Developer ID Installer` certificate is for `.pkg` installers; neither one can codesign the `.app` bundle Tauri puts inside the direct-download DMG. Create the certificate from Apple Developer > Certificates, Identifiers & Profiles > Certificates, choosing `Developer ID Application`; download the `.cer`, install it into Keychain Access, then export the certificate and private key from the `My Certificates` tab as a password-protected `.p12`.
+
+For notarization, create an App Store Connect API key under App Store Connect > Users and Access > Integrations. Use the issuer UUID as `APPLE_API_ISSUER`, the key ID as `APPLE_API_KEY`, and the full downloaded `AuthKey_<key-id>.p8` contents as `APPLE_API_PRIVATE_KEY`.
 
 Release tags must match the version in `Cargo.toml`, `desktop/src-tauri/Cargo.toml`, `desktop/package.json`, and `desktop/src-tauri/tauri.conf.json`. When preparing a release, bump all four version fields together before tagging.
 
