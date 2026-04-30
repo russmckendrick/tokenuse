@@ -272,14 +272,29 @@ jobs:
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
-          echo "${APPLE_CERTIFICATE}" | base64 --decode > certificate.p12
-          security create-keychain -p "${KEYCHAIN_PASSWORD}" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "${KEYCHAIN_PASSWORD}" build.keychain
-          security set-keychain-settings -t 3600 -u build.keychain
-          security import certificate.p12 -k build.keychain -P "${APPLE_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${KEYCHAIN_PASSWORD}" build.keychain
-          security find-identity -v -p codesigning build.keychain
+          CERTIFICATE_PATH="${RUNNER_TEMP}/certificate.p12"
+          KEYCHAIN_PATH="${RUNNER_TEMP}/tokenuse-signing.keychain-db"
+
+          printf '%s' "${APPLE_CERTIFICATE}" | base64 --decode > "${CERTIFICATE_PATH}"
+          security create-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+          security set-keychain-settings -lut 21600 "${KEYCHAIN_PATH}"
+          security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+          security import "${CERTIFICATE_PATH}" -k "${KEYCHAIN_PATH}" -P "${APPLE_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign
+          security list-keychains -d user -s "${KEYCHAIN_PATH}" $(security list-keychains -d user | tr -d '"')
+          security default-keychain -s "${KEYCHAIN_PATH}"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+
+          security find-identity -v -p codesigning "${KEYCHAIN_PATH}"
+          CERT_ID=$(security find-identity -v -p codesigning "${KEYCHAIN_PATH}" | sed -n 's/.*"\(Developer ID Application:.*\)".*/\1/p' | head -n 1)
+
+          if [ -z "${CERT_ID}" ]; then
+            echo "No Developer ID Application signing identity was found in the imported certificate." >&2
+            echo "Export the certificate from Keychain Access > My Certificates so the .p12 includes its private key." >&2
+            exit 1
+          fi
+
+          echo "APPLE_SIGNING_IDENTITY=${CERT_ID}" >> "$GITHUB_ENV"
+          echo "APPLE_KEYCHAIN_PATH=${KEYCHAIN_PATH}" >> "$GITHUB_ENV"
 
       - name: "🍎 Write App Store Connect API key"
         env:
@@ -292,7 +307,6 @@ jobs:
       - name: "🏗️ Build notarized desktop DMG"
         working-directory: desktop
         env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
         run: pnpm tauri build --target universal-apple-darwin --bundles dmg --ci

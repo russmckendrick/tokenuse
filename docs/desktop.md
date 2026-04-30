@@ -54,11 +54,12 @@ The macOS release job requires these repository secrets:
 | `APPLE_CERTIFICATE` | Base64-encoded Developer ID Application `.p12` certificate |
 | `APPLE_CERTIFICATE_PASSWORD` | Password for the exported certificate |
 | `KEYCHAIN_PASSWORD` | Temporary CI keychain password |
-| `APPLE_SIGNING_IDENTITY` | Developer ID Application signing identity |
 | `APPLE_API_ISSUER` | App Store Connect issuer ID |
 | `APPLE_API_KEY` | App Store Connect key ID |
 | `APPLE_API_PRIVATE_KEY` | App Store Connect `.p8` private key contents |
 | `HOMEBREW_TAP_TOKEN` | Token with push access to `russmckendrick/homebrew-tap` |
+
+The workflow imports the `.p12`, verifies that it contains a `Developer ID Application` identity, and passes the discovered identity to Tauri as `APPLE_SIGNING_IDENTITY`. If this step reports no identity, export the certificate from Keychain Access > My Certificates so the `.p12` includes the private key.
 
 Release tags must match the version in `Cargo.toml`, `desktop/src-tauri/Cargo.toml`, `desktop/package.json`, and `desktop/src-tauri/tauri.conf.json`. When preparing a release, bump all four version fields together before tagging.
 
