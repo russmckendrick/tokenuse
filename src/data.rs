@@ -513,7 +513,8 @@ fn apply_sample_sort(data: &mut DashboardData, sort: SortMode) {
                 .sort_by(|a, b| b.date.cmp(a.date).then_with(|| a.project.cmp(b.project)));
         }
         SortMode::Tokens => {
-            data.daily.sort_by(|a, b| b.value.cmp(&a.value));
+            data.daily
+                .sort_by_key(|entry| std::cmp::Reverse(entry.value));
             data.projects
                 .sort_by(|a, b| b.value.cmp(&a.value).then_with(|| a.name.cmp(b.name)));
             data.project_tools.sort_by(|a, b| {
