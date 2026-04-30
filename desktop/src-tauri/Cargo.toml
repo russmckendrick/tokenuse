@@ -1,6 +1,6 @@
 [package]
 name = "tokenuse-desktop"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 description = "Desktop app for local AI coding tool token and cost usage."
 authors = ["Russ McKendrick"]

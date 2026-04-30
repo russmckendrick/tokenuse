@@ -1,7 +1,7 @@
 {
   "$schema": "./gen/schemas/desktop-schema.json",
   "productName": "Token Use",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "identifier": "com.russmckendrick.tokenuse",
   "build": {
     "beforeDevCommand": "pnpm run dev",
