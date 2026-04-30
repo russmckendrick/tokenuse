@@ -16,50 +16,6 @@ use crate::{
 
 use super::components::{bar_cell, centered_rect, BAR_WIDTH};
 
-pub(super) fn render_summary(frame: &mut Frame<'_>, area: Rect, app: &App, summary: &Summary) {
-    let title_owned = match &app.status {
-        Some(s) => format!("tokenuse  ·  {s}"),
-        None => "tokenuse".to_string(),
-    };
-    let title: &str = &title_owned;
-
-    let text = Text::from(vec![
-        Line::from(vec![
-            Span::styled(title, theme::key()),
-            Span::raw("  "),
-            Span::styled(app.period.label(), theme::muted()),
-        ]),
-        Line::from(vec![
-            Span::styled(summary.cost, theme::money().add_modifier(Modifier::BOLD)),
-            Span::styled(" cost   ", theme::muted()),
-            Span::styled(summary.calls, theme::base().add_modifier(Modifier::BOLD)),
-            Span::styled(" calls   ", theme::muted()),
-            Span::styled(summary.sessions, theme::base().add_modifier(Modifier::BOLD)),
-            Span::styled(" sessions   ", theme::muted()),
-            Span::styled(
-                summary.cache_hit,
-                theme::base().add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(" cache hit", theme::muted()),
-        ]),
-        Line::from(vec![
-            Span::styled(summary.input, theme::muted()),
-            Span::styled(" in   ", theme::dim()),
-            Span::styled(summary.output, theme::muted()),
-            Span::styled(" out   ", theme::dim()),
-            Span::styled(summary.cached, theme::muted()),
-            Span::styled(" cached   ", theme::dim()),
-            Span::styled(summary.written, theme::muted()),
-            Span::styled(" written", theme::dim()),
-        ]),
-    ]);
-
-    Paragraph::new(text)
-        .block(theme::panel_block("", theme::PRIMARY))
-        .style(theme::base())
-        .render(area, frame.buffer_mut());
-}
-
 pub(super) fn render_title_bar(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let block = theme::panel_block("", theme::PRIMARY);
     let inner = block.inner(area);
@@ -235,11 +191,11 @@ pub(super) fn render_projects(frame: &mut Frame<'_>, area: Rect, rows: &[Project
         table_rows,
         [
             Constraint::Length(BAR_WIDTH as u16),
-            Constraint::Min(24),
+            Constraint::Min(16),
             Constraint::Length(9),
             Constraint::Length(8),
             Constraint::Length(5),
-            Constraint::Length(24),
+            Constraint::Min(14),
         ],
     )
     .header(Row::new(vec![
@@ -307,8 +263,8 @@ pub(super) fn render_project_tools(frame: &mut Frame<'_>, area: Rect, rows: &[Pr
         table_rows,
         [
             Constraint::Length(BAR_WIDTH as u16),
-            Constraint::Min(14),
-            Constraint::Length(8),
+            Constraint::Min(12),
+            Constraint::Length(7),
             Constraint::Length(9),
             Constraint::Length(6),
             Constraint::Length(5),
@@ -345,10 +301,10 @@ pub(super) fn render_models(frame: &mut Frame<'_>, area: Rect, rows: &[ModelMetr
         table_rows,
         [
             Constraint::Length(BAR_WIDTH as u16),
-            Constraint::Min(16),
-            Constraint::Length(10),
-            Constraint::Length(8),
-            Constraint::Length(8),
+            Constraint::Min(10),
+            Constraint::Length(9),
+            Constraint::Length(7),
+            Constraint::Length(6),
         ],
     )
     .header(Row::new(vec![

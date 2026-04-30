@@ -10,16 +10,16 @@ use ratatui::{
 
 use crate::{
     app::{App, Page},
+    data::DashboardData,
     theme,
 };
 
-use components::{centered_rect, two_columns};
+use components::{centered_rect, two_columns, weighted_columns};
 use sections::{
     render_config, render_counts, render_currency_modal, render_daily,
     render_export_dir_picker_modal, render_export_modal, render_footer, render_help_modal,
     render_kpi_strip, render_limits, render_models, render_project_modal, render_project_tools,
-    render_projects, render_session_modal, render_session_page, render_sessions, render_summary,
-    render_title_bar,
+    render_projects, render_session_modal, render_session_page, render_sessions, render_title_bar,
 };
 
 pub fn render(frame: &mut Frame<'_>, app: &App) {
@@ -103,63 +103,111 @@ fn render_overview(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
 }
 
 fn render_dashboard(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
+    let data = app.dashboard();
+    let heights = deep_dive_panel_heights(area.height, &data);
     let sections = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3),
-            Constraint::Length(4),
             Constraint::Length(1),
-            Constraint::Length(9),
+            Constraint::Length(heights[0]),
             Constraint::Length(1),
-            Constraint::Length(8),
+            Constraint::Length(heights[1]),
             Constraint::Length(1),
-            Constraint::Min(10),
+            Constraint::Length(heights[2]),
             Constraint::Length(1),
-            Constraint::Length(10),
-            Constraint::Length(1),
-            Constraint::Length(5),
+            Constraint::Length(heights[3]),
+            Constraint::Fill(1),
             Constraint::Length(3),
         ])
         .split(area);
 
-    let data = app.dashboard();
-
     render_title_bar(frame, sections[0], app);
-    render_summary(frame, sections[1], app, &data.summary);
 
-    let top = two_columns(sections[3]);
+    let top = weighted_columns(sections[2], 35);
     render_daily(frame, top[0], &data.daily);
     render_projects(frame, top[1], &data.projects);
 
-    render_sessions(frame, sections[5], &data.sessions);
+    render_sessions(frame, sections[4], &data.sessions);
 
-    let middle = two_columns(sections[7]);
+    let middle = weighted_columns(sections[6], 58);
     render_project_tools(frame, middle[0], &data.project_tools);
-    render_models(frame, middle[1], &data.models);
 
-    let lower = two_columns(sections[9]);
-    render_counts(frame, lower[0], "Core Tools", theme::CYAN, &data.tools);
+    let model_height = table_panel_height(data.models.len(), 5, 7)
+        .min(middle[1].height.saturating_sub(4))
+        .max(3)
+        .min(middle[1].height);
+    let right_stack = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(model_height),
+            Constraint::Length(u16::from(middle[1].height > model_height + 1)),
+            Constraint::Min(0),
+        ])
+        .split(middle[1]);
+    render_models(frame, right_stack[0], &data.models);
     render_counts(
         frame,
-        lower[1],
+        right_stack[2],
+        "Core Tools",
+        theme::CYAN,
+        &data.tools,
+    );
+
+    let bottom = weighted_columns(sections[8], 70);
+    render_counts(
+        frame,
+        bottom[0],
         "Shell Commands",
         theme::PRIMARY,
         &data.commands,
     );
-
     render_counts(
         frame,
-        sections[11],
+        bottom[1],
         "MCP Servers",
         theme::MAGENTA,
         &data.mcp_servers,
     );
-    render_footer(frame, sections[12], app);
+    render_footer(frame, sections[10], app);
     render_project_modal(frame, root, app);
     render_currency_modal(frame, root, app);
     render_session_modal(frame, root, app);
     render_export_modal(frame, root, app);
     render_export_dir_picker_modal(frame, root, app);
+}
+
+fn deep_dive_panel_heights(area_height: u16, data: &DashboardData) -> [u16; 4] {
+    let top = table_panel_height(data.daily.len().max(data.projects.len()), 6, 10);
+    let sessions = table_panel_height(data.sessions.len(), 6, 13);
+    let project_tools = table_panel_height(data.project_tools.len(), 8, 15);
+    let models = table_panel_height(data.models.len(), 5, 7);
+    let tools = table_panel_height(data.tools.len(), 6, 13);
+    let main = project_tools
+        .max(models.saturating_add(1).saturating_add(tools))
+        .min(21);
+    let bottom = table_panel_height(data.commands.len().max(data.mcp_servers.len()), 5, 13);
+    let mut heights = [top, sessions, main, bottom];
+
+    let reserved = 3 + 3 + 4; // title, footer, and the gaps between content bands
+    let available = area_height.saturating_sub(reserved);
+    let mut overflow = heights.iter().sum::<u16>().saturating_sub(available);
+    let minimums = [6, 6, 8, 5];
+
+    for idx in [2, 1, 3, 0] {
+        if overflow == 0 {
+            break;
+        }
+        let shrink = heights[idx].saturating_sub(minimums[idx]).min(overflow);
+        heights[idx] -= shrink;
+        overflow -= shrink;
+    }
+
+    heights
+}
+
+fn table_panel_height(rows: usize, min: u16, max: u16) -> u16 {
+    (rows as u16).saturating_add(3).clamp(min, max)
 }
 
 fn render_small_terminal_notice(frame: &mut Frame<'_>, area: Rect) {
@@ -224,6 +272,30 @@ mod tests {
         assert!(!rendered.contains("switch"));
         assert!(!rendered.contains("optimize"));
         assert!(!rendered.contains("compare"));
+    }
+
+    #[test]
+    fn dashboard_omits_redundant_status_summary_strip() {
+        let backend = TestBackend::new(170, 64);
+        let mut terminal = Terminal::new(backend).expect("create terminal");
+        let mut app = App::default();
+        app.status = Some("auto-refreshed · 12399 calls".into());
+        app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("draw dashboard");
+
+        let rendered = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+
+        assert!(!rendered.contains("auto-refreshed"));
+        assert!(!rendered.contains("12399 calls"));
     }
 
     #[test]

@@ -15,8 +15,9 @@
 
 ## Documentation
 
-- Add or update release notes in `docs/releases/` for user-visible changes that affect shipped behavior or documented workflows. One file per version (`docs/releases/<version>.md`), modelled on the existing notes — highlights, install instructions, and notes sections.
-- The current released version lives in `Cargo.toml`. Bump it in the same change that lands the release notes; CI tags off `v*` and publishes that version, so the `Cargo.toml` version and the matching `docs/releases/<version>.md` file should always land together.
+- Add user-visible changes that affect shipped behavior or documented workflows to `docs/releases/unreleased.md`.
+- Do not bump `Cargo.toml`, edit `Cargo.lock` just for a version change, or create a numbered `docs/releases/<version>.md` unless Russ explicitly asks to prep a release.
+- When Russ asks to prep a release, move the relevant `unreleased.md` notes into `docs/releases/<version>.md`, then bump `Cargo.toml` and let Cargo update `Cargo.lock` in the same change.
 - Keep `docs/architecture.md`, `docs/usage.md`, and the `docs/tools/<name>.md` files in sync with the code they describe. If you change page routing, ingestion behavior, or a tool adapter's source schema, update the matching doc in the same change.
 - Update `docs/README.md` whenever a new top-level doc lands so the index stays current.
 
