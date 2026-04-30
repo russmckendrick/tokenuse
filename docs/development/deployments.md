@@ -16,16 +16,20 @@ The release workflow builds and uploads these TUI binaries:
 
 Each asset has a matching `.sha256` checksum file.
 
-## Desktop DMG
+## Desktop Apps
 
-Tagged releases also build a universal macOS desktop DMG:
+Tagged releases also build desktop app bundles:
 
-```text
-tokenuse-desktop-macos-universal.dmg
-tokenuse-desktop-macos-universal.dmg.sha256
-```
+| Platform | Assets |
+| --- | --- |
+| macOS Universal | `tokenuse-desktop-macos-universal.dmg` |
+| Windows AMD64 | `tokenuse-desktop-windows-amd64-setup.exe`, `tokenuse-desktop-windows-amd64.msi` |
+| Linux AMD64 | `tokenuse-desktop-linux-amd64.AppImage`, `tokenuse-desktop-linux-amd64.deb`, `tokenuse-desktop-linux-amd64.rpm` |
+| Linux ARM64 | `tokenuse-desktop-linux-arm64.AppImage`, `tokenuse-desktop-linux-arm64.deb`, `tokenuse-desktop-linux-arm64.rpm` |
 
-The desktop release job signs with a Developer ID Application certificate, notarizes through App Store Connect, verifies the mounted DMG, and uploads the normalized artifact to the GitHub Release.
+Each asset has a matching `.sha256` checksum file.
+
+The macOS desktop release job signs with a Developer ID Application certificate, notarizes through App Store Connect, verifies the mounted DMG, and uploads the normalized artifact to the GitHub Release. Windows and Linux desktop assets are unsigned for now and should be verified with their checksum files before installing.
 
 ## Required Secrets
 
@@ -50,4 +54,4 @@ After the GitHub Release is created, `.github/workflows/update-tap.yml` updates:
 - `Formula/tokenuse.rb` for the TUI on macOS and Linux.
 - `Casks/tokenuse.rb` for the macOS desktop DMG.
 
-The tap downloads checksums from the newly published release before writing the formula and cask.
+The tap downloads checksums from the newly published release before writing the formula and cask. Windows and Linux desktop assets are published only to GitHub Releases for now.

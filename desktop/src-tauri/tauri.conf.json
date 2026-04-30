@@ -37,6 +37,10 @@
     ],
     "publisher": "Russ McKendrick",
     "homepage": "https://www.tokenuse.app",
+    "category": "DeveloperTool",
+    "shortDescription": "Desktop app for local AI coding tool token and cost usage",
+    "longDescription": "Token Use is a local-only desktop app for exploring AI coding tool token and cost usage. It reads local usage files directly and shares its archive and configuration with the tokenuse terminal UI.",
+    "license": "MIT",
     "copyright": "Copyright 2026 Russ McKendrick",
     "macOS": {
       "bundleName": "Token Use",

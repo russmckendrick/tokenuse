@@ -10,6 +10,7 @@ Changes that should be included in the next release go here. Keep this file curr
 - Desktop builds now regenerate app icons from `desktop/tokenusebars.svg`.
 - The desktop header now uses the bars mark with the `Token Use` title and omits the version and source labels.
 - Desktop dashboard sections now render all rows and scroll overflowing data inside each section.
+- Tagged releases now publish unsigned Windows and Linux desktop app assets with checksum files alongside the signed macOS DMG.
 
 ## Notes
 

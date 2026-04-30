@@ -11,7 +11,7 @@ brew install --cask russmckendrick/tap/tokenuse
 open -a "Token Use"
 ```
 
-The desktop app currently ships as a signed and notarized universal macOS DMG. Linux and Windows desktop installers are intentionally deferred; use the TUI binaries on those platforms.
+The macOS desktop app also ships as a signed and notarized universal DMG. Linux desktop builds are published as unsigned AppImage, deb, and rpm assets for AMD64 and ARM64. Windows desktop builds are published as unsigned AMD64 NSIS and MSI installers. Verify the matching `.sha256` file before running or installing unsigned assets.
 
 ## Main Tabs
 
