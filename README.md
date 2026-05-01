@@ -2,17 +2,31 @@
 
 `tokenuse` is a Rust TUI for exploring AI coding tool token and cost usage. It reads session files already written on your machine, appends normalized records to its own archive, and renders a dense terminal dashboard for spend by day, project, tool, model, shell command, and MCP server.
 
+Website: [tokenuse.app](https://www.tokenuse.app/)
+
 There is no API key, proxy, telemetry endpoint, daemon, or live file watcher. Usage ingestion stays local-only; outbound network is limited to explicit confirmed Config-page downloads or maintainer refresh flags.
 
 ## Quick Start
 
+Install the terminal UI with Homebrew:
+
 ```bash
-cargo run
+brew install russmckendrick/tap/tokenuse
+tokenuse
 ```
 
 Use a terminal at least `120x40`. Smaller terminals show a resize notice instead of the full dashboard.
 
 If no local sessions are found, or archive sync fails before any calls are loaded, the app falls back to bundled sample data and shows that status in the title bar. Press `r` to sync sessions created after startup.
+
+Install the macOS desktop app with Homebrew Cask:
+
+```bash
+brew install --cask russmckendrick/tap/tokenuse
+open -a "Token Use"
+```
+
+Linux, Windows, and manual desktop downloads are published on GitHub Releases. See [installation](docs/guides/installation.md) for platform-specific commands.
 
 ## Desktop App
 
@@ -80,27 +94,15 @@ USD remains the default. Costs are calculated and stored internally as import-ti
 
 Default TUI and desktop builds include the confirmed download actions. Build with `--no-default-features` when you need a no-download binary; those builds keep ingestion local-only and report Config-page downloads as unavailable.
 
-## CLI Helpers
+## CLI Helper
 
 Sync the archive and list normalized project/tool rows without opening the TUI:
 
 ```bash
-cargo run -- --list-projects
+tokenuse --list-projects
 ```
 
-Refresh the embedded LiteLLM-derived pricing snapshot:
-
-```bash
-cargo run -- --refresh-prices
-```
-
-Refresh the checked-in Frankfurter-derived currency snapshot:
-
-```bash
-cargo run -- --generate-currency-json
-```
-
-Do not hand-edit `src/pricing/snapshot.json` or `currency/rates.json`; use the refresh commands so generated data stays consistent.
+Maintainer snapshot refresh commands are documented in [local development](docs/development/local-development.md). Do not hand-edit `src/pricing/snapshot.json` or `currency/rates.json`; use the refresh commands so generated data stays consistent.
 
 ## Documentation
 
