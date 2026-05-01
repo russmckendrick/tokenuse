@@ -75,6 +75,7 @@
     { "context": "usage_page", "keys": ["t"], "action": "cycle_tool" },
     { "context": "usage_page", "keys": ["c"], "action": "page_config" },
     { "context": "usage_page", "keys": ["r"], "action": "reload" },
+    { "context": "usage_page", "keys": ["e"], "action": "open_export_picker" },
 
     { "context": "config_page", "keys": ["q"], "action": "quit" },
     { "context": "config_page", "keys": ["h", "?"], "action": "open_help" },
@@ -101,6 +102,7 @@
     { "context": "session_page", "keys": ["Enter"], "action": "confirm" },
     { "context": "session_page", "keys": ["r"], "action": "reload" },
     { "context": "session_page", "keys": ["s"], "action": "open_session_picker" },
+    { "context": "session_page", "keys": ["e"], "action": "open_export_picker" },
 
     { "context": "help", "keys": ["Esc", "h", "?"], "action": "close_help" },
     { "context": "help", "keys": ["q"], "action": "quit" },
@@ -273,6 +275,7 @@
       { "keys": "Up/Down", "label": "move", "action": "move_up" },
       { "keys": "Enter", "label": "detail", "action": "confirm" },
       { "keys": "s", "label": "pick", "action": "open_session_picker" },
+      { "keys": "e", "label": "export", "action": "open_export_picker" },
       { "keys": "g", "label": "sort", "action": "cycle_sort" },
       { "keys": "h", "label": "help", "action": "open_help" }
     ],
@@ -281,6 +284,7 @@
       { "keys": "Tab", "label": "tabs", "action": "next_tab" },
       { "keys": "o/d", "label": "overview/deep", "action": "page_overview" },
       { "keys": "c", "label": "config", "action": "page_config" },
+      { "keys": "e", "label": "export", "action": "open_export_picker" },
       { "keys": "g", "label": "sort", "action": "cycle_sort" },
       { "keys": "h", "label": "help", "action": "open_help" }
     ],

@@ -1,15 +1,17 @@
+use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use chrono::Local;
+use chrono::{Datelike, Duration, Local, NaiveDate};
 use color_eyre::{eyre::WrapErr, Result};
 use plotters::prelude::*;
 
-use crate::app::{Period, ProjectFilter, Tool};
+use crate::app::{Period, ProjectFilter, SortMode, Tool};
 use crate::config::ConfigPaths;
 use crate::data::{
     CountMetric, DailyMetric, DashboardData, ModelMetric, ProjectMetric, ProjectToolMetric,
-    SessionMetric, Summary,
+    SessionDetailView, SessionMetric, Summary,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,6 +20,7 @@ pub enum ExportFormat {
     Csv,
     Svg,
     Png,
+    Html,
 }
 
 impl ExportFormat {
@@ -27,10 +30,22 @@ impl ExportFormat {
             Self::Csv => "CSV (one file per panel)",
             Self::Svg => "SVG (full dashboard)",
             Self::Png => "PNG (full dashboard)",
+            Self::Html => "HTML (full workbook report)",
         }
     }
 
-    pub const ALL: [Self; 4] = [Self::Json, Self::Csv, Self::Svg, Self::Png];
+    pub const ALL: [Self; 5] = [Self::Json, Self::Csv, Self::Svg, Self::Png, Self::Html];
+}
+
+pub struct ExportContext<'a> {
+    pub dashboard: &'a DashboardData,
+    pub session: Option<&'a SessionDetailView>,
+    pub period: Period,
+    pub tool: Tool,
+    pub project_filter: &'a ProjectFilter,
+    pub sort: SortMode,
+    pub currency_code: &'a str,
+    pub source_label: &'a str,
 }
 
 // Palette mirrors src/theme.rs and DESIGN.md.
@@ -79,13 +94,10 @@ const PANEL_HEADER_GAP: i32 = 28;
 pub fn write(
     paths: &ConfigPaths,
     format: ExportFormat,
-    data: &DashboardData,
-    period: Period,
-    tool: Tool,
-    project_filter: &ProjectFilter,
+    context: &ExportContext<'_>,
 ) -> Result<PathBuf> {
     let exports_root = default_export_dir(paths);
-    write_to_dir(&exports_root, format, data, period, tool, project_filter)
+    write_to_dir(&exports_root, format, context)
 }
 
 pub fn default_export_dir(paths: &ConfigPaths) -> PathBuf {
@@ -105,38 +117,53 @@ fn default_export_dir_from(
 pub fn write_to_dir(
     exports_root: &Path,
     format: ExportFormat,
-    data: &DashboardData,
-    period: Period,
-    tool: Tool,
-    project_filter: &ProjectFilter,
+    context: &ExportContext<'_>,
 ) -> Result<PathBuf> {
     fs::create_dir_all(exports_root)
         .wrap_err_with(|| format!("create {}", exports_root.display()))?;
 
-    let slug = filter_slug(period, tool, project_filter);
+    let slug = filter_slug(context.period, context.tool, context.project_filter);
     let stamp = Local::now().format("%Y%m%dT%H%M%S").to_string();
 
     match format {
         ExportFormat::Json => {
             let file = exports_root.join(format!("tokenuse-{stamp}-{slug}.json"));
-            let text = serde_json::to_string_pretty(data).wrap_err("serialize json")?;
+            let text =
+                serde_json::to_string_pretty(context.dashboard).wrap_err("serialize json")?;
             fs::write(&file, text).wrap_err_with(|| format!("write {}", file.display()))?;
             Ok(file)
         }
         ExportFormat::Csv => {
             let dir = exports_root.join(format!("tokenuse-{stamp}-{slug}-csv"));
             fs::create_dir_all(&dir).wrap_err_with(|| format!("create {}", dir.display()))?;
-            write_csv_dir(&dir, data)?;
+            write_csv_dir(&dir, context.dashboard)?;
             Ok(dir)
         }
         ExportFormat::Svg => {
             let file = exports_root.join(format!("tokenuse-{stamp}-{slug}.svg"));
-            write_chart_svg(&file, data, period, tool, project_filter)?;
+            write_chart_svg(
+                &file,
+                context.dashboard,
+                context.period,
+                context.tool,
+                context.project_filter,
+            )?;
             Ok(file)
         }
         ExportFormat::Png => {
             let file = exports_root.join(format!("tokenuse-{stamp}-{slug}.png"));
-            write_chart_png(&file, data, period, tool, project_filter)?;
+            write_chart_png(
+                &file,
+                context.dashboard,
+                context.period,
+                context.tool,
+                context.project_filter,
+            )?;
+            Ok(file)
+        }
+        ExportFormat::Html => {
+            let file = exports_root.join(format!("tokenuse-{stamp}-{slug}.html"));
+            write_html_report(&file, context, &stamp)?;
             Ok(file)
         }
     }
@@ -361,6 +388,1002 @@ fn write_counts_csv(dir: &Path, name: &str, rows: &[CountMetric]) -> Result<()> 
         .map(|r| vec![r.name.to_string(), r.calls.to_string()])
         .collect();
     write_csv(dir, name, &["name", "calls"], &data)
+}
+
+fn write_html_report(path: &Path, context: &ExportContext<'_>, stamp: &str) -> Result<()> {
+    let generated_at = Local::now().format("%Y-%m-%d %H:%M:%S %Z").to_string();
+    let title = format!(
+        "Token Use report - {} - {}",
+        period_label(context.period),
+        tool_label(context.tool)
+    );
+    let mut out = String::with_capacity(96 * 1024);
+
+    out.push_str("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n");
+    out.push_str("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
+    out.push_str("<title>");
+    out.push_str(&escape_html(&title));
+    out.push_str("</title>\n<style>\n");
+    out.push_str(HTML_REPORT_CSS);
+    out.push_str("\n</style>\n</head>\n<body>\n<main class=\"report\">\n");
+
+    push_report_header(&mut out, context, &generated_at, stamp);
+    push_summary_cards(&mut out, &context.dashboard.summary, context.currency_code);
+    push_dashboard_workbook(&mut out, context.dashboard);
+    if let Some(session) = context.session {
+        push_session_workbook(&mut out, session);
+    }
+
+    out.push_str("</main>\n</body>\n</html>\n");
+    fs::write(path, out).wrap_err_with(|| format!("write {}", path.display()))
+}
+
+const HTML_REPORT_CSS: &str = r##"
+:root {
+  color-scheme: light;
+  --paper: #f7f8fb;
+  --panel: #ffffff;
+  --ink: #1b2030;
+  --muted: #5f667a;
+  --faint: #e4e8f2;
+  --line: #cfd5e6;
+  --primary: #ff8f40;
+  --blue: #2d72d9;
+  --green: #14875a;
+  --yellow: #9b7400;
+  --red: #c53f4d;
+  --cyan: #008b8a;
+  --magenta: #b347b8;
+  --heat-empty: #edf0f7;
+  --heat-1: #62a6ff;
+  --heat-2: #4cf2a0;
+  --heat-3: #ffd60a;
+  --heat-4: #ff9c48;
+  --heat-5: #ff5f6d;
+  font-family: "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--paper);
+  font: 13px/1.45 "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.report {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 22px 0 36px;
+}
+
+.report-head,
+.panel,
+.kpi {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.report-head {
+  padding: 18px;
+  border-color: #d6a172;
+}
+
+.brand-row,
+.panel-head,
+.meta-grid,
+.kpis,
+.call-facts {
+  display: grid;
+  gap: 8px;
+}
+
+.brand-row {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-mark {
+  width: 32px;
+  height: 42px;
+  display: block;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+h1 {
+  color: var(--ink);
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.eyebrow {
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.meta-grid {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin-top: 16px;
+}
+
+.meta-grid div,
+.call-facts div {
+  border-left: 2px solid var(--faint);
+  padding-left: 8px;
+  min-width: 0;
+}
+
+.meta-grid span,
+.call-facts span,
+.kpi span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.meta-grid strong,
+.call-facts strong,
+.kpi strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.kpis {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  margin: 14px 0;
+}
+
+.kpi {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 11px;
+}
+
+.kpi svg,
+.panel-head svg {
+  width: 18px;
+  height: 18px;
+}
+
+.kpi strong {
+  font-size: 18px;
+}
+
+.kpi small {
+  color: var(--muted);
+}
+
+.workbook-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.panel {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.panel.wide {
+  grid-column: 1 / -1;
+}
+
+.panel-head {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.panel h2 {
+  font-size: 15px;
+}
+
+.tone-blue { --tone: var(--blue); }
+.tone-green { --tone: var(--green); }
+.tone-yellow { --tone: var(--yellow); }
+.tone-red { --tone: var(--red); }
+.tone-cyan { --tone: var(--cyan); }
+.tone-magenta { --tone: var(--magenta); }
+.tone-orange { --tone: var(--primary); }
+
+.panel-head,
+.money {
+  color: var(--tone, var(--primary));
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--faint);
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+td.num,
+th.num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.empty {
+  color: var(--muted);
+  text-align: center;
+}
+
+.calendar-months {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.calendar-title {
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.calendar-weekday {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.calendar-blank {
+  min-height: 72px;
+}
+
+.calendar-cell {
+  min-height: 72px;
+  display: grid;
+  align-content: space-between;
+  gap: 5px;
+  padding: 7px;
+  background: #fbfcff;
+  border: 1px solid var(--faint);
+  border-radius: 2px;
+}
+
+.calendar-cell.i1 { background: #eef6ff; border-color: #c7ddff; }
+.calendar-cell.i2 { background: #ebfff6; border-color: #bff0db; }
+.calendar-cell.i3 { background: #fff9d8; border-color: #f0df91; }
+.calendar-cell.i4 { background: #fff0df; border-color: #efc08b; }
+.calendar-cell.i5 { background: #fff0f2; border-color: #efa7af; }
+
+.calendar-day-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--ink);
+}
+
+.calendar-day-head span,
+.calendar-calls {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.calendar-cost {
+  color: var(--yellow);
+  font-weight: 800;
+}
+
+.heat {
+  display: inline-flex;
+  align-items: end;
+  gap: 2px;
+  min-width: 86px;
+}
+
+.heat span {
+  width: 5px;
+  height: 16px;
+  background: var(--heat-empty);
+}
+
+.heat .filled.l0,
+.heat .filled.l1 { background: var(--heat-1); }
+.heat .filled.l2,
+.heat .filled.l3 { background: var(--heat-2); }
+.heat .filled.l4,
+.heat .filled.l5,
+.heat .filled.l6 { background: var(--heat-3); }
+.heat .filled.l7,
+.heat .filled.l8 { background: var(--heat-4); }
+.heat .filled.l9,
+.heat .filled.l10,
+.heat .filled.l11 { background: var(--heat-5); }
+
+.session-kpis {
+  padding: 12px;
+}
+
+details.call-detail {
+  border-top: 1px solid var(--faint);
+  padding: 9px 12px;
+}
+
+details.call-detail summary {
+  cursor: pointer;
+  color: var(--red);
+  font-weight: 800;
+}
+
+pre {
+  margin: 8px 0 0;
+  padding: 10px;
+  overflow: auto;
+  color: var(--ink);
+  background: #f0f3f9;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.report-footnote {
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+@media (max-width: 820px) {
+  .report {
+    width: calc(100% - 20px);
+    padding-top: 10px;
+  }
+
+  .workbook-grid {
+    grid-template-columns: 1fr;
+  }
+
+}
+
+@media print {
+  body {
+    background: #ffffff;
+  }
+
+  .report {
+    width: 100%;
+    padding: 0;
+  }
+
+  .panel,
+  .report-head,
+  .kpi {
+    break-inside: avoid;
+  }
+
+  details.call-detail {
+    break-inside: avoid;
+  }
+}
+"##;
+
+fn push_report_header(
+    out: &mut String,
+    context: &ExportContext<'_>,
+    generated_at: &str,
+    stamp: &str,
+) {
+    out.push_str("<header class=\"report-head\">\n<div class=\"brand-row\">\n");
+    out.push_str(BARS_LOGO_SVG);
+    out.push_str(
+        "<div><p class=\"eyebrow\">Full workbook report</p><h1>Token Use</h1></div>\n</div>\n",
+    );
+    out.push_str("<div class=\"meta-grid\">\n");
+    push_meta(out, "generated", generated_at);
+    push_meta(out, "export id", stamp);
+    push_meta(out, "source", context.source_label);
+    push_meta(out, "currency", context.currency_code);
+    push_meta(out, "period", period_label(context.period));
+    push_meta(out, "tool", tool_label(context.tool));
+    push_meta(out, "project", context.project_filter.label());
+    push_meta(out, "sort", context.sort.label());
+    out.push_str("</div>\n</header>\n");
+}
+
+const BARS_LOGO_SVG: &str = r##"<svg class="brand-mark" viewBox="0 0 440 560" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="html-brand-bars" x1="0" y1="0" x2="0" y2="560" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#FFC06A"/><stop offset="45%" stop-color="#FF9A4D"/><stop offset="100%" stop-color="#F26A3D"/></linearGradient></defs><rect x="0" y="280" width="80" height="280" rx="16" fill="url(#html-brand-bars)"/><rect x="120" y="160" width="80" height="400" rx="16" fill="url(#html-brand-bars)"/><rect x="240" y="0" width="80" height="560" rx="16" fill="url(#html-brand-bars)"/><rect x="360" y="120" width="80" height="440" rx="16" fill="url(#html-brand-bars)"/></svg>"##;
+
+fn push_meta(out: &mut String, label: &str, value: &str) {
+    out.push_str("<div><span>");
+    out.push_str(&escape_html(label));
+    out.push_str("</span><strong>");
+    out.push_str(&escape_html(value));
+    out.push_str("</strong></div>\n");
+}
+
+fn push_summary_cards(out: &mut String, summary: &Summary, currency_code: &str) {
+    out.push_str("<section class=\"kpis\" aria-label=\"Summary metrics\">\n");
+    push_kpi(out, "cost", summary.cost, currency_code, "cost");
+    push_kpi(out, "calls", summary.calls, summary.input, "calls");
+    push_kpi(out, "sessions", summary.sessions, "active set", "sessions");
+    push_kpi(out, "cache hit", summary.cache_hit, summary.cached, "cache");
+    let tokens = format!("{} out", summary.output);
+    push_kpi(out, "input", summary.input, &tokens, "tokens");
+    let written = format!("{} written", summary.written);
+    push_kpi(out, "cached", summary.cached, &written, "cache");
+    out.push_str("</section>\n");
+}
+
+fn push_kpi(out: &mut String, label: &str, value: &str, detail: &str, icon: &str) {
+    out.push_str("<article class=\"kpi tone-orange\">");
+    out.push_str(icon_svg(icon));
+    out.push_str("<div><span>");
+    out.push_str(&escape_html(label));
+    out.push_str("</span><strong>");
+    out.push_str(&escape_html(value));
+    out.push_str("</strong><small>");
+    out.push_str(&escape_html(detail));
+    out.push_str("</small></div></article>\n");
+}
+
+fn push_dashboard_workbook(out: &mut String, data: &DashboardData) {
+    out.push_str("<section class=\"workbook-grid\" aria-label=\"Dashboard workbook\">\n");
+    push_daily_html(out, &data.daily);
+    push_projects_html(out, &data.projects);
+    push_sessions_html(out, &data.sessions);
+    push_project_tools_html(out, &data.project_tools);
+    push_models_html(out, &data.models);
+    push_counts_html(out, "Core Tools", "tone-cyan", "tools", &data.tools);
+    push_counts_html(
+        out,
+        "Shell Commands",
+        "tone-orange",
+        "terminal",
+        &data.commands,
+    );
+    push_counts_html(
+        out,
+        "MCP Servers",
+        "tone-magenta",
+        "network",
+        &data.mcp_servers,
+    );
+    out.push_str("</section>\n");
+}
+
+fn push_session_workbook(out: &mut String, session: &SessionDetailView) {
+    push_section_open(out, "Selected Session", "tone-red wide", "session");
+    out.push_str("<div class=\"session-kpis\">\n<div class=\"call-facts\">\n");
+    push_meta(out, "project", &session.project);
+    push_meta(out, "tool", session.tool);
+    push_meta(out, "date range", &session.date_range);
+    push_meta(out, "cost", &session.total_cost);
+    push_meta(out, "calls", &session.total_calls.to_string());
+    push_meta(out, "input", &session.total_input);
+    push_meta(out, "output", &session.total_output);
+    push_meta(out, "cache read", &session.total_cache_read);
+    out.push_str("</div>\n");
+    if let Some(note) = &session.note {
+        out.push_str("<p class=\"report-footnote\">");
+        out.push_str(&escape_html(note));
+        out.push_str("</p>\n");
+    }
+    out.push_str("</div>\n");
+
+    push_table_open(
+        out,
+        &[
+            "time", "model", "cost", "input", "output", "cache", "tools", "prompt",
+        ],
+    );
+    if session.calls.is_empty() {
+        push_empty_row(out, 8);
+    } else {
+        for call in &session.calls {
+            out.push_str("<tr>");
+            push_text_cell(out, "", &call.timestamp);
+            push_text_cell(out, "", &call.model);
+            push_text_cell(out, "money num", &call.cost);
+            push_text_cell(out, "num", &format_u64(call.input_tokens));
+            push_text_cell(out, "num", &format_u64(call.output_tokens));
+            push_text_cell(out, "num", &format_u64(call.cache_read + call.cache_write));
+            push_text_cell(out, "", &call.tools);
+            push_text_cell(out, "muted", &call.prompt);
+            out.push_str("</tr>\n");
+        }
+    }
+    push_table_close(out);
+
+    for (idx, call) in session.calls.iter().enumerate() {
+        out.push_str("<details class=\"call-detail\"><summary>");
+        let _ = write!(
+            out,
+            "Call {} - {} - {}",
+            idx + 1,
+            escape_html(&call.model),
+            escape_html(&call.cost)
+        );
+        out.push_str("</summary>\n<div class=\"call-facts\">\n");
+        push_meta(out, "time", &call.timestamp);
+        push_meta(out, "model", &call.model);
+        push_meta(out, "cost", &call.cost);
+        push_meta(out, "tools", &call.tools);
+        push_meta(out, "input", &format_u64(call.input_tokens));
+        push_meta(out, "output", &format_u64(call.output_tokens));
+        push_meta(out, "cache read", &format_u64(call.cache_read));
+        push_meta(out, "cache write", &format_u64(call.cache_write));
+        push_meta(out, "reasoning", &format_u64(call.reasoning_tokens));
+        push_meta(out, "web search", &format_u64(call.web_search_requests));
+        out.push_str("</div>\n");
+        if !call.bash_commands.is_empty() {
+            out.push_str("<h4>Shell commands</h4><pre>");
+            out.push_str(&escape_html(&call.bash_commands.join("\n")));
+            out.push_str("</pre>\n");
+        }
+        out.push_str("<h4>Prompt</h4><pre>");
+        let prompt = if call.prompt_full.is_empty() {
+            &call.prompt
+        } else {
+            &call.prompt_full
+        };
+        out.push_str(&escape_html(prompt));
+        out.push_str("</pre>\n</details>\n");
+    }
+    push_section_close(out);
+}
+
+fn push_daily_html(out: &mut String, rows: &[DailyMetric]) {
+    push_section_open(out, "Daily Activity", "tone-blue wide", "calendar");
+    if rows.is_empty() {
+        out.push_str("<p class=\"empty\">no data</p>\n");
+        push_section_close(out);
+        return;
+    }
+
+    let months = daily_calendar_months(rows);
+    if months.is_empty() {
+        push_daily_table_html(out, rows);
+        push_section_close(out);
+        return;
+    }
+
+    out.push_str("<div class=\"calendar-months\">\n");
+    for ((year, month), days) in months {
+        let days_by_month_day: BTreeMap<u32, &DailyMetric> = days
+            .iter()
+            .map(|day| (day.date.day(), day.metric))
+            .collect();
+        let Some(first_day) = NaiveDate::from_ymd_opt(year, month, 1) else {
+            continue;
+        };
+        let month_days = days_in_month(year, month);
+        out.push_str("<section class=\"calendar-month\"><h3 class=\"calendar-title\">");
+        out.push_str(month_name(month));
+        let _ = write!(out, " {year}");
+        out.push_str("</h3><div class=\"calendar-grid\">\n");
+        for weekday in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] {
+            out.push_str("<div class=\"calendar-weekday\">");
+            out.push_str(weekday);
+            out.push_str("</div>");
+        }
+        for _ in 0..first_day.weekday().num_days_from_monday() {
+            out.push_str("<div class=\"calendar-blank\" aria-hidden=\"true\"></div>");
+        }
+        for day in 1..=month_days {
+            if let Some(row) = days_by_month_day.get(&day).copied() {
+                push_calendar_day(out, day, row);
+            } else {
+                let _ = write!(
+                    out,
+                    "<div class=\"calendar-cell calendar-empty\"><div class=\"calendar-day-head\"><strong>{day}</strong></div></div>"
+                );
+            }
+        }
+        out.push_str("</div></section>\n");
+    }
+    out.push_str("</div>\n");
+    push_section_close(out);
+}
+
+fn push_daily_table_html(out: &mut String, rows: &[DailyMetric]) {
+    push_table_open(out, &["date", "activity", "cost", "calls"]);
+    for row in rows {
+        out.push_str("<tr>");
+        push_text_cell(out, "", row.day);
+        push_raw_cell(out, "", &heat_html(row.value));
+        push_text_cell(out, "money num", row.cost);
+        push_text_cell(out, "num", &format_u64(row.calls));
+        out.push_str("</tr>\n");
+    }
+    push_table_close(out);
+}
+
+struct CalendarDay<'a> {
+    date: NaiveDate,
+    metric: &'a DailyMetric,
+}
+
+fn daily_calendar_months(rows: &[DailyMetric]) -> BTreeMap<(i32, u32), Vec<CalendarDay<'_>>> {
+    let mut months: BTreeMap<(i32, u32), Vec<CalendarDay<'_>>> = BTreeMap::new();
+    for row in rows {
+        if let Some(date) = parse_report_day(row.day) {
+            months
+                .entry((date.year(), date.month()))
+                .or_default()
+                .push(CalendarDay { date, metric: row });
+        }
+    }
+    for days in months.values_mut() {
+        days.sort_by_key(|day| day.date);
+    }
+    months
+}
+
+fn parse_report_day(value: &str) -> Option<NaiveDate> {
+    let (month, day) = value.split_once('-')?;
+    let month = month.parse::<u32>().ok()?;
+    let day = day.parse::<u32>().ok()?;
+    let today = Local::now().date_naive();
+    let mut date = NaiveDate::from_ymd_opt(today.year(), month, day)?;
+    if date > today + Duration::days(1) {
+        date = NaiveDate::from_ymd_opt(today.year() - 1, month, day)?;
+    }
+    Some(date)
+}
+
+fn days_in_month(year: i32, month: u32) -> u32 {
+    let next_month = if month == 12 {
+        NaiveDate::from_ymd_opt(year + 1, 1, 1)
+    } else {
+        NaiveDate::from_ymd_opt(year, month + 1, 1)
+    }
+    .expect("valid adjacent month");
+    (next_month - Duration::days(1)).day()
+}
+
+fn month_name(month: u32) -> &'static str {
+    match month {
+        1 => "January",
+        2 => "February",
+        3 => "March",
+        4 => "April",
+        5 => "May",
+        6 => "June",
+        7 => "July",
+        8 => "August",
+        9 => "September",
+        10 => "October",
+        11 => "November",
+        12 => "December",
+        _ => "",
+    }
+}
+
+fn push_calendar_day(out: &mut String, day: u32, row: &DailyMetric) {
+    let _ = write!(
+        out,
+        "<div class=\"calendar-cell i{}\"><div class=\"calendar-day-head\"><strong>{}</strong><span>{}</span></div><div class=\"calendar-cost\">{}</div><div class=\"calendar-calls\">{} calls</div></div>",
+        calendar_intensity(row.value),
+        day,
+        escape_html(row.day),
+        escape_html(row.cost),
+        format_u64(row.calls),
+    );
+}
+
+fn calendar_intensity(value: u64) -> u64 {
+    if value == 0 {
+        0
+    } else {
+        ((value.min(100) - 1) / 20) + 1
+    }
+}
+
+fn push_projects_html(out: &mut String, rows: &[ProjectMetric]) {
+    push_section_open(out, "By Project", "tone-green wide", "project");
+    push_table_open(out, &["", "project", "cost", "avg/s", "sessions", "tools"]);
+    if rows.is_empty() {
+        push_empty_row(out, 6);
+    } else {
+        for row in rows {
+            out.push_str("<tr>");
+            push_raw_cell(out, "", &heat_html(row.value));
+            push_text_cell(out, "", row.name);
+            push_text_cell(out, "money num", row.cost);
+            push_text_cell(out, "money num", row.avg_per_session);
+            push_text_cell(out, "num", &format_u64(row.sessions));
+            push_text_cell(out, "muted", row.tool_mix);
+            out.push_str("</tr>\n");
+        }
+    }
+    push_table_close(out);
+    push_section_close(out);
+}
+
+fn push_sessions_html(out: &mut String, rows: &[SessionMetric]) {
+    push_section_open(out, "Top Sessions", "tone-red wide", "session");
+    push_table_open(out, &["", "date", "project", "cost", "calls"]);
+    if rows.is_empty() {
+        push_empty_row(out, 5);
+    } else {
+        for row in rows {
+            out.push_str("<tr>");
+            push_raw_cell(out, "", &heat_html(row.value));
+            push_text_cell(out, "", row.date);
+            push_text_cell(out, "", row.project);
+            push_text_cell(out, "money num", row.cost);
+            push_text_cell(out, "num", &format_u64(row.calls));
+            out.push_str("</tr>\n");
+        }
+    }
+    push_table_close(out);
+    push_section_close(out);
+}
+
+fn push_project_tools_html(out: &mut String, rows: &[ProjectToolMetric]) {
+    push_section_open(out, "Project Spend by Tool", "tone-yellow", "split");
+    push_table_open(
+        out,
+        &["", "project", "tool", "cost", "calls", "sessions", "avg/s"],
+    );
+    if rows.is_empty() {
+        push_empty_row(out, 7);
+    } else {
+        for row in rows {
+            out.push_str("<tr>");
+            push_raw_cell(out, "", &heat_html(row.value));
+            push_text_cell(out, "", row.project);
+            push_text_cell(out, "", row.tool);
+            push_text_cell(out, "money num", row.cost);
+            push_text_cell(out, "num", &format_u64(row.calls));
+            push_text_cell(out, "num", &format_u64(row.sessions));
+            push_text_cell(out, "money num", row.avg_per_session);
+            out.push_str("</tr>\n");
+        }
+    }
+    push_table_close(out);
+    push_section_close(out);
+}
+
+fn push_models_html(out: &mut String, rows: &[ModelMetric]) {
+    push_section_open(out, "By Model", "tone-magenta", "model");
+    push_table_open(out, &["", "model", "cost", "cache", "calls"]);
+    if rows.is_empty() {
+        push_empty_row(out, 5);
+    } else {
+        for row in rows {
+            out.push_str("<tr>");
+            push_raw_cell(out, "", &heat_html(row.value));
+            push_text_cell(out, "", row.name);
+            push_text_cell(out, "money num", row.cost);
+            push_text_cell(out, "num", row.cache);
+            push_text_cell(out, "num", &format_u64(row.calls));
+            out.push_str("</tr>\n");
+        }
+    }
+    push_table_close(out);
+    push_section_close(out);
+}
+
+fn push_counts_html(out: &mut String, title: &str, tone: &str, icon: &str, rows: &[CountMetric]) {
+    push_section_open(out, title, tone, icon);
+    push_table_open(out, &["", "name", "calls"]);
+    if rows.is_empty() {
+        push_empty_row(out, 3);
+    } else {
+        for row in rows {
+            out.push_str("<tr>");
+            push_raw_cell(out, "", &heat_html(row.value));
+            push_text_cell(out, "", row.name);
+            push_text_cell(out, "num", &format_u64(row.calls));
+            out.push_str("</tr>\n");
+        }
+    }
+    push_table_close(out);
+    push_section_close(out);
+}
+
+fn push_section_open(out: &mut String, title: &str, class: &str, icon: &str) {
+    out.push_str("<section class=\"panel ");
+    out.push_str(class);
+    out.push_str("\">\n<header class=\"panel-head\">");
+    out.push_str(icon_svg(icon));
+    out.push_str("<h2>");
+    out.push_str(&escape_html(title));
+    out.push_str("</h2></header>\n");
+}
+
+fn push_section_close(out: &mut String) {
+    out.push_str("</section>\n");
+}
+
+fn push_table_open(out: &mut String, headers: &[&str]) {
+    out.push_str("<div class=\"table-wrap\"><table><thead><tr>");
+    for header in headers {
+        let class = if matches!(
+            *header,
+            "cost"
+                | "calls"
+                | "avg/s"
+                | "sessions"
+                | "used"
+                | "left"
+                | "tokens"
+                | "input"
+                | "output"
+                | "cache"
+        ) {
+            " class=\"num\""
+        } else {
+            ""
+        };
+        out.push_str("<th");
+        out.push_str(class);
+        out.push('>');
+        out.push_str(&escape_html(header));
+        out.push_str("</th>");
+    }
+    out.push_str("</tr></thead><tbody>\n");
+}
+
+fn push_table_close(out: &mut String) {
+    out.push_str("</tbody></table></div>\n");
+}
+
+fn push_empty_row(out: &mut String, colspan: usize) {
+    let _ = write!(
+        out,
+        "<tr><td class=\"empty\" colspan=\"{}\">no data</td></tr>\n",
+        colspan
+    );
+}
+
+fn push_text_cell(out: &mut String, class: &str, value: &str) {
+    out.push_str("<td");
+    if !class.is_empty() {
+        out.push_str(" class=\"");
+        out.push_str(class);
+        out.push('"');
+    }
+    out.push('>');
+    out.push_str(&escape_html(value));
+    out.push_str("</td>");
+}
+
+fn push_raw_cell(out: &mut String, class: &str, value: &str) {
+    out.push_str("<td");
+    if !class.is_empty() {
+        out.push_str(" class=\"");
+        out.push_str(class);
+        out.push('"');
+    }
+    out.push('>');
+    out.push_str(value);
+    out.push_str("</td>");
+}
+
+fn heat_html(value: u64) -> String {
+    let cells = 12u64;
+    let filled = ((value.min(100) as f64 / 100.0) * cells as f64).ceil() as u64;
+    let mut out = String::from("<span class=\"heat\" aria-hidden=\"true\">");
+    for idx in 0..cells {
+        if idx < filled {
+            let _ = write!(out, "<span class=\"filled l{}\"></span>", idx);
+        } else {
+            out.push_str("<span></span>");
+        }
+    }
+    out.push_str("</span>");
+    out
+}
+
+fn icon_svg(kind: &str) -> &'static str {
+    match kind {
+        "calendar" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 3v4M16 3v4M4 10h16" fill="none" stroke="currentColor" stroke-width="2"/></svg>"#
+        }
+        "project" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h6l2 3h8v9H4z" fill="none" stroke="currentColor" stroke-width="2"/></svg>"#
+        }
+        "session" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h10" fill="none" stroke="currentColor" stroke-width="2"/></svg>"#
+        }
+        "split" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h5v5H5zM14 5h5v5h-5zM5 14h5v5H5zM14 14h5v5h-5z" fill="none" stroke="currentColor" stroke-width="2"/></svg>"#
+        }
+        "model" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2"/></svg>"#
+        }
+        "tools" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 6l4 4-8 8H6v-4z" fill="none" stroke="currentColor" stroke-width="2"/></svg>"#
+        }
+        "terminal" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 9l3 3-3 3M12 15h5" fill="none" stroke="currentColor" stroke-width="2"/></svg>"#
+        }
+        "network" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="18" r="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 11l8-4M8 13l8 4" fill="none" stroke="currentColor" stroke-width="2"/></svg>"#
+        }
+        "cost" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M17 7.5c-.8-1-2.4-1.8-4.4-1.8-2.4 0-4.1 1.1-4.1 2.8 0 4.5 9 1.8 9 6.6 0 1.9-1.9 3.2-4.6 3.2-2.2 0-4.1-.8-5.1-2" fill="none" stroke="currentColor" stroke-width="2"/></svg>"#
+        }
+        "calls" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h14" fill="none" stroke="currentColor" stroke-width="2"/></svg>"#
+        }
+        "sessions" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 9h8M8 13h8M8 17h5" fill="none" stroke="currentColor" stroke-width="2"/></svg>"#
+        }
+        "cache" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7c0-2 12-2 12 0v10c0 2-12 2-12 0zM6 7c0 2 12 2 12 0M6 12c0 2 12 2 12 0" fill="none" stroke="currentColor" stroke-width="2"/></svg>"#
+        }
+        _ => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14" fill="none" stroke="currentColor" stroke-width="2"/></svg>"#
+        }
+    }
+}
+
+fn escape_html(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for c in value.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+fn format_u64(value: u64) -> String {
+    let raw = value.to_string();
+    let mut out = String::with_capacity(raw.len() + raw.len() / 3);
+    for (idx, ch) in raw.chars().rev().enumerate() {
+        if idx > 0 && idx % 3 == 0 {
+            out.push(',');
+        }
+        out.push(ch);
+    }
+    out.chars().rev().collect()
 }
 
 const CANVAS_W: u32 = 1800;
@@ -1229,7 +2252,7 @@ mod tests {
     use super::*;
     use crate::config::ConfigPaths;
     use crate::currency::CurrencyFormatter;
-    use crate::data::dashboard_data;
+    use crate::data::{dashboard_data, SessionDetail, SessionDetailView};
     use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -1251,6 +2274,8 @@ mod tests {
         path
     }
 
+    static ALL_PROJECTS: ProjectFilter = ProjectFilter::All;
+
     fn fixture() -> (ConfigPaths, DashboardData) {
         let dir = tempdir("paths");
         let paths = ConfigPaths::new(dir);
@@ -1264,19 +2289,59 @@ mod tests {
         (paths, data)
     }
 
+    fn context<'a>(
+        data: &'a DashboardData,
+        session: Option<&'a SessionDetailView>,
+    ) -> ExportContext<'a> {
+        ExportContext {
+            dashboard: data,
+            session,
+            period: Period::AllTime,
+            tool: Tool::All,
+            project_filter: &ALL_PROJECTS,
+            sort: crate::app::SortMode::Spend,
+            currency_code: "USD",
+            source_label: "sample",
+        }
+    }
+
+    fn selected_session() -> SessionDetailView {
+        SessionDetailView {
+            key: "session-key".into(),
+            session_id: "session-id".into(),
+            project: "Project <Danger>".into(),
+            tool: "Codex",
+            date_range: "2026-05-01 10:00 - 10:20".into(),
+            total_cost: "$1.23".into(),
+            total_calls: 1,
+            total_input: "1,000".into(),
+            total_output: "500".into(),
+            total_cache_read: "250".into(),
+            calls: vec![SessionDetail {
+                timestamp: "2026-05-01 10:00".into(),
+                model: "model <x>".into(),
+                cost: "$1.23".into(),
+                input_tokens: 1000,
+                output_tokens: 500,
+                cache_read: 200,
+                cache_write: 50,
+                reasoning_tokens: 25,
+                web_search_requests: 1,
+                tools: "shell & read".into(),
+                bash_commands: vec!["echo \"<hi>\" & exit".into()],
+                prompt: "prompt preview".into(),
+                prompt_full: "full <prompt> & \"quote\"".into(),
+            }],
+            note: Some("note <with> & detail".into()),
+        }
+    }
+
     #[test]
     fn json_export_writes_pretty_file_with_summary() {
         let (paths, data) = fixture();
+        let context = context(&data, None);
         let export_root = paths.dir.join("exports");
-        let path = write_to_dir(
-            &export_root,
-            ExportFormat::Json,
-            &data,
-            Period::AllTime,
-            Tool::All,
-            &ProjectFilter::All,
-        )
-        .unwrap();
+        let path = write_to_dir(&export_root, ExportFormat::Json, &context).unwrap();
         assert!(path.exists());
         let body = fs::read_to_string(&path).unwrap();
         assert!(body.contains("\"summary\""));
@@ -1287,16 +2352,9 @@ mod tests {
     #[test]
     fn csv_export_writes_one_file_per_panel() {
         let (paths, data) = fixture();
+        let context = context(&data, None);
         let export_root = paths.dir.join("exports");
-        let dir = write_to_dir(
-            &export_root,
-            ExportFormat::Csv,
-            &data,
-            Period::AllTime,
-            Tool::All,
-            &ProjectFilter::All,
-        )
-        .unwrap();
+        let dir = write_to_dir(&export_root, ExportFormat::Csv, &context).unwrap();
         for name in [
             "summary.csv",
             "daily.csv",
@@ -1317,16 +2375,9 @@ mod tests {
     fn svg_export_writes_xml_chart() {
         let _lock = CHART_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let (paths, data) = fixture();
+        let context = context(&data, None);
         let export_root = paths.dir.join("exports");
-        let path = write_to_dir(
-            &export_root,
-            ExportFormat::Svg,
-            &data,
-            Period::AllTime,
-            Tool::All,
-            &ProjectFilter::All,
-        )
-        .unwrap();
+        let path = write_to_dir(&export_root, ExportFormat::Svg, &context).unwrap();
         let body = fs::read_to_string(&path).unwrap();
         assert!(body.contains("<svg"));
         let _ = fs::remove_dir_all(&paths.dir);
@@ -1336,20 +2387,78 @@ mod tests {
     fn png_export_writes_png_signature() {
         let _lock = CHART_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let (paths, data) = fixture();
+        let context = context(&data, None);
         let export_root = paths.dir.join("exports");
-        let path = write_to_dir(
-            &export_root,
-            ExportFormat::Png,
-            &data,
-            Period::AllTime,
-            Tool::All,
-            &ProjectFilter::All,
-        )
-        .unwrap();
+        let path = write_to_dir(&export_root, ExportFormat::Png, &context).unwrap();
         let bytes = fs::read(&path).unwrap();
         assert!(bytes.len() > 8);
         assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n");
         let _ = fs::remove_dir_all(&paths.dir);
+    }
+
+    #[test]
+    fn html_export_writes_self_contained_workbook() {
+        let (paths, data) = fixture();
+        let context = context(&data, None);
+        let export_root = paths.dir.join("exports");
+        let path = write_to_dir(&export_root, ExportFormat::Html, &context).unwrap();
+
+        assert!(path.extension().is_some_and(|ext| ext == "html"));
+        let body = fs::read_to_string(&path).unwrap();
+        assert!(body.contains("<style>"));
+        assert!(body.contains("brand-mark"));
+        assert!(body.contains("Daily Activity"));
+        assert!(body.contains("calendar-grid"));
+        assert!(body.contains("calendar-cell"));
+        assert!(!body.contains("Usage Limits"));
+        assert!(body.contains("Full workbook report"));
+        assert!(!body.contains("<script"));
+        let _ = fs::remove_dir_all(&paths.dir);
+    }
+
+    #[test]
+    fn html_export_includes_selected_session_full_detail_and_escapes_text() {
+        let (paths, mut data) = fixture();
+        data.projects.insert(
+            0,
+            ProjectMetric {
+                name: "<project & \"quoted\">",
+                cost: "$0.10",
+                avg_per_session: "$0.10",
+                sessions: 1,
+                tool_mix: "Codex & Claude",
+                value: 75,
+            },
+        );
+        data.commands.insert(
+            0,
+            CountMetric {
+                name: "cmd <unsafe> & \"quoted\"",
+                calls: 2,
+                value: 50,
+            },
+        );
+        let session = selected_session();
+        let context = context(&data, Some(&session));
+        let export_root = paths.dir.join("exports");
+        let path = write_to_dir(&export_root, ExportFormat::Html, &context).unwrap();
+        let body = fs::read_to_string(&path).unwrap();
+
+        assert!(body.contains("Selected Session"));
+        assert!(body.contains("&lt;project &amp; &quot;quoted&quot;&gt;"));
+        assert!(body.contains("cmd &lt;unsafe&gt; &amp; &quot;quoted&quot;"));
+        assert!(body.contains("Project &lt;Danger&gt;"));
+        assert!(body.contains("note &lt;with&gt; &amp; detail"));
+        assert!(body.contains("echo &quot;&lt;hi&gt;&quot; &amp; exit"));
+        assert!(body.contains("full &lt;prompt&gt; &amp; &quot;quote&quot;"));
+        assert!(!body.contains("full <prompt>"));
+        let _ = fs::remove_dir_all(&paths.dir);
+    }
+
+    #[test]
+    fn export_formats_include_html() {
+        assert!(ExportFormat::ALL.contains(&ExportFormat::Html));
+        assert_eq!(ExportFormat::Html.label(), "HTML (full workbook report)");
     }
 
     #[test]

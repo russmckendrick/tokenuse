@@ -83,7 +83,7 @@ USD remains the default display currency. Costs are calculated and stored intern
 
 ## Export
 
-Press `e` on Overview or Deep Dive to export the current filtered dashboard view. Output defaults to the user's Downloads folder, falling back to `~/Downloads` and then `<config dir>/tokenuse/exports/`.
+Press `e` on Overview, Deep Dive, Usage, or Session to export. JSON, CSV, SVG, and PNG export the current filtered dashboard view; HTML exports a self-contained workbook report. Output defaults to the user's Downloads folder, falling back to `~/Downloads` and then `<config dir>/tokenuse/exports/`.
 
 Exports are timestamped and slugged with the active period, tool, and project filter, so prior runs are not overwritten.
 
@@ -93,3 +93,4 @@ Exports are timestamped and slugged with the active period, tool, and project fi
 | CSV | One directory with one CSV per dashboard panel |
 | SVG | One multi-panel dashboard render |
 | PNG | Same dashboard render as SVG, rasterized |
+| HTML | One self-contained print-friendly workbook with dashboard panels and the selected Session's full call detail when a session is open |

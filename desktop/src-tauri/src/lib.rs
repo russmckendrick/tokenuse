@@ -468,6 +468,7 @@ fn parse_export_format(value: &str) -> CommandResult<ExportFormat> {
         "csv" => Ok(ExportFormat::Csv),
         "svg" => Ok(ExportFormat::Svg),
         "png" => Ok(ExportFormat::Png),
+        "html" => Ok(ExportFormat::Html),
         _ => Err(unknown("export format", value)),
     }
 }
@@ -478,6 +479,7 @@ fn export_format_id(format: ExportFormat) -> &'static str {
         ExportFormat::Csv => "csv",
         ExportFormat::Svg => "svg",
         ExportFormat::Png => "png",
+        ExportFormat::Html => "html",
     }
 }
 
@@ -602,6 +604,20 @@ fn desktop_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R>>
             &help_menu,
         ],
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn export_format_helpers_roundtrip_html() {
+        assert!(matches!(
+            parse_export_format("html").unwrap(),
+            ExportFormat::Html
+        ));
+        assert_eq!(export_format_id(ExportFormat::Html), "html");
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

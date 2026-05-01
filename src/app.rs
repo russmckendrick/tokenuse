@@ -15,7 +15,7 @@ use crate::currency::{CurrencyFormatter, CurrencyTable};
 use crate::data::{
     DashboardData, LimitsData, ProjectOption, SessionDetail, SessionDetailView, SessionOption,
 };
-use crate::export::ExportFormat;
+use crate::export::{ExportContext, ExportFormat};
 use crate::ingest::Ingested;
 use crate::keymap;
 
@@ -970,15 +970,25 @@ impl App {
         &mut self,
         format: ExportFormat,
     ) -> color_eyre::Result<std::path::PathBuf> {
-        let data = self.dashboard();
-        let path = crate::export::write_to_dir(
-            &self.export_dir,
-            format,
-            &data,
-            self.period,
-            self.tool,
-            &self.project_filter,
-        )?;
+        let path = {
+            let dashboard = self.dashboard();
+            let currency = self.currency();
+            let source_label = match &self.source {
+                DataSource::Live(_) => "live",
+                DataSource::Sample => "sample",
+            };
+            let context = ExportContext {
+                dashboard: &dashboard,
+                session: self.session_view.as_ref(),
+                period: self.period,
+                tool: self.tool,
+                project_filter: &self.project_filter,
+                sort: self.sort,
+                currency_code: currency.code(),
+                source_label,
+            };
+            crate::export::write_to_dir(&self.export_dir, format, &context)?
+        };
         self.status = Some(format!("exported {} · {}", format.label(), path.display()));
         Ok(path)
     }
@@ -1891,6 +1901,27 @@ mod tests {
 
         assert_eq!(app.page, Page::Usage);
         assert!(!data.sections.is_empty());
+    }
+
+    #[test]
+    fn usage_page_can_open_export_picker() {
+        let mut app = App::default();
+
+        app.handle_key(key(KeyCode::Char('u')));
+        app.handle_key(key(KeyCode::Char('e')));
+
+        assert_eq!(app.page, Page::Usage);
+        assert!(app.export_modal.is_some());
+    }
+
+    #[test]
+    fn session_page_can_open_export_picker() {
+        let mut app = app_with_session_calls(1);
+
+        app.handle_key(key(KeyCode::Char('e')));
+
+        assert_eq!(app.page, Page::Session);
+        assert!(app.export_modal.is_some());
     }
 
     #[test]
