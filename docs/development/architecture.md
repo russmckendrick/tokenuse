@@ -125,7 +125,7 @@ flowchart LR
 - **Session** (`Page::Session`): drill-down for one `tool:session_id`. Rendered from `SessionDetailView`, computed by filtering `Ingested.calls` by `session_key(call) == key` and sorting calls with the active sort mode. Live data shows per-call timestamp, model, cost, in/out tokens, cache, tools used, and a 120-char single-line prompt snippet; selecting a call opens a modal with the full stored prompt plus reasoning/web-search counts and bash commands. Sample mode shows a privacy note since per-call records are not bundled.
 - **Config** (`Page::Config`): currency override + local data refresh actions (rates, LiteLLM pricing).
 - **Project picker, Currency picker, Session picker** (`*Modal` structs): each holds `options`, a typeable `query`, and a `filtered: Vec<usize>` mapping; all three share the same case-insensitive substring filter pattern. The project picker pins `All` regardless of query.
-- **Export picker** (`ExportModal`): five-row chooser (`JSON`, `CSV`, `SVG`, `PNG`, `HTML`) showing the active session export folder. `Enter` writes to that folder; `f` or `b` opens the folder picker.
+- **Export picker** (`ExportModal`): six-row chooser (`JSON`, `CSV`, `SVG`, `PNG`, `HTML`, `PDF`) showing the active session export folder. `Enter` writes to that folder; `f` or `b` opens the folder picker.
 - **Export folder picker** (`FolderPickerModal`): directory-only picker rooted at the current export folder. `Use this folder` updates `App::export_dir` for the running session; `Esc` cancels without saving to `config.json`.
 - **Help** (`help_open: bool`): full keybinding reference rendered from the shared keymap, openable from any page with `h` or `?`. Closes with `h`, `?`, or `Esc`.
 
@@ -206,7 +206,7 @@ The TUI and desktop configuration pages can also download the LiteLLM-derived sn
 
 Press `e` on Dashboard, Usage, or Session pages to open the export picker. Output defaults to the user's Downloads folder, falling back to `~/Downloads` and then `<config dir>/tokenuse/exports/` if the platform does not expose a Downloads directory. Press `f` or `b` inside the export picker to choose another folder for the current TUI session. Export files never overwrite prior runs -- every filename is timestamped with `YYYYMMDDTHHMMSS` and slugged with the active period, tool, and project filter (for example `tokenuse-20260429T160054-week-claude-allprojects.json`).
 
-JSON, CSV, SVG, and PNG exports reflect the **current filtered dashboard view** (period + tool + project). HTML uses an `ExportContext` around the same dashboard data plus selected Session detail, source, currency, and sort metadata.
+JSON, CSV, SVG, and PNG exports reflect the **current filtered dashboard view** (period + tool + project). HTML and PDF use an `ExportContext` around the same dashboard data plus selected Session detail, source, currency, and sort metadata.
 
 | Format | Output | Notes |
 | --- | --- | --- |
@@ -215,10 +215,11 @@ JSON, CSV, SVG, and PNG exports reflect the **current filtered dashboard view** 
 | SVG | one `.svg` file | Multi-panel render of the dashboard at 1800×1500. |
 | PNG | one `.png` file | Same render as SVG, rasterized via `plotters`' bitmap backend. |
 | HTML | one `.html` file | Self-contained print-friendly workbook with inline CSS, inline bars mark, dashboard panels, and selected Session full prompts/shell commands when a session is open. |
+| PDF | one `.pdf` file | Fulgur-rendered version of the same self-contained HTML workbook, including inline CSS, the bars mark, dashboard panels, and selected Session full prompts/shell commands when a session is open. |
 
 Both image formats are produced by the same `render_dashboard_chart` function in `src/export.rs`, so they always look identical. The palette is loaded from constants that mirror `src/theme.rs` and `DESIGN.md`. Tests serialize chart rendering through a process-wide `Mutex` because plotters' macOS font lookup is not thread-safe.
 
-The export pipeline depends on `plotters` (with the `svg_backend`, `bitmap_backend`, `bitmap_encoder`, `line_series`, and `ttf` features) and the existing `serde_json`. HTML generation is hand-written, escaped at render time, and uses no external assets, scripts, fonts, or network dependency.
+The export pipeline depends on `plotters` (with the `svg_backend`, `bitmap_backend`, `bitmap_encoder`, `line_series`, and `ttf` features), `fulgur` for browserless HTML/CSS-to-PDF rendering, and the existing `serde_json`. HTML generation is hand-written, escaped at render time, and uses no external scripts or network dependency. PDF generation reuses that exact workbook HTML and renders it locally through Fulgur instead of shelling out to Chromium, WebKit, wkhtmltopdf, or another browser process.
 
 ## Configuration And Currency
 

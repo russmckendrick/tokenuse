@@ -469,6 +469,7 @@ fn parse_export_format(value: &str) -> CommandResult<ExportFormat> {
         "svg" => Ok(ExportFormat::Svg),
         "png" => Ok(ExportFormat::Png),
         "html" => Ok(ExportFormat::Html),
+        "pdf" => Ok(ExportFormat::Pdf),
         _ => Err(unknown("export format", value)),
     }
 }
@@ -480,6 +481,7 @@ fn export_format_id(format: ExportFormat) -> &'static str {
         ExportFormat::Svg => "svg",
         ExportFormat::Png => "png",
         ExportFormat::Html => "html",
+        ExportFormat::Pdf => "pdf",
     }
 }
 
@@ -611,12 +613,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn export_format_helpers_roundtrip_html() {
+    fn export_format_helpers_roundtrip_html_and_pdf() {
         assert!(matches!(
             parse_export_format("html").unwrap(),
             ExportFormat::Html
         ));
         assert_eq!(export_format_id(ExportFormat::Html), "html");
+        assert!(matches!(
+            parse_export_format("pdf").unwrap(),
+            ExportFormat::Pdf
+        ));
+        assert_eq!(export_format_id(ExportFormat::Pdf), "pdf");
     }
 }
 

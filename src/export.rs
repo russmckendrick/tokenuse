@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use chrono::{Datelike, Duration, Local, NaiveDate};
 use color_eyre::{eyre::WrapErr, Result};
+use fulgur::{Engine, Margin, PageSize};
 use plotters::prelude::*;
 
 use crate::app::{Period, ProjectFilter, SortMode, Tool};
@@ -21,6 +22,7 @@ pub enum ExportFormat {
     Svg,
     Png,
     Html,
+    Pdf,
 }
 
 impl ExportFormat {
@@ -31,10 +33,18 @@ impl ExportFormat {
             Self::Svg => "SVG (full dashboard)",
             Self::Png => "PNG (full dashboard)",
             Self::Html => "HTML (full workbook report)",
+            Self::Pdf => "PDF (full workbook report)",
         }
     }
 
-    pub const ALL: [Self; 5] = [Self::Json, Self::Csv, Self::Svg, Self::Png, Self::Html];
+    pub const ALL: [Self; 6] = [
+        Self::Json,
+        Self::Csv,
+        Self::Svg,
+        Self::Png,
+        Self::Html,
+        Self::Pdf,
+    ];
 }
 
 pub struct ExportContext<'a> {
@@ -164,6 +174,11 @@ pub fn write_to_dir(
         ExportFormat::Html => {
             let file = exports_root.join(format!("tokenuse-{stamp}-{slug}.html"));
             write_html_report(&file, context, &stamp)?;
+            Ok(file)
+        }
+        ExportFormat::Pdf => {
+            let file = exports_root.join(format!("tokenuse-{stamp}-{slug}.pdf"));
+            write_pdf_report(&file, context, &stamp)?;
             Ok(file)
         }
     }
@@ -391,21 +406,16 @@ fn write_counts_csv(dir: &Path, name: &str, rows: &[CountMetric]) -> Result<()> 
 }
 
 fn write_html_report(path: &Path, context: &ExportContext<'_>, stamp: &str) -> Result<()> {
+    let out = build_html_report(context, stamp);
+    fs::write(path, out).wrap_err_with(|| format!("write {}", path.display()))
+}
+
+fn build_html_report(context: &ExportContext<'_>, stamp: &str) -> String {
     let generated_at = Local::now().format("%Y-%m-%d %H:%M:%S %Z").to_string();
-    let title = format!(
-        "Token Use report - {} - {}",
-        period_label(context.period),
-        tool_label(context.tool)
-    );
+    let title = report_title(context);
     let mut out = String::with_capacity(96 * 1024);
 
-    out.push_str("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n");
-    out.push_str("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
-    out.push_str("<title>");
-    out.push_str(&escape_html(&title));
-    out.push_str("</title>\n<style>\n");
-    out.push_str(HTML_REPORT_CSS);
-    out.push_str("\n</style>\n</head>\n<body>\n<main class=\"report\">\n");
+    push_report_document_open(&mut out, &title, HTML_REPORT_CSS, "report");
 
     push_report_header(&mut out, context, &generated_at, stamp);
     push_summary_cards(&mut out, &context.dashboard.summary, context.currency_code);
@@ -415,7 +425,46 @@ fn write_html_report(path: &Path, context: &ExportContext<'_>, stamp: &str) -> R
     }
 
     out.push_str("</main>\n</body>\n</html>\n");
-    fs::write(path, out).wrap_err_with(|| format!("write {}", path.display()))
+    out
+}
+
+fn build_pdf_html_report(context: &ExportContext<'_>, stamp: &str) -> String {
+    let generated_at = Local::now().format("%Y-%m-%d %H:%M:%S %Z").to_string();
+    let title = report_title(context);
+    let mut out = String::with_capacity(96 * 1024);
+    let css = format!("{HTML_REPORT_CSS}\n{PDF_REPORT_CSS}");
+
+    push_report_document_open(&mut out, &title, &css, "report pdf-report");
+
+    push_report_header(&mut out, context, &generated_at, stamp);
+    push_summary_cards_pdf(&mut out, &context.dashboard.summary, context.currency_code);
+    push_dashboard_workbook_pdf(&mut out, context.dashboard);
+    if let Some(session) = context.session {
+        push_session_workbook_pdf(&mut out, session);
+    }
+
+    out.push_str("</main>\n</body>\n</html>\n");
+    out
+}
+
+fn push_report_document_open(out: &mut String, title: &str, css: &str, main_class: &str) {
+    out.push_str("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n");
+    out.push_str("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
+    out.push_str("<title>");
+    out.push_str(&escape_html(title));
+    out.push_str("</title>\n<style>\n");
+    out.push_str(css);
+    out.push_str("\n</style>\n</head>\n<body>\n<main class=\"");
+    out.push_str(main_class);
+    out.push_str("\">\n");
+}
+
+fn report_title(context: &ExportContext<'_>) -> String {
+    format!(
+        "Token Use report - {} - {}",
+        period_label(context.period),
+        tool_label(context.tool)
+    )
 }
 
 const HTML_REPORT_CSS: &str = r##"
@@ -772,6 +821,11 @@ pre {
   margin-top: 8px;
 }
 
+@page {
+  size: A4;
+  margin: 8mm;
+}
+
 @media (max-width: 820px) {
   .report {
     width: calc(100% - 20px);
@@ -803,6 +857,292 @@ pre {
   details.call-detail {
     break-inside: avoid;
   }
+}
+"##;
+
+const PDF_REPORT_CSS: &str = r##"
+.pdf-report {
+  --paper: #ffffff;
+  --panel: #ffffff;
+  --heat-empty: #f1f4fa;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+}
+
+html,
+body {
+  background: var(--paper);
+}
+
+.pdf-report .report-head {
+  padding: 14px;
+}
+
+.pdf-report .brand-row {
+  gap: 10px;
+}
+
+.pdf-report .brand-mark {
+  width: 28px;
+  height: 36px;
+}
+
+.pdf-report h1 {
+  font-size: 22px;
+}
+
+.pdf-report .meta-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 10px;
+}
+
+.pdf-report .report-head,
+.pdf-report .pdf-kpis td {
+  break-inside: avoid;
+}
+
+.pdf-kpis {
+  width: 100%;
+  margin: 0;
+  padding: 10px 0;
+  background: var(--paper);
+  border-collapse: separate;
+  border-spacing: 4px;
+  table-layout: fixed;
+}
+
+.pdf-kpis td {
+  height: 56px;
+  padding: 8px 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.pdf-kpis span,
+.pdf-facts span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.pdf-kpis strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 17px;
+}
+
+.pdf-kpis small {
+  display: none;
+}
+
+.pdf-kpi-icon {
+  display: inline-block;
+  width: 15px;
+  margin-right: 5px;
+  vertical-align: -2px;
+}
+
+.pdf-kpi-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.pdf-panel-title {
+  display: block;
+  margin: 8px 0 0;
+  overflow: visible;
+  padding: 9px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-bottom: 1px solid currentColor;
+  font-size: 15px;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.pdf-workbook {
+  padding-top: 8px;
+  background: var(--paper);
+}
+
+.pdf-workbook .pdf-panel-title:first-child {
+  margin-top: 0;
+}
+
+.pdf-panel-title.tone-blue { color: var(--blue); }
+.pdf-panel-title.tone-green { color: var(--green); }
+.pdf-panel-title.tone-yellow { color: var(--yellow); }
+.pdf-panel-title.tone-red { color: var(--red); }
+.pdf-panel-title.tone-cyan { color: var(--cyan); }
+.pdf-panel-title.tone-magenta { color: var(--magenta); }
+.pdf-panel-title.tone-orange { color: var(--primary); }
+
+.pdf-panel-body {
+  display: block;
+  padding: 10px 12px 12px;
+  background: var(--paper);
+}
+
+.pdf-panel-icon svg {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  margin-right: 6px;
+  vertical-align: -2px;
+}
+
+.pdf-table,
+.pdf-calendar,
+.pdf-facts {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.pdf-table {
+  font-size: 11px;
+}
+
+.pdf-table th,
+.pdf-table td {
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--faint);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.pdf-table th {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.pdf-table .num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.pdf-table .money {
+  color: var(--yellow);
+  font-weight: 800;
+}
+
+.pdf-heat span {
+  display: inline-block;
+  width: 5px;
+  height: 15px;
+  margin-right: 2px;
+  background: var(--heat-empty);
+}
+
+.pdf-heat .filled.l0,
+.pdf-heat .filled.l1 { background: var(--heat-1); }
+.pdf-heat .filled.l2,
+.pdf-heat .filled.l3 { background: var(--heat-2); }
+.pdf-heat .filled.l4,
+.pdf-heat .filled.l5,
+.pdf-heat .filled.l6 { background: var(--heat-3); }
+.pdf-heat .filled.l7,
+.pdf-heat .filled.l8 { background: var(--heat-4); }
+.pdf-heat .filled.l9,
+.pdf-heat .filled.l10,
+.pdf-heat .filled.l11 { background: var(--heat-5); }
+
+.pdf-month {
+  margin: 0;
+  padding-bottom: 12px;
+  background: var(--paper);
+}
+
+.pdf-month-title {
+  margin: 0 0 6px;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.pdf-calendar th {
+  padding: 0 0 4px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.pdf-calendar td {
+  height: 64px;
+  padding: 5px;
+  background: var(--panel);
+  border: 1px solid var(--faint);
+  font-size: 10px;
+  line-height: 1.2;
+  vertical-align: top;
+}
+
+.pdf-calendar td.blank {
+  background: var(--paper);
+  border: 0;
+}
+
+.pdf-calendar td.i1 { background: #eef6ff; border-color: #c7ddff; }
+.pdf-calendar td.i2 { background: #ebfff6; border-color: #bff0db; }
+.pdf-calendar td.i3 { background: #fff9d8; border-color: #f0df91; }
+.pdf-calendar td.i4 { background: #fff0df; border-color: #efc08b; }
+.pdf-calendar td.i5 { background: #fff0f2; border-color: #efa7af; }
+
+.pdf-calendar strong {
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.pdf-calendar .cost {
+  display: block;
+  margin-top: 6px;
+  color: var(--yellow);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.pdf-calendar .calls {
+  display: block;
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 7px;
+  line-height: 1.2;
+}
+
+.pdf-facts td {
+  padding: 7px 8px;
+  border-left: 2px solid var(--faint);
+  vertical-align: top;
+}
+
+.pdf-facts strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.pdf-call-detail {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--faint);
+  break-inside: avoid;
+}
+
+.pdf-call-detail h3 {
+  margin: 0 0 8px;
+  color: var(--red);
+  font-size: 13px;
 }
 "##;
 
@@ -852,6 +1192,37 @@ fn push_summary_cards(out: &mut String, summary: &Summary, currency_code: &str) 
     out.push_str("</section>\n");
 }
 
+fn push_summary_cards_pdf(out: &mut String, summary: &Summary, currency_code: &str) {
+    let tokens = format!("{} out", summary.output);
+    let written = format!("{} written", summary.written);
+    let cards = [
+        ("cost", summary.cost, currency_code, "cost"),
+        ("calls", summary.calls, summary.input, "calls"),
+        ("sessions", summary.sessions, "active set", "sessions"),
+        ("cache hit", summary.cache_hit, summary.cached, "cache"),
+        ("input", summary.input, tokens.as_str(), "tokens"),
+        ("cached", summary.cached, written.as_str(), "cache"),
+    ];
+
+    out.push_str("<table class=\"pdf-kpis\" aria-label=\"Summary metrics\">");
+    for row in cards.chunks(3) {
+        out.push_str("<tr>");
+        for (label, value, detail, icon) in row {
+            out.push_str("<td><span>");
+            out.push_str(&escape_html(label));
+            out.push_str("</span><strong><b class=\"pdf-kpi-icon\">");
+            out.push_str(icon_svg(icon));
+            out.push_str("</b>");
+            out.push_str(&escape_html(value));
+            out.push_str("</strong><small>");
+            out.push_str(&escape_html(detail));
+            out.push_str("</small></td>");
+        }
+        out.push_str("</tr>");
+    }
+    out.push_str("</table>\n");
+}
+
 fn push_kpi(out: &mut String, label: &str, value: &str, detail: &str, icon: &str) {
     out.push_str("<article class=\"kpi tone-orange\">");
     out.push_str(icon_svg(icon));
@@ -880,6 +1251,31 @@ fn push_dashboard_workbook(out: &mut String, data: &DashboardData) {
         &data.commands,
     );
     push_counts_html(
+        out,
+        "MCP Servers",
+        "tone-magenta",
+        "network",
+        &data.mcp_servers,
+    );
+    out.push_str("</section>\n");
+}
+
+fn push_dashboard_workbook_pdf(out: &mut String, data: &DashboardData) {
+    out.push_str("<section class=\"pdf-workbook\" aria-label=\"Dashboard workbook\">\n");
+    push_daily_pdf(out, &data.daily);
+    push_projects_pdf(out, &data.projects);
+    push_sessions_pdf(out, &data.sessions);
+    push_project_tools_pdf(out, &data.project_tools);
+    push_models_pdf(out, &data.models);
+    push_counts_pdf(out, "Core Tools", "tone-cyan", "tools", &data.tools);
+    push_counts_pdf(
+        out,
+        "Shell Commands",
+        "tone-orange",
+        "terminal",
+        &data.commands,
+    );
+    push_counts_pdf(
         out,
         "MCP Servers",
         "tone-magenta",
@@ -968,6 +1364,415 @@ fn push_session_workbook(out: &mut String, session: &SessionDetailView) {
         out.push_str("</pre>\n</details>\n");
     }
     push_section_close(out);
+}
+
+fn push_session_workbook_pdf(out: &mut String, session: &SessionDetailView) {
+    push_pdf_panel_open(out, "Selected Session", "tone-red", "session");
+    out.push_str("<table class=\"pdf-facts\"><tbody>");
+    let total_calls = session.total_calls.to_string();
+    let facts = [
+        ("project", session.project.as_str()),
+        ("tool", session.tool),
+        ("date range", session.date_range.as_str()),
+        ("cost", session.total_cost.as_str()),
+        ("calls", total_calls.as_str()),
+        ("input", session.total_input.as_str()),
+        ("output", session.total_output.as_str()),
+        ("cache read", session.total_cache_read.as_str()),
+    ];
+    push_pdf_fact_rows(out, &facts, 4);
+    out.push_str("</tbody></table>");
+    if let Some(note) = &session.note {
+        out.push_str("<p class=\"report-footnote\">");
+        out.push_str(&escape_html(note));
+        out.push_str("</p>");
+    }
+
+    push_pdf_table_open(
+        out,
+        &[
+            "time", "model", "cost", "input", "output", "cache", "tools", "prompt",
+        ],
+    );
+    if session.calls.is_empty() {
+        push_pdf_empty_row(out, 8);
+    } else {
+        for call in &session.calls {
+            out.push_str("<tr>");
+            push_pdf_text_cell(out, "", &call.timestamp);
+            push_pdf_text_cell(out, "", &call.model);
+            push_pdf_text_cell(out, "money num", &call.cost);
+            push_pdf_text_cell(out, "num", &format_u64(call.input_tokens));
+            push_pdf_text_cell(out, "num", &format_u64(call.output_tokens));
+            push_pdf_text_cell(out, "num", &format_u64(call.cache_read + call.cache_write));
+            push_pdf_text_cell(out, "", &call.tools);
+            push_pdf_text_cell(out, "muted", &call.prompt);
+            out.push_str("</tr>");
+        }
+    }
+    push_pdf_table_close(out);
+
+    for (idx, call) in session.calls.iter().enumerate() {
+        out.push_str("<div class=\"pdf-call-detail\"><h3>");
+        let _ = write!(
+            out,
+            "Call {} - {} - {}",
+            idx + 1,
+            escape_html(&call.model),
+            escape_html(&call.cost)
+        );
+        out.push_str("</h3><table class=\"pdf-facts\"><tbody>");
+        let input = format_u64(call.input_tokens);
+        let output = format_u64(call.output_tokens);
+        let cache_read = format_u64(call.cache_read);
+        let cache_write = format_u64(call.cache_write);
+        let reasoning = format_u64(call.reasoning_tokens);
+        let web_search = format_u64(call.web_search_requests);
+        let call_facts = [
+            ("time", call.timestamp.as_str()),
+            ("model", call.model.as_str()),
+            ("cost", call.cost.as_str()),
+            ("tools", call.tools.as_str()),
+            ("input", input.as_str()),
+            ("output", output.as_str()),
+            ("cache read", cache_read.as_str()),
+            ("cache write", cache_write.as_str()),
+            ("reasoning", reasoning.as_str()),
+            ("web search", web_search.as_str()),
+        ];
+        push_pdf_fact_rows(out, &call_facts, 5);
+        out.push_str("</tbody></table>");
+        if !call.bash_commands.is_empty() {
+            out.push_str("<h4>Shell commands</h4><pre>");
+            out.push_str(&escape_html(&call.bash_commands.join("\n")));
+            out.push_str("</pre>");
+        }
+        out.push_str("<h4>Prompt</h4><pre>");
+        let prompt = if call.prompt_full.is_empty() {
+            &call.prompt
+        } else {
+            &call.prompt_full
+        };
+        out.push_str(&escape_html(prompt));
+        out.push_str("</pre></div>");
+    }
+
+    push_pdf_panel_close(out);
+}
+
+fn push_daily_pdf(out: &mut String, rows: &[DailyMetric]) {
+    push_pdf_panel_open(out, "Daily Activity", "tone-blue", "calendar");
+    if rows.is_empty() {
+        out.push_str("<p class=\"empty\">no data</p>");
+        push_pdf_panel_close(out);
+        return;
+    }
+
+    let months = daily_calendar_months(rows);
+    if months.is_empty() {
+        push_daily_table_pdf(out, rows);
+        push_pdf_panel_close(out);
+        return;
+    }
+
+    for ((year, month), days) in months {
+        push_pdf_calendar_month(out, year, month, &days);
+    }
+    push_pdf_panel_close(out);
+}
+
+fn push_daily_table_pdf(out: &mut String, rows: &[DailyMetric]) {
+    push_pdf_table_open(out, &["date", "activity", "cost", "calls"]);
+    for row in rows {
+        out.push_str("<tr>");
+        push_pdf_text_cell(out, "", row.day);
+        push_pdf_raw_cell(out, "", &heat_html_pdf(row.value));
+        push_pdf_text_cell(out, "money num", row.cost);
+        push_pdf_text_cell(out, "num", &format_u64(row.calls));
+        out.push_str("</tr>");
+    }
+    push_pdf_table_close(out);
+}
+
+fn push_pdf_calendar_month(out: &mut String, year: i32, month: u32, days: &[CalendarDay<'_>]) {
+    let days_by_month_day: BTreeMap<u32, &DailyMetric> = days
+        .iter()
+        .map(|day| (day.date.day(), day.metric))
+        .collect();
+    let Some(first_day) = NaiveDate::from_ymd_opt(year, month, 1) else {
+        return;
+    };
+    let month_days = days_in_month(year, month);
+    let leading = first_day.weekday().num_days_from_monday() as usize;
+    let cell_count = leading + month_days as usize;
+    let week_count = cell_count.div_ceil(7);
+
+    out.push_str("<section class=\"pdf-month\"><h3 class=\"pdf-month-title\">");
+    out.push_str(month_name(month));
+    let _ = write!(out, " {year}");
+    out.push_str("</h3><table class=\"pdf-calendar\"><thead><tr>");
+    for weekday in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] {
+        out.push_str("<th>");
+        out.push_str(weekday);
+        out.push_str("</th>");
+    }
+    out.push_str("</tr></thead><tbody>");
+
+    for week in 0..week_count {
+        out.push_str("<tr>");
+        for weekday in 0..7 {
+            let slot = week * 7 + weekday;
+            if slot < leading {
+                out.push_str("<td class=\"blank\"></td>");
+                continue;
+            }
+            let day = (slot - leading + 1) as u32;
+            if day > month_days {
+                out.push_str("<td class=\"blank\"></td>");
+            } else if let Some(row) = days_by_month_day.get(&day).copied() {
+                let calls = format_u64(row.calls);
+                let _ = write!(
+                    out,
+                    "<td class=\"i{}\"><strong>{}</strong><span class=\"cost\">{}</span><span class=\"calls\">{} calls</span></td>",
+                    calendar_intensity(row.value),
+                    day,
+                    escape_html(row.cost),
+                    calls,
+                );
+            } else {
+                let _ = write!(out, "<td><strong>{day}</strong></td>");
+            }
+        }
+        out.push_str("</tr>");
+    }
+    out.push_str("</tbody></table>");
+
+    out.push_str("</section>");
+}
+
+fn push_projects_pdf(out: &mut String, rows: &[ProjectMetric]) {
+    push_pdf_panel_open(out, "By Project", "tone-green", "project");
+    push_pdf_table_open(out, &["", "project", "cost", "avg/s", "sessions", "tools"]);
+    if rows.is_empty() {
+        push_pdf_empty_row(out, 6);
+    } else {
+        for row in rows {
+            out.push_str("<tr>");
+            push_pdf_raw_cell(out, "", &heat_html_pdf(row.value));
+            push_pdf_text_cell(out, "", row.name);
+            push_pdf_text_cell(out, "money num", row.cost);
+            push_pdf_text_cell(out, "money num", row.avg_per_session);
+            push_pdf_text_cell(out, "num", &format_u64(row.sessions));
+            let tool_mix = compact_pdf_tool_mix(row.tool_mix);
+            push_pdf_text_cell(out, "muted", &tool_mix);
+            out.push_str("</tr>");
+        }
+    }
+    push_pdf_table_close(out);
+    push_pdf_panel_close(out);
+}
+
+fn push_sessions_pdf(out: &mut String, rows: &[SessionMetric]) {
+    push_pdf_panel_open(out, "Top Sessions", "tone-red", "session");
+    push_pdf_table_open(out, &["", "date", "project", "cost", "calls"]);
+    if rows.is_empty() {
+        push_pdf_empty_row(out, 5);
+    } else {
+        for row in rows {
+            out.push_str("<tr>");
+            push_pdf_raw_cell(out, "", &heat_html_pdf(row.value));
+            push_pdf_text_cell(out, "", row.date);
+            push_pdf_text_cell(out, "", row.project);
+            push_pdf_text_cell(out, "money num", row.cost);
+            push_pdf_text_cell(out, "num", &format_u64(row.calls));
+            out.push_str("</tr>");
+        }
+    }
+    push_pdf_table_close(out);
+    push_pdf_panel_close(out);
+}
+
+fn push_project_tools_pdf(out: &mut String, rows: &[ProjectToolMetric]) {
+    push_pdf_panel_open(out, "Project Spend by Tool", "tone-yellow", "split");
+    push_pdf_table_open(
+        out,
+        &["", "project", "tool", "cost", "calls", "sessions", "avg/s"],
+    );
+    if rows.is_empty() {
+        push_pdf_empty_row(out, 7);
+    } else {
+        for row in rows {
+            out.push_str("<tr>");
+            push_pdf_raw_cell(out, "", &heat_html_pdf(row.value));
+            push_pdf_text_cell(out, "", row.project);
+            push_pdf_text_cell(out, "", row.tool);
+            push_pdf_text_cell(out, "money num", row.cost);
+            push_pdf_text_cell(out, "num", &format_u64(row.calls));
+            push_pdf_text_cell(out, "num", &format_u64(row.sessions));
+            push_pdf_text_cell(out, "money num", row.avg_per_session);
+            out.push_str("</tr>");
+        }
+    }
+    push_pdf_table_close(out);
+    push_pdf_panel_close(out);
+}
+
+fn push_models_pdf(out: &mut String, rows: &[ModelMetric]) {
+    push_pdf_panel_open(out, "By Model", "tone-magenta", "model");
+    push_pdf_table_open(out, &["", "model", "cost", "cache", "calls"]);
+    if rows.is_empty() {
+        push_pdf_empty_row(out, 5);
+    } else {
+        for row in rows {
+            out.push_str("<tr>");
+            push_pdf_raw_cell(out, "", &heat_html_pdf(row.value));
+            push_pdf_text_cell(out, "", row.name);
+            push_pdf_text_cell(out, "money num", row.cost);
+            push_pdf_text_cell(out, "num", row.cache);
+            push_pdf_text_cell(out, "num", &format_u64(row.calls));
+            out.push_str("</tr>");
+        }
+    }
+    push_pdf_table_close(out);
+    push_pdf_panel_close(out);
+}
+
+fn push_counts_pdf(out: &mut String, title: &str, tone: &str, icon: &str, rows: &[CountMetric]) {
+    push_pdf_panel_open(out, title, tone, icon);
+    push_pdf_table_open(out, &["", "name", "calls"]);
+    if rows.is_empty() {
+        push_pdf_empty_row(out, 3);
+    } else {
+        for row in rows {
+            out.push_str("<tr>");
+            push_pdf_raw_cell(out, "", &heat_html_pdf(row.value));
+            push_pdf_text_cell(out, "", row.name);
+            push_pdf_text_cell(out, "num", &format_u64(row.calls));
+            out.push_str("</tr>");
+        }
+    }
+    push_pdf_table_close(out);
+    push_pdf_panel_close(out);
+}
+
+fn push_pdf_panel_open(out: &mut String, title: &str, tone: &str, icon: &str) {
+    out.push_str("<h2 class=\"pdf-panel-title ");
+    out.push_str(tone);
+    out.push_str("\"><span class=\"pdf-panel-icon\">");
+    out.push_str(icon_svg(icon));
+    out.push_str("</span>");
+    out.push_str(&escape_html(title));
+    out.push_str("</h2><div class=\"pdf-panel-body\">");
+}
+
+fn push_pdf_panel_close(out: &mut String) {
+    out.push_str("</div>");
+}
+
+fn push_pdf_table_open(out: &mut String, headers: &[&str]) {
+    out.push_str("<table class=\"pdf-table\"><thead><tr>");
+    for header in headers {
+        let class = if is_num_header(header) {
+            " class=\"num\""
+        } else {
+            ""
+        };
+        out.push_str("<th");
+        out.push_str(class);
+        out.push('>');
+        out.push_str(&escape_html(header));
+        out.push_str("</th>");
+    }
+    out.push_str("</tr></thead><tbody>");
+}
+
+fn push_pdf_table_close(out: &mut String) {
+    out.push_str("</tbody></table>");
+}
+
+fn push_pdf_empty_row(out: &mut String, colspan: usize) {
+    let _ = write!(
+        out,
+        "<tr><td class=\"empty\" colspan=\"{}\">no data</td></tr>",
+        colspan
+    );
+}
+
+fn push_pdf_text_cell(out: &mut String, class: &str, value: &str) {
+    out.push_str("<td");
+    if !class.is_empty() {
+        out.push_str(" class=\"");
+        out.push_str(class);
+        out.push('"');
+    }
+    out.push('>');
+    out.push_str(&escape_html(value));
+    out.push_str("</td>");
+}
+
+fn push_pdf_raw_cell(out: &mut String, class: &str, value: &str) {
+    out.push_str("<td");
+    if !class.is_empty() {
+        out.push_str(" class=\"");
+        out.push_str(class);
+        out.push('"');
+    }
+    out.push('>');
+    out.push_str(value);
+    out.push_str("</td>");
+}
+
+fn push_pdf_fact_rows(out: &mut String, facts: &[(&str, &str)], cols: usize) {
+    for row in facts.chunks(cols) {
+        out.push_str("<tr>");
+        for (label, value) in row {
+            out.push_str("<td><span>");
+            out.push_str(&escape_html(label));
+            out.push_str("</span><strong>");
+            out.push_str(&escape_html(value));
+            out.push_str("</strong></td>");
+        }
+        for _ in row.len()..cols {
+            out.push_str("<td></td>");
+        }
+        out.push_str("</tr>");
+    }
+}
+
+fn heat_html_pdf(value: u64) -> String {
+    let cells = 12u64;
+    let filled = ((value.min(100) as f64 / 100.0) * cells as f64).ceil() as u64;
+    let mut out = String::from("<span class=\"pdf-heat\" aria-hidden=\"true\">");
+    for idx in 0..cells {
+        if idx < filled {
+            let _ = write!(out, "<span class=\"filled l{}\"></span>", idx);
+        } else {
+            out.push_str("<span></span>");
+        }
+    }
+    out.push_str("</span>");
+    out
+}
+
+fn compact_pdf_tool_mix(value: &str) -> String {
+    let mut labels: Vec<&str> = Vec::new();
+    for token in value.split_whitespace() {
+        if token
+            .chars()
+            .any(|ch| ch.is_ascii_digit() || matches!(ch, '$' | '£' | '€' | '¥'))
+        {
+            continue;
+        }
+        if !labels.contains(&token) {
+            labels.push(token);
+        }
+    }
+
+    if labels.is_empty() {
+        value.to_owned()
+    } else {
+        labels.join(" ")
+    }
 }
 
 fn push_daily_html(out: &mut String, rows: &[DailyMetric]) {
@@ -1238,19 +2043,7 @@ fn push_section_close(out: &mut String) {
 fn push_table_open(out: &mut String, headers: &[&str]) {
     out.push_str("<div class=\"table-wrap\"><table><thead><tr>");
     for header in headers {
-        let class = if matches!(
-            *header,
-            "cost"
-                | "calls"
-                | "avg/s"
-                | "sessions"
-                | "used"
-                | "left"
-                | "tokens"
-                | "input"
-                | "output"
-                | "cache"
-        ) {
+        let class = if is_num_header(header) {
             " class=\"num\""
         } else {
             ""
@@ -1262,6 +2055,22 @@ fn push_table_open(out: &mut String, headers: &[&str]) {
         out.push_str("</th>");
     }
     out.push_str("</tr></thead><tbody>\n");
+}
+
+fn is_num_header(header: &str) -> bool {
+    matches!(
+        header,
+        "cost"
+            | "calls"
+            | "avg/s"
+            | "sessions"
+            | "used"
+            | "left"
+            | "tokens"
+            | "input"
+            | "output"
+            | "cache"
+    )
 }
 
 fn push_table_close(out: &mut String) {
@@ -1372,6 +2181,19 @@ fn escape_html(value: &str) -> String {
         }
     }
     out
+}
+
+fn write_pdf_report(path: &Path, context: &ExportContext<'_>, stamp: &str) -> Result<()> {
+    let html = build_pdf_html_report(context, stamp);
+    let bytes = Engine::builder()
+        .page_size(PageSize::A4)
+        .margin(Margin::uniform_mm(8.0))
+        .title(report_title(context))
+        .build()
+        .render_html(&html)
+        .wrap_err("render branded HTML workbook to PDF")?;
+
+    fs::write(path, bytes).wrap_err_with(|| format!("write {}", path.display()))
 }
 
 fn format_u64(value: u64) -> String {
@@ -2328,9 +3150,15 @@ mod tests {
                 reasoning_tokens: 25,
                 web_search_requests: 1,
                 tools: "shell & read".into(),
-                bash_commands: vec!["echo \"<hi>\" & exit".into()],
+                bash_commands: vec![
+                    "echo \"<hi>\" & exit".into(),
+                    "printf 'a deliberately long command with flags and quoted values' -- --format json --project tokenuse".into(),
+                ],
                 prompt: "prompt preview".into(),
-                prompt_full: "full <prompt> & \"quote\"".into(),
+                prompt_full: format!(
+                    "full <prompt> & \"quote\"\n{}",
+                    "long prompt segment with wrapping pressure ".repeat(16)
+                ),
             }],
             note: Some("note <with> & detail".into()),
         }
@@ -2456,9 +3284,26 @@ mod tests {
     }
 
     #[test]
-    fn export_formats_include_html() {
+    fn pdf_export_writes_branded_workbook_file() {
+        let (paths, data) = fixture();
+        let session = selected_session();
+        let context = context(&data, Some(&session));
+        let export_root = paths.dir.join("exports");
+        let path = write_to_dir(&export_root, ExportFormat::Pdf, &context).unwrap();
+
+        assert!(path.extension().is_some_and(|ext| ext == "pdf"));
+        let bytes = fs::read(&path).unwrap();
+        assert!(bytes.len() > 1_000);
+        assert_eq!(&bytes[..5], b"%PDF-");
+        let _ = fs::remove_dir_all(&paths.dir);
+    }
+
+    #[test]
+    fn export_formats_include_full_workbook_formats() {
         assert!(ExportFormat::ALL.contains(&ExportFormat::Html));
+        assert!(ExportFormat::ALL.contains(&ExportFormat::Pdf));
         assert_eq!(ExportFormat::Html.label(), "HTML (full workbook report)");
+        assert_eq!(ExportFormat::Pdf.label(), "PDF (full workbook report)");
     }
 
     #[test]
