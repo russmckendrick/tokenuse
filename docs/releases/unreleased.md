@@ -4,7 +4,7 @@ Changes that should be included in the next release go here. Keep this file curr
 
 ## Highlights
 
-- None yet.
+- Fixed desktop filter dropdowns so expanded menus stay above dashboard panel title bars.
 
 ## Notes
 
