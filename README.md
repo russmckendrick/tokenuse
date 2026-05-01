@@ -22,7 +22,7 @@ If no local sessions are found, or archive sync fails before any calls are loade
 Install the macOS desktop app with Homebrew Cask:
 
 ```bash
-brew install --cask russmckendrick/tap/tokenuse
+brew install --cask russmckendrick/tap/tokenuse-desktop
 open -a "Token Use"
 ```
 

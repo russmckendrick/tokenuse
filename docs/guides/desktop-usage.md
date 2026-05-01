@@ -7,7 +7,7 @@ The desktop app is a Tauri v2 + Svelte frontend over the same Rust core as the T
 Install on macOS with Homebrew Cask:
 
 ```bash
-brew install --cask russmckendrick/tap/tokenuse
+brew install --cask russmckendrick/tap/tokenuse-desktop
 open -a "Token Use"
 ```
 

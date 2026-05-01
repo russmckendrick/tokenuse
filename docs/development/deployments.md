@@ -52,6 +52,7 @@ Use a Developer ID Application certificate for direct-download DMGs. Apple Distr
 After the GitHub Release is created, `.github/workflows/update-tap.yml` updates:
 
 - `Formula/tokenuse.rb` for the TUI on macOS and Linux.
-- `Casks/tokenuse.rb` for the macOS desktop DMG.
+- `Casks/tokenuse-desktop.rb` for the macOS desktop DMG.
+- `cask_renames.json` so existing installs of the old `tokenuse` cask migrate to `tokenuse-desktop`.
 
 The tap downloads checksums from the newly published release before writing the formula and cask. Windows and Linux desktop assets are published only to GitHub Releases for now.
