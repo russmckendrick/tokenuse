@@ -2078,9 +2078,9 @@ fn push_table_close(out: &mut String) {
 }
 
 fn push_empty_row(out: &mut String, colspan: usize) {
-    let _ = write!(
+    let _ = writeln!(
         out,
-        "<tr><td class=\"empty\" colspan=\"{}\">no data</td></tr>\n",
+        "<tr><td class=\"empty\" colspan=\"{}\">no data</td></tr>",
         colspan
     );
 }

@@ -2,6 +2,7 @@
 
 ## Tooling
 
+- Before finishing code changes, run `cargo clippy -- -D warnings` as part of the local test pass.
 - Update embedded pricing: `cargo run -- --refresh-prices` - never hand-edit `src/pricing/snapshot.json`.
 - Update embedded currency rates: `cargo run -- --generate-currency-json` - never hand-edit `currency/rates.json`.
 - Default builds include confirmed Config-page downloads for local rates/pricing files. Use `--no-default-features` for a no-download build; `ureq` remains gated behind the `refresh-prices` and `refresh-currency` features.
@@ -17,7 +18,7 @@
 
 - Add user-visible changes that affect shipped behavior or documented workflows to `docs/releases/unreleased.md`.
 - Do not bump `Cargo.toml`, edit `Cargo.lock` just for a version change, or create a numbered `docs/releases/<version>.md` unless Russ explicitly asks to prep a release.
-- When Russ asks to prep a release, move the relevant `unreleased.md` notes into `docs/releases/<version>.md`, then bump `Cargo.toml` and let Cargo update `Cargo.lock` in the same change.
+- When Russ asks to prep a release, choose a short human-readable release name, move the relevant `unreleased.md` notes into `docs/releases/<version>.md` using that name in the title and intro, then bump `Cargo.toml` and let Cargo update `Cargo.lock` in the same change.
 - Keep `docs/architecture.md`, `docs/usage.md`, and the `docs/tools/<name>.md` files in sync with the code they describe. If you change page routing, ingestion behavior, or a tool adapter's source schema, update the matching doc in the same change.
 - Update `docs/README.md` whenever a new top-level doc lands so the index stays current.
 
