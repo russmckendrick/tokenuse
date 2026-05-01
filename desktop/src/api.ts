@@ -5,6 +5,8 @@ import type {
   ExportResponse,
   PageId,
   PeriodId,
+  ShortcutInput,
+  ShortcutResponse,
   SortId,
   ToolId
 } from './types';
@@ -24,5 +26,7 @@ export const api = {
   refreshPricingSnapshot: () => invoke<DesktopSnapshot>('refresh_pricing_snapshot'),
   setExportDir: (path: string) => invoke<DesktopSnapshot>('set_export_dir', { path }),
   exportCurrent: (format: ExportFormatId) =>
-    invoke<ExportResponse>('export_current', { format })
+    invoke<ExportResponse>('export_current', { format }),
+  handleShortcut: (context: string, input: ShortcutInput) =>
+    invoke<ShortcutResponse>('handle_shortcut', { context, input })
 };

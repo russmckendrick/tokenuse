@@ -6,6 +6,7 @@ pub mod data;
 pub mod export;
 pub mod ingest;
 pub mod ingest_cache;
+pub mod keymap;
 pub mod pricing;
 pub mod runtime;
 pub mod theme;

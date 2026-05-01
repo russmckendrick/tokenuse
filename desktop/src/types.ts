@@ -176,6 +176,20 @@ export type ProjectState = {
   label: string;
 };
 
+export type ShortcutHint = {
+  keys: string;
+  label: string;
+  action: string;
+};
+
+export type ShortcutInput = {
+  key: string;
+  ctrl: boolean;
+  alt: boolean;
+  shift: boolean;
+  meta: boolean;
+};
+
 export type DesktopSnapshot = {
   version: string;
   source: 'live' | 'sample';
@@ -198,9 +212,16 @@ export type DesktopSnapshot = {
   currency: string;
   export_dir: string;
   export_formats: OptionItem<ExportFormatId>[];
+  shortcut_footer: ShortcutHint[];
 };
 
 export type ExportResponse = {
   path: string;
+  snapshot: DesktopSnapshot;
+};
+
+export type ShortcutResponse = {
+  handled: boolean;
+  effect: 'open_project_picker' | 'open_session_picker' | 'open_export_picker' | 'close_modal' | 'close_call_detail' | null;
   snapshot: DesktopSnapshot;
 };

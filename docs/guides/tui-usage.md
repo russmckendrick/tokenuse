@@ -32,6 +32,8 @@ Press `g` to cycle the dashboard sort mode between spend, latest date, and token
 
 ## Keyboard
 
+The keyboard reference, footer hints, and shortcut behavior come from the shared embedded keymap used by both the TUI and desktop app.
+
 | Key | Action |
 | --- | --- |
 | `q` | Quit |

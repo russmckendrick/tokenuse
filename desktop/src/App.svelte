@@ -16,6 +16,7 @@
     ProjectOption,
     ProjectToolMetric,
     RecentModelMetric,
+    ShortcutInput,
     SortId,
     SessionDetail,
     SessionDetailView,
@@ -111,94 +112,65 @@
 
   function handleKey(event: KeyboardEvent) {
     const target = event.target as HTMLElement | null;
-    if (target?.tagName === 'INPUT' || target?.tagName === 'SELECT') {
-      if (event.key === 'Escape') closeModal();
+    if ((target?.tagName === 'INPUT' || target?.tagName === 'SELECT') && event.key !== 'Escape') {
       return;
     }
     if (!snapshot) return;
 
-    if (callDetail) {
-      if (event.key === 'Escape') closeCallDetail();
-      return;
-    }
+    void commitShortcut(event);
+  }
 
-    if (modal) {
-      if (event.key === 'Escape') closeModal();
-      return;
-    }
-
-    if (event.key === 'Escape' && snapshot.page === 'session') {
+  async function commitShortcut(event: KeyboardEvent) {
+    busy = true;
+    error = null;
+    try {
+      const response = await api.handleShortcut(shortcutContext(event), shortcutInput(event));
+      if (!response.handled) return;
       event.preventDefault();
-      void commit(() => api.closeSession());
-      return;
+      snapshot = response.snapshot;
+      applyShortcutEffect(response.effect);
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    } finally {
+      busy = false;
     }
+  }
 
-    if (event.key.toLowerCase() === 'g') {
-      event.preventDefault();
-      cycleSort();
-      return;
-    }
+  function shortcutContext(event: KeyboardEvent) {
+    if (callDetail) return 'desktop_call_detail';
+    if (modal) return 'desktop_modal';
+    if (snapshot?.page === 'session' && event.key === 'Escape') return 'desktop_session_page';
+    return 'desktop';
+  }
 
-    const periodKeys = ['today', 'week', 'thirty-days', 'month', 'all-time'] as const;
-    if (/^[1-5]$/.test(event.key)) {
-      event.preventDefault();
-      const period = periodKeys[Number(event.key) - 1];
-      void commit(() => api.setPeriod(period));
-      return;
-    }
+  function shortcutInput(event: KeyboardEvent): ShortcutInput {
+    return {
+      key: event.key,
+      ctrl: event.ctrlKey,
+      alt: event.altKey,
+      shift: event.shiftKey,
+      meta: event.metaKey
+    };
+  }
 
-    switch (event.key.toLowerCase()) {
-      case 'o':
-        event.preventDefault();
-        void commit(() => api.setPage('overview'));
-        break;
-      case 'd':
-        event.preventDefault();
-        void commit(() => api.setPage('deep-dive'));
-        break;
-      case 'u':
-        event.preventDefault();
-        void commit(() => api.setPage('usage'));
-        break;
-      case 'c':
-        event.preventDefault();
-        void commit(() => api.setPage('config'));
-        break;
-      case 'p':
-        event.preventDefault();
+  function applyShortcutEffect(effect: string | null) {
+    switch (effect) {
+      case 'open_project_picker':
         openModal('project');
         break;
-      case 's':
-        event.preventDefault();
+      case 'open_session_picker':
         openModal('session');
         break;
-      case 'e':
-        event.preventDefault();
+      case 'open_export_picker':
         openModal('export');
         break;
-      case 'r':
-        event.preventDefault();
-        void commit(() => api.refreshArchive());
+      case 'close_modal':
+        closeModal();
         break;
-      case 't':
-        event.preventDefault();
-        cycleTool();
+      case 'close_call_detail':
+        closeCallDetail();
         break;
     }
-  }
-
-  function cycleTool() {
-    if (!snapshot) return;
-    const idx = snapshot.tools.findIndex((tool) => tool.value === snapshot?.tool);
-    const next = snapshot.tools[(idx + 1) % snapshot.tools.length];
-    void commit(() => api.setTool(next.value));
-  }
-
-  function cycleSort() {
-    if (!snapshot) return;
-    const idx = snapshot.sorts.findIndex((sort) => sort.value === snapshot?.sort);
-    const next = snapshot.sorts[(idx + 1) % snapshot.sorts.length];
-    void commit(() => api.setSort(next.value));
   }
 
   function setToolFromEvent(event: Event) {
@@ -512,13 +484,9 @@
     </main>
 
     <footer>
-      <span><b>1-5</b> period</span>
-      <span><b>t</b> tool</span>
-      <span><b>g</b> sort {activeSortLabel()}</span>
-      <span><b>p</b> project</span>
-      <span><b>s</b> session</span>
-      <span><b>e</b> export</span>
-      <span><b>r</b> refresh</span>
+      {#each snapshot.shortcut_footer as hint}
+        <span><b>{hint.keys}</b> {hint.action === 'cycle_sort' ? `sort ${activeSortLabel()}` : hint.label}</span>
+      {/each}
     </footer>
   </div>
 

@@ -13,6 +13,7 @@ use tokenuse::{
     app::{App, ConfigRowView, DataSource, Page, Period, ProjectFilter, SortMode, Tool},
     data::{DashboardData, LimitsData, ProjectOption, SessionDetailView, SessionOption},
     export::ExportFormat,
+    keymap::{self, KeyHint, KeyInput},
     runtime,
 };
 
@@ -83,11 +84,19 @@ struct DesktopSnapshot {
     currency: String,
     export_dir: String,
     export_formats: Vec<OptionItem>,
+    shortcut_footer: Vec<KeyHint>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 struct ExportResponse {
     path: String,
+    snapshot: DesktopSnapshot,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ShortcutResponse {
+    handled: bool,
+    effect: Option<&'static str>,
     snapshot: DesktopSnapshot,
 }
 
@@ -245,6 +254,50 @@ async fn export_current(
     .await
 }
 
+#[tauri::command]
+async fn handle_shortcut(
+    context: String,
+    input: KeyInput,
+    state: State<'_, SharedState>,
+) -> CommandResult<ShortcutResponse> {
+    let action = keymap::keymap()
+        .resolve_input(&context, &input)
+        .map(str::to_string);
+    with_app(state, move |app| {
+        let mut effect = None;
+        let handled = match action.as_deref() {
+            Some(keymap::ACTION_OPEN_PROJECT_PICKER) => {
+                effect = Some("open_project_picker");
+                true
+            }
+            Some(keymap::ACTION_OPEN_SESSION_PICKER) => {
+                effect = Some("open_session_picker");
+                true
+            }
+            Some(keymap::ACTION_OPEN_EXPORT_PICKER) => {
+                effect = Some("open_export_picker");
+                true
+            }
+            Some(keymap::ACTION_CLOSE_MODAL) => {
+                effect = Some("close_modal");
+                true
+            }
+            Some(keymap::ACTION_CLOSE_CALL_DETAIL) => {
+                effect = Some("close_call_detail");
+                true
+            }
+            Some(action) => app.apply_shortcut_action(action),
+            None => false,
+        };
+        Ok(ShortcutResponse {
+            handled,
+            effect,
+            snapshot: snapshot(app),
+        })
+    })
+    .await
+}
+
 async fn with_app<T, F>(state: State<'_, SharedState>, f: F) -> CommandResult<T>
 where
     T: Send + 'static,
@@ -325,6 +378,7 @@ fn snapshot(app: &App) -> DesktopSnapshot {
                 label: format.label(),
             })
             .collect(),
+        shortcut_footer: keymap::keymap().footer("desktop").to_vec(),
     }
 }
 
@@ -583,6 +637,7 @@ pub fn run() {
             refresh_pricing_snapshot,
             set_export_dir,
             export_current,
+            handle_shortcut,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tokenuse desktop application");

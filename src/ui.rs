@@ -301,6 +301,11 @@ mod tests {
         assert!(rendered.contains("Daily Activity"));
         assert!(rendered.contains("Project Spend by Tool"));
         assert!(rendered.contains("q quit"));
+        let first_footer_hint = crate::keymap::keymap().footer("dashboard")[0].clone();
+        assert!(rendered.contains(&format!(
+            "{} {}",
+            first_footer_hint.keys, first_footer_hint.label
+        )));
         assert!(rendered.contains("h help"));
         assert!(rendered.contains("[t]"));
         assert!(rendered.contains("[p]"));
@@ -390,6 +395,8 @@ mod tests {
         assert!(rendered.contains("keybindings"));
         assert!(rendered.contains("Period"));
         assert!(rendered.contains("Pickers"));
+        let help_item = &crate::keymap::keymap().help_groups()[0].items[1];
+        assert!(rendered.contains(&help_item.label));
 
         app.handle_key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));
         assert!(!app.help_open);

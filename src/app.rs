@@ -17,6 +17,7 @@ use crate::data::{
 };
 use crate::export::ExportFormat;
 use crate::ingest::Ingested;
+use crate::keymap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Period {
@@ -464,6 +465,19 @@ fn is_hidden_dir_name(name: &str) -> bool {
     name.starts_with('.') && name != ".."
 }
 
+fn move_index(selected: &mut usize, len: usize, delta: isize) {
+    if len == 0 {
+        *selected = 0;
+        return;
+    }
+
+    if delta.is_negative() {
+        *selected = selected.saturating_sub(delta.unsigned_abs());
+    } else {
+        *selected = (*selected + delta as usize).min(len - 1);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SessionModal {
     pub options: Vec<SessionOption>,
@@ -816,63 +830,6 @@ impl App {
         });
     }
 
-    fn handle_session_modal_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Esc => self.session_modal = None,
-            KeyCode::Up => {
-                if let Some(modal) = self.session_modal.as_mut() {
-                    modal.selected = modal.selected.saturating_sub(1);
-                }
-            }
-            KeyCode::Down => {
-                if let Some(modal) = self.session_modal.as_mut() {
-                    let last = modal.filtered.len().saturating_sub(1);
-                    modal.selected = (modal.selected + 1).min(last);
-                }
-            }
-            KeyCode::Home => {
-                if let Some(modal) = self.session_modal.as_mut() {
-                    modal.selected = 0;
-                }
-            }
-            KeyCode::End => {
-                if let Some(modal) = self.session_modal.as_mut() {
-                    modal.selected = modal.filtered.len().saturating_sub(1);
-                }
-            }
-            KeyCode::Backspace => {
-                if let Some(modal) = self.session_modal.as_mut() {
-                    modal.query.pop();
-                    modal.refilter();
-                }
-            }
-            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                if let Some(modal) = self.session_modal.as_mut() {
-                    modal.query.clear();
-                    modal.refilter();
-                }
-            }
-            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                if let Some(modal) = self.session_modal.as_mut() {
-                    modal.query.push(c);
-                    modal.refilter();
-                }
-            }
-            KeyCode::Enter => {
-                let key = self
-                    .session_modal
-                    .as_ref()
-                    .and_then(|modal| modal.current_option())
-                    .map(|option| option.key.clone());
-                self.session_modal = None;
-                if let Some(key) = key {
-                    self.enter_session(&key);
-                }
-            }
-            _ => {}
-        }
-    }
-
     pub fn enter_session(&mut self, key: &str) {
         match self.lookup_session_view(key) {
             Some(view) => {
@@ -955,146 +912,13 @@ impl App {
         self.session_scroll = idx;
     }
 
-    fn handle_session_page_key(&mut self, key: KeyEvent) {
-        let row_count = self
-            .session_view
-            .as_ref()
-            .map(|view| view.calls.len())
-            .unwrap_or(0);
-        match key.code {
-            KeyCode::Esc | KeyCode::Char('d') => {
-                self.page = Page::DeepDive;
-                self.session_view = None;
-                self.session_scroll = 0;
-                self.session_selected = 0;
-                self.call_detail_index = None;
-            }
-            KeyCode::Up => {
-                self.select_session_call(self.session_selected.saturating_sub(1));
-            }
-            KeyCode::Down => {
-                let last = row_count.saturating_sub(1);
-                self.select_session_call((self.session_selected + 1).min(last));
-            }
-            KeyCode::PageUp => {
-                self.select_session_call(self.session_selected.saturating_sub(10));
-            }
-            KeyCode::PageDown => {
-                let last = row_count.saturating_sub(1);
-                self.select_session_call((self.session_selected + 10).min(last));
-            }
-            KeyCode::Home => self.select_session_call(0),
-            KeyCode::End => self.select_session_call(row_count.saturating_sub(1)),
-            KeyCode::Enter => self.open_session_call_detail(self.session_selected),
-            KeyCode::Char('r') => self.reload(),
-            KeyCode::Char('s') => self.open_session_modal(),
-            _ => {}
-        }
-    }
-
     fn open_export_modal(&mut self) {
         self.export_dir_picker = None;
         self.export_modal = Some(ExportModal::new());
     }
 
-    fn handle_export_modal_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Esc => self.export_modal = None,
-            KeyCode::Char('f') | KeyCode::Char('b')
-                if !key.modifiers.contains(KeyModifiers::CONTROL) =>
-            {
-                self.open_export_dir_picker();
-            }
-            KeyCode::Up => {
-                if let Some(modal) = self.export_modal.as_mut() {
-                    modal.selected = modal.selected.saturating_sub(1);
-                }
-            }
-            KeyCode::Down => {
-                if let Some(modal) = self.export_modal.as_mut() {
-                    let last = modal.options.len().saturating_sub(1);
-                    modal.selected = (modal.selected + 1).min(last);
-                }
-            }
-            KeyCode::Home => {
-                if let Some(modal) = self.export_modal.as_mut() {
-                    modal.selected = 0;
-                }
-            }
-            KeyCode::End => {
-                if let Some(modal) = self.export_modal.as_mut() {
-                    modal.selected = modal.options.len().saturating_sub(1);
-                }
-            }
-            KeyCode::Enter => {
-                let format = self
-                    .export_modal
-                    .as_ref()
-                    .and_then(|modal| modal.options.get(modal.selected).copied());
-                self.export_modal = None;
-                if let Some(format) = format {
-                    self.run_export(format);
-                }
-            }
-            _ => {}
-        }
-    }
-
     fn open_export_dir_picker(&mut self) {
         self.export_dir_picker = Some(FolderPickerModal::new(self.export_dir.clone()));
-    }
-
-    fn handle_export_dir_picker_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Esc => self.export_dir_picker = None,
-            KeyCode::Up => {
-                if let Some(picker) = self.export_dir_picker.as_mut() {
-                    picker.move_by(-1);
-                }
-            }
-            KeyCode::Down => {
-                if let Some(picker) = self.export_dir_picker.as_mut() {
-                    picker.move_by(1);
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(picker) = self.export_dir_picker.as_mut() {
-                    picker.move_by(-10);
-                }
-            }
-            KeyCode::PageDown => {
-                if let Some(picker) = self.export_dir_picker.as_mut() {
-                    picker.move_by(10);
-                }
-            }
-            KeyCode::Home => {
-                if let Some(picker) = self.export_dir_picker.as_mut() {
-                    picker.selected = 0;
-                }
-            }
-            KeyCode::End => {
-                if let Some(picker) = self.export_dir_picker.as_mut() {
-                    picker.selected = picker.entries.len().saturating_sub(1);
-                }
-            }
-            KeyCode::Backspace | KeyCode::Left => {
-                if let Some(picker) = self.export_dir_picker.as_mut() {
-                    picker.go_parent();
-                }
-            }
-            KeyCode::Enter => {
-                let picked = self
-                    .export_dir_picker
-                    .as_mut()
-                    .and_then(FolderPickerModal::activate);
-                if let Some(dir) = picked {
-                    self.export_dir = dir;
-                    self.export_dir_picker = None;
-                    self.status = Some(format!("export folder · {}", self.export_dir.display()));
-                }
-            }
-            _ => {}
-        }
     }
 
     pub fn export_current(
@@ -1174,103 +998,347 @@ impl App {
             return;
         }
 
-        if self.help_open {
-            match key.code {
-                KeyCode::Esc | KeyCode::Char('h') | KeyCode::Char('?') => self.help_open = false,
-                KeyCode::Char('q') => self.should_quit = true,
-                _ => {}
-            }
+        let context = self.shortcut_context();
+        if let Some(action) = keymap::keymap().resolve_tui(context, key) {
+            self.apply_shortcut_action(action);
             return;
+        }
+
+        self.handle_text_input_key(key);
+    }
+
+    fn shortcut_context(&self) -> &'static str {
+        if self.help_open {
+            return keymap::CONTEXT_HELP;
         }
 
         if self.call_detail_index.is_some() {
-            match key.code {
-                KeyCode::Esc | KeyCode::Enter => self.close_call_detail(),
-                KeyCode::Char('q') => self.should_quit = true,
-                _ => {}
-            }
-            return;
+            return keymap::CONTEXT_CALL_DETAIL;
         }
 
         if self.currency_modal.is_some() {
-            self.handle_currency_modal_key(key);
-            return;
+            return keymap::CONTEXT_CURRENCY_PICKER;
         }
 
         if self.download_confirm.is_some() {
-            self.handle_download_confirm_key(key);
-            return;
+            return keymap::CONTEXT_DOWNLOAD_CONFIRM;
         }
 
         if self.project_modal.is_some() {
-            self.handle_project_modal_key(key);
-            return;
+            return keymap::CONTEXT_PROJECT_PICKER;
         }
 
         if self.session_modal.is_some() {
-            self.handle_session_modal_key(key);
-            return;
+            return keymap::CONTEXT_SESSION_PICKER;
         }
 
         if self.export_dir_picker.is_some() {
-            self.handle_export_dir_picker_key(key);
-            return;
+            return keymap::CONTEXT_EXPORT_FOLDER_PICKER;
         }
 
         if self.export_modal.is_some() {
-            self.handle_export_modal_key(key);
-            return;
+            return keymap::CONTEXT_EXPORT_PICKER;
         }
 
-        if key.code == KeyCode::Char('q') {
-            self.should_quit = true;
-            return;
+        match self.page {
+            Page::Config => keymap::CONTEXT_CONFIG_PAGE,
+            Page::Usage => keymap::CONTEXT_USAGE_PAGE,
+            Page::Session => keymap::CONTEXT_SESSION_PAGE,
+            Page::Overview | Page::DeepDive => keymap::CONTEXT_DASHBOARD,
         }
+    }
 
-        if matches!(key.code, KeyCode::Char('h') | KeyCode::Char('?')) {
-            self.help_open = true;
-            return;
+    pub fn apply_shortcut_action(&mut self, action: &str) -> bool {
+        match action {
+            keymap::ACTION_QUIT => self.should_quit = true,
+            keymap::ACTION_OPEN_HELP => self.help_open = true,
+            keymap::ACTION_CLOSE_HELP => self.help_open = false,
+            keymap::ACTION_CLOSE_CALL_DETAIL => self.close_call_detail(),
+            keymap::ACTION_CLOSE_MODAL | keymap::ACTION_CANCEL => self.cancel_active_context(),
+            keymap::ACTION_CONFIRM => self.confirm_active_context(),
+            keymap::ACTION_NEXT_TAB => self.page = self.page.next_tab(),
+            keymap::ACTION_PREV_TAB => self.page = self.page.prev_tab(),
+            keymap::ACTION_PERIOD_TODAY => self.period = Period::Today,
+            keymap::ACTION_PERIOD_WEEK => self.period = Period::Week,
+            keymap::ACTION_PERIOD_THIRTY_DAYS => self.period = Period::ThirtyDays,
+            keymap::ACTION_PERIOD_MONTH => self.period = Period::Month,
+            keymap::ACTION_PERIOD_ALL_TIME => self.period = Period::AllTime,
+            keymap::ACTION_CYCLE_TOOL => self.tool = self.tool.next(),
+            keymap::ACTION_CYCLE_SORT => self.cycle_sort(),
+            keymap::ACTION_OPEN_PROJECT_PICKER => self.open_project_modal(),
+            keymap::ACTION_OPEN_SESSION_PICKER => self.open_session_modal(),
+            keymap::ACTION_OPEN_EXPORT_PICKER => self.open_export_modal(),
+            keymap::ACTION_OPEN_EXPORT_FOLDER_PICKER => self.open_export_dir_picker(),
+            keymap::ACTION_PAGE_OVERVIEW => self.page = Page::Overview,
+            keymap::ACTION_PAGE_DEEP_DIVE => self.page = Page::DeepDive,
+            keymap::ACTION_PAGE_USAGE => self.page = Page::Usage,
+            keymap::ACTION_PAGE_CONFIG => self.page = Page::Config,
+            keymap::ACTION_CLOSE_SESSION => self.leave_session(),
+            keymap::ACTION_RELOAD => self.reload(),
+            keymap::ACTION_MOVE_UP => self.move_active_selection(-1),
+            keymap::ACTION_MOVE_DOWN => self.move_active_selection(1),
+            keymap::ACTION_MOVE_PAGE_UP => self.move_active_page(-10),
+            keymap::ACTION_MOVE_PAGE_DOWN => self.move_active_page(10),
+            keymap::ACTION_MOVE_HOME => self.move_active_to_start(),
+            keymap::ACTION_MOVE_END => self.move_active_to_end(),
+            keymap::ACTION_QUERY_BACKSPACE => self.backspace_active_query(),
+            keymap::ACTION_QUERY_CLEAR => self.clear_active_query(),
+            keymap::ACTION_GO_PARENT => self.go_active_parent(),
+            _ => return false,
         }
+        true
+    }
 
-        if is_sort_key(key) {
-            self.cycle_sort();
-            return;
-        }
-
-        if self.page == Page::Config {
-            self.handle_config_key(key);
-            return;
-        }
-
-        if self.page == Page::Usage {
-            self.handle_usage_key(key);
-            return;
-        }
-
-        if self.page == Page::Session {
-            self.handle_session_page_key(key);
-            return;
-        }
-
+    fn handle_text_input_key(&mut self, key: KeyEvent) -> bool {
         match key.code {
-            KeyCode::Esc => self.should_quit = true,
-            KeyCode::Tab => self.page = self.page.next_tab(),
-            KeyCode::BackTab => self.page = self.page.prev_tab(),
-            KeyCode::Char('1') => self.period = Period::Today,
-            KeyCode::Char('2') => self.period = Period::Week,
-            KeyCode::Char('3') => self.period = Period::ThirtyDays,
-            KeyCode::Char('4') => self.period = Period::Month,
-            KeyCode::Char('5') => self.period = Period::AllTime,
-            KeyCode::Char('t') => self.tool = self.tool.next(),
-            KeyCode::Char('p') => self.open_project_modal(),
-            KeyCode::Char('c') => self.page = Page::Config,
-            KeyCode::Char('o') => self.page = Page::Overview,
-            KeyCode::Char('d') => self.page = Page::DeepDive,
-            KeyCode::Char('u') => self.page = Page::Usage,
-            KeyCode::Char('r') => self.reload(),
-            KeyCode::Char('s') => self.open_session_modal(),
-            KeyCode::Char('e') => self.open_export_modal(),
-            _ => {}
+            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.push_active_query_char(c)
+            }
+            _ => false,
+        }
+    }
+
+    fn cancel_active_context(&mut self) {
+        if self.currency_modal.is_some() {
+            self.currency_modal = None;
+        } else if self.download_confirm.is_some() {
+            self.download_confirm = None;
+        } else if self.project_modal.is_some() {
+            self.project_modal = None;
+        } else if self.session_modal.is_some() {
+            self.session_modal = None;
+        } else if self.export_dir_picker.is_some() {
+            self.export_dir_picker = None;
+        } else if self.export_modal.is_some() {
+            self.export_modal = None;
+        }
+    }
+
+    fn confirm_active_context(&mut self) {
+        if self.download_confirm.is_some() {
+            self.confirm_download();
+        } else if self.currency_modal.is_some() {
+            self.confirm_currency_picker();
+        } else if self.project_modal.is_some() {
+            self.confirm_project_picker();
+        } else if self.session_modal.is_some() {
+            self.confirm_session_picker();
+        } else if self.export_dir_picker.is_some() {
+            self.confirm_export_dir_picker();
+        } else if self.export_modal.is_some() {
+            self.confirm_export_picker();
+        } else if self.page == Page::Config {
+            self.activate_config_row();
+        } else if self.page == Page::Session {
+            self.open_session_call_detail(self.session_selected);
+        }
+    }
+
+    fn confirm_project_picker(&mut self) {
+        let selected = self
+            .project_modal
+            .as_ref()
+            .and_then(|modal| modal.current_option())
+            .cloned();
+        if let Some(option) = selected {
+            self.project_filter = ProjectFilter::from_option(&option);
+        }
+        self.project_modal = None;
+    }
+
+    fn confirm_session_picker(&mut self) {
+        let key = self
+            .session_modal
+            .as_ref()
+            .and_then(|modal| modal.current_option())
+            .map(|option| option.key.clone());
+        self.session_modal = None;
+        if let Some(key) = key {
+            self.enter_session(&key);
+        }
+    }
+
+    fn confirm_currency_picker(&mut self) {
+        let selected = self
+            .currency_modal
+            .as_ref()
+            .and_then(|modal| modal.current_code())
+            .map(|s| s.to_string());
+        if let Some(code) = selected {
+            self.set_currency(&code);
+        }
+        self.currency_modal = None;
+    }
+
+    fn confirm_download(&mut self) {
+        let target = self.download_confirm.take();
+        match target {
+            Some(ConfigDownload::CurrencyRates) => self.refresh_currency_rates(),
+            Some(ConfigDownload::PricingSnapshot) => self.refresh_pricing_snapshot(),
+            None => {}
+        }
+    }
+
+    fn confirm_export_picker(&mut self) {
+        let format = self
+            .export_modal
+            .as_ref()
+            .and_then(|modal| modal.options.get(modal.selected).copied());
+        self.export_modal = None;
+        if let Some(format) = format {
+            self.run_export(format);
+        }
+    }
+
+    fn confirm_export_dir_picker(&mut self) {
+        let picked = self
+            .export_dir_picker
+            .as_mut()
+            .and_then(FolderPickerModal::activate);
+        if let Some(dir) = picked {
+            self.export_dir = dir;
+            self.export_dir_picker = None;
+            self.status = Some(format!("export folder · {}", self.export_dir.display()));
+        }
+    }
+
+    fn move_active_selection(&mut self, delta: isize) {
+        if let Some(modal) = self.currency_modal.as_mut() {
+            move_index(&mut modal.selected, modal.filtered.len(), delta);
+        } else if let Some(modal) = self.project_modal.as_mut() {
+            move_index(&mut modal.selected, modal.filtered.len(), delta);
+        } else if let Some(modal) = self.session_modal.as_mut() {
+            move_index(&mut modal.selected, modal.filtered.len(), delta);
+        } else if let Some(picker) = self.export_dir_picker.as_mut() {
+            picker.move_by(delta);
+        } else if let Some(modal) = self.export_modal.as_mut() {
+            move_index(&mut modal.selected, modal.options.len(), delta);
+        } else if self.page == Page::Config {
+            let len = self.config_rows().len();
+            move_index(&mut self.config_selected, len, delta);
+        } else if self.page == Page::Session {
+            let row_count = self
+                .session_view
+                .as_ref()
+                .map(|view| view.calls.len())
+                .unwrap_or(0);
+            let next = if delta.is_negative() {
+                self.session_selected.saturating_sub(delta.unsigned_abs())
+            } else {
+                let last = row_count.saturating_sub(1);
+                (self.session_selected + delta as usize).min(last)
+            };
+            self.select_session_call(next);
+        }
+    }
+
+    fn move_active_page(&mut self, delta: isize) {
+        if let Some(picker) = self.export_dir_picker.as_mut() {
+            picker.move_by(delta);
+        } else if self.page == Page::Session {
+            let row_count = self
+                .session_view
+                .as_ref()
+                .map(|view| view.calls.len())
+                .unwrap_or(0);
+            let next = if delta.is_negative() {
+                self.session_selected.saturating_sub(delta.unsigned_abs())
+            } else {
+                let last = row_count.saturating_sub(1);
+                (self.session_selected + delta as usize).min(last)
+            };
+            self.select_session_call(next);
+        }
+    }
+
+    fn move_active_to_start(&mut self) {
+        if let Some(modal) = self.currency_modal.as_mut() {
+            modal.selected = 0;
+        } else if let Some(modal) = self.project_modal.as_mut() {
+            modal.selected = 0;
+        } else if let Some(modal) = self.session_modal.as_mut() {
+            modal.selected = 0;
+        } else if let Some(picker) = self.export_dir_picker.as_mut() {
+            picker.selected = 0;
+        } else if let Some(modal) = self.export_modal.as_mut() {
+            modal.selected = 0;
+        } else if self.page == Page::Config {
+            self.config_selected = 0;
+        } else if self.page == Page::Session {
+            self.select_session_call(0);
+        }
+    }
+
+    fn move_active_to_end(&mut self) {
+        if let Some(modal) = self.currency_modal.as_mut() {
+            modal.selected = modal.filtered.len().saturating_sub(1);
+        } else if let Some(modal) = self.project_modal.as_mut() {
+            modal.selected = modal.filtered.len().saturating_sub(1);
+        } else if let Some(modal) = self.session_modal.as_mut() {
+            modal.selected = modal.filtered.len().saturating_sub(1);
+        } else if let Some(picker) = self.export_dir_picker.as_mut() {
+            picker.selected = picker.entries.len().saturating_sub(1);
+        } else if let Some(modal) = self.export_modal.as_mut() {
+            modal.selected = modal.options.len().saturating_sub(1);
+        } else if self.page == Page::Config {
+            self.config_selected = self.config_rows().len().saturating_sub(1);
+        } else if self.page == Page::Session {
+            let row_count = self
+                .session_view
+                .as_ref()
+                .map(|view| view.calls.len())
+                .unwrap_or(0);
+            self.select_session_call(row_count.saturating_sub(1));
+        }
+    }
+
+    fn backspace_active_query(&mut self) {
+        if let Some(modal) = self.currency_modal.as_mut() {
+            modal.query.pop();
+            modal.refilter();
+        } else if let Some(modal) = self.project_modal.as_mut() {
+            modal.query.pop();
+            modal.refilter();
+        } else if let Some(modal) = self.session_modal.as_mut() {
+            modal.query.pop();
+            modal.refilter();
+        }
+    }
+
+    fn clear_active_query(&mut self) {
+        if let Some(modal) = self.currency_modal.as_mut() {
+            modal.query.clear();
+            modal.refilter();
+        } else if let Some(modal) = self.project_modal.as_mut() {
+            modal.query.clear();
+            modal.refilter();
+        } else if let Some(modal) = self.session_modal.as_mut() {
+            modal.query.clear();
+            modal.refilter();
+        }
+    }
+
+    fn push_active_query_char(&mut self, c: char) -> bool {
+        if let Some(modal) = self.currency_modal.as_mut() {
+            modal.query.push(c);
+            modal.refilter();
+            true
+        } else if let Some(modal) = self.project_modal.as_mut() {
+            modal.query.push(c);
+            modal.refilter();
+            true
+        } else if let Some(modal) = self.session_modal.as_mut() {
+            modal.query.push(c);
+            modal.refilter();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn go_active_parent(&mut self) {
+        if let Some(picker) = self.export_dir_picker.as_mut() {
+            picker.go_parent();
         }
     }
 
@@ -1400,101 +1468,6 @@ impl App {
         });
     }
 
-    fn handle_project_modal_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Esc => self.project_modal = None,
-            KeyCode::Up => {
-                if let Some(modal) = self.project_modal.as_mut() {
-                    modal.selected = modal.selected.saturating_sub(1);
-                }
-            }
-            KeyCode::Down => {
-                if let Some(modal) = self.project_modal.as_mut() {
-                    let last = modal.filtered.len().saturating_sub(1);
-                    modal.selected = (modal.selected + 1).min(last);
-                }
-            }
-            KeyCode::Home => {
-                if let Some(modal) = self.project_modal.as_mut() {
-                    modal.selected = 0;
-                }
-            }
-            KeyCode::End => {
-                if let Some(modal) = self.project_modal.as_mut() {
-                    modal.selected = modal.filtered.len().saturating_sub(1);
-                }
-            }
-            KeyCode::Backspace => {
-                if let Some(modal) = self.project_modal.as_mut() {
-                    modal.query.pop();
-                    modal.refilter();
-                }
-            }
-            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                if let Some(modal) = self.project_modal.as_mut() {
-                    modal.query.push(c);
-                    modal.refilter();
-                }
-            }
-            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                if let Some(modal) = self.project_modal.as_mut() {
-                    modal.query.clear();
-                    modal.refilter();
-                }
-            }
-            KeyCode::Enter => {
-                let selected = self
-                    .project_modal
-                    .as_ref()
-                    .and_then(|modal| modal.current_option())
-                    .cloned();
-                if let Some(option) = selected {
-                    self.project_filter = ProjectFilter::from_option(&option);
-                }
-                self.project_modal = None;
-            }
-            _ => {}
-        }
-    }
-
-    fn handle_config_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Esc | KeyCode::Char('d') | KeyCode::Char('c') => {
-                self.page = Page::DeepDive;
-            }
-            KeyCode::Up => {
-                self.config_selected = self.config_selected.saturating_sub(1);
-            }
-            KeyCode::Down => {
-                let last = self.config_rows().len().saturating_sub(1);
-                self.config_selected = (self.config_selected + 1).min(last);
-            }
-            KeyCode::Home => self.config_selected = 0,
-            KeyCode::End => self.config_selected = self.config_rows().len().saturating_sub(1),
-            KeyCode::Enter => self.activate_config_row(),
-            _ => {}
-        }
-    }
-
-    fn handle_usage_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Esc | KeyCode::Char('d') => self.page = Page::DeepDive,
-            KeyCode::Char('o') => self.page = Page::Overview,
-            KeyCode::Char('u') => self.page = Page::Overview,
-            KeyCode::Tab => self.page = self.page.next_tab(),
-            KeyCode::BackTab => self.page = self.page.prev_tab(),
-            KeyCode::Char('1') => self.period = Period::Today,
-            KeyCode::Char('2') => self.period = Period::Week,
-            KeyCode::Char('3') => self.period = Period::ThirtyDays,
-            KeyCode::Char('4') => self.period = Period::Month,
-            KeyCode::Char('5') => self.period = Period::AllTime,
-            KeyCode::Char('t') => self.tool = self.tool.next(),
-            KeyCode::Char('c') => self.page = Page::Config,
-            KeyCode::Char('r') => self.reload(),
-            _ => {}
-        }
-    }
-
     fn activate_config_row(&mut self) {
         match self.config_selected {
             0 => self.open_currency_modal(),
@@ -1506,23 +1479,6 @@ impl App {
 
     fn open_download_confirm(&mut self, target: ConfigDownload) {
         self.download_confirm = Some(target);
-    }
-
-    fn handle_download_confirm_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Esc | KeyCode::Char('n') | KeyCode::Char('N') => {
-                self.download_confirm = None;
-            }
-            KeyCode::Enter | KeyCode::Char('y') | KeyCode::Char('Y') => {
-                let target = self.download_confirm.take();
-                match target {
-                    Some(ConfigDownload::CurrencyRates) => self.refresh_currency_rates(),
-                    Some(ConfigDownload::PricingSnapshot) => self.refresh_pricing_snapshot(),
-                    None => {}
-                }
-            }
-            _ => {}
-        }
     }
 
     fn open_currency_modal(&mut self) {
@@ -1539,63 +1495,6 @@ impl App {
             query: String::new(),
             selected,
         });
-    }
-
-    fn handle_currency_modal_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Esc => self.currency_modal = None,
-            KeyCode::Up => {
-                if let Some(modal) = self.currency_modal.as_mut() {
-                    modal.selected = modal.selected.saturating_sub(1);
-                }
-            }
-            KeyCode::Down => {
-                if let Some(modal) = self.currency_modal.as_mut() {
-                    let last = modal.filtered.len().saturating_sub(1);
-                    modal.selected = (modal.selected + 1).min(last);
-                }
-            }
-            KeyCode::Home => {
-                if let Some(modal) = self.currency_modal.as_mut() {
-                    modal.selected = 0;
-                }
-            }
-            KeyCode::End => {
-                if let Some(modal) = self.currency_modal.as_mut() {
-                    modal.selected = modal.filtered.len().saturating_sub(1);
-                }
-            }
-            KeyCode::Backspace => {
-                if let Some(modal) = self.currency_modal.as_mut() {
-                    modal.query.pop();
-                    modal.refilter();
-                }
-            }
-            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                if let Some(modal) = self.currency_modal.as_mut() {
-                    modal.query.push(c);
-                    modal.refilter();
-                }
-            }
-            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                if let Some(modal) = self.currency_modal.as_mut() {
-                    modal.query.clear();
-                    modal.refilter();
-                }
-            }
-            KeyCode::Enter => {
-                let selected = self
-                    .currency_modal
-                    .as_ref()
-                    .and_then(|modal| modal.current_code())
-                    .map(|s| s.to_string());
-                if let Some(code) = selected {
-                    self.set_currency(&code);
-                }
-                self.currency_modal = None;
-            }
-            _ => {}
-        }
     }
 
     pub fn set_currency(&mut self, code: &str) {
@@ -1646,10 +1545,6 @@ impl App {
     pub fn refresh_pricing_snapshot(&mut self) {
         self.status = Some("LiteLLM download unavailable in this build".into());
     }
-}
-
-fn is_sort_key(key: KeyEvent) -> bool {
-    matches!(key.code, KeyCode::Char('g'))
 }
 
 #[cfg(test)]

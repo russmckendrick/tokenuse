@@ -11,7 +11,7 @@ use crate::{
         CountMetric, DailyMetric, ModelMetric, ProjectMetric, ProjectToolMetric, RecentModelMetric,
         RecentUsageMetric, SessionDetail, SessionMetric, Summary, ToolLimitSection,
     },
-    theme,
+    keymap, theme,
 };
 
 use super::components::{bar_cell, centered_rect, BAR_WIDTH};
@@ -887,89 +887,20 @@ pub(super) fn render_help_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let inner = block.inner(modal_area);
     block.render(modal_area, frame.buffer_mut());
 
-    let groups: Vec<(&str, Vec<(&str, &str)>)> = vec![
-        (
-            "General",
-            vec![
-                ("q", "quit"),
-                ("h  ?", "toggle this help"),
-                ("Esc", "close modal · back from page"),
-            ],
-        ),
-        (
-            "Period",
-            vec![
-                ("1", "today"),
-                ("2", "7 days"),
-                ("3", "30 days"),
-                ("4", "this month"),
-                ("5", "all time"),
-            ],
-        ),
-        (
-            "Filter",
-            vec![
-                ("t", "cycle tool"),
-                ("g", "cycle sort mode"),
-                ("p", "project picker (typeable)"),
-            ],
-        ),
-        (
-            "Tabs",
-            vec![
-                ("Tab  Shift-Tab", "cycle main tabs"),
-                ("o", "Overview"),
-                ("d", "Deep Dive"),
-                ("u", "Usage / rate limits"),
-            ],
-        ),
-        (
-            "Pages",
-            vec![("c", "configuration"), ("s", "session drill-down")],
-        ),
-        (
-            "Actions",
-            vec![
-                ("e", "export current view"),
-                ("f/b in export", "browse export folder"),
-                ("r", "reload (re-run ingest)"),
-            ],
-        ),
-        (
-            "Pickers",
-            vec![
-                ("type", "filter list as you type"),
-                ("Backspace", "delete last char"),
-                ("Ctrl-U", "clear filter"),
-                ("Up/Down  Home/End", "navigate"),
-                ("Enter", "select"),
-            ],
-        ),
-        (
-            "Session page",
-            vec![
-                ("Up/Down  PgUp/PgDn", "select calls"),
-                ("Enter / click", "call details"),
-                ("Home/End", "jump to ends"),
-                ("d  Esc", "back to dashboard"),
-            ],
-        ),
-    ];
-
     let mut lines: Vec<Line> = Vec::new();
-    for (i, (heading, rows)) in groups.iter().enumerate() {
+    for (i, group) in keymap::keymap().help_groups().iter().enumerate() {
         if i > 0 {
             lines.push(Line::from(""));
         }
         lines.push(Line::from(vec![Span::styled(
-            *heading,
+            group.title.clone(),
             theme::base().fg(theme::CYAN).add_modifier(Modifier::BOLD),
         )]));
-        for (key, desc) in rows {
+        for item in &group.items {
             lines.push(Line::from(vec![
                 Span::raw("  "),
-                Span::styled(format!("{key:<22}"), theme::key()),
-                Span::styled((*desc).to_string(), theme::muted()),
+                Span::styled(format!("{:<22}", item.keys), theme::key()),
+                Span::styled(item.label.clone(), theme::muted()),
             ]));
         }
     }
@@ -1306,99 +1237,13 @@ pub(super) fn render_session_modal(frame: &mut Frame<'_>, area: Rect, app: &App)
 }
 
 pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
-    if app.page == Page::Config {
-        let commands = Line::from(vec![
-            Span::styled("q", theme::key()),
-            Span::styled(" quit    ", theme::muted()),
-            Span::styled("Esc", theme::key()),
-            Span::styled(" dashboard    ", theme::muted()),
-            Span::styled("Up/Down", theme::key()),
-            Span::styled(" move    ", theme::muted()),
-            Span::styled("Enter", theme::key()),
-            Span::styled(" select    ", theme::muted()),
-            Span::styled("h", theme::key()),
-            Span::styled(" help", theme::muted()),
-        ]);
-
-        Paragraph::new(commands)
-            .alignment(Alignment::Center)
-            .block(theme::panel_block("", theme::DIM))
-            .style(theme::base())
-            .render(area, frame.buffer_mut());
-        return;
-    }
-
-    if app.page == Page::Session {
-        let commands = Line::from(vec![
-            Span::styled("q", theme::key()),
-            Span::styled(" quit    ", theme::muted()),
-            Span::styled("Esc/d", theme::key()),
-            Span::styled(" dashboard    ", theme::muted()),
-            Span::styled("Up/Down", theme::key()),
-            Span::styled(" move    ", theme::muted()),
-            Span::styled("Enter", theme::key()),
-            Span::styled(" detail    ", theme::muted()),
-            Span::styled("s", theme::key()),
-            Span::styled(" pick    ", theme::muted()),
-            Span::styled("g", theme::key()),
-            Span::styled(" sort    ", theme::muted()),
-            Span::styled("h", theme::key()),
-            Span::styled(" help", theme::muted()),
-        ]);
-
-        Paragraph::new(commands)
-            .alignment(Alignment::Center)
-            .block(theme::panel_block("", theme::DIM))
-            .style(theme::base())
-            .render(area, frame.buffer_mut());
-        return;
-    }
-
-    if app.page == Page::Usage {
-        let commands = Line::from(vec![
-            Span::styled("q", theme::key()),
-            Span::styled(" quit    ", theme::muted()),
-            Span::styled("Tab", theme::key()),
-            Span::styled(" tabs    ", theme::muted()),
-            Span::styled("o/d", theme::key()),
-            Span::styled(" overview/deep    ", theme::muted()),
-            Span::styled("c", theme::key()),
-            Span::styled(" config    ", theme::muted()),
-            Span::styled("g", theme::key()),
-            Span::styled(" sort    ", theme::muted()),
-            Span::styled("h", theme::key()),
-            Span::styled(" help", theme::muted()),
-        ]);
-
-        Paragraph::new(commands)
-            .alignment(Alignment::Center)
-            .block(theme::panel_block("", theme::DIM))
-            .style(theme::base())
-            .render(area, frame.buffer_mut());
-        return;
-    }
-
-    let commands = Line::from(vec![
-        Span::styled("q", theme::key()),
-        Span::styled(" quit    ", theme::muted()),
-        Span::styled("Tab", theme::key()),
-        Span::styled(" tabs    ", theme::muted()),
-        footer_period("1", "today", app.period == Period::Today),
-        Span::raw("    "),
-        footer_period("2", "week", app.period == Period::Week),
-        Span::raw("    "),
-        footer_period("3", "30 days", app.period == Period::ThirtyDays),
-        Span::raw("    "),
-        footer_period("4", "month", app.period == Period::Month),
-        Span::raw("    "),
-        footer_period("5", "all", app.period == Period::AllTime),
-        Span::raw("    "),
-        Span::styled("g", theme::key()),
-        Span::styled(" sort", theme::muted()),
-        Span::raw("    "),
-        Span::styled("h", theme::key()),
-        Span::styled(" help", theme::muted()),
-    ]);
+    let footer = match app.page {
+        Page::Config => "config",
+        Page::Session => "session",
+        Page::Usage => "usage",
+        Page::Overview | Page::DeepDive => "dashboard",
+    };
+    let commands = footer_line(keymap::keymap().footer(footer), app);
 
     Paragraph::new(commands)
         .alignment(Alignment::Center)
@@ -1407,9 +1252,36 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
         .render(area, frame.buffer_mut());
 }
 
-fn footer_period<'a>(key: &'a str, label: &'a str, active: bool) -> Span<'a> {
-    let style = if active { theme::key() } else { theme::muted() };
-    Span::styled(format!("{key} {label}"), style)
+fn footer_line(hints: &[keymap::KeyHint], app: &App) -> Line<'static> {
+    let mut spans = Vec::new();
+    for (idx, hint) in hints.iter().enumerate() {
+        if idx > 0 {
+            spans.push(Span::raw("    "));
+        }
+        if let Some(period) = footer_period_action(&hint.action) {
+            let style = if app.period == period {
+                theme::key()
+            } else {
+                theme::muted()
+            };
+            spans.push(Span::styled(format!("{} {}", hint.keys, hint.label), style));
+        } else {
+            spans.push(Span::styled(hint.keys.clone(), theme::key()));
+            spans.push(Span::styled(format!(" {}", hint.label), theme::muted()));
+        }
+    }
+    Line::from(spans)
+}
+
+fn footer_period_action(action: &str) -> Option<Period> {
+    match action {
+        keymap::ACTION_PERIOD_TODAY => Some(Period::Today),
+        keymap::ACTION_PERIOD_WEEK => Some(Period::Week),
+        keymap::ACTION_PERIOD_THIRTY_DAYS => Some(Period::ThirtyDays),
+        keymap::ACTION_PERIOD_MONTH => Some(Period::Month),
+        keymap::ACTION_PERIOD_ALL_TIME => Some(Period::AllTime),
+        _ => None,
+    }
 }
 
 pub(super) fn render_project_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {

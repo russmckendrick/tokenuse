@@ -21,7 +21,7 @@ The macOS desktop app also ships as a signed and notarized universal DMG. Linux 
 - **Usage**: rolling 24-hour per-tool activity with Codex limit snapshots when available.
 - **Config**: currency selection and confirmed local downloads for currency and pricing snapshots.
 
-The desktop header mirrors the TUI filters: period, tool, sort mode, and project. Sort mode can be changed from the header or with `g`, and cycles between spend, latest date, and token use. The app polls snapshots in the background so completed refreshes appear without blocking the UI.
+The desktop header mirrors the TUI filters: period, tool, sort mode, and project. In-window keyboard shortcuts are resolved through the same embedded keymap as the TUI; sort mode can be changed from the header or with `g`, and cycles between spend, latest date, and token use. The app polls snapshots in the background so completed refreshes appear without blocking the UI.
 
 Dashboard sections render the full sorted row set. Sections with more rows than fit in the current window scroll inside the section so the header, filters, and footer remain visible.
 
