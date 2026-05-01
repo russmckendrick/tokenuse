@@ -32,7 +32,7 @@ The startup loader lives in `src/runtime.rs` so both frontends use the same conf
 
 New sessions written while the dashboard is open are visible after archive sync — press `r` (Dashboard, Usage, or Session pages) to sync on a background thread. The dashboard stays responsive: the status bar shows `reloading…` while it runs, the next tick of the main loop drains completed results via `App::poll_reload`, and the status flips to `reloaded · N calls`. The refresher runs one sync at a time; if several results complete between UI ticks, the latest result wins. Failures or empty sync results keep the prior data unchanged.
 
-Individual adapter discovery or parse errors are skipped so one malformed source does not stop the whole dashboard. If the archive has no calls or limits after sync, the UI shows sample data and a status message.
+Individual adapter discovery or parse errors are skipped so one malformed source does not stop the whole dashboard. If the archive has no calls or limits after sync, the UI shows sample data and a status message. Bundled sample data lives in `src/sample_data.json` and is embedded at build time.
 
 ## Normalized Record
 
@@ -86,7 +86,7 @@ The dashboard panels are built from the filtered call set:
 
 ## Pages And Modals
 
-The TUI is a small state machine over five pages (Overview, Deep Dive, Usage, Config, Session) plus six overlay modals. The first three pages are reachable through the tab strip via `Tab` / `Shift-Tab` or their direct keys; Config and Session are sub-pages opened from any tab. `g` cycles the global sort mode. Shortcut definitions, help groups, and footer hints live in `src/keymap.json`; `src/keymap.rs` validates the embedded JSON and resolves keys to action IDs. `src/app.rs` applies those actions to state, while rendering is dispatched from `src/ui.rs`.
+The TUI is a small state machine over five pages (Overview, Deep Dive, Usage, Config, Session) plus six overlay modals. The first three pages are reachable through the tab strip via `Tab` / `Shift-Tab` or their direct keys; Config and Session are sub-pages opened from any tab. `g` cycles the global sort mode, and `Shift-D` toggles the visible data source between live and sample data when live data is available. Shortcut definitions, help groups, and footer hints live in `src/keymap.json`; `src/keymap.rs` validates the embedded JSON and resolves keys to action IDs. `src/app.rs` applies those actions to state, while rendering is dispatched from `src/ui.rs`.
 
 ```mermaid
 flowchart LR

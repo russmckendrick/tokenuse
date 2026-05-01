@@ -21,13 +21,15 @@ The macOS desktop app also ships as a signed and notarized universal DMG. Linux 
 - **Usage**: rolling 24-hour per-tool activity with Codex limit snapshots when available.
 - **Config**: currency selection and confirmed local downloads for currency and pricing snapshots.
 
-The desktop header mirrors the TUI filters: period, tool, sort mode, and project. In-window keyboard shortcuts are resolved through the same embedded keymap as the TUI; sort mode can be changed from the header or with `g`, and cycles between spend, latest date, and token use. The app polls snapshots in the background so completed refreshes appear without blocking the UI.
+The desktop header mirrors the TUI filters: period, tool, sort mode, and project. In-window keyboard shortcuts are resolved through the same embedded keymap as the TUI; sort mode can be changed from the header or with `g`, and cycles between spend, latest date, and token use. `Shift-D` toggles between live and bundled sample data. The app polls snapshots in the background so completed refreshes appear without blocking the UI.
 
 Dashboard sections render the full sorted row set. Sections with more rows than fit in the current window scroll inside the section so the header, filters, and footer remain visible.
 
 ## Refresh
 
 Use the refresh button or keyboard shortcut `r` to sync the archive. Refreshes use the same background archive refresher as the TUI and keep the previous data visible if a sync fails.
+
+If sample data is selected manually with `Shift-D`, refreshes update the cached live data without switching the visible dashboard back until `Shift-D` is pressed again.
 
 ## Project, Session, Currency, And Export Pickers
 

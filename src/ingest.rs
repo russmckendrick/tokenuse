@@ -14,6 +14,7 @@ use crate::data::{
 };
 use crate::tools::{self, LimitSnapshot, LimitWindow, ParsedCall};
 
+#[derive(Clone)]
 pub struct Ingested {
     pub calls: Vec<ParsedCall>,
     pub limits: Vec<LimitSnapshot>,

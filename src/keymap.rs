@@ -39,6 +39,7 @@ pub const ACTION_PERIOD_MONTH: &str = "period_month";
 pub const ACTION_PERIOD_ALL_TIME: &str = "period_all_time";
 pub const ACTION_CYCLE_TOOL: &str = "cycle_tool";
 pub const ACTION_CYCLE_SORT: &str = "cycle_sort";
+pub const ACTION_TOGGLE_DATA_SOURCE: &str = "toggle_data_source";
 pub const ACTION_OPEN_PROJECT_PICKER: &str = "open_project_picker";
 pub const ACTION_OPEN_SESSION_PICKER: &str = "open_session_picker";
 pub const ACTION_OPEN_EXPORT_PICKER: &str = "open_export_picker";
@@ -76,6 +77,7 @@ const SUPPORTED_ACTIONS: &[&str] = &[
     ACTION_PERIOD_ALL_TIME,
     ACTION_CYCLE_TOOL,
     ACTION_CYCLE_SORT,
+    ACTION_TOGGLE_DATA_SOURCE,
     ACTION_OPEN_PROJECT_PICKER,
     ACTION_OPEN_SESSION_PICKER,
     ACTION_OPEN_EXPORT_PICKER,
@@ -307,8 +309,9 @@ impl NormalizedKey {
             KeyCode::Delete => "delete".into(),
             KeyCode::Esc => "esc".into(),
             KeyCode::Char(c) => {
-                shift = false;
-                c.to_lowercase().collect()
+                let code: String = c.to_lowercase().collect();
+                shift = shifted_printable_supports_shift(&code) && (shift || c.is_uppercase());
+                code
             }
             KeyCode::Null
             | KeyCode::Insert
@@ -336,7 +339,7 @@ impl NormalizedKey {
     fn from_input(input: &KeyInput) -> Option<Self> {
         let mut shift = input.shift;
         let code = canonical_code(&input.key)?;
-        if is_printable_key(&code) {
+        if is_printable_key(&code) && !shifted_printable_supports_shift(&code) {
             shift = false;
         }
         Some(Self {
@@ -415,7 +418,7 @@ fn parse_key(input: &str) -> Result<NormalizedKey, String> {
 
     let code = code.ok_or_else(|| format!("missing key code in {input}"))?;
     let code = canonical_code(&code).ok_or_else(|| format!("unsupported key code {input}"))?;
-    if is_printable_key(&code) {
+    if is_printable_key(&code) && !shifted_printable_supports_shift(&code) {
         shift = false;
     }
 
@@ -453,6 +456,10 @@ fn canonical_code(input: &str) -> Option<String> {
 
 fn is_printable_key(code: &str) -> bool {
     code.chars().count() == 1
+}
+
+fn shifted_printable_supports_shift(code: &str) -> bool {
+    is_printable_key(code) && code.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
 }
 
 #[cfg(test)]
@@ -497,6 +504,35 @@ mod tests {
         );
 
         assert_eq!(action, Some(ACTION_PREV_TAB));
+    }
+
+    #[test]
+    fn resolves_shifted_printable_shortcut_without_stealing_plain_key() {
+        let keymap = keymap();
+
+        let shifted = keymap.resolve_input(
+            CONTEXT_DASHBOARD,
+            &KeyInput {
+                key: "D".into(),
+                ctrl: false,
+                alt: false,
+                shift: true,
+                meta: false,
+            },
+        );
+        let plain = keymap.resolve_input(
+            CONTEXT_DASHBOARD,
+            &KeyInput {
+                key: "d".into(),
+                ctrl: false,
+                alt: false,
+                shift: false,
+                meta: false,
+            },
+        );
+
+        assert_eq!(shifted, Some(ACTION_TOGGLE_DATA_SOURCE));
+        assert_eq!(plain, Some(ACTION_PAGE_DEEP_DIVE));
     }
 
     #[test]

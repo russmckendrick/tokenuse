@@ -1,4 +1,6 @@
-use serde::Serialize;
+use std::sync::OnceLock;
+
+use serde::{Deserialize, Serialize};
 
 use crate::app::{Period, ProjectFilter, SortMode, Tool};
 use crate::currency::CurrencyFormatter;
@@ -176,6 +178,151 @@ pub struct SessionDetailView {
     pub note: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct WireSampleData {
+    periods: WireSamplePeriods,
+    limits: WireLimitsData,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireSamplePeriods {
+    today: WireDashboardData,
+    week: WireDashboardData,
+    thirty_days: WireDashboardData,
+    month: WireDashboardData,
+    all_time: WireDashboardData,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireDashboardData {
+    summary: WireSummary,
+    daily: Vec<WireDailyMetric>,
+    projects: Vec<WireProjectMetric>,
+    project_tools: Vec<WireProjectToolMetric>,
+    sessions: Vec<WireSessionMetric>,
+    models: Vec<WireModelMetric>,
+    tools: Vec<WireCountMetric>,
+    commands: Vec<WireCountMetric>,
+    mcp_servers: Vec<WireCountMetric>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireLimitsData {
+    sections: Vec<WireToolLimitSection>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireToolLimitSection {
+    tool: String,
+    limits: Vec<WireLimitMetric>,
+    usage: WireRecentUsageMetric,
+    models: Vec<WireRecentModelMetric>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireLimitMetric {
+    tool: String,
+    scope: String,
+    window: String,
+    used: u64,
+    left: String,
+    reset: String,
+    plan: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireRecentUsageMetric {
+    buckets: [u64; 24],
+    calls: u64,
+    tokens: String,
+    cost: String,
+    last_seen: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireRecentModelMetric {
+    name: String,
+    calls: u64,
+    tokens: String,
+    cost: String,
+    value: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireSummary {
+    cost: String,
+    calls: String,
+    sessions: String,
+    cache_hit: String,
+    input: String,
+    output: String,
+    cached: String,
+    written: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireDailyMetric {
+    day: String,
+    cost: String,
+    calls: u64,
+    value: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireProjectMetric {
+    name: String,
+    cost: String,
+    avg_per_session: String,
+    sessions: u64,
+    tool_mix: String,
+    value: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireProjectToolMetric {
+    project: String,
+    tool: String,
+    cost: String,
+    calls: u64,
+    sessions: u64,
+    avg_per_session: String,
+    value: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireSessionMetric {
+    date: String,
+    project: String,
+    cost: String,
+    calls: u64,
+    value: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireModelMetric {
+    name: String,
+    cost: String,
+    cache: String,
+    calls: u64,
+    value: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireCountMetric {
+    name: String,
+    calls: u64,
+    value: u64,
+}
+
+struct SampleData {
+    today: DashboardData,
+    week: DashboardData,
+    thirty_days: DashboardData,
+    month: DashboardData,
+    all_time: DashboardData,
+    limits: LimitsData,
+}
+
 impl ProjectOption {
     pub fn all(cost: String, calls: u64) -> Self {
         Self {
@@ -196,61 +343,203 @@ impl ProjectOption {
     }
 }
 
+fn sample_data() -> &'static SampleData {
+    static SAMPLE: OnceLock<SampleData> = OnceLock::new();
+    SAMPLE.get_or_init(|| {
+        let wire: WireSampleData = serde_json::from_str(include_str!("sample_data.json"))
+            .expect("embedded sample data must be valid JSON");
+        SampleData::from(wire)
+    })
+}
+
+impl From<WireSampleData> for SampleData {
+    fn from(wire: WireSampleData) -> Self {
+        Self {
+            today: wire.periods.today.into(),
+            week: wire.periods.week.into(),
+            thirty_days: wire.periods.thirty_days.into(),
+            month: wire.periods.month.into(),
+            all_time: wire.periods.all_time.into(),
+            limits: wire.limits.into(),
+        }
+    }
+}
+
+impl From<WireDashboardData> for DashboardData {
+    fn from(wire: WireDashboardData) -> Self {
+        Self {
+            summary: wire.summary.into(),
+            daily: wire.daily.into_iter().map(Into::into).collect(),
+            projects: wire.projects.into_iter().map(Into::into).collect(),
+            project_tools: wire.project_tools.into_iter().map(Into::into).collect(),
+            sessions: wire.sessions.into_iter().map(Into::into).collect(),
+            models: wire.models.into_iter().map(Into::into).collect(),
+            tools: wire.tools.into_iter().map(Into::into).collect(),
+            commands: wire.commands.into_iter().map(Into::into).collect(),
+            mcp_servers: wire.mcp_servers.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<WireLimitsData> for LimitsData {
+    fn from(wire: WireLimitsData) -> Self {
+        Self {
+            sections: wire.sections.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<WireToolLimitSection> for ToolLimitSection {
+    fn from(wire: WireToolLimitSection) -> Self {
+        Self {
+            tool: leak(wire.tool),
+            limits: wire.limits.into_iter().map(Into::into).collect(),
+            usage: wire.usage.into(),
+            models: wire.models.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<WireLimitMetric> for LimitMetric {
+    fn from(wire: WireLimitMetric) -> Self {
+        Self {
+            tool: leak(wire.tool),
+            scope: leak(wire.scope),
+            window: leak(wire.window),
+            used: wire.used,
+            left: leak(wire.left),
+            reset: leak(wire.reset),
+            plan: leak(wire.plan),
+        }
+    }
+}
+
+impl From<WireRecentUsageMetric> for RecentUsageMetric {
+    fn from(wire: WireRecentUsageMetric) -> Self {
+        Self {
+            buckets: wire.buckets,
+            calls: wire.calls,
+            tokens: leak(wire.tokens),
+            cost: leak(wire.cost),
+            last_seen: leak(wire.last_seen),
+        }
+    }
+}
+
+impl From<WireRecentModelMetric> for RecentModelMetric {
+    fn from(wire: WireRecentModelMetric) -> Self {
+        Self {
+            name: leak(wire.name),
+            calls: wire.calls,
+            tokens: leak(wire.tokens),
+            cost: leak(wire.cost),
+            value: wire.value,
+        }
+    }
+}
+
+impl From<WireSummary> for Summary {
+    fn from(wire: WireSummary) -> Self {
+        Self {
+            cost: leak(wire.cost),
+            calls: leak(wire.calls),
+            sessions: leak(wire.sessions),
+            cache_hit: leak(wire.cache_hit),
+            input: leak(wire.input),
+            output: leak(wire.output),
+            cached: leak(wire.cached),
+            written: leak(wire.written),
+        }
+    }
+}
+
+impl From<WireDailyMetric> for DailyMetric {
+    fn from(wire: WireDailyMetric) -> Self {
+        Self {
+            day: leak(wire.day),
+            cost: leak(wire.cost),
+            calls: wire.calls,
+            value: wire.value,
+        }
+    }
+}
+
+impl From<WireProjectMetric> for ProjectMetric {
+    fn from(wire: WireProjectMetric) -> Self {
+        Self {
+            name: leak(wire.name),
+            cost: leak(wire.cost),
+            avg_per_session: leak(wire.avg_per_session),
+            sessions: wire.sessions,
+            tool_mix: leak(wire.tool_mix),
+            value: wire.value,
+        }
+    }
+}
+
+impl From<WireProjectToolMetric> for ProjectToolMetric {
+    fn from(wire: WireProjectToolMetric) -> Self {
+        Self {
+            project: leak(wire.project),
+            tool: leak(wire.tool),
+            cost: leak(wire.cost),
+            calls: wire.calls,
+            sessions: wire.sessions,
+            avg_per_session: leak(wire.avg_per_session),
+            value: wire.value,
+        }
+    }
+}
+
+impl From<WireSessionMetric> for SessionMetric {
+    fn from(wire: WireSessionMetric) -> Self {
+        Self {
+            date: leak(wire.date),
+            project: leak(wire.project),
+            cost: leak(wire.cost),
+            calls: wire.calls,
+            value: wire.value,
+        }
+    }
+}
+
+impl From<WireModelMetric> for ModelMetric {
+    fn from(wire: WireModelMetric) -> Self {
+        Self {
+            name: leak(wire.name),
+            cost: leak(wire.cost),
+            cache: leak(wire.cache),
+            calls: wire.calls,
+            value: wire.value,
+        }
+    }
+}
+
+impl From<WireCountMetric> for CountMetric {
+    fn from(wire: WireCountMetric) -> Self {
+        Self {
+            name: leak(wire.name),
+            calls: wire.calls,
+            value: wire.value,
+        }
+    }
+}
+
 pub fn dashboard_data(
     period: Period,
-    tool: Tool,
+    _tool: Tool,
     project_filter: &ProjectFilter,
     sort: SortMode,
     currency: &CurrencyFormatter,
 ) -> DashboardData {
+    let samples = sample_data();
     let mut data = match period {
-        Period::Today => today_data(),
-        Period::Week => week_data(),
-        Period::ThirtyDays => thirty_day_data(),
-        Period::Month => month_data(),
-        Period::AllTime => all_time_data(),
+        Period::Today => samples.today.clone(),
+        Period::Week => samples.week.clone(),
+        Period::ThirtyDays => samples.thirty_days.clone(),
+        Period::Month => samples.month.clone(),
+        Period::AllTime => samples.all_time.clone(),
     };
-
-    if tool == Tool::All {
-        data.summary.calls = "1,038";
-        data.summary.sessions = "27";
-        data.summary.cache_hit = "96.0%";
-        data.projects.insert(
-            2,
-            ProjectMetric {
-                name: "openai/sidecar",
-                cost: "$12.48",
-                avg_per_session: "$2.08",
-                sessions: 6,
-                tool_mix: "Copilot $7.1  Codex $5.4",
-                value: 28,
-            },
-        );
-        data.project_tools.insert(
-            3,
-            ProjectToolMetric {
-                project: "openai/sidecar",
-                tool: "Copilot",
-                cost: "$7.10",
-                calls: 64,
-                sessions: 4,
-                avg_per_session: "$1.78",
-                value: 18,
-            },
-        );
-        data.project_tools.insert(
-            4,
-            ProjectToolMetric {
-                project: "openai/sidecar",
-                tool: "Codex",
-                cost: "$5.38",
-                calls: 41,
-                sessions: 2,
-                avg_per_session: "$2.69",
-                value: 14,
-            },
-        );
-    }
 
     apply_project_filter(&mut data, project_filter);
     apply_sample_sort(&mut data, sort);
@@ -339,169 +628,14 @@ pub fn session_detail(
 }
 
 pub fn limits_data(_tool: Tool, sort: SortMode) -> LimitsData {
-    let codex_limits = vec![
-        LimitMetric {
-            tool: "Codex",
-            scope: "Codex",
-            window: "5h",
-            used: 17,
-            left: "83% left",
-            reset: "16:47",
-            plan: "Pro Lite",
-        },
-        LimitMetric {
-            tool: "Codex",
-            scope: "Codex",
-            window: "weekly",
-            used: 6,
-            left: "94% left",
-            reset: "05 May 07:00",
-            plan: "Pro Lite",
-        },
-        LimitMetric {
-            tool: "Codex",
-            scope: "GPT-5.3-Codex-Spark",
-            window: "5h",
-            used: 0,
-            left: "100% left",
-            reset: "19:37",
-            plan: "-",
-        },
-        LimitMetric {
-            tool: "Codex",
-            scope: "GPT-5.3-Codex-Spark",
-            window: "weekly",
-            used: 0,
-            left: "100% left",
-            reset: "06 May 14:37",
-            plan: "-",
-        },
-    ];
+    let mut data = sample_data().limits.clone();
 
-    LimitsData {
-        sections: sample_limit_sections(codex_limits, sort),
-    }
-}
-
-fn sample_limit_sections(codex_limits: Vec<LimitMetric>, sort: SortMode) -> Vec<ToolLimitSection> {
-    let mut sections = vec![
-        ToolLimitSection {
-            tool: "Codex",
-            limits: codex_limits,
-            usage: RecentUsageMetric {
-                buckets: [
-                    0, 0, 12, 24, 8, 0, 18, 30, 42, 17, 5, 0, 0, 0, 18, 48, 66, 21, 9, 0, 36, 75,
-                    44, 11,
-                ],
-                calls: 41,
-                tokens: "1.2M",
-                cost: "$5.38",
-                last_seen: "now",
-            },
-            models: vec![
-                RecentModelMetric {
-                    name: "GPT-5",
-                    calls: 24,
-                    tokens: "820K",
-                    cost: "$3.91",
-                    value: 100,
-                },
-                RecentModelMetric {
-                    name: "GPT-5.3-Codex-Spark",
-                    calls: 17,
-                    tokens: "380K",
-                    cost: "$1.47",
-                    value: 46,
-                },
-            ],
-        },
-        ToolLimitSection {
-            tool: "Claude Code",
-            limits: Vec::new(),
-            usage: RecentUsageMetric {
-                buckets: [
-                    8, 14, 0, 0, 21, 44, 36, 9, 0, 0, 12, 28, 0, 6, 18, 40, 55, 31, 12, 0, 9, 20,
-                    48, 33,
-                ],
-                calls: 73,
-                tokens: "5.8M",
-                cost: "$11.42",
-                last_seen: "18m",
-            },
-            models: vec![
-                RecentModelMetric {
-                    name: "Opus 4.7",
-                    calls: 51,
-                    tokens: "4.9M",
-                    cost: "$10.70",
-                    value: 100,
-                },
-                RecentModelMetric {
-                    name: "Haiku 4.5",
-                    calls: 22,
-                    tokens: "900K",
-                    cost: "$0.72",
-                    value: 18,
-                },
-            ],
-        },
-        ToolLimitSection {
-            tool: "Cursor",
-            limits: Vec::new(),
-            usage: RecentUsageMetric {
-                buckets: [
-                    0, 0, 0, 6, 10, 4, 0, 0, 0, 9, 13, 0, 0, 0, 0, 7, 15, 24, 8, 0, 0, 12, 18, 0,
-                ],
-                calls: 18,
-                tokens: "184K",
-                cost: "$0.92",
-                last_seen: "47m",
-            },
-            models: vec![RecentModelMetric {
-                name: "Sonnet 4.5",
-                calls: 18,
-                tokens: "184K",
-                cost: "$0.92",
-                value: 100,
-            }],
-        },
-        ToolLimitSection {
-            tool: "Copilot",
-            limits: Vec::new(),
-            usage: RecentUsageMetric {
-                buckets: [
-                    4, 7, 0, 0, 0, 16, 22, 5, 0, 8, 0, 0, 0, 0, 0, 10, 29, 20, 5, 0, 0, 7, 0, 0,
-                ],
-                calls: 29,
-                tokens: "96K",
-                cost: "$0.47",
-                last_seen: "2h",
-            },
-            models: vec![
-                RecentModelMetric {
-                    name: "anthropic-auto",
-                    calls: 17,
-                    tokens: "60K",
-                    cost: "$0.31",
-                    value: 100,
-                },
-                RecentModelMetric {
-                    name: "openai-auto",
-                    calls: 12,
-                    tokens: "36K",
-                    cost: "$0.16",
-                    value: 60,
-                },
-            ],
-        },
-    ];
-
-    sections.sort_by(|a, b| {
+    data.sections.sort_by(|a, b| {
         sample_usage_sort_value(&b.usage, sort)
             .cmp(&sample_usage_sort_value(&a.usage, sort))
             .then_with(|| a.tool.cmp(b.tool))
     });
-    sections
+    data
 }
 
 fn apply_sample_sort(data: &mut DashboardData, sort: SortMode) {
@@ -712,792 +846,48 @@ fn leak(s: String) -> &'static str {
     Box::leak(s.into_boxed_str())
 }
 
-fn week_data() -> DashboardData {
-    DashboardData {
-        summary: Summary {
-            cost: "$65.87",
-            calls: "474",
-            sessions: "12",
-            cache_hit: "98.9%",
-            input: "10.3K",
-            output: "324.9K",
-            cached: "105.6M",
-            written: "1.1M",
-        },
-        daily: vec![
-            DailyMetric {
-                day: "04-22",
-                cost: "$1.15",
-                calls: 32,
-                value: 2,
-            },
-            DailyMetric {
-                day: "04-26",
-                cost: "$64.72",
-                calls: 442,
-                value: 100,
-            },
-        ],
-        projects: vec![
-            ProjectMetric {
-                name: "asciinema/to/svg",
-                cost: "$59.03",
-                avg_per_session: "$11.81",
-                sessions: 5,
-                tool_mix: "Claude $59.0",
-                value: 100,
-            },
-            ProjectMetric {
-                name: "mckendrick/Code/skills",
-                cost: "$3.80",
-                avg_per_session: "$1.90",
-                sessions: 2,
-                tool_mix: "Claude $2.6  Codex $1.2",
-                value: 12,
-            },
-            ProjectMetric {
-                name: "mckendrick/Code/blog",
-                cost: "$2.41",
-                avg_per_session: "$0.603",
-                sessions: 4,
-                tool_mix: "Claude $1.8  Copilot $0.61",
-                value: 8,
-            },
-            ProjectMetric {
-                name: "Code/russ/fm",
-                cost: "$0.624",
-                avg_per_session: "$0.624",
-                sessions: 1,
-                tool_mix: "Codex $0.62",
-                value: 3,
-            },
-        ],
-        project_tools: vec![
-            ProjectToolMetric {
-                project: "asciinema/to/svg",
-                tool: "Claude",
-                cost: "$59.03",
-                calls: 442,
-                sessions: 5,
-                avg_per_session: "$11.81",
-                value: 100,
-            },
-            ProjectToolMetric {
-                project: "mckendrick/Code/skills",
-                tool: "Claude",
-                cost: "$2.60",
-                calls: 31,
-                sessions: 1,
-                avg_per_session: "$2.60",
-                value: 4,
-            },
-            ProjectToolMetric {
-                project: "mckendrick/Code/skills",
-                tool: "Codex",
-                cost: "$1.20",
-                calls: 22,
-                sessions: 1,
-                avg_per_session: "$1.20",
-                value: 2,
-            },
-            ProjectToolMetric {
-                project: "mckendrick/Code/blog",
-                tool: "Claude",
-                cost: "$1.80",
-                calls: 30,
-                sessions: 3,
-                avg_per_session: "$0.600",
-                value: 3,
-            },
-            ProjectToolMetric {
-                project: "mckendrick/Code/blog",
-                tool: "Copilot",
-                cost: "$0.610",
-                calls: 10,
-                sessions: 1,
-                avg_per_session: "$0.610",
-                value: 1,
-            },
-            ProjectToolMetric {
-                project: "Code/russ/fm",
-                tool: "Codex",
-                cost: "$0.624",
-                calls: 16,
-                sessions: 1,
-                avg_per_session: "$0.624",
-                value: 1,
-            },
-        ],
-        sessions: vec![
-            SessionMetric {
-                date: "2026-04-26",
-                project: "asciinema/to/svg",
-                cost: "$58.52",
-                calls: 311,
-                value: 100,
-            },
-            SessionMetric {
-                date: "2026-04-26",
-                project: "mckendrick/Code/skills",
-                cost: "$3.33",
-                calls: 53,
-                value: 12,
-            },
-            SessionMetric {
-                date: "2026-04-26",
-                project: "mckendrick/Code/blog",
-                cost: "$1.18",
-                calls: 23,
-                value: 5,
-            },
-            SessionMetric {
-                date: "2026-04-22",
-                project: "mckendrick/Code/blog",
-                cost: "$1.03",
-                calls: 17,
-                value: 4,
-            },
-            SessionMetric {
-                date: "2026-04-26",
-                project: "Code/russ/fm",
-                cost: "$0.624",
-                calls: 16,
-                value: 2,
-            },
-        ],
-        models: vec![
-            ModelMetric {
-                name: "Opus 4.7",
-                cost: "$65.35",
-                cache: "99.2%",
-                calls: 431,
-                value: 100,
-            },
-            ModelMetric {
-                name: "Haiku 4.5",
-                cost: "$0.517",
-                cache: "87.1%",
-                calls: 42,
-                value: 6,
-            },
-            ModelMetric {
-                name: "<synthetic>",
-                cost: "$0.0000",
-                cache: "-",
-                calls: 1,
-                value: 1,
-            },
-        ],
-        tools: vec![
-            CountMetric {
-                name: "Edit",
-                calls: 76,
-                value: 100,
-            },
-            CountMetric {
-                name: "Bash",
-                calls: 61,
-                value: 80,
-            },
-            CountMetric {
-                name: "Read",
-                calls: 27,
-                value: 36,
-            },
-            CountMetric {
-                name: "TodoWrite",
-                calls: 10,
-                value: 13,
-            },
-            CountMetric {
-                name: "Write",
-                calls: 8,
-                value: 11,
-            },
-            CountMetric {
-                name: "ExitPlanMode",
-                calls: 5,
-                value: 7,
-            },
-            CountMetric {
-                name: "ToolSearch",
-                calls: 3,
-                value: 4,
-            },
-            CountMetric {
-                name: "WebFetch",
-                calls: 3,
-                value: 4,
-            },
-            CountMetric {
-                name: "AskUserQuestion",
-                calls: 2,
-                value: 3,
-            },
-            CountMetric {
-                name: "TaskUpdate",
-                calls: 2,
-                value: 3,
-            },
-        ],
-        commands: vec![
-            CountMetric {
-                name: "tail",
-                calls: 54,
-                value: 100,
-            },
-            CountMetric {
-                name: "cargo",
-                calls: 52,
-                value: 96,
-            },
-            CountMetric {
-                name: "echo",
-                calls: 19,
-                value: 35,
-            },
-            CountMetric {
-                name: "head",
-                calls: 16,
-                value: 30,
-            },
-            CountMetric {
-                name: "git",
-                calls: 10,
-                value: 18,
-            },
-            CountMetric {
-                name: "grep",
-                calls: 10,
-                value: 18,
-            },
-            CountMetric {
-                name: "cat",
-                calls: 5,
-                value: 9,
-            },
-            CountMetric {
-                name: "gh",
-                calls: 5,
-                value: 9,
-            },
-            CountMetric {
-                name: "ls",
-                calls: 4,
-                value: 7,
-            },
-            CountMetric {
-                name: "python3",
-                calls: 3,
-                value: 6,
-            },
-        ],
-        mcp_servers: vec![CountMetric {
-            name: "ccd_session",
-            calls: 1,
-            value: 100,
-        }],
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn embedded_sample_data_loads_all_periods() {
+        let currency = CurrencyFormatter::usd();
+
+        for period in Period::ALL {
+            let data = dashboard_data(
+                period,
+                Tool::All,
+                &ProjectFilter::All,
+                SortMode::Spend,
+                &currency,
+            );
+            assert!(!data.projects.is_empty());
+            assert!(!data.project_tools.is_empty());
+            assert!(!data.sessions.is_empty());
+        }
+
+        assert!(!limits_data(Tool::All, SortMode::Spend).sections.is_empty());
     }
-}
 
-fn today_data() -> DashboardData {
-    let mut data = week_data();
-    data.summary.cost = "$9.04";
-    data.summary.calls = "246";
-    data.summary.sessions = "4";
-    data.daily = vec![DailyMetric {
-        day: "04-29",
-        cost: "$9.04",
-        calls: 246,
-        value: 100,
-    }];
-    data.projects.truncate(3);
-    data.project_tools.truncate(4);
-    data.sessions.truncate(3);
-    data
-}
-
-fn thirty_day_data() -> DashboardData {
-    let mut data = all_time_data();
-    data.summary.cost = "$191.48";
-    data.summary.calls = "2,818";
-    data.summary.sessions = "61";
-    data.summary.cache_hit = "97.8%";
-    data.daily.truncate(10);
-    data
-}
-
-fn month_data() -> DashboardData {
-    let mut data = all_time_data();
-    data.summary.cost = "$184.96";
-    data.summary.calls = "2,626";
-    data.summary.sessions = "57";
-    data.summary.cache_hit = "97.6%";
-    data
-}
-
-fn all_time_data() -> DashboardData {
-    let mut data = week_data();
-    data.summary = Summary {
-        cost: "$558.13",
-        calls: "9,522",
-        sessions: "215",
-        cache_hit: "96.0%",
-        input: "30.2M",
-        output: "4.5M",
-        cached: "1054.0M",
-        written: "14.2M",
-    };
-    data.daily = vec![
-        DailyMetric {
-            day: "04-06",
-            cost: "$6.52",
-            calls: 192,
-            value: 4,
-        },
-        DailyMetric {
-            day: "04-07",
-            cost: "$8.31",
-            calls: 384,
-            value: 5,
-        },
-        DailyMetric {
-            day: "04-08",
-            cost: "$15.32",
-            calls: 347,
-            value: 10,
-        },
-        DailyMetric {
-            day: "04-09",
-            cost: "$4.19",
-            calls: 195,
-            value: 3,
-        },
-        DailyMetric {
-            day: "04-11",
-            cost: "$18.97",
-            calls: 601,
-            value: 12,
-        },
-        DailyMetric {
-            day: "04-12",
-            cost: "$38.41",
-            calls: 602,
-            value: 24,
-        },
-        DailyMetric {
-            day: "04-14",
-            cost: "$12.22",
-            calls: 198,
-            value: 8,
-        },
-        DailyMetric {
-            day: "04-16",
-            cost: "$19.89",
-            calls: 202,
-            value: 13,
-        },
-        DailyMetric {
-            day: "04-18",
-            cost: "$161.51",
-            calls: 1408,
-            value: 100,
-        },
-        DailyMetric {
-            day: "04-19",
-            cost: "$75.47",
-            calls: 938,
-            value: 47,
-        },
-        DailyMetric {
-            day: "04-22",
-            cost: "$9.04",
-            calls: 246,
-            value: 6,
-        },
-        DailyMetric {
-            day: "04-25",
-            cost: "$21.31",
-            calls: 593,
-            value: 13,
-        },
-        DailyMetric {
-            day: "04-26",
-            cost: "$75.60",
-            calls: 792,
-            value: 47,
-        },
-        DailyMetric {
-            day: "04-28",
-            cost: "$6.64",
-            calls: 245,
-            value: 4,
-        },
-    ];
-    data.projects = vec![
-        ProjectMetric {
-            name: "ai/commit/dev",
-            cost: "$117.91",
-            avg_per_session: "$6.21",
-            sessions: 19,
-            tool_mix: "Claude $78  Codex $40",
-            value: 100,
-        },
-        ProjectMetric {
-            name: "Code/russ/fm",
-            cost: "$115.49",
-            avg_per_session: "$9.62",
-            sessions: 12,
-            tool_mix: "Claude $82  Cursor $33",
-            value: 98,
-        },
-        ProjectMetric {
-            name: "mckendrick/Code/blog",
-            cost: "$68.17",
-            avg_per_session: "$0.897",
-            sessions: 76,
-            tool_mix: "Claude $39  Copilot $18  Codex $11",
-            value: 58,
-        },
-        ProjectMetric {
-            name: "asciinema/to/svg",
-            cost: "$59.03",
-            avg_per_session: "$11.81",
-            sessions: 5,
-            tool_mix: "Claude $59",
-            value: 50,
-        },
-        ProjectMetric {
-            name: "Code/dvr",
-            cost: "$42.24",
-            avg_per_session: "$2.01",
-            sessions: 21,
-            tool_mix: "Cursor $28  Copilot $14",
-            value: 36,
-        },
-        ProjectMetric {
-            name: "mckendrick/Code/aicommit",
-            cost: "$41.52",
-            avg_per_session: "$1.54",
-            sessions: 27,
-            tool_mix: "Claude $42",
-            value: 35,
-        },
-        ProjectMetric {
-            name: "Code/aicommit",
-            cost: "$37.59",
-            avg_per_session: "$1.45",
-            sessions: 26,
-            tool_mix: "Codex $25  Copilot $13",
-            value: 32,
-        },
-        ProjectMetric {
-            name: "Code/russ/fm",
-            cost: "$30.63",
-            avg_per_session: "$3.40",
-            sessions: 9,
-            tool_mix: "Codex $31",
-            value: 26,
-        },
-    ];
-    data.project_tools = vec![
-        ProjectToolMetric {
-            project: "ai/commit/dev",
-            tool: "Claude",
-            cost: "$78.20",
-            calls: 961,
-            sessions: 12,
-            avg_per_session: "$6.52",
-            value: 95,
-        },
-        ProjectToolMetric {
-            project: "ai/commit/dev",
-            tool: "Codex",
-            cost: "$39.71",
-            calls: 623,
-            sessions: 7,
-            avg_per_session: "$5.67",
-            value: 48,
-        },
-        ProjectToolMetric {
-            project: "Code/russ/fm",
-            tool: "Claude",
-            cost: "$82.61",
-            calls: 545,
-            sessions: 4,
-            avg_per_session: "$20.65",
-            value: 100,
-        },
-        ProjectToolMetric {
-            project: "Code/russ/fm",
-            tool: "Cursor",
-            cost: "$32.88",
-            calls: 514,
-            sessions: 8,
-            avg_per_session: "$4.11",
-            value: 40,
-        },
-        ProjectToolMetric {
-            project: "mckendrick/Code/blog",
-            tool: "Claude",
-            cost: "$39.04",
-            calls: 991,
-            sessions: 41,
-            avg_per_session: "$0.952",
-            value: 47,
-        },
-        ProjectToolMetric {
-            project: "mckendrick/Code/blog",
-            tool: "Copilot",
-            cost: "$18.40",
-            calls: 682,
-            sessions: 23,
-            avg_per_session: "$0.800",
-            value: 22,
-        },
-        ProjectToolMetric {
-            project: "mckendrick/Code/blog",
-            tool: "Codex",
-            cost: "$10.73",
-            calls: 341,
-            sessions: 12,
-            avg_per_session: "$0.894",
-            value: 13,
-        },
-        ProjectToolMetric {
-            project: "asciinema/to/svg",
-            tool: "Claude",
-            cost: "$59.03",
-            calls: 442,
-            sessions: 5,
-            avg_per_session: "$11.81",
-            value: 71,
-        },
-        ProjectToolMetric {
-            project: "Code/dvr",
-            tool: "Cursor",
-            cost: "$28.15",
-            calls: 455,
-            sessions: 14,
-            avg_per_session: "$2.01",
-            value: 34,
-        },
-        ProjectToolMetric {
-            project: "Code/dvr",
-            tool: "Copilot",
-            cost: "$14.09",
-            calls: 188,
-            sessions: 7,
-            avg_per_session: "$2.01",
-            value: 17,
-        },
-    ];
-    data.sessions = vec![
-        SessionMetric {
-            date: "2026-04-18",
-            project: "Code/russ/fm",
-            cost: "$82.61",
-            calls: 545,
-            value: 100,
-        },
-        SessionMetric {
-            date: "2026-04-26",
-            project: "asciinema/to/svg",
-            cost: "$58.52",
-            calls: 311,
-            value: 71,
-        },
-        SessionMetric {
-            date: "2026-04-18",
-            project: "ai/commit/dev",
-            cost: "$31.28",
-            calls: 175,
-            value: 38,
-        },
-        SessionMetric {
-            date: "2026-04-18",
-            project: "Code/russ/fm",
-            cost: "$31.20",
-            calls: 234,
-            value: 38,
-        },
-        SessionMetric {
-            date: "2026-04-19",
-            project: "ai/commit/dev",
-            cost: "$27.94",
-            calls: 230,
-            value: 34,
-        },
-    ];
-    data.models = vec![
-        ModelMetric {
-            name: "Opus 4.7",
-            cost: "$304.74",
-            cache: "98.5%",
-            calls: 2345,
-            value: 100,
-        },
-        ModelMetric {
-            name: "Opus 4.6",
-            cost: "$124.43",
-            cache: "97.7%",
-            calls: 2299,
-            value: 41,
-        },
-        ModelMetric {
-            name: "GPT-5",
-            cost: "$121.95",
-            cache: "93.1%",
-            calls: 4159,
-            value: 40,
-        },
-        ModelMetric {
-            name: "Haiku 4.5",
-            cost: "$7.00",
-            cache: "87.6%",
-            calls: 704,
-            value: 2,
-        },
-        ModelMetric {
-            name: "GPT-5.4",
-            cost: "$0.0059",
-            cache: "-",
-            calls: 1,
-            value: 1,
-        },
-        ModelMetric {
-            name: "<synthetic>",
-            cost: "$0.0000",
-            cache: "-",
-            calls: 14,
-            value: 1,
-        },
-    ];
-    data.tools = vec![
-        CountMetric {
-            name: "Bash",
-            calls: 5119,
-            value: 100,
-        },
-        CountMetric {
-            name: "write_stdin",
-            calls: 486,
-            value: 9,
-        },
-        CountMetric {
-            name: "Edit",
-            calls: 463,
-            value: 9,
-        },
-        CountMetric {
-            name: "Read",
-            calls: 410,
-            value: 8,
-        },
-        CountMetric {
-            name: "js",
-            calls: 176,
-            value: 3,
-        },
-        CountMetric {
-            name: "Write",
-            calls: 118,
-            value: 2,
-        },
-        CountMetric {
-            name: "Grep",
-            calls: 86,
-            value: 2,
-        },
-        CountMetric {
-            name: "TaskUpdate",
-            calls: 77,
-            value: 2,
-        },
-        CountMetric {
-            name: "update_plan",
-            calls: 62,
-            value: 1,
-        },
-        CountMetric {
-            name: "TodoWrite",
-            calls: 53,
-            value: 1,
-        },
-    ];
-    data.commands = vec![
-        CountMetric {
-            name: "tail",
-            calls: 131,
-            value: 100,
-        },
-        CountMetric {
-            name: "cargo",
-            calls: 129,
-            value: 98,
-        },
-        CountMetric {
-            name: "head",
-            calls: 112,
-            value: 85,
-        },
-        CountMetric {
-            name: "grep",
-            calls: 89,
-            value: 68,
-        },
-        CountMetric {
-            name: "echo",
-            calls: 84,
-            value: 64,
-        },
-        CountMetric {
-            name: "ls",
-            calls: 76,
-            value: 58,
-        },
-        CountMetric {
-            name: "pnpm",
-            calls: 62,
-            value: 47,
-        },
-        CountMetric {
-            name: "curl",
-            calls: 35,
-            value: 27,
-        },
-        CountMetric {
-            name: "git",
-            calls: 33,
-            value: 25,
-        },
-        CountMetric {
-            name: "python3",
-            calls: 25,
-            value: 19,
-        },
-    ];
-    data.mcp_servers = vec![
-        CountMetric {
-            name: "claude-in-chrome",
-            calls: 215,
-            value: 100,
-        },
-        CountMetric {
-            name: "Claude_Preview",
-            calls: 149,
-            value: 69,
-        },
-        CountMetric {
-            name: "ccd_session",
-            calls: 1,
-            value: 1,
-        },
-        CountMetric {
-            name: "cowork",
-            calls: 1,
-            value: 1,
-        },
-    ];
-    data
+    #[test]
+    fn embedded_sample_data_has_no_personal_project_names() {
+        let raw = include_str!("sample_data.json").to_lowercase();
+        let banned = [
+            ["ru", "ss"].concat(),
+            ["mcken", "drick"].concat(),
+            ["openai", "/sidecar"].concat(),
+            ["ascii", "nema"].concat(),
+            ["code/", "ru", "ss"].concat(),
+            ["ai/", "commit"].concat(),
+            ["ai", "commit"].concat(),
+            ["code/", "dvr"].concat(),
+        ];
+        for banned in banned {
+            assert!(
+                !raw.contains(&banned),
+                "sample data should not contain {banned}"
+            );
+        }
+    }
 }

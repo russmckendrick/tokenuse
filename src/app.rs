@@ -530,6 +530,13 @@ pub enum DataSource {
     Sample,
 }
 
+fn cached_live_source(source: &DataSource) -> Option<Ingested> {
+    match source {
+        DataSource::Live(ingested) => Some(ingested.clone()),
+        DataSource::Sample => None,
+    }
+}
+
 /// Channel pair used to talk to the long-lived refresher thread. The thread
 /// sleeps for `archive::SYNC_INTERVAL`, then syncs the local archive and sends
 /// the resulting in-memory view. `signal_tx` lets the UI request an out-of-cycle
@@ -616,6 +623,8 @@ pub struct App {
     pub paths: ConfigPaths,
     pub currency_table: CurrencyTable,
     pub source: DataSource,
+    live_source: Option<Ingested>,
+    sample_forced: bool,
     pub status: Option<String>,
     should_quit: bool,
 }
@@ -649,6 +658,8 @@ impl Default for App {
             currency_table: CurrencyTable::embedded()
                 .expect("embedded currency rates must be valid JSON"),
             source: DataSource::Sample,
+            live_source: None,
+            sample_forced: false,
             status: None,
             should_quit: false,
         }
@@ -657,8 +668,10 @@ impl Default for App {
 
 impl App {
     pub fn with_source(source: DataSource, status: Option<String>) -> Self {
+        let live_source = cached_live_source(&source);
         Self {
             source,
+            live_source,
             status,
             ..Self::default()
         }
@@ -675,8 +688,10 @@ impl App {
     ) -> Self {
         let refresher = Some(Refresher::spawn(initial_refresh_delay, refresh_source));
         let export_dir = crate::export::default_export_dir(&paths);
+        let live_source = cached_live_source(&source);
         Self {
             source,
+            live_source,
             status,
             settings,
             export_dir,
@@ -735,6 +750,27 @@ impl App {
         }
     }
 
+    pub fn toggle_data_source(&mut self) {
+        match std::mem::replace(&mut self.source, DataSource::Sample) {
+            DataSource::Live(ingested) => {
+                self.live_source = Some(ingested);
+                self.sample_forced = true;
+                self.status = Some("sample data".into());
+            }
+            DataSource::Sample => {
+                self.sample_forced = false;
+                if let Some(ingested) = self.live_source.take() {
+                    self.source = DataSource::Live(ingested);
+                    self.status = Some("live data".into());
+                } else {
+                    self.source = DataSource::Sample;
+                    self.status = Some("no local sessions found · sample data".into());
+                }
+            }
+        }
+        self.refresh_session_view();
+    }
+
     /// Drain any results the refresher has produced and apply the most recent
     /// successful one. Called every tick from the main loop.
     pub fn poll_reload(&mut self) {
@@ -761,7 +797,12 @@ impl App {
         match outcome.result {
             Ok(ingested) if !ingested.is_empty() => {
                 let n = ingested.calls.len();
-                self.source = DataSource::Live(ingested);
+                if self.sample_forced {
+                    self.live_source = Some(ingested);
+                } else {
+                    self.source = DataSource::Live(ingested);
+                    self.live_source = None;
+                }
                 self.status = Some(if manual {
                     format!("reloaded · {n} calls")
                 } else {
@@ -784,6 +825,10 @@ impl App {
             }
         }
 
+        self.refresh_session_view();
+    }
+
+    fn refresh_session_view(&mut self) {
         if let Some(view) = self.session_view.as_ref() {
             let key = view.key.clone();
             self.session_view = self.lookup_session_view(&key);
@@ -1065,6 +1110,7 @@ impl App {
             keymap::ACTION_PERIOD_ALL_TIME => self.period = Period::AllTime,
             keymap::ACTION_CYCLE_TOOL => self.tool = self.tool.next(),
             keymap::ACTION_CYCLE_SORT => self.cycle_sort(),
+            keymap::ACTION_TOGGLE_DATA_SOURCE => self.toggle_data_source(),
             keymap::ACTION_OPEN_PROJECT_PICKER => self.open_project_modal(),
             keymap::ACTION_OPEN_SESSION_PICKER => self.open_session_modal(),
             keymap::ACTION_OPEN_EXPORT_PICKER => self.open_export_modal(),
@@ -1558,6 +1604,10 @@ mod tests {
         KeyEvent::new(code, KeyModifiers::NONE)
     }
 
+    fn shift_key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::SHIFT)
+    }
+
     fn tempdir(name: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!(
             "tokenuse-app-{}-{}-{}",
@@ -1608,6 +1658,23 @@ mod tests {
                 note: None,
             }),
             ..App::default()
+        }
+    }
+
+    fn ingested_with_calls(count: usize) -> Ingested {
+        Ingested {
+            calls: (0..count)
+                .map(|idx| crate::tools::ParsedCall {
+                    tool: "codex",
+                    model: "gpt-5".into(),
+                    cost_usd: 0.12,
+                    dedup_key: format!("call-{idx}"),
+                    session_id: format!("session-{idx}"),
+                    project: "fixture/project".into(),
+                    ..Default::default()
+                })
+                .collect(),
+            limits: Vec::new(),
         }
     }
 
@@ -1682,6 +1749,79 @@ mod tests {
 
         app.handle_key(key(KeyCode::Char('o')));
         assert_eq!(app.page, Page::Overview);
+    }
+
+    #[test]
+    fn shift_d_toggles_live_and_sample_data() {
+        let mut app = App::with_source(DataSource::Live(ingested_with_calls(1)), None);
+
+        app.handle_key(shift_key(KeyCode::Char('D')));
+        assert!(matches!(app.source, DataSource::Sample));
+        assert!(app.sample_forced);
+        assert_eq!(app.status.as_deref(), Some("sample data"));
+
+        app.handle_key(shift_key(KeyCode::Char('D')));
+        assert!(matches!(app.source, DataSource::Live(_)));
+        assert!(!app.sample_forced);
+        assert_eq!(app.status.as_deref(), Some("live data"));
+    }
+
+    #[test]
+    fn shift_d_without_live_data_keeps_sample_fallback() {
+        let mut app = App::default();
+
+        app.handle_key(shift_key(KeyCode::Char('D')));
+
+        assert!(matches!(app.source, DataSource::Sample));
+        assert!(!app.sample_forced);
+        assert_eq!(
+            app.status.as_deref(),
+            Some("no local sessions found · sample data")
+        );
+    }
+
+    #[test]
+    fn plain_d_keeps_navigation_instead_of_toggling_data() {
+        let mut app = App::with_source(DataSource::Live(ingested_with_calls(1)), None);
+
+        app.handle_key(key(KeyCode::Char('d')));
+
+        assert_eq!(app.page, Page::DeepDive);
+        assert!(matches!(app.source, DataSource::Live(_)));
+        assert!(!app.sample_forced);
+    }
+
+    #[test]
+    fn refresh_updates_cached_live_data_while_sample_is_forced() {
+        let mut app = App::with_source(DataSource::Live(ingested_with_calls(1)), None);
+        app.handle_key(shift_key(KeyCode::Char('D')));
+        let (signal_tx, _signal_rx) = mpsc::channel::<()>();
+        let (result_tx, result_rx) = mpsc::channel::<RefreshOutcome>();
+        result_tx
+            .send(RefreshOutcome {
+                kind: RefreshKind::Manual,
+                result: Ok(ingested_with_calls(2)),
+            })
+            .unwrap();
+        app.refresher = Some(Refresher {
+            signal_tx,
+            result_rx,
+        });
+
+        app.poll_reload();
+
+        assert!(matches!(app.source, DataSource::Sample));
+        assert!(app.sample_forced);
+        assert_eq!(
+            app.live_source.as_ref().map(|live| live.calls.len()),
+            Some(2)
+        );
+
+        app.handle_key(shift_key(KeyCode::Char('D')));
+        match &app.source {
+            DataSource::Live(ingested) => assert_eq!(ingested.calls.len(), 2),
+            DataSource::Sample => panic!("expected cached live data"),
+        }
     }
 
     #[test]

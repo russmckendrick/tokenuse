@@ -6,7 +6,7 @@ The terminal UI is the default `tokenuse` experience. It scans local session fil
 tokenuse
 ```
 
-If no local sessions are found, or archive sync fails before any calls are loaded, the app falls back to bundled sample data and shows that status in the title bar.
+If no local sessions are found, or archive sync fails before any calls are loaded, the app falls back to bundled JSON sample data and shows that status in the title bar.
 
 ## Dashboard
 
@@ -41,6 +41,7 @@ The keyboard reference, footer hints, and shortcut behavior come from the shared
 | `1`-`5` | Period: today, 7 days, 30 days, this month, all time |
 | `t` | Cycle tool filter |
 | `g` | Cycle sort mode: spend, latest date, token use |
+| `Shift-D` | Toggle between live and sample data |
 | `p` | Open project picker |
 | `Tab` / `Shift-Tab` | Cycle Overview, Deep Dive, and Usage |
 | `o` | Open Overview |

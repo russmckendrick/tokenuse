@@ -16,6 +16,7 @@
     { "id": "period_all_time", "label": "all time" },
     { "id": "cycle_tool", "label": "cycle tool" },
     { "id": "cycle_sort", "label": "cycle sort mode" },
+    { "id": "toggle_data_source", "label": "toggle live/sample data" },
     { "id": "open_project_picker", "label": "project picker" },
     { "id": "open_session_picker", "label": "session picker" },
     { "id": "open_export_picker", "label": "export current view" },
@@ -40,6 +41,7 @@
     { "context": "dashboard", "keys": ["q", "Esc"], "action": "quit" },
     { "context": "dashboard", "keys": ["h", "?"], "action": "open_help" },
     { "context": "dashboard", "keys": ["g"], "action": "cycle_sort" },
+    { "context": "dashboard", "keys": ["Shift+D"], "action": "toggle_data_source" },
     { "context": "dashboard", "keys": ["Tab"], "action": "next_tab" },
     { "context": "dashboard", "keys": ["Shift+Tab"], "action": "prev_tab" },
     { "context": "dashboard", "keys": ["1"], "action": "period_today" },
@@ -60,6 +62,7 @@
     { "context": "usage_page", "keys": ["q"], "action": "quit" },
     { "context": "usage_page", "keys": ["h", "?"], "action": "open_help" },
     { "context": "usage_page", "keys": ["g"], "action": "cycle_sort" },
+    { "context": "usage_page", "keys": ["Shift+D"], "action": "toggle_data_source" },
     { "context": "usage_page", "keys": ["Esc", "d"], "action": "page_deep_dive" },
     { "context": "usage_page", "keys": ["o", "u"], "action": "page_overview" },
     { "context": "usage_page", "keys": ["Tab"], "action": "next_tab" },
@@ -76,6 +79,7 @@
     { "context": "config_page", "keys": ["q"], "action": "quit" },
     { "context": "config_page", "keys": ["h", "?"], "action": "open_help" },
     { "context": "config_page", "keys": ["g"], "action": "cycle_sort" },
+    { "context": "config_page", "keys": ["Shift+D"], "action": "toggle_data_source" },
     { "context": "config_page", "keys": ["Esc", "d", "c"], "action": "page_deep_dive" },
     { "context": "config_page", "keys": ["Up"], "action": "move_up" },
     { "context": "config_page", "keys": ["Down"], "action": "move_down" },
@@ -86,6 +90,7 @@
     { "context": "session_page", "keys": ["q"], "action": "quit" },
     { "context": "session_page", "keys": ["h", "?"], "action": "open_help" },
     { "context": "session_page", "keys": ["g"], "action": "cycle_sort" },
+    { "context": "session_page", "keys": ["Shift+D"], "action": "toggle_data_source" },
     { "context": "session_page", "keys": ["Esc", "d"], "action": "close_session" },
     { "context": "session_page", "keys": ["Up"], "action": "move_up" },
     { "context": "session_page", "keys": ["Down"], "action": "move_down" },
@@ -152,6 +157,7 @@
     { "context": "export_folder_picker", "keys": ["Enter"], "action": "confirm" },
 
     { "context": "desktop", "keys": ["g"], "action": "cycle_sort" },
+    { "context": "desktop", "keys": ["Shift+D"], "action": "toggle_data_source" },
     { "context": "desktop", "keys": ["1"], "action": "period_today" },
     { "context": "desktop", "keys": ["2"], "action": "period_week" },
     { "context": "desktop", "keys": ["3"], "action": "period_thirty_days" },
@@ -218,6 +224,7 @@
       "items": [
         { "keys": "e", "label": "export current view", "action": "open_export_picker" },
         { "keys": "f/b in export", "label": "browse export folder", "action": "open_export_folder_picker" },
+        { "keys": "Shift-D", "label": "toggle live/sample data", "action": "toggle_data_source" },
         { "keys": "r", "label": "reload (re-run ingest)", "action": "reload" }
       ]
     },
@@ -251,6 +258,7 @@
       { "keys": "4", "label": "month", "action": "period_month" },
       { "keys": "5", "label": "all", "action": "period_all_time" },
       { "keys": "g", "label": "sort", "action": "cycle_sort" },
+      { "keys": "Shift-D", "label": "data", "action": "toggle_data_source" },
       { "keys": "h", "label": "help", "action": "open_help" }
     ],
     "config": [
@@ -258,6 +266,7 @@
       { "keys": "Esc", "label": "dashboard", "action": "page_deep_dive" },
       { "keys": "Up/Down", "label": "move", "action": "move_up" },
       { "keys": "Enter", "label": "select", "action": "confirm" },
+      { "keys": "Shift-D", "label": "data", "action": "toggle_data_source" },
       { "keys": "h", "label": "help", "action": "open_help" }
     ],
     "session": [
@@ -267,6 +276,7 @@
       { "keys": "Enter", "label": "detail", "action": "confirm" },
       { "keys": "s", "label": "pick", "action": "open_session_picker" },
       { "keys": "g", "label": "sort", "action": "cycle_sort" },
+      { "keys": "Shift-D", "label": "data", "action": "toggle_data_source" },
       { "keys": "h", "label": "help", "action": "open_help" }
     ],
     "usage": [
@@ -275,6 +285,7 @@
       { "keys": "o/d", "label": "overview/deep", "action": "page_overview" },
       { "keys": "c", "label": "config", "action": "page_config" },
       { "keys": "g", "label": "sort", "action": "cycle_sort" },
+      { "keys": "Shift-D", "label": "data", "action": "toggle_data_source" },
       { "keys": "h", "label": "help", "action": "open_help" }
     ],
     "desktop": [
@@ -284,7 +295,8 @@
       { "keys": "p", "label": "project", "action": "open_project_picker" },
       { "keys": "s", "label": "session", "action": "open_session_picker" },
       { "keys": "e", "label": "export", "action": "open_export_picker" },
-      { "keys": "r", "label": "refresh", "action": "reload" }
+      { "keys": "r", "label": "refresh", "action": "reload" },
+      { "keys": "Shift-D", "label": "data", "action": "toggle_data_source" }
     ]
   }
 }
