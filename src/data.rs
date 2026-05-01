@@ -1,5 +1,6 @@
 use std::sync::OnceLock;
 
+use chrono::{Datelike, Duration, Local, NaiveDate};
 use serde::{Deserialize, Serialize};
 
 use crate::app::{Period, ProjectFilter, SortMode, Tool};
@@ -525,6 +526,107 @@ impl From<WireCountMetric> for CountMetric {
     }
 }
 
+fn sample_base_date() -> NaiveDate {
+    NaiveDate::from_ymd_opt(2026, 4, 29).expect("sample base date is valid")
+}
+
+fn sample_date_delta() -> Duration {
+    Local::now()
+        .date_naive()
+        .signed_duration_since(sample_base_date())
+}
+
+fn rebase_dashboard_dates(data: &mut DashboardData, base: NaiveDate, delta: Duration) {
+    for row in &mut data.daily {
+        if let Some(date) = parse_sample_day(row.day, base) {
+            row.day = leak(format_sample_day(date + delta));
+        }
+    }
+    for row in &mut data.sessions {
+        if let Ok(date) = NaiveDate::parse_from_str(row.date, "%Y-%m-%d") {
+            row.date = leak((date + delta).format("%Y-%m-%d").to_string());
+        }
+    }
+}
+
+fn rebase_limit_dates(data: &mut LimitsData, base: NaiveDate, delta: Duration) {
+    for section in &mut data.sections {
+        for limit in &mut section.limits {
+            if let Some(reset) = rebase_reset_text(limit.reset, base, delta) {
+                limit.reset = leak(reset);
+            }
+        }
+    }
+}
+
+fn parse_sample_day(value: &str, base: NaiveDate) -> Option<NaiveDate> {
+    let (month, day) = value.split_once('-')?;
+    let month = month.parse::<u32>().ok()?;
+    let day = day.parse::<u32>().ok()?;
+    let mut date = NaiveDate::from_ymd_opt(base.year(), month, day)?;
+    if date > base {
+        date = NaiveDate::from_ymd_opt(base.year() - 1, month, day)?;
+    }
+    Some(date)
+}
+
+fn format_sample_day(date: NaiveDate) -> String {
+    date.format("%m-%d").to_string()
+}
+
+fn rebase_reset_text(value: &str, base: NaiveDate, delta: Duration) -> Option<String> {
+    let mut parts = value.split_whitespace();
+    let day = parts.next()?.parse::<u32>().ok()?;
+    let month = month_number(parts.next()?)?;
+    let time = parts.next()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    let date = NaiveDate::from_ymd_opt(base.year(), month, day)?;
+    Some(format!(
+        "{} {} {}",
+        (date + delta).format("%d"),
+        month_name(date + delta),
+        time
+    ))
+}
+
+fn month_number(name: &str) -> Option<u32> {
+    match name {
+        "Jan" => Some(1),
+        "Feb" => Some(2),
+        "Mar" => Some(3),
+        "Apr" => Some(4),
+        "May" => Some(5),
+        "Jun" => Some(6),
+        "Jul" => Some(7),
+        "Aug" => Some(8),
+        "Sep" => Some(9),
+        "Oct" => Some(10),
+        "Nov" => Some(11),
+        "Dec" => Some(12),
+        _ => None,
+    }
+}
+
+fn month_name(date: NaiveDate) -> &'static str {
+    match date.month() {
+        1 => "Jan",
+        2 => "Feb",
+        3 => "Mar",
+        4 => "Apr",
+        5 => "May",
+        6 => "Jun",
+        7 => "Jul",
+        8 => "Aug",
+        9 => "Sep",
+        10 => "Oct",
+        11 => "Nov",
+        12 => "Dec",
+        _ => unreachable!("chrono months are always 1-12"),
+    }
+}
+
 pub fn dashboard_data(
     period: Period,
     _tool: Tool,
@@ -540,6 +642,7 @@ pub fn dashboard_data(
         Period::Month => samples.month.clone(),
         Period::AllTime => samples.all_time.clone(),
     };
+    rebase_dashboard_dates(&mut data, sample_base_date(), sample_date_delta());
 
     apply_project_filter(&mut data, project_filter);
     apply_sample_sort(&mut data, sort);
@@ -627,14 +730,16 @@ pub fn session_detail(
     })
 }
 
-pub fn limits_data(_tool: Tool, sort: SortMode) -> LimitsData {
+pub fn limits_data(_tool: Tool, sort: SortMode, currency: &CurrencyFormatter) -> LimitsData {
     let mut data = sample_data().limits.clone();
+    rebase_limit_dates(&mut data, sample_base_date(), sample_date_delta());
 
     data.sections.sort_by(|a, b| {
         sample_usage_sort_value(&b.usage, sort)
             .cmp(&sample_usage_sort_value(&a.usage, sort))
             .then_with(|| a.tool.cmp(b.tool))
     });
+    apply_limits_currency(&mut data, currency);
     data
 }
 
@@ -772,6 +877,19 @@ fn apply_currency(data: &mut DashboardData, currency: &CurrencyFormatter) {
     }
 }
 
+fn apply_limits_currency(data: &mut LimitsData, currency: &CurrencyFormatter) {
+    if currency.is_usd() {
+        return;
+    }
+
+    for section in &mut data.sections {
+        section.usage.cost = convert_money_text(section.usage.cost, currency, false);
+        for model in &mut section.models {
+            model.cost = convert_money_text(model.cost, currency, false);
+        }
+    }
+}
+
 fn convert_money_text(
     value: &'static str,
     currency: &CurrencyFormatter,
@@ -867,7 +985,44 @@ mod tests {
             assert!(!data.sessions.is_empty());
         }
 
-        assert!(!limits_data(Tool::All, SortMode::Spend).sections.is_empty());
+        assert!(!limits_data(Tool::All, SortMode::Spend, &currency)
+            .sections
+            .is_empty());
+    }
+
+    #[test]
+    fn sample_today_dates_are_relative_to_current_day() {
+        let currency = CurrencyFormatter::usd();
+        let data = dashboard_data(
+            Period::Today,
+            Tool::All,
+            &ProjectFilter::All,
+            SortMode::Spend,
+            &currency,
+        );
+        let today = Local::now().date_naive();
+
+        assert_eq!(data.daily[0].day, today.format("%m-%d").to_string());
+        assert!(data
+            .sessions
+            .iter()
+            .all(|session| session.date == today.format("%Y-%m-%d").to_string()));
+    }
+
+    #[test]
+    fn sample_usage_costs_honor_currency() {
+        let table = crate::currency::CurrencyTable::embedded().unwrap();
+        let currency = table.formatter("GBP");
+        let data = limits_data(Tool::All, SortMode::Spend, &currency);
+
+        assert!(data.sections.iter().any(|section| {
+            section.usage.cost.contains('£')
+                || section.models.iter().any(|model| model.cost.contains('£'))
+        }));
+        assert!(data.sections.iter().all(|section| {
+            !section.usage.cost.contains('$')
+                && section.models.iter().all(|model| !model.cost.contains('$'))
+        }));
     }
 
     #[test]

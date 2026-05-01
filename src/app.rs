@@ -730,7 +730,7 @@ impl App {
         let currency = self.currency();
         match &self.source {
             DataSource::Live(ingested) => ingested.limits(self.tool, self.sort, &currency),
-            DataSource::Sample => crate::data::limits_data(self.tool, self.sort),
+            DataSource::Sample => crate::data::limits_data(self.tool, self.sort, &currency),
         }
     }
 

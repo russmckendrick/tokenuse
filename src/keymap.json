@@ -258,7 +258,6 @@
       { "keys": "4", "label": "month", "action": "period_month" },
       { "keys": "5", "label": "all", "action": "period_all_time" },
       { "keys": "g", "label": "sort", "action": "cycle_sort" },
-      { "keys": "Shift-D", "label": "data", "action": "toggle_data_source" },
       { "keys": "h", "label": "help", "action": "open_help" }
     ],
     "config": [
@@ -266,7 +265,6 @@
       { "keys": "Esc", "label": "dashboard", "action": "page_deep_dive" },
       { "keys": "Up/Down", "label": "move", "action": "move_up" },
       { "keys": "Enter", "label": "select", "action": "confirm" },
-      { "keys": "Shift-D", "label": "data", "action": "toggle_data_source" },
       { "keys": "h", "label": "help", "action": "open_help" }
     ],
     "session": [
@@ -276,7 +274,6 @@
       { "keys": "Enter", "label": "detail", "action": "confirm" },
       { "keys": "s", "label": "pick", "action": "open_session_picker" },
       { "keys": "g", "label": "sort", "action": "cycle_sort" },
-      { "keys": "Shift-D", "label": "data", "action": "toggle_data_source" },
       { "keys": "h", "label": "help", "action": "open_help" }
     ],
     "usage": [
@@ -285,7 +282,6 @@
       { "keys": "o/d", "label": "overview/deep", "action": "page_overview" },
       { "keys": "c", "label": "config", "action": "page_config" },
       { "keys": "g", "label": "sort", "action": "cycle_sort" },
-      { "keys": "Shift-D", "label": "data", "action": "toggle_data_source" },
       { "keys": "h", "label": "help", "action": "open_help" }
     ],
     "desktop": [
@@ -295,8 +291,7 @@
       { "keys": "p", "label": "project", "action": "open_project_picker" },
       { "keys": "s", "label": "session", "action": "open_session_picker" },
       { "keys": "e", "label": "export", "action": "open_export_picker" },
-      { "keys": "r", "label": "refresh", "action": "reload" },
-      { "keys": "Shift-D", "label": "data", "action": "toggle_data_source" }
+      { "keys": "r", "label": "refresh", "action": "reload" }
     ]
   }
 }
