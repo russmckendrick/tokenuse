@@ -21,8 +21,11 @@ Copilot has two supported on-disk layouts: the legacy CLI agent under `~/.copilo
 | Platform | Workspace storage |
 | --- | --- |
 | macOS | `~/Library/Application Support/Code/User/workspaceStorage/<hash>/` |
+| macOS Insiders | `~/Library/Application Support/Code - Insiders/User/workspaceStorage/<hash>/` |
 | Linux | `~/.config/Code/User/workspaceStorage/<hash>/` |
+| Linux Insiders/server | `~/.config/Code - Insiders/User/workspaceStorage/<hash>/`, `~/.vscode-server/data/User/workspaceStorage/<hash>/` |
 | Windows | `%APPDATA%/Code/User/workspaceStorage/<hash>/` |
+| Windows Insiders | `%APPDATA%/Code - Insiders/User/workspaceStorage/<hash>/` |
 
 Inside each workspace hash directory:
 
@@ -30,7 +33,7 @@ Inside each workspace hash directory:
 GitHub.copilot-chat/transcripts/<session>.jsonl
 ```
 
-A transcript file only parses as Copilot when its first line has `type == "session.start"` and `data.producer == "copilot-agent"`. When that `session.start` event includes `data.context.cwd`, the cwd is the authoritative project path. If absent, `tokenuse` falls back to `workspace.yaml` and then the discovered source project.
+A transcript file only parses as Copilot when its first line has `type == "session.start"` and `data.producer == "copilot-agent"`. When that `session.start` event includes `data.context.cwd`, the cwd is the authoritative project path. If absent, `tokenuse` falls back to `workspace.yaml`, the VS Code `workspace.json` folder name, and then the workspace hash.
 
 ```mermaid
 flowchart TD
@@ -109,15 +112,15 @@ The current transcript parser does **not** use `data.model` for pricing. It infe
 | `ParsedCall` field | Legacy source | VS Code transcript source |
 | --- | --- | --- |
 | `input_tokens` | `0` | latest `data.content.len() / 4`, rounded up |
-| `output_tokens` | `data.outputTokens` | `data.content.len() / 4`, rounded up, unless explicit `data.outputTokens` exists |
+| `output_tokens` | `data.outputTokens` | `data.content.len() / 4` plus `data.reasoningText.len() / 4`, both rounded up, unless explicit `data.outputTokens` exists |
 | `reasoning_tokens` | `0` | `data.reasoningText.len() / 4`, rounded up |
 | `cache_creation_input_tokens` | `0` | `0` |
 | `cache_read_input_tokens` | `0` | `0` |
 | `model` | latest `session.model_change.data.newModel` | inferred alias from tool-call ids |
 | `timestamp` | top-level `timestamp`, parsed as RFC3339 | top-level `timestamp` when present; otherwise `None` |
-| `project` | `workspace.yaml` `cwd:`, then discovered source | `session.start.data.context.cwd`, then `workspace.yaml`, then discovered source |
+| `project` | `workspace.yaml` `cwd:`, then discovered source | `session.start.data.context.cwd`, then `workspace.yaml`, then VS Code `workspace.json` folder name or workspace hash |
 
-Transcript reasoning tokens are preserved in `reasoning_tokens` for future breakouts. They are not folded into `output_tokens` by the current Copilot parser.
+Transcript reasoning tokens are preserved in `reasoning_tokens` and folded into `output_tokens` so estimated transcript cost includes generated reasoning text.
 
 ## Model Inference
 
@@ -173,5 +176,5 @@ flowchart LR
 - Legacy events without a positive `data.outputTokens` value are skipped.
 - Legacy input tokens are currently recorded as `0` because the legacy format only exposes output tokens in the supported path.
 - VS Code transcript token counts are estimates based on `chars / 4.0`; treat Copilot totals as approximate.
-- VS Code `data.model` is currently ignored for pricing; tool-call id inference picks one model alias for the whole transcript.
+- VS Code `data.model` is currently ignored for pricing; tool-call id inference picks one model alias for the whole transcript. Auto aliases are displayed as Copilot-specific model buckets.
 - `workspace.yaml` parsing reads only the scalar `cwd:` line used by Copilot session-state files. If Copilot starts writing richer YAML, replace the small parser with a YAML crate.

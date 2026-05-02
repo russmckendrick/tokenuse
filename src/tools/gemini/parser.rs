@@ -55,6 +55,10 @@ struct GeminiTokens {
     cached: u64,
     #[serde(default)]
     thoughts: u64,
+    #[serde(default)]
+    tool: u64,
+    #[serde(default)]
+    total: u64,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -164,7 +168,7 @@ fn parse_session_data(
         }
 
         let input_tokens = tokens.input.saturating_sub(tokens.cached);
-        let output_tokens = tokens.output.saturating_add(tokens.thoughts);
+        let output_tokens = gemini_output_tokens(tokens);
         let (tools, bash_commands) = extract_tools(message.tool_calls.as_deref());
         let timestamp = message
             .timestamp
@@ -221,8 +225,24 @@ fn gemini_dedup_key(
         model,
         tokens.input,
         tokens.output,
-        tokens.cached
+        tokens
+            .cached
+            .saturating_add(tokens.tool)
+            .saturating_add(tokens.total)
     )
+}
+
+fn gemini_output_tokens(tokens: GeminiTokens) -> u64 {
+    let mut generated = tokens.output.saturating_add(tokens.tool);
+    let known = tokens
+        .input
+        .saturating_add(generated)
+        .saturating_add(tokens.cached)
+        .saturating_add(tokens.thoughts);
+    if tokens.total > known {
+        generated = generated.saturating_add(tokens.total - known);
+    }
+    generated.saturating_add(tokens.thoughts)
 }
 
 fn extract_content_text(content: Option<&Value>) -> String {
@@ -410,6 +430,24 @@ mod tests {
             call.timestamp.unwrap(),
             parse_timestamp("2026-05-01T18:34:30.869Z").unwrap()
         );
+    }
+
+    #[test]
+    fn includes_tool_and_unallocated_total_tokens_in_output() {
+        let raw = [
+            r#"{"sessionId":"s3","projectHash":"hash","startTime":"2026-05-01T18:34:30.869Z"}"#,
+            r#"{"id":"g1","type":"gemini","model":"gemini-2.5-pro","tokens":{"input":100,"output":20,"cached":10,"thoughts":3,"tool":5,"total":150}}"#,
+        ]
+        .join("\n");
+        let file = write_session(&raw, "jsonl");
+        let mut seen = HashSet::new();
+
+        let calls = parse_session(&source_for(file.path().to_path_buf()), &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].input_tokens, 90);
+        assert_eq!(calls[0].output_tokens, 40);
+        assert_eq!(calls[0].reasoning_tokens, 3);
     }
 
     #[test]

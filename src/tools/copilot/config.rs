@@ -15,14 +15,25 @@ pub fn legacy_root() -> Option<PathBuf> {
     paths::home().map(|h| h.join(LEGACY_DIR))
 }
 
-pub fn vscode_workspace_storage() -> Option<PathBuf> {
-    let home = paths::home()?;
-    let base = if cfg!(target_os = "macos") {
-        home.join("Library/Application Support/Code/User/workspaceStorage")
-    } else if cfg!(target_os = "windows") {
-        home.join("AppData/Roaming/Code/User/workspaceStorage")
-    } else {
-        home.join(".config/Code/User/workspaceStorage")
+pub fn vscode_workspace_storage_dirs() -> Vec<PathBuf> {
+    let Some(home) = paths::home() else {
+        return Vec::new();
     };
-    Some(base)
+    if cfg!(target_os = "macos") {
+        return vec![
+            home.join("Library/Application Support/Code/User/workspaceStorage"),
+            home.join("Library/Application Support/Code - Insiders/User/workspaceStorage"),
+        ];
+    }
+    if cfg!(target_os = "windows") {
+        return vec![
+            home.join("AppData/Roaming/Code/User/workspaceStorage"),
+            home.join("AppData/Roaming/Code - Insiders/User/workspaceStorage"),
+        ];
+    }
+    vec![
+        home.join(".config/Code/User/workspaceStorage"),
+        home.join(".config/Code - Insiders/User/workspaceStorage"),
+        home.join(".vscode-server/data/User/workspaceStorage"),
+    ]
 }

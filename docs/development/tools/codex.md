@@ -94,7 +94,7 @@ A rollout is heterogeneous JSONL. The interesting types:
 
 ## Token & cost mapping
 
-One `ParsedCall` is emitted per `event_msg/token_count` whose `info.last_token_usage` is non-null. Tokens come straight from `last_token_usage` (the per-turn delta).
+One `ParsedCall` is emitted per `event_msg/token_count` whose usage is non-null. Prefer `info.last_token_usage` when present. If Codex only writes cumulative `info.total_token_usage`, the parser subtracts the previous cumulative total in the same rollout and uses the delta.
 
 | `ParsedCall` field | Source |
 | --- | --- |
@@ -104,7 +104,7 @@ One `ParsedCall` is emitted per `event_msg/token_count` whose `info.last_token_u
 | `cache_read_input_tokens` | `last.cached_input_tokens` (priced as cache read) |
 | `cache_creation_input_tokens` | always `0` (OpenAI doesn't expose cache writes) |
 | `reasoning_tokens` | `last.reasoning_output_tokens` |
-| `model` | most recent `turn_context.payload.model`, or `"gpt-5"` if no `turn_context` has appeared yet |
+| `model` | most recent model hint from `turn_context`, `token_count.info`, or payload metadata; `"gpt-5"` if none has appeared yet |
 | `speed` | always `Speed::Standard` (Codex has no fast/standard split) |
 
 **Critical quirk:** OpenAI reports cached tokens **inside** `input_tokens`. The parser subtracts `cached_input_tokens` before pricing or the cache read would be double-billed.
@@ -137,5 +137,6 @@ flowchart LR
 - Files use UTC timestamps with millisecond precision — `chrono::DateTime::parse_from_rfc3339` is sufficient.
 - `payload.cwd` from `session_meta` is the only reliable project signal; absent that, the parser falls back to the `YYYY/MM/DD` discovery label.
 - Codex rolls models mid-session via `turn_context`; the parser tracks the most-recently-set model so each turn is priced correctly. Variants such as `gpt-5.4` resolve through the pricing table's exact, alias, prefix, or fallback lookup path.
+- Some Codex builds spell cached input as `cache_read_input_tokens` rather than `cached_input_tokens`; both names map to the same cache-read bucket.
 - Cache-creation tokens are not exposed by OpenAI, so `cache_creation_input_tokens` is always zero. The "Cache Written" tile will read 0 for Codex.
 - Limit snapshots are not live API reads. They are the latest local values Codex wrote to session JSONL, imported during archive sync.

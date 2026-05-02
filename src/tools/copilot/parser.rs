@@ -234,10 +234,9 @@ fn parse_transcript(
         let (output_tokens, reasoning_tokens) = if explicit_output > 0 {
             (explicit_output, 0)
         } else {
-            (
-                ((content_text.len() as f64) / CHARS_PER_TOKEN).ceil() as u64,
-                ((reasoning_text.len() as f64) / CHARS_PER_TOKEN).ceil() as u64,
-            )
+            let visible_output = ((content_text.len() as f64) / CHARS_PER_TOKEN).ceil() as u64;
+            let reasoning = ((reasoning_text.len() as f64) / CHARS_PER_TOKEN).ceil() as u64;
+            (visible_output.saturating_add(reasoning), reasoning)
         };
         let input_tokens = ((pending_user_message.len() as f64) / CHARS_PER_TOKEN).ceil() as u64;
 
@@ -531,6 +530,8 @@ mod tests {
         assert_eq!(calls[0].project, "/Users/me/Code/tokens");
         assert_eq!(calls[0].tools, vec!["Read", "Edit"]);
         assert_eq!(calls[1].tools, vec!["WebSearch"]);
+        assert_eq!(calls[0].output_tokens, 6);
+        assert_eq!(calls[0].reasoning_tokens, 3);
         assert!(
             calls[0].input_tokens > 0,
             "input estimated from user message length"

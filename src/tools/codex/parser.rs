@@ -4,6 +4,7 @@ use std::mem;
 use chrono::{DateTime, Utc};
 use color_eyre::Result;
 use serde::Deserialize;
+use serde_json::Value;
 
 use crate::pricing;
 use crate::tools::{
@@ -30,12 +31,6 @@ struct SessionMeta {
     cwd: Option<String>,
     #[serde(default)]
     originator: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct TurnContext {
-    #[serde(default)]
-    model: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -70,7 +65,7 @@ struct TokenInfo {
 struct TokenUsage {
     #[serde(default)]
     input_tokens: u64,
-    #[serde(default)]
+    #[serde(default, alias = "cache_read_input_tokens")]
     cached_input_tokens: u64,
     #[serde(default)]
     output_tokens: u64,
@@ -169,6 +164,7 @@ pub fn parse_session(
     let mut current_model = String::new();
     let mut pending_tools: Vec<String> = Vec::new();
     let mut pending_bash: Vec<String> = Vec::new();
+    let mut previous_total_usage: Option<TokenUsage> = None;
     let mut calls = Vec::new();
 
     for line in iter {
@@ -181,12 +177,8 @@ pub fn parse_session(
 
         match entry.kind.as_str() {
             "turn_context" => {
-                if let Ok(ctx) = serde_json::from_value::<TurnContext>(payload) {
-                    if let Some(m) = ctx.model {
-                        if !m.is_empty() {
-                            current_model = m;
-                        }
-                    }
+                if let Some(model) = extract_model(&payload) {
+                    current_model = model;
                 }
             }
             "response_item" => {
@@ -209,17 +201,33 @@ pub fn parse_session(
                 }
             }
             "event_msg" => {
+                let model_hint = extract_model(&payload);
                 let Ok(event) = serde_json::from_value::<EventMsg>(payload) else {
                     continue;
                 };
                 if event.kind != "token_count" {
                     continue;
                 }
+                if let Some(model) = model_hint {
+                    current_model = model;
+                }
                 let Some(info) = event.info else { continue };
-                let Some(last) = info.last_token_usage else {
-                    continue;
+                let usage = match (info.last_token_usage, info.total_token_usage) {
+                    (Some(last), _) => last,
+                    (None, Some(total)) => total.saturating_delta(previous_total_usage),
+                    (None, None) => continue,
                 };
-                let total = info.total_token_usage.unwrap_or(last);
+                let total = info.total_token_usage.unwrap_or(usage);
+                if let Some(total_usage) = info.total_token_usage {
+                    previous_total_usage = Some(total_usage);
+                }
+                if usage.input_tokens == 0
+                    && usage.cached_input_tokens == 0
+                    && usage.output_tokens == 0
+                    && usage.reasoning_output_tokens == 0
+                {
+                    continue;
+                }
 
                 let timestamp_str = entry.timestamp.clone().unwrap_or_default();
                 let dedup_key = format!(
@@ -241,17 +249,17 @@ pub fn parse_session(
                     current_model.clone()
                 };
 
-                let input_tokens = last.input_tokens.saturating_sub(last.cached_input_tokens);
-                let output_tokens = last.output_tokens + last.reasoning_output_tokens;
+                let input_tokens = usage.input_tokens.saturating_sub(usage.cached_input_tokens);
+                let output_tokens = usage.output_tokens + usage.reasoning_output_tokens;
 
                 let mut call = ParsedCall {
                     tool: config::TOOL_ID,
                     model: model.clone(),
                     input_tokens,
                     output_tokens,
-                    cache_read_input_tokens: last.cached_input_tokens,
-                    cached_input_tokens: last.cached_input_tokens,
-                    reasoning_tokens: last.reasoning_output_tokens,
+                    cache_read_input_tokens: usage.cached_input_tokens,
+                    cached_input_tokens: usage.cached_input_tokens,
+                    reasoning_tokens: usage.reasoning_output_tokens,
                     speed: Speed::Standard,
                     tools: mem::take(&mut pending_tools),
                     bash_commands: mem::take(&mut pending_bash),
@@ -378,6 +386,52 @@ impl From<RateLimitCredits> for LimitCredits {
     }
 }
 
+impl TokenUsage {
+    fn saturating_delta(self, previous: Option<Self>) -> Self {
+        let Some(previous) = previous else {
+            return self;
+        };
+        Self {
+            input_tokens: self.input_tokens.saturating_sub(previous.input_tokens),
+            cached_input_tokens: self
+                .cached_input_tokens
+                .saturating_sub(previous.cached_input_tokens),
+            output_tokens: self.output_tokens.saturating_sub(previous.output_tokens),
+            reasoning_output_tokens: self
+                .reasoning_output_tokens
+                .saturating_sub(previous.reasoning_output_tokens),
+        }
+    }
+}
+
+fn extract_model(payload: &Value) -> Option<String> {
+    let obj = payload.as_object()?;
+    obj.get("info")
+        .and_then(|info| {
+            let info = info.as_object()?;
+            model_from_obj(info)
+        })
+        .or_else(|| model_from_obj(obj))
+}
+
+fn model_from_obj(obj: &serde_json::Map<String, Value>) -> Option<String> {
+    non_empty_str(obj.get("model"))
+        .or_else(|| non_empty_str(obj.get("model_name")))
+        .or_else(|| {
+            obj.get("metadata")
+                .and_then(|m| m.as_object())
+                .and_then(model_from_obj)
+        })
+}
+
+fn non_empty_str(value: Option<&Value>) -> Option<String> {
+    value
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+}
+
 fn normalize_tool(name: &str) -> String {
     match name {
         "exec_command" => "Bash".to_string(),
@@ -423,6 +477,8 @@ mod tests {
     const TOKEN_NULL: &str = r#"{"timestamp":"2026-03-29T15:04:01.591Z","type":"event_msg","payload":{"type":"token_count","info":null}}"#;
     const TOKEN_FIRST: &str = r#"{"timestamp":"2026-03-29T15:04:10.090Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":18193,"cached_input_tokens":10624,"output_tokens":371,"reasoning_output_tokens":38,"total_tokens":18564},"total_token_usage":{"input_tokens":18193,"cached_input_tokens":10624,"output_tokens":371,"reasoning_output_tokens":38,"total_tokens":18564}}}}"#;
     const TOKEN_SECOND: &str = r#"{"timestamp":"2026-03-29T15:05:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":21590,"cached_input_tokens":10624,"output_tokens":375,"reasoning_output_tokens":12,"total_tokens":21965},"total_token_usage":{"input_tokens":39783,"cached_input_tokens":21248,"output_tokens":746,"reasoning_output_tokens":50,"total_tokens":40529}}}}"#;
+    const TOKEN_TOTAL_ONLY_FIRST: &str = r#"{"timestamp":"2026-03-29T15:04:10.090Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cache_read_input_tokens":20,"output_tokens":10,"reasoning_output_tokens":1,"total_tokens":111}}}}"#;
+    const TOKEN_TOTAL_ONLY_SECOND: &str = r#"{"timestamp":"2026-03-29T15:05:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"model":"gpt-5.4","total_token_usage":{"input_tokens":180,"cache_read_input_tokens":50,"output_tokens":30,"reasoning_output_tokens":4,"total_tokens":214}}}}"#;
     const TOKEN_LIMIT_NULL: &str = r#"{"timestamp":"2026-04-29T07:59:08.887Z","type":"event_msg","payload":{"type":"token_count","info":null,"rate_limits":{"limit_id":"codex","limit_name":null,"primary":{"used_percent":17.0,"window_minutes":300,"resets_at":1777477636},"secondary":{"used_percent":6.0,"window_minutes":10080,"resets_at":1777960801},"credits":null,"plan_type":"prolite","rate_limit_reached_type":null}}}"#;
     const TOKEN_LIMIT_MODEL: &str = r#"{"timestamp":"2026-04-29T07:59:28.815Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":18193,"cached_input_tokens":10624,"output_tokens":371,"reasoning_output_tokens":38,"total_tokens":18564},"total_token_usage":{"input_tokens":18193,"cached_input_tokens":10624,"output_tokens":371,"reasoning_output_tokens":38,"total_tokens":18564}},"rate_limits":{"limit_id":"codex_bengalfox","limit_name":"GPT-5.3-Codex-Spark","primary":{"used_percent":0.0,"window_minutes":300,"resets_at":1777487853},"secondary":{"used_percent":0.0,"window_minutes":10080,"resets_at":1778074653},"credits":{"has_credits":false,"unlimited":false,"balance":null},"plan_type":null,"rate_limit_reached_type":null}}}"#;
 
@@ -453,6 +509,24 @@ mod tests {
         assert_eq!(calls.len(), 2);
         assert_eq!(calls[0].model, "gpt-5");
         assert_eq!(calls[1].model, "o3");
+    }
+
+    #[test]
+    fn total_only_usage_deltas_cache_alias_and_info_model_are_supported() {
+        let f = write_session(&[META_OK, TOKEN_TOTAL_ONLY_FIRST, TOKEN_TOTAL_ONLY_SECOND]);
+        let mut seen = HashSet::new();
+
+        let calls = parse_session(&source_for(f.path().to_path_buf()), &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].input_tokens, 80);
+        assert_eq!(calls[0].cache_read_input_tokens, 20);
+        assert_eq!(calls[0].output_tokens, 11);
+        assert_eq!(calls[1].model, "gpt-5.4");
+        assert_eq!(calls[1].input_tokens, 50);
+        assert_eq!(calls[1].cache_read_input_tokens, 30);
+        assert_eq!(calls[1].output_tokens, 23);
+        assert_eq!(calls[1].reasoning_tokens, 3);
     }
 
     #[test]

@@ -11,7 +11,7 @@ Gemini CLI writes project-scoped chat session files under `~/.gemini/tmp/<projec
 | `~/.gemini/tmp/<project_hash>/chats/session-*.jsonl` | Current JSONL session format |
 | `~/.gemini/tmp/<project_hash>/chats/session-*.json` | Older/exported JSON session format |
 
-There is no v1 environment override. The adapter reads the default Gemini CLI data directory only.
+**Env var override:** `GEMINI_DIR` replaces `~/.gemini`. The adapter still expects sessions below that root's `tmp/<project>/chats/` tree.
 
 **Discovery rules** (`src/tools/gemini/discovery.rs`):
 - Read direct child project directories under `~/.gemini/tmp/`.
@@ -64,7 +64,7 @@ One `ParsedCall` is emitted for each Gemini/model message with both `tokens` and
 | `ParsedCall` field | Source |
 | --- | --- |
 | `input_tokens` | `tokens.input` - `tokens.cached` |
-| `output_tokens` | `tokens.output` + `tokens.thoughts` |
+| `output_tokens` | `tokens.output` + `tokens.tool` + any unallocated `tokens.total` remainder + `tokens.thoughts` |
 | `cached_input_tokens` | `tokens.cached` |
 | `cache_read_input_tokens` | `tokens.cached` |
 | `cache_creation_input_tokens` | always `0` |

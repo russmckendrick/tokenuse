@@ -11,7 +11,7 @@ use super::config;
 pub fn discover() -> Result<Vec<SessionSource>> {
     let mut sources = Vec::new();
 
-    if let Some(projects) = config::projects_dir() {
+    for projects in config::projects_dirs() {
         sources.extend(list_project_dirs(&projects));
     }
 

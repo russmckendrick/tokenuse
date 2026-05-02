@@ -15,12 +15,12 @@ Claude Code records every assistant message — including token usage and tool c
 
 Subagent transcripts live in a `subagents/` subdirectory under each project and are read in addition to the main `*.jsonl` files.
 
-**Env var override:** `CLAUDE_CONFIG_DIR` replaces `~/.claude` for the CLI projects path. Useful for sandboxed installs.
+**Env var override:** `CLAUDE_CONFIG_DIR` replaces the default CLI roots for the projects path. It can contain one path or a comma-separated list of config roots, each expected to contain a `projects/` directory. Without an override, `tokenuse` checks both `$XDG_CONFIG_HOME/claude/projects` (or `~/.config/claude/projects`) and `~/.claude/projects`.
 
 Claude entries include a top-level `cwd` field, and that is the authoritative project path for parsed calls. The project directory name is only a lossy fallback: names like `-Users-me-Code-ai-commit-dev` cannot distinguish path separators from real hyphens, so never treat the directory-derived value as canonical when `cwd` is present.
 
 **Discovery rules** (`src/tools/claude_code/discovery.rs`):
-- Enumerate immediate subdirectories of `~/.claude/projects/`.
+- Enumerate immediate subdirectories of every configured CLI `projects/` root.
 - Walk the Desktop sessions tree to depth 8 looking for any directory named `projects`; treat each child as a session source.
 - Skip `node_modules` and `.git` while walking.
 
