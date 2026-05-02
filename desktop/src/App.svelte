@@ -3,11 +3,13 @@
   import { confirm, open as openDialog } from '@tauri-apps/plugin-dialog';
   import { ArrowLeft, Database, Download, FolderOpen, RefreshCw, Search, X } from 'lucide-svelte';
   import { api } from './api';
+  import ActivityPulse from './components/ActivityPulse.svelte';
+  import RankBar from './components/RankBar.svelte';
+  import UsageConsole from './components/UsageConsole.svelte';
   import Panel from './Panel.svelte';
   import type {
     ConfigRow,
     CountMetric,
-    DailyMetric,
     DesktopSnapshot,
     ExportFormatId,
     ModelMetric,
@@ -15,7 +17,6 @@
     ProjectMetric,
     ProjectOption,
     ProjectToolMetric,
-    RecentModelMetric,
     ShortcutInput,
     SortId,
     SessionDetail,
@@ -23,8 +24,7 @@
     SessionMetric,
     SessionOption,
     Summary,
-    ToolId,
-    ToolLimitSection
+    ToolId
   } from './types';
 
   type ModalKind = 'project' | 'session' | 'currency' | 'export' | null;
@@ -237,10 +237,6 @@
     }
   }
 
-  function bar(value: number) {
-    return Math.max(0, Math.min(100, value));
-  }
-
   function count(value: number) {
     return value.toLocaleString();
   }
@@ -252,6 +248,15 @@
   function activeSortLabel() {
     if (!snapshot) return '';
     return snapshot.sorts.find((sort) => sort.value === snapshot?.sort)?.label ?? '';
+  }
+
+  function usageTone(tool: string, index: number) {
+    const normalized = tool.toLowerCase();
+    if (normalized.includes('codex')) return 'orange';
+    if (normalized.includes('claude')) return 'magenta';
+    if (normalized.includes('cursor')) return 'blue';
+    if (normalized.includes('copilot')) return 'green';
+    return ['cyan', 'yellow', 'magenta', 'green'][index % 4];
   }
 
   function configAction(row: ConfigRow) {
@@ -384,17 +389,19 @@
       {#if activePage() === 'overview'}
         <section class="page overview-page">
           {@render Kpis(snapshot.dashboard.summary, snapshot.currency)}
+          <Panel title="Activity Pulse" tone="cyan">
+            <ActivityPulse points={snapshot.dashboard.activity_timeline} />
+          </Panel>
           <section class="grid overview-grid">
-            <Panel title="Daily Activity" tone="blue">
-              {@render DailyTable(snapshot.dashboard.daily)}
-            </Panel>
-            <Panel title="By Model" tone="magenta">
-              {@render ModelTable(snapshot.dashboard.models)}
-            </Panel>
-            <Panel title="Project Spend by Tool" tone="yellow">
-              {@render ProjectToolTable(snapshot.dashboard.project_tools)}
-            </Panel>
-            <div class="stack">
+            <div class="overview-primary">
+              <Panel title="Project Spend by Tool" tone="yellow">
+                {@render ProjectToolTable(snapshot.dashboard.project_tools)}
+              </Panel>
+            </div>
+            <div class="overview-side-stack">
+              <Panel title="By Model" tone="magenta">
+                {@render ModelTable(snapshot.dashboard.models)}
+              </Panel>
               <Panel title="Shell Commands" tone="orange">
                 {@render CountTable(snapshot.dashboard.commands)}
               </Panel>
@@ -407,40 +414,52 @@
       {:else if activePage() === 'deep-dive'}
         <section class="page deep-page">
           <section class="grid deep-grid">
-            <Panel title="Daily Activity" tone="blue">
-              {@render DailyTable(snapshot.dashboard.daily)}
-            </Panel>
-            <Panel title="By Project" tone="green">
-              {@render ProjectTable(snapshot.dashboard.projects)}
-            </Panel>
-            <Panel title="Top Sessions" tone="red">
-              <button class="panel-command" type="button" onclick={() => openModal('session')}>Open Session Picker</button>
-              {@render SessionTable(snapshot.dashboard.sessions)}
-            </Panel>
-            <Panel title="Project Spend by Tool" tone="yellow">
-              {@render ProjectToolTable(snapshot.dashboard.project_tools)}
-            </Panel>
-            <div class="stack">
-              <Panel title="By Model" tone="magenta">
+            <div class="deep-trend">
+              <Panel title="Activity Trend" tone="blue">
+                <ActivityPulse points={snapshot.dashboard.activity_timeline} />
+              </Panel>
+            </div>
+            <div class="deep-projects">
+              <Panel title="By Project" tone="green">
+                {@render ProjectTable(snapshot.dashboard.projects)}
+              </Panel>
+            </div>
+            <div class="deep-span">
+              <Panel title="Top Sessions" tone="red">
+                <button class="panel-command" type="button" onclick={() => openModal('session')}>Open Session Picker</button>
+                {@render SessionTable(snapshot.dashboard.sessions)}
+              </Panel>
+            </div>
+            <div class="deep-project-tools">
+              <Panel title="Project Spend by Tool" tone="yellow">
+                {@render ProjectToolTable(snapshot.dashboard.project_tools)}
+              </Panel>
+            </div>
+            <div class="deep-side-stack">
+              <Panel title="Model Efficiency" tone="magenta">
                 {@render ModelTable(snapshot.dashboard.models)}
               </Panel>
               <Panel title="Core Tools" tone="cyan">
                 {@render CountTable(snapshot.dashboard.tools)}
               </Panel>
             </div>
-            <Panel title="Shell Commands" tone="orange">
-              {@render CountTable(snapshot.dashboard.commands)}
-            </Panel>
-            <Panel title="MCP Servers" tone="magenta">
-              {@render CountTable(snapshot.dashboard.mcp_servers)}
-            </Panel>
+            <div class="deep-shell">
+              <Panel title="Shell Commands" tone="orange">
+                {@render CountTable(snapshot.dashboard.commands)}
+              </Panel>
+            </div>
+            <div class="deep-mcp">
+              <Panel title="MCP Servers" tone="magenta">
+                {@render CountTable(snapshot.dashboard.mcp_servers)}
+              </Panel>
+            </div>
           </section>
         </section>
       {:else if activePage() === 'usage'}
         <section class="page usage-page">
           <section class="usage-grid">
-            {#each snapshot.usage.sections as section}
-              {@render UsagePanel(section)}
+            {#each snapshot.usage.sections as section, index}
+              <UsageConsole {section} tone={usageTone(section.tool, index)} />
             {/each}
           </section>
         </section>
@@ -601,22 +620,6 @@
   <div class="loading">Token Use</div>
 {/if}
 
-{#snippet heat(value: number)}
-  <span class="heat" aria-hidden="true">
-    {#each Array.from({ length: 10 }) as _, index}
-      <span class:filled={index < Math.ceil((bar(value) / 100) * 10)}></span>
-    {/each}
-  </span>
-{/snippet}
-
-{#snippet sparkline(values: number[])}
-  <span class="sparkline" aria-hidden="true">
-    {#each values as value}
-      <span style={`height: ${Math.max(8, bar(value))}%`}></span>
-    {/each}
-  </span>
-{/snippet}
-
 {#snippet Kpis(summary: Summary, currency: string)}
   <section class="kpis">
     <div><span>cost</span><strong>{summary.cost}</strong><small>{currency}</small></div>
@@ -627,42 +630,33 @@
   </section>
 {/snippet}
 
-{#snippet DailyTable(rows: DailyMetric[])}
-  <table>
-    <thead><tr><th>date</th><th></th><th>cost</th><th>calls</th></tr></thead>
-    <tbody>
-      {#each rows as row}
-        <tr><td>{row.day}</td><td>{@render heat(row.value)}</td><td class="money">{row.cost}</td><td>{count(row.calls)}</td></tr>
-      {/each}
-    </tbody>
-  </table>
-{/snippet}
-
 {#snippet ProjectTable(rows: ProjectMetric[])}
-  <table>
+  <table class="data-table project-table">
     <thead><tr><th></th><th>project</th><th>cost</th><th>avg/s</th><th>sess</th><th>tools</th></tr></thead>
     <tbody>
       {#each rows as row}
         <tr>
-          <td>{@render heat(row.value)}</td>
+          <td><RankBar value={row.value} ariaLabel={`${row.name} rank`} /></td>
           <td>{row.name}</td>
           <td class="money">{row.cost}</td>
           <td class="money">{row.avg_per_session}</td>
           <td>{count(row.sessions)}</td>
           <td class="muted-cell">{row.tool_mix}</td>
         </tr>
+      {:else}
+        <tr><td colspan="6" class="empty-cell">no project rows</td></tr>
       {/each}
     </tbody>
   </table>
 {/snippet}
 
 {#snippet ProjectToolTable(rows: ProjectToolMetric[])}
-  <table>
+  <table class="data-table project-tool-table">
     <thead><tr><th></th><th>project</th><th>tool</th><th>cost</th><th>calls</th><th>sess</th><th>avg/s</th></tr></thead>
     <tbody>
       {#each rows as row}
         <tr>
-          <td>{@render heat(row.value)}</td>
+          <td><RankBar value={row.value} ariaLabel={`${row.project} ${row.tool} rank`} /></td>
           <td>{row.project}</td>
           <td>{row.tool}</td>
           <td class="money">{row.cost}</td>
@@ -670,79 +664,66 @@
           <td>{count(row.sessions)}</td>
           <td class="money">{row.avg_per_session}</td>
         </tr>
+      {:else}
+        <tr><td colspan="7" class="empty-cell">no project/tool rows</td></tr>
       {/each}
     </tbody>
   </table>
 {/snippet}
 
 {#snippet SessionTable(rows: SessionMetric[])}
-  <table>
+  <table class="data-table session-table">
     <thead><tr><th></th><th>date</th><th>project</th><th>cost</th><th>calls</th></tr></thead>
     <tbody>
       {#each rows as row}
-        <tr><td>{@render heat(row.value)}</td><td>{row.date}</td><td>{row.project}</td><td class="money">{row.cost}</td><td>{count(row.calls)}</td></tr>
+        <tr>
+          <td><RankBar value={row.value} ariaLabel={`${row.project} session rank`} /></td>
+          <td>{row.date}</td>
+          <td>{row.project}</td>
+          <td class="money">{row.cost}</td>
+          <td>{count(row.calls)}</td>
+        </tr>
+      {:else}
+        <tr><td colspan="5" class="empty-cell">no sessions</td></tr>
       {/each}
     </tbody>
   </table>
 {/snippet}
 
 {#snippet ModelTable(rows: ModelMetric[])}
-  <table>
+  <table class="data-table model-table">
     <thead><tr><th></th><th>model</th><th>cost</th><th>cache</th><th>calls</th></tr></thead>
     <tbody>
       {#each rows as row}
-        <tr><td>{@render heat(row.value)}</td><td>{row.name}</td><td class="money">{row.cost}</td><td>{row.cache}</td><td>{count(row.calls)}</td></tr>
+        <tr>
+          <td><RankBar value={row.value} ariaLabel={`${row.name} rank`} /></td>
+          <td>{row.name}</td>
+          <td class="money">{row.cost}</td>
+          <td>{row.cache}</td>
+          <td>{count(row.calls)}</td>
+        </tr>
+      {:else}
+        <tr><td colspan="5" class="empty-cell">no models</td></tr>
       {/each}
     </tbody>
   </table>
 {/snippet}
 
 {#snippet CountTable(rows: CountMetric[])}
-  <table>
+  <table class="data-table count-table">
     <thead><tr><th></th><th>name</th><th>calls</th></tr></thead>
     <tbody>
       {#each rows as row}
-        <tr><td>{@render heat(row.value)}</td><td>{row.name}</td><td>{count(row.calls)}</td></tr>
+        <tr>
+          <td><RankBar value={row.value} ariaLabel={`${row.name} rank`} /></td>
+          <td>{row.name}</td>
+          <td>{count(row.calls)}</td>
+        </tr>
+      {:else}
+        <tr><td colspan="3" class="empty-cell">no rows</td></tr>
       {/each}
     </tbody>
   </table>
-{/snippet}
-
-{#snippet UsagePanel(section: ToolLimitSection)}
-  <Panel title={`${section.tool} · 24h usage + models`} tone="cyan">
-    <div class="usage-row">
-      <span>usage</span>
-      {@render sparkline(section.usage.buckets)}
-      <strong>{count(section.usage.calls)}</strong>
-      <span>{section.usage.tokens}</span>
-      <span class="money">{section.usage.cost}</span>
-      <span>{section.usage.last_seen}</span>
-    </div>
-    {#each section.limits as limit}
-      <div class="usage-row limit-row">
-        <span>{limit.scope}</span>
-        {@render heat(limit.used)}
-        <strong>{limit.left}</strong>
-        <span>{limit.window}</span>
-        <span>{limit.reset}</span>
-        <span>{limit.plan}</span>
-      </div>
-    {/each}
-    {#each section.models as model}
-      {@render RecentModelRow(model)}
-    {/each}
-  </Panel>
-{/snippet}
-
-{#snippet RecentModelRow(model: RecentModelMetric)}
-  <div class="usage-row">
-    <span>{model.name}</span>
-    {@render heat(model.value)}
-    <strong>{count(model.calls)}</strong>
-    <span>{model.tokens}</span>
-    <span class="money">{model.cost}</span>
-    <span></span>
-  </div>
 {/snippet}
 
 {#snippet SessionDetailPanel(session: SessionDetailView | null)}

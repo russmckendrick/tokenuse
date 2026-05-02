@@ -9,7 +9,7 @@
     { "id": "confirm", "label": "select" },
     { "id": "next_tab", "label": "next tab" },
     { "id": "prev_tab", "label": "previous tab" },
-    { "id": "period_today", "label": "today" },
+    { "id": "period_today", "label": "24h" },
     { "id": "period_week", "label": "7 days" },
     { "id": "period_thirty_days", "label": "30 days" },
     { "id": "period_month", "label": "this month" },
@@ -190,7 +190,7 @@
     {
       "title": "Period",
       "items": [
-        { "keys": "1", "label": "today", "action": "period_today" },
+        { "keys": "1", "label": "24h", "action": "period_today" },
         { "keys": "2", "label": "7 days", "action": "period_week" },
         { "keys": "3", "label": "30 days", "action": "period_thirty_days" },
         { "keys": "4", "label": "this month", "action": "period_month" },
@@ -254,7 +254,7 @@
     "dashboard": [
       { "keys": "q", "label": "quit", "action": "quit" },
       { "keys": "Tab", "label": "tabs", "action": "next_tab" },
-      { "keys": "1", "label": "today", "action": "period_today" },
+      { "keys": "1", "label": "24h", "action": "period_today" },
       { "keys": "2", "label": "week", "action": "period_week" },
       { "keys": "3", "label": "30 days", "action": "period_thirty_days" },
       { "keys": "4", "label": "month", "action": "period_month" },

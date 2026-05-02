@@ -186,7 +186,7 @@ pub fn write_to_dir(
 
 fn filter_slug(period: Period, tool: Tool, project_filter: &ProjectFilter) -> String {
     let period = match period {
-        Period::Today => "today",
+        Period::Today => "24h",
         Period::Week => "week",
         Period::ThirtyDays => "30d",
         Period::Month => "month",
@@ -2511,7 +2511,7 @@ where
     DB::ErrorType: 'static,
 {
     let chips = [
-        (Period::Today, "Today"),
+        (Period::Today, "24 Hours"),
         (Period::Week, "7 Days"),
         (Period::ThirtyDays, "30 Days"),
         (Period::Month, "This Month"),
@@ -3051,7 +3051,7 @@ where
 
 fn period_label(period: Period) -> &'static str {
     match period {
-        Period::Today => "Today",
+        Period::Today => "24 Hours",
         Period::Week => "7 Days",
         Period::ThirtyDays => "30 Days",
         Period::Month => "This Month",

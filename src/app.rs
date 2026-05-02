@@ -40,7 +40,7 @@ impl Period {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Today => "Today",
+            Self::Today => "24 Hours",
             Self::Week => "7 Days",
             Self::ThirtyDays => "30 Days",
             Self::Month => "This Month",

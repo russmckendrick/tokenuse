@@ -15,15 +15,23 @@ The macOS desktop app also ships as a signed and notarized universal DMG. Linux 
 
 ## Main Tabs
 
-- **Overview**: KPIs, daily activity, model spend, project spend, and common commands.
-- **Deep Dive**: denser tables for projects, sessions, models, tools, commands, and MCP servers.
+- **Overview**: command-center view with KPIs, a chronological Activity Pulse, project/tool spend, model spend, shell commands, and MCP servers.
+- **Deep Dive**: analysis workbench with a larger activity trend, project rankings, top sessions, project/tool spend, model efficiency, core tools, shell commands, and MCP servers.
 - **Session**: per-call session drill-down with clickable rows for full stored prompt, tool, command, and token metadata.
-- **Usage**: rolling 24-hour per-tool activity with Codex limit snapshots when available.
+- **Usage**: four per-tool consoles with 24-hour activity pulses, call/token/cost summaries, plan limit gauges when available, and top model bars.
 - **Config**: currency selection and confirmed local downloads for currency and pricing snapshots.
 
 The desktop header mirrors the TUI filters: period, tool, sort mode, and project. In-window keyboard shortcuts are resolved through the same embedded keymap as the TUI; sort mode can be changed from the header or with `g`, and cycles between spend, latest date, and token use. `Shift-D` toggles between live and bundled sample data. The app polls snapshots in the background so completed refreshes appear without blocking the UI.
 
 Dashboard sections render the full sorted row set. Sections with more rows than fit in the current window scroll inside the section so the header, filters, and footer remain visible.
+
+## Reading The Dashboard
+
+The **Activity Pulse** and **Activity Trend** panels use two stacked graph lines. Orange/red bars show relative spend, cyan/blue bars show relative call volume, and the footer summarizes the visible range, peak bucket, latest bucket, and total calls. 24 Hours and 7 Days use hourly buckets so short views do not collapse into one or two bars; 30 Days, Month, and All Time use daily buckets. The 24 Hours period is rolling from the current time, not a calendar-day midnight cutoff.
+
+Ranked table bars use the same stepped color ramp as the TUI: blue is lower relative volume, yellow/orange is hotter, and red marks the current high end of the table. These bars are relative to the visible table, not exported pixel charts.
+
+Usage consoles ignore the dashboard period and project filters because they are rolling 24-hour tool monitors. Empty tools stay visible with compact idle rows so you can still confirm that Codex, Claude Code, Cursor, and Copilot were checked.
 
 ## Background Alerts
 

@@ -206,7 +206,7 @@ fn in_period(call: &ParsedCall, period: Period, now: DateTime<Local>) -> bool {
     let date = local.date_naive();
 
     match period {
-        Period::Today => date == today,
+        Period::Today => local >= now - Duration::hours(24) && local <= now,
         Period::Week => date >= today - Duration::days(6),
         Period::ThirtyDays => date >= today - Duration::days(29),
         Period::Month => date.year() == today.year() && date.month() == today.month(),
@@ -1790,11 +1790,28 @@ mod tests {
     fn period_today_filters_correctly() {
         use chrono::TimeZone;
         let now = Local.with_ymd_and_hms(2026, 4, 29, 12, 0, 0).unwrap();
-        let same_day = mk_call("claude-code", "2026-04-29T08:00:00Z", 1.0);
-        let yesterday = mk_call("claude-code", "2026-04-28T08:00:00Z", 1.0);
+        let now_utc = now.with_timezone(&chrono::Utc);
+        let same_day = ParsedCall {
+            timestamp: Some(now_utc - Duration::hours(4)),
+            ..mk_call("claude-code", "2026-04-29T08:00:00Z", 1.0)
+        };
+        let previous_day_within_24h = ParsedCall {
+            timestamp: Some(now_utc - Duration::hours(23)),
+            ..mk_call("claude-code", "2026-04-28T13:00:00Z", 1.0)
+        };
+        let previous_day_outside_24h = ParsedCall {
+            timestamp: Some(now_utc - Duration::hours(25)),
+            ..mk_call("claude-code", "2026-04-28T08:00:00Z", 1.0)
+        };
+        let future = ParsedCall {
+            timestamp: Some(now_utc + Duration::minutes(1)),
+            ..mk_call("claude-code", "2026-04-29T12:01:00Z", 1.0)
+        };
         assert!(in_period(&same_day, Period::Today, now));
-        assert!(!in_period(&yesterday, Period::Today, now));
-        assert!(in_period(&yesterday, Period::Week, now));
+        assert!(in_period(&previous_day_within_24h, Period::Today, now));
+        assert!(!in_period(&previous_day_outside_24h, Period::Today, now));
+        assert!(!in_period(&future, Period::Today, now));
+        assert!(in_period(&previous_day_outside_24h, Period::Week, now));
     }
 
     #[test]

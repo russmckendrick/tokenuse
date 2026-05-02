@@ -38,7 +38,7 @@ Deep Dive is the comparison view. The **Activity Trend** panel uses the same chr
 
 Usage is the live capacity view. Each tool gets its own console. The **24h pulse** line shows hourly relative activity for that tool, followed by totals for calls, tokens, cost, and last seen. Limit rows are gauges from imported plan snapshots when available; model rows are ranked bars for that tool's rolling 24-hour slice.
 
-Activity Pulse and Activity Trend use hourly buckets for Today and 7 Days, then daily buckets for 30 Days, This Month, and All Time. Graph bars and pulse lines are relative to the visible panel. They are designed for quick comparison inside the terminal, not exact accounting; use the adjacent numeric columns for exact cost, call, token, reset, and plan values.
+Activity Pulse and Activity Trend use hourly buckets for 24 Hours and 7 Days, then daily buckets for 30 Days, This Month, and All Time. The 24 Hours period is rolling from the current time, not a calendar-day midnight cutoff. Graph bars and pulse lines are relative to the visible panel. They are designed for quick comparison inside the terminal, not exact accounting; use the adjacent numeric columns for exact cost, call, token, reset, and plan values.
 
 ## Keyboard
 
@@ -48,7 +48,7 @@ The keyboard reference, footer hints, and shortcut behavior come from the shared
 | --- | --- |
 | `q` | Quit |
 | `Esc` | Close modal or go back from a sub-page |
-| `1`-`5` | Period: today, 7 days, 30 days, this month, all time |
+| `1`-`5` | Period: 24 hours, 7 days, 30 days, this month, all time |
 | `t` | Cycle tool filter |
 | `g` | Cycle sort mode: spend, latest date, token use |
 | `Shift-D` | Toggle between live and sample data |
@@ -74,7 +74,7 @@ The active sort mode controls the order of tool sections and model rows; rate-li
 Each tool section includes:
 
 - One 24-hour pulse graph plus calls, tokens, cost, and last seen time.
-- Zero or more limit gauge rows from imported `LimitSnapshot` records. Today Codex is the only adapter that imports plan rate-limit snapshots.
+- Zero or more limit gauge rows from imported `LimitSnapshot` records. Currently Codex is the only adapter that imports plan rate-limit snapshots.
 - Up to three top model rows for that tool's 24-hour slice.
 
 ## Configuration

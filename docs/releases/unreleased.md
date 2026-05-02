@@ -5,6 +5,8 @@ Changes that should be included in the next release go here. Keep this file curr
 ## Highlights
 
 - TUI Overview, Deep Dive, and Usage now use a refreshed graph-forward layout with chronological activity pulses, ranked bars, and per-tool usage consoles. Short dashboard periods use hourly activity buckets; longer periods use daily buckets.
+- Desktop Overview, Deep Dive, and Usage now mirror the refreshed dashboard language with activity pulses, ranked bars, compact gauges, and per-tool usage consoles.
+- The `1` period now means a rolling 24-hour window in both TUI and desktop, based on the current time rather than local midnight.
 - Desktop app window closes now keep Token Use running in the background with tray/menu-bar restore and configurable usage-jump notifications.
 
 ## Notes

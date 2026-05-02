@@ -133,7 +133,7 @@ flowchart LR
 
 The modal state is checked in priority order in `App::handle_key`: help, call detail, currency, download confirmation, project, session, export folder picker, then export. The active context is passed to the keymap resolver before `App` applies the returned action. The folder picker is the only nested modal and sits on top of the export picker. The desktop app uses the same resolver through the `handle_shortcut` Tauri command, returning frontend effects for Svelte-owned modals and call-detail state.
 
-Terminal graph primitives live in `src/ui/graphs.rs`. They provide relative block sparklines, ranked bars, and compact gauges for TUI panels without adding another charting dependency. `DashboardData.activity_timeline` is the chronological graph source for Overview and Deep Dive: Today and 7 Days use hourly buckets, while longer periods use daily buckets. `DashboardData.daily` remains the sort-aware table source.
+Terminal graph primitives live in `src/ui/graphs.rs`. They provide relative block sparklines, ranked bars, and compact gauges for TUI panels without adding another charting dependency. The desktop frontend ports the same visual language with small Svelte components for activity pulses, ranked bars, limit gauges, and per-tool usage consoles. `DashboardData.activity_timeline` is the chronological graph source for Overview and Deep Dive in both frontends: 24 Hours and 7 Days use hourly buckets, while longer periods use daily buckets. `Period::Today` is a rolling last-24-hours filter based on the current time, not a local calendar-day filter. `DashboardData.daily` remains the sort-aware table source.
 
 ## Project Identity
 
