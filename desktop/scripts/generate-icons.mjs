@@ -9,12 +9,18 @@ const iconsDir = join(root, 'src-tauri', 'icons');
 const appIconSource = 'tokenusebars.svg';
 const menubarIconSource = 'tokenusebars-menubar.svg';
 const trayIconSource = 'tokenusebars-tray.svg';
+const tauriCli = join(root, 'node_modules', '@tauri-apps', 'cli', 'tauri.js');
 
 const tauriIcon = spawnSync(
-  'tauri',
-  ['icon', appIconSource, '--output', 'src-tauri/icons'],
+  process.execPath,
+  [tauriCli, 'icon', appIconSource, '--output', 'src-tauri/icons'],
   { cwd: root, stdio: 'inherit' }
 );
+
+if (tauriIcon.error) {
+  console.error(`Failed to run Tauri icon generator: ${tauriIcon.error.message}`);
+  process.exit(1);
+}
 
 if (tauriIcon.status !== 0) {
   process.exit(tauriIcon.status ?? 1);
