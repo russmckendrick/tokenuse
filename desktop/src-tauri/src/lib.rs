@@ -1,16 +1,25 @@
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use serde::Serialize;
 use tauri::{
-    menu::{AboutMetadata, Menu, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID},
-    AppHandle, Runtime, State,
+    menu::{
+        AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID,
+        WINDOW_SUBMENU_ID,
+    },
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Manager, Runtime, State, WindowEvent,
 };
+use tauri_plugin_notification::NotificationExt;
 use thiserror::Error;
 use tokenuse::{
-    app::{App, ConfigRowView, DataSource, Page, Period, ProjectFilter, SortMode, Tool},
+    app::{
+        App, BackgroundUsageAlert, ConfigRowView, DataSource, Page, Period, ProjectFilter,
+        SortMode, Tool,
+    },
     data::{DashboardData, LimitsData, ProjectOption, SessionDetailView, SessionOption},
     export::ExportFormat,
     keymap::{self, KeyHint, KeyInput},
@@ -26,6 +35,7 @@ const HOMEPAGE_URL: &str = "https://www.tokenuse.app";
 
 struct DesktopState {
     app: App,
+    quitting: bool,
 }
 
 #[derive(Debug, Error)]
@@ -608,6 +618,171 @@ fn desktop_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R>>
     )
 }
 
+fn restore_main_window<R: Runtime>(app_handle: &AppHandle<R>) {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+fn mark_quitting<R: Runtime>(app_handle: &AppHandle<R>) {
+    let state = app_handle.state::<SharedState>();
+    if let Ok(mut state) = state.inner().lock() {
+        state.quitting = true;
+    }
+}
+
+fn is_quitting<R: Runtime>(app_handle: &AppHandle<R>) -> bool {
+    let state = app_handle.state::<SharedState>();
+    state
+        .inner()
+        .lock()
+        .map(|state| state.quitting)
+        .unwrap_or(true)
+}
+
+fn setup_desktop_runtime<R: Runtime>(
+    app: &mut tauri::App<R>,
+    state: SharedState,
+) -> tauri::Result<()> {
+    setup_tray(app)?;
+    spawn_background_monitor(app.handle().clone(), state);
+    Ok(())
+}
+
+fn setup_tray<R: Runtime>(app: &mut tauri::App<R>) -> tauri::Result<()> {
+    let show_item = MenuItem::with_id(app, "show", "Show Token Use", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit Token Use", true, None::<&str>)?;
+    let separator = PredefinedMenuItem::separator(app)?;
+    let menu = Menu::with_items(app, &[&show_item, &separator, &quit_item])?;
+
+    TrayIconBuilder::new()
+        .icon(tray_icon()?)
+        .icon_as_template(cfg!(target_os = "macos"))
+        .tooltip(APP_NAME)
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show" => restore_main_window(app),
+            "quit" => {
+                mark_quitting(app);
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                restore_main_window(tray.app_handle());
+            }
+        })
+        .build(app)?;
+
+    Ok(())
+}
+
+fn tray_icon() -> tauri::Result<tauri::image::Image<'static>> {
+    #[cfg(target_os = "macos")]
+    const TRAY_ICON: &[u8] = include_bytes!("../icons/tray-menubar.png");
+    #[cfg(not(target_os = "macos"))]
+    const TRAY_ICON: &[u8] = include_bytes!("../icons/tray-system.png");
+
+    tauri::image::Image::from_bytes(TRAY_ICON)
+}
+
+fn spawn_background_monitor<R: Runtime>(app_handle: AppHandle<R>, state: SharedState) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_secs(3));
+
+        let alerts = {
+            let mut state = match state.lock() {
+                Ok(state) => state,
+                Err(_) => return,
+            };
+            if state.quitting {
+                return;
+            }
+            state.app.poll_reload();
+            state.app.take_background_alerts()
+        };
+
+        for alert in alerts {
+            send_background_alert(&app_handle, alert);
+        }
+    });
+}
+
+fn send_background_alert<R: Runtime>(app_handle: &AppHandle<R>, alert: BackgroundUsageAlert) {
+    let _ = app_handle
+        .notification()
+        .builder()
+        .title("Token Use usage alert")
+        .body(background_alert_body(alert))
+        .show();
+}
+
+fn background_alert_body(alert: BackgroundUsageAlert) -> String {
+    let mut parts = Vec::new();
+    if alert.cost_usd > 0.0 {
+        parts.push(format!("${:.2}", alert.cost_usd));
+    }
+    if alert.tokens > 0 {
+        parts.push(format!("{} tokens", format_compact_count(alert.tokens)));
+    }
+    if alert.calls > 0 {
+        parts.push(format!(
+            "{} {}",
+            format_int(alert.calls),
+            plural(alert.calls, "call", "calls")
+        ));
+    }
+
+    let summary = if parts.is_empty() {
+        "usage changed".into()
+    } else {
+        parts.join(", ")
+    };
+    format!("Usage jumped by {summary} since the last alert baseline.")
+}
+
+fn format_compact_count(n: u64) -> String {
+    if n >= 1_000_000_000 {
+        format!("{:.1}B", n as f64 / 1_000_000_000.0)
+    } else if n >= 1_000_000 {
+        format!("{:.1}M", n as f64 / 1_000_000.0)
+    } else if n >= 1_000 {
+        format!("{:.1}K", n as f64 / 1_000.0)
+    } else {
+        format_int(n)
+    }
+}
+
+fn format_int(n: u64) -> String {
+    let s = n.to_string();
+    let bytes = s.as_bytes();
+    let mut out = String::with_capacity(s.len() + s.len() / 3);
+    for (i, b) in bytes.iter().enumerate() {
+        if i > 0 && (bytes.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(*b as char);
+    }
+    out
+}
+
+fn plural<'a>(count: u64, singular: &'a str, plural: &'a str) -> &'a str {
+    if count == 1 {
+        singular
+    } else {
+        plural
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -625,6 +800,34 @@ mod tests {
         ));
         assert_eq!(export_format_id(ExportFormat::Pdf), "pdf");
     }
+
+    #[test]
+    fn background_alert_body_formats_usage_delta() {
+        let body = background_alert_body(BackgroundUsageAlert {
+            calls: 25,
+            tokens: 120_000,
+            cost_usd: 1.25,
+        });
+
+        assert_eq!(
+            body,
+            "Usage jumped by $1.25, 120.0K tokens, 25 calls since the last alert baseline."
+        );
+    }
+
+    #[test]
+    fn background_alert_body_skips_zero_delta_parts() {
+        let body = background_alert_body(BackgroundUsageAlert {
+            calls: 1,
+            tokens: 0,
+            cost_usd: 0.0,
+        });
+
+        assert_eq!(
+            body,
+            "Usage jumped by 1 call since the last alert baseline."
+        );
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -640,11 +843,36 @@ pub fn run() {
         startup.initial_refresh_delay,
         startup.refresh_source,
     );
+    let shared_state = Arc::new(Mutex::new(DesktopState {
+        app,
+        quitting: false,
+    }));
+    let monitor_state = shared_state.clone();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            restore_main_window(app);
+        }))
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
+        .setup(move |app| {
+            setup_desktop_runtime(app, monitor_state.clone())?;
+            Ok(())
+        })
         .menu(desktop_menu)
-        .manage(Arc::new(Mutex::new(DesktopState { app })))
+        .manage(shared_state)
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let app_handle = window.app_handle();
+                if !is_quitting(app_handle) {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             get_snapshot,
             set_page,

@@ -3,6 +3,8 @@
 ## Tooling
 
 - Before finishing code changes, run `cargo clippy -- -D warnings` as part of the local test pass.
+- Run desktop `pnpm` commands non-interactively with `CI=true` (for example `CI=true pnpm run check`) so pnpm never stops on a no-TTY module purge prompt.
+- If a required dependency/check command fails because the sandbox blocks registry or network access, rerun the same command with network approval instead of retrying in the sandbox.
 - Update embedded pricing: `cargo run -- --refresh-prices` - never hand-edit `src/pricing/snapshot.json`.
 - Update embedded currency rates: `cargo run -- --generate-currency-json` - never hand-edit `currency/rates.json`.
 - Default builds include confirmed Config-page downloads for local rates/pricing files. Use `--no-default-features` for a no-download build; `ureq` remains gated behind the `refresh-prices` and `refresh-currency` features.

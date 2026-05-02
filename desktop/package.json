@@ -4,7 +4,7 @@
   "version": "0.0.4",
   "type": "module",
   "scripts": {
-    "icons": "tauri icon tokenusebars.svg --output src-tauri/icons",
+    "icons": "node scripts/generate-icons.mjs",
     "dev": "pnpm run icons && vite --host 127.0.0.1",
     "build": "pnpm run icons && vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json",

@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::time::Duration;
 
+use chrono::{DateTime, Utc};
 use color_eyre::Result;
 use crossterm::event::{
     KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
@@ -564,6 +565,49 @@ struct RefreshOutcome {
     result: Result<Ingested>,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct UsageTotals {
+    calls: u64,
+    tokens: u64,
+    cost_usd: f64,
+}
+
+impl UsageTotals {
+    fn from_ingested(ingested: &Ingested) -> Self {
+        let mut totals = Self::default();
+        for call in &ingested.calls {
+            totals.calls += 1;
+            totals.tokens = totals.tokens.saturating_add(call.input_tokens);
+            totals.tokens = totals.tokens.saturating_add(call.output_tokens);
+            totals.tokens = totals
+                .tokens
+                .saturating_add(call.cache_creation_input_tokens);
+            totals.tokens = totals.tokens.saturating_add(call.cache_read_input_tokens);
+            totals.cost_usd += call.cost_usd;
+        }
+        totals
+    }
+
+    fn delta_since(self, baseline: Self) -> Self {
+        Self {
+            calls: self.calls.saturating_sub(baseline.calls),
+            tokens: self.tokens.saturating_sub(baseline.tokens),
+            cost_usd: (self.cost_usd - baseline.cost_usd).max(0.0),
+        }
+    }
+
+    fn is_less_than(self, other: Self) -> bool {
+        self.calls < other.calls || self.tokens < other.tokens || self.cost_usd < other.cost_usd
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BackgroundUsageAlert {
+    pub calls: u64,
+    pub tokens: u64,
+    pub cost_usd: f64,
+}
+
 impl Refresher {
     /// Spawn the refresher thread. `initial_delay` sets how long to wait
     /// before the first auto refresh. Existing archives pass zero so startup
@@ -623,6 +667,9 @@ pub struct App {
     pub paths: ConfigPaths,
     pub currency_table: CurrencyTable,
     pub source: DataSource,
+    background_alert_baseline: Option<UsageTotals>,
+    background_alert_last_sent: Option<DateTime<Utc>>,
+    background_alerts: Vec<BackgroundUsageAlert>,
     live_source: Option<Ingested>,
     sample_forced: bool,
     pub status: Option<String>,
@@ -658,6 +705,9 @@ impl Default for App {
             currency_table: CurrencyTable::embedded()
                 .expect("embedded currency rates must be valid JSON"),
             source: DataSource::Sample,
+            background_alert_baseline: None,
+            background_alert_last_sent: None,
+            background_alerts: Vec::new(),
             live_source: None,
             sample_forced: false,
             status: None,
@@ -669,9 +719,11 @@ impl Default for App {
 impl App {
     pub fn with_source(source: DataSource, status: Option<String>) -> Self {
         let live_source = cached_live_source(&source);
+        let background_alert_baseline = live_source.as_ref().map(UsageTotals::from_ingested);
         Self {
             source,
             live_source,
+            background_alert_baseline,
             status,
             ..Self::default()
         }
@@ -689,9 +741,11 @@ impl App {
         let refresher = Some(Refresher::spawn(initial_refresh_delay, refresh_source));
         let export_dir = crate::export::default_export_dir(&paths);
         let live_source = cached_live_source(&source);
+        let background_alert_baseline = live_source.as_ref().map(UsageTotals::from_ingested);
         Self {
             source,
             live_source,
+            background_alert_baseline,
             status,
             settings,
             export_dir,
@@ -750,6 +804,10 @@ impl App {
         }
     }
 
+    pub fn take_background_alerts(&mut self) -> Vec<BackgroundUsageAlert> {
+        std::mem::take(&mut self.background_alerts)
+    }
+
     pub fn toggle_data_source(&mut self) {
         match std::mem::replace(&mut self.source, DataSource::Sample) {
             DataSource::Live(ingested) => {
@@ -797,6 +855,7 @@ impl App {
         match outcome.result {
             Ok(ingested) if !ingested.is_empty() => {
                 let n = ingested.calls.len();
+                self.update_background_alerts(outcome.kind, &ingested);
                 if self.sample_forced {
                     self.live_source = Some(ingested);
                 } else {
@@ -826,6 +885,51 @@ impl App {
         }
 
         self.refresh_session_view();
+    }
+
+    fn update_background_alerts(&mut self, kind: RefreshKind, ingested: &Ingested) {
+        let totals = UsageTotals::from_ingested(ingested);
+        if matches!(kind, RefreshKind::Manual) || !self.settings.background_alerts.enabled {
+            self.background_alert_baseline = Some(totals);
+            return;
+        }
+
+        let Some(baseline) = self.background_alert_baseline else {
+            self.background_alert_baseline = Some(totals);
+            return;
+        };
+
+        if totals.is_less_than(baseline) {
+            self.background_alert_baseline = Some(totals);
+            return;
+        }
+
+        let delta = totals.delta_since(baseline);
+        let config = &self.settings.background_alerts;
+        let crossed_threshold = delta.cost_usd >= config.min_cost_usd
+            || delta.tokens >= config.min_tokens()
+            || delta.calls >= config.min_calls();
+        if !crossed_threshold {
+            return;
+        }
+
+        let now = Utc::now();
+        if let Some(last_sent) = self.background_alert_last_sent {
+            let elapsed = (now - last_sent)
+                .to_std()
+                .unwrap_or_else(|_| Duration::from_secs(0));
+            if elapsed < config.cooldown() {
+                return;
+            }
+        }
+
+        self.background_alerts.push(BackgroundUsageAlert {
+            calls: delta.calls,
+            tokens: delta.tokens,
+            cost_usd: delta.cost_usd,
+        });
+        self.background_alert_last_sent = Some(now);
+        self.background_alert_baseline = Some(totals);
     }
 
     fn refresh_session_view(&mut self) {
@@ -1688,6 +1792,40 @@ mod tests {
         }
     }
 
+    fn ingested_with_usage(count: usize, cost_usd: f64, input_tokens: u64) -> Ingested {
+        Ingested {
+            calls: (0..count)
+                .map(|idx| crate::tools::ParsedCall {
+                    tool: "codex",
+                    model: "gpt-5".into(),
+                    cost_usd,
+                    input_tokens,
+                    dedup_key: format!("usage-call-{idx}"),
+                    session_id: format!("usage-session-{idx}"),
+                    project: "fixture/project".into(),
+                    ..Default::default()
+                })
+                .collect(),
+            limits: Vec::new(),
+        }
+    }
+
+    fn set_completed_refresh(app: &mut App, kind: RefreshKind, ingested: Ingested) {
+        let (signal_tx, _signal_rx) = mpsc::channel::<()>();
+        let (result_tx, result_rx) = mpsc::channel::<RefreshOutcome>();
+        result_tx
+            .send(RefreshOutcome {
+                kind,
+                result: Ok(ingested),
+            })
+            .unwrap();
+        app.refresher = Some(Refresher {
+            signal_tx,
+            result_rx,
+        });
+        std::mem::forget(result_tx);
+    }
+
     #[test]
     fn t_cycles_tool_filter() {
         let mut app = App::default();
@@ -2233,5 +2371,105 @@ mod tests {
             app.status.as_deref(),
             Some("auto-refresh · no sessions found · prior data kept")
         );
+    }
+
+    #[test]
+    fn auto_refresh_queues_background_alert_when_delta_crosses_threshold() {
+        let mut app = App::with_source(DataSource::Live(ingested_with_usage(10, 0.0, 0)), None);
+        set_completed_refresh(&mut app, RefreshKind::Auto, ingested_with_usage(35, 0.0, 0));
+
+        app.poll_reload();
+
+        assert_eq!(
+            app.take_background_alerts(),
+            vec![BackgroundUsageAlert {
+                calls: 25,
+                tokens: 0,
+                cost_usd: 0.0
+            }]
+        );
+    }
+
+    #[test]
+    fn below_threshold_auto_refreshes_accumulate_until_alert_fires() {
+        let mut app = App::with_source(DataSource::Live(ingested_with_usage(10, 0.0, 0)), None);
+        set_completed_refresh(&mut app, RefreshKind::Auto, ingested_with_usage(20, 0.0, 0));
+
+        app.poll_reload();
+        assert!(app.take_background_alerts().is_empty());
+
+        set_completed_refresh(&mut app, RefreshKind::Auto, ingested_with_usage(35, 0.0, 0));
+        app.poll_reload();
+
+        assert_eq!(app.take_background_alerts()[0].calls, 25);
+    }
+
+    #[test]
+    fn background_alert_cooldown_delays_repeated_notifications() {
+        let mut app = App::with_source(DataSource::Live(ingested_with_usage(10, 0.0, 0)), None);
+        set_completed_refresh(&mut app, RefreshKind::Auto, ingested_with_usage(35, 0.0, 0));
+        app.poll_reload();
+        assert_eq!(app.take_background_alerts().len(), 1);
+
+        set_completed_refresh(&mut app, RefreshKind::Auto, ingested_with_usage(60, 0.0, 0));
+        app.poll_reload();
+        assert!(app.take_background_alerts().is_empty());
+
+        app.background_alert_last_sent = Some(Utc::now() - chrono::Duration::minutes(31));
+        set_completed_refresh(&mut app, RefreshKind::Auto, ingested_with_usage(60, 0.0, 0));
+        app.poll_reload();
+
+        assert_eq!(app.take_background_alerts()[0].calls, 25);
+    }
+
+    #[test]
+    fn manual_refresh_resets_background_alert_baseline_without_notifying() {
+        let mut app = App::with_source(DataSource::Live(ingested_with_usage(10, 0.0, 0)), None);
+        set_completed_refresh(
+            &mut app,
+            RefreshKind::Manual,
+            ingested_with_usage(40, 0.0, 0),
+        );
+
+        app.poll_reload();
+
+        assert!(app.take_background_alerts().is_empty());
+
+        set_completed_refresh(&mut app, RefreshKind::Auto, ingested_with_usage(64, 0.0, 0));
+        app.poll_reload();
+        assert!(app.take_background_alerts().is_empty());
+
+        set_completed_refresh(&mut app, RefreshKind::Auto, ingested_with_usage(65, 0.0, 0));
+        app.poll_reload();
+        assert_eq!(app.take_background_alerts()[0].calls, 25);
+    }
+
+    #[test]
+    fn first_live_auto_refresh_from_sample_sets_baseline_without_alerting() {
+        let mut app = App::default();
+        set_completed_refresh(
+            &mut app,
+            RefreshKind::Auto,
+            ingested_with_usage(100, 10.0, 10_000),
+        );
+
+        app.poll_reload();
+
+        assert!(app.take_background_alerts().is_empty());
+    }
+
+    #[test]
+    fn disabled_background_alerts_never_queue_notifications() {
+        let mut app = App::with_source(DataSource::Live(ingested_with_usage(10, 0.0, 0)), None);
+        app.settings.background_alerts.enabled = false;
+        set_completed_refresh(
+            &mut app,
+            RefreshKind::Auto,
+            ingested_with_usage(100, 10.0, 10_000),
+        );
+
+        app.poll_reload();
+
+        assert!(app.take_background_alerts().is_empty());
     }
 }

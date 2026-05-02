@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fs, path::PathBuf};
+use std::{collections::BTreeMap, fs, path::PathBuf, time::Duration};
 
 use color_eyre::{eyre::Context, Result};
 use serde::{Deserialize, Serialize};
@@ -12,6 +12,11 @@ pub const CURRENCY_RATES_URL: &str =
 pub const FRANKFURTER_RATES_URL: &str = "https://api.frankfurter.dev/v2/rates?base=USD";
 pub const LITELLM_PRICING_URL: &str =
     "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
+
+pub const DEFAULT_BACKGROUND_ALERT_MIN_COST_USD: f64 = 1.0;
+pub const DEFAULT_BACKGROUND_ALERT_MIN_TOKENS: i64 = 100_000;
+pub const DEFAULT_BACKGROUND_ALERT_MIN_CALLS: i64 = 25;
+pub const DEFAULT_BACKGROUND_ALERT_COOLDOWN_MINUTES: i64 = 30;
 
 const CONFIG_FILE_NAME: &str = "config.json";
 const LOCAL_RATES_FILE_NAME: &str = "rates.json";
@@ -54,6 +59,8 @@ pub struct UserConfig {
     #[serde(default = "default_currency")]
     pub currency: String,
     #[serde(default)]
+    pub background_alerts: BackgroundAlertsConfig,
+    #[serde(default)]
     pub overrides: BTreeMap<String, Value>,
 }
 
@@ -61,8 +68,64 @@ impl Default for UserConfig {
     fn default() -> Self {
         Self {
             currency: DEFAULT_CURRENCY.into(),
+            background_alerts: BackgroundAlertsConfig::default(),
             overrides: BTreeMap::new(),
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BackgroundAlertsConfig {
+    #[serde(default = "default_background_alerts_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_background_alert_min_cost_usd")]
+    pub min_cost_usd: f64,
+    #[serde(default = "default_background_alert_min_tokens")]
+    pub min_tokens: i64,
+    #[serde(default = "default_background_alert_min_calls")]
+    pub min_calls: i64,
+    #[serde(default = "default_background_alert_cooldown_minutes")]
+    pub cooldown_minutes: i64,
+}
+
+impl Default for BackgroundAlertsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_background_alerts_enabled(),
+            min_cost_usd: default_background_alert_min_cost_usd(),
+            min_tokens: default_background_alert_min_tokens(),
+            min_calls: default_background_alert_min_calls(),
+            cooldown_minutes: default_background_alert_cooldown_minutes(),
+        }
+    }
+}
+
+impl BackgroundAlertsConfig {
+    pub fn normalize(&mut self) {
+        if !self.min_cost_usd.is_finite() || self.min_cost_usd <= 0.0 {
+            self.min_cost_usd = default_background_alert_min_cost_usd();
+        }
+        if self.min_tokens <= 0 {
+            self.min_tokens = default_background_alert_min_tokens();
+        }
+        if self.min_calls <= 0 {
+            self.min_calls = default_background_alert_min_calls();
+        }
+        if self.cooldown_minutes <= 0 {
+            self.cooldown_minutes = default_background_alert_cooldown_minutes();
+        }
+    }
+
+    pub fn min_tokens(&self) -> u64 {
+        self.min_tokens.max(1) as u64
+    }
+
+    pub fn min_calls(&self) -> u64 {
+        self.min_calls.max(1) as u64
+    }
+
+    pub fn cooldown(&self) -> Duration {
+        Duration::from_secs((self.cooldown_minutes.max(1) as u64).saturating_mul(60))
     }
 }
 
@@ -107,6 +170,7 @@ impl UserConfig {
     fn normalize(&mut self) {
         self.currency =
             normalize_currency_code(&self.currency).unwrap_or_else(|| DEFAULT_CURRENCY.into());
+        self.background_alerts.normalize();
     }
 }
 
@@ -123,9 +187,145 @@ fn default_currency() -> String {
     DEFAULT_CURRENCY.into()
 }
 
+fn default_background_alerts_enabled() -> bool {
+    true
+}
+
+fn default_background_alert_min_cost_usd() -> f64 {
+    DEFAULT_BACKGROUND_ALERT_MIN_COST_USD
+}
+
+fn default_background_alert_min_tokens() -> i64 {
+    DEFAULT_BACKGROUND_ALERT_MIN_TOKENS
+}
+
+fn default_background_alert_min_calls() -> i64 {
+    DEFAULT_BACKGROUND_ALERT_MIN_CALLS
+}
+
+fn default_background_alert_cooldown_minutes() -> i64 {
+    DEFAULT_BACKGROUND_ALERT_COOLDOWN_MINUTES
+}
+
 fn default_config_dir() -> PathBuf {
     let base = dirs::config_dir()
         .or_else(|| dirs::home_dir().map(|home| home.join(".config")))
         .unwrap_or_else(|| PathBuf::from("."));
     base.join(APP_ID)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_paths(name: &str) -> ConfigPaths {
+        let dir = std::env::temp_dir().join(format!(
+            "tokenuse-config-{}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+            name
+        ));
+        ConfigPaths::new(dir)
+    }
+
+    #[test]
+    fn default_config_includes_background_alert_thresholds() {
+        let config = UserConfig::default();
+
+        assert!(config.background_alerts.enabled);
+        assert_eq!(
+            config.background_alerts.min_cost_usd,
+            DEFAULT_BACKGROUND_ALERT_MIN_COST_USD
+        );
+        assert_eq!(
+            config.background_alerts.min_tokens,
+            DEFAULT_BACKGROUND_ALERT_MIN_TOKENS
+        );
+        assert_eq!(
+            config.background_alerts.min_calls,
+            DEFAULT_BACKGROUND_ALERT_MIN_CALLS
+        );
+        assert_eq!(
+            config.background_alerts.cooldown_minutes,
+            DEFAULT_BACKGROUND_ALERT_COOLDOWN_MINUTES
+        );
+    }
+
+    #[test]
+    fn custom_background_alert_config_loads_from_file() {
+        let paths = temp_paths("custom-alerts");
+        paths.ensure_dir().unwrap();
+        std::fs::write(
+            &paths.config_file,
+            r#"{
+  "currency": "GBP",
+  "background_alerts": {
+    "enabled": false,
+    "min_cost_usd": 2.5,
+    "min_tokens": 250000,
+    "min_calls": 50,
+    "cooldown_minutes": 45
+  }
+}
+"#,
+        )
+        .unwrap();
+
+        let config = UserConfig::load(&paths).unwrap();
+
+        assert_eq!(config.currency, "GBP");
+        assert!(!config.background_alerts.enabled);
+        assert_eq!(config.background_alerts.min_cost_usd, 2.5);
+        assert_eq!(config.background_alerts.min_tokens, 250_000);
+        assert_eq!(config.background_alerts.min_calls, 50);
+        assert_eq!(config.background_alerts.cooldown_minutes, 45);
+
+        let _ = std::fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn invalid_background_alert_values_fall_back_to_defaults() {
+        let paths = temp_paths("invalid-alerts");
+        paths.ensure_dir().unwrap();
+        std::fs::write(
+            &paths.config_file,
+            r#"{
+  "currency": "usd",
+  "background_alerts": {
+    "enabled": true,
+    "min_cost_usd": -1.0,
+    "min_tokens": -20,
+    "min_calls": 0,
+    "cooldown_minutes": -5
+  }
+}
+"#,
+        )
+        .unwrap();
+
+        let config = UserConfig::load(&paths).unwrap();
+
+        assert_eq!(config.currency, "USD");
+        assert_eq!(
+            config.background_alerts.min_cost_usd,
+            DEFAULT_BACKGROUND_ALERT_MIN_COST_USD
+        );
+        assert_eq!(
+            config.background_alerts.min_tokens,
+            DEFAULT_BACKGROUND_ALERT_MIN_TOKENS
+        );
+        assert_eq!(
+            config.background_alerts.min_calls,
+            DEFAULT_BACKGROUND_ALERT_MIN_CALLS
+        );
+        assert_eq!(
+            config.background_alerts.cooldown_minutes,
+            DEFAULT_BACKGROUND_ALERT_COOLDOWN_MINUTES
+        );
+
+        let _ = std::fs::remove_dir_all(paths.dir);
+    }
 }

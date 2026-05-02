@@ -25,6 +25,29 @@ The desktop header mirrors the TUI filters: period, tool, sort mode, and project
 
 Dashboard sections render the full sorted row set. Sections with more rows than fit in the current window scroll inside the section so the header, filters, and footer remain visible.
 
+## Background Alerts
+
+Closing the desktop window keeps Token Use running in the background. Use the tray or menu-bar icon to show the window again, or choose **Quit Token Use** from that menu to stop the app. Opening Token Use while it is already running restores the existing window instead of launching a second copy.
+
+While the app is running, the desktop backend keeps polling completed archive refreshes even if the window is hidden. If an automatic refresh imports a significant amount of new usage since the last alert baseline, Token Use sends a native desktop notification. Notifications are driven by all live imported usage, independent of the visible period, tool, project, or sort filters. Manual refreshes reset the alert baseline without sending a notification.
+
+Background alert thresholds are configured in the shared `config.json` file:
+
+```json
+{
+  "currency": "USD",
+  "background_alerts": {
+    "enabled": true,
+    "min_cost_usd": 1.0,
+    "min_tokens": 100000,
+    "min_calls": 25,
+    "cooldown_minutes": 30
+  }
+}
+```
+
+The defaults are conservative: notify after at least `$1.00`, `100k` tokens, or `25` calls of new usage, with a 30-minute cooldown. Linux tray click behavior depends on the desktop environment, so use the tray menu when a left-click does not restore the window. Windows notifications are most reliable from an installed build.
+
 ## Refresh
 
 Use the refresh button or keyboard shortcut `r` to sync the archive. Refreshes use the same background archive refresher as the TUI and keep the previous data visible if a sync fails.

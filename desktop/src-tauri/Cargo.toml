@@ -16,8 +16,10 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 color-eyre = "0.6"
 serde = { version = "1", features = ["derive"] }
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["image-png", "tray-icon"] }
 tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-single-instance = "2"
 thiserror = "2"
 tokenuse = { path = "../..", default-features = false }
 

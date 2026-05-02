@@ -1,0 +1,15 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="barGradient" x1="0" y1="173" x2="0" y2="867" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFC06A"/>
+      <stop offset="45%" stop-color="#FF9A4D"/>
+      <stop offset="100%" stop-color="#F26A3D"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Transparent, bars-only source for non-macOS system tray icons. -->
+  <rect x="239" y="520" width="100" height="347" rx="20" fill="url(#barGradient)"/>
+  <rect x="388" y="371" width="100" height="496" rx="20" fill="url(#barGradient)"/>
+  <rect x="537" y="173" width="100" height="694" rx="20" fill="url(#barGradient)"/>
+  <rect x="686" y="322" width="100" height="545" rx="20" fill="url(#barGradient)"/>
+</svg>
