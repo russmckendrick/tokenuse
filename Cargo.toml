@@ -1,6 +1,6 @@
 [package]
 name = "tokenuse"
-version = "0.0.5"
+version = "0.0.6"
 edition = "2021"
 description = "A terminal dashboard for AI token usage analytics."
 license = "MIT"
