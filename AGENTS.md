@@ -2,8 +2,9 @@
 
 ## Tooling
 
-- Before finishing code changes, run `cargo clippy -- -D warnings` as part of the local test pass.
-- Run desktop `pnpm` commands non-interactively with `CI=true` (for example `CI=true pnpm run check`) so pnpm never stops on a no-TTY module purge prompt.
+- Before finishing code changes, run the same local pass as the CI check jobs: `cargo fmt --check`, `cargo check`, `cargo clippy --all-targets --all-features -- -D warnings`, and `cargo test` from the repo root.
+- For desktop changes, also mirror the CI desktop check job: from `desktop/`, run `CI=true pnpm run check` and `CI=true pnpm run build`; from `desktop/src-tauri/`, run `cargo check`.
+- Run all desktop `pnpm` commands non-interactively with `CI=true` so pnpm never stops on a no-TTY module purge prompt.
 - If a required dependency/check command fails because the sandbox blocks registry or network access, rerun the same command with network approval instead of retrying in the sandbox.
 - Update embedded pricing: `cargo run -- --refresh-prices` - never hand-edit `src/pricing/snapshot.json`.
 - Update embedded currency rates: `cargo run -- --generate-currency-json` - never hand-edit `currency/rates.json`.

@@ -2089,7 +2089,7 @@ mod tests {
             .with_ymd_and_hms(2026, 5, 2, 15, 30, 0)
             .single()
             .unwrap();
-        let calls = vec![
+        let calls = [
             mk_timed_call(
                 "codex",
                 "first",
@@ -2133,7 +2133,7 @@ mod tests {
             .with_ymd_and_hms(2026, 5, 15, 12, 30, 0)
             .single()
             .unwrap();
-        let calls = vec![
+        let calls = [
             mk_timed_call(
                 "codex",
                 "first",
