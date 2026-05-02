@@ -10,6 +10,7 @@ use crate::currency::CurrencyFormatter;
 pub struct DashboardData {
     pub summary: Summary,
     pub daily: Vec<DailyMetric>,
+    pub activity_timeline: Vec<ActivityMetric>,
     pub projects: Vec<ProjectMetric>,
     pub project_tools: Vec<ProjectToolMetric>,
     pub sessions: Vec<SessionMetric>,
@@ -76,6 +77,14 @@ pub struct Summary {
 #[derive(Debug, Clone, Serialize)]
 pub struct DailyMetric {
     pub day: &'static str,
+    pub cost: &'static str,
+    pub calls: u64,
+    pub value: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ActivityMetric {
+    pub label: &'static str,
     pub cost: &'static str,
     pub calls: u64,
     pub value: u64,
@@ -368,9 +377,11 @@ impl From<WireSampleData> for SampleData {
 
 impl From<WireDashboardData> for DashboardData {
     fn from(wire: WireDashboardData) -> Self {
+        let daily: Vec<DailyMetric> = wire.daily.into_iter().map(Into::into).collect();
         Self {
             summary: wire.summary.into(),
-            daily: wire.daily.into_iter().map(Into::into).collect(),
+            activity_timeline: daily.iter().map(ActivityMetric::from_daily).collect(),
+            daily,
             projects: wire.projects.into_iter().map(Into::into).collect(),
             project_tools: wire.project_tools.into_iter().map(Into::into).collect(),
             sessions: wire.sessions.into_iter().map(Into::into).collect(),
@@ -465,6 +476,17 @@ impl From<WireDailyMetric> for DailyMetric {
     }
 }
 
+impl ActivityMetric {
+    fn from_daily(row: &DailyMetric) -> Self {
+        Self {
+            label: row.day,
+            cost: row.cost,
+            calls: row.calls,
+            value: row.value,
+        }
+    }
+}
+
 impl From<WireProjectMetric> for ProjectMetric {
     fn from(wire: WireProjectMetric) -> Self {
         Self {
@@ -542,6 +564,11 @@ fn rebase_dashboard_dates(data: &mut DashboardData, base: NaiveDate, delta: Dura
             row.day = leak(format_sample_day(date + delta));
         }
     }
+    for row in &mut data.activity_timeline {
+        if let Some(date) = parse_sample_day(row.label, base) {
+            row.label = leak(format_sample_day(date + delta));
+        }
+    }
     for row in &mut data.sessions {
         if let Ok(date) = NaiveDate::parse_from_str(row.date, "%Y-%m-%d") {
             row.date = leak((date + delta).format("%Y-%m-%d").to_string());
@@ -557,6 +584,37 @@ fn rebase_limit_dates(data: &mut LimitsData, base: NaiveDate, delta: Duration) {
             }
         }
     }
+}
+
+fn sample_activity_timeline(rows: &[DailyMetric], period: Period) -> Vec<ActivityMetric> {
+    if !matches!(period, Period::Today | Period::Week) {
+        return rows.iter().map(ActivityMetric::from_daily).collect();
+    }
+
+    // Sample data is daily-only, so create a deterministic hourly contour to
+    // exercise the same short-range graph density as live data.
+    const HOURLY_SHAPE: [u64; 24] = [
+        0, 0, 0, 0, 4, 12, 18, 8, 0, 6, 14, 10, 0, 0, 8, 24, 40, 30, 12, 0, 4, 14, 26, 10,
+    ];
+    let shape_total = HOURLY_SHAPE.iter().sum::<u64>().max(1);
+
+    rows.iter()
+        .flat_map(|row| {
+            HOURLY_SHAPE.iter().enumerate().map(move |(hour, weight)| {
+                let value = if row.value == 0 || *weight == 0 {
+                    0
+                } else {
+                    (row.value * *weight).div_ceil(100).max(1)
+                };
+                ActivityMetric {
+                    label: leak(format!("{} {:02}h", row.day, hour)),
+                    cost: row.cost,
+                    calls: row.calls.saturating_mul(*weight) / shape_total,
+                    value,
+                }
+            })
+        })
+        .collect()
 }
 
 fn parse_sample_day(value: &str, base: NaiveDate) -> Option<NaiveDate> {
@@ -645,6 +703,7 @@ pub fn dashboard_data(
     rebase_dashboard_dates(&mut data, sample_base_date(), sample_date_delta());
 
     apply_project_filter(&mut data, project_filter);
+    data.activity_timeline = sample_activity_timeline(&data.daily, period);
     apply_sample_sort(&mut data, sort);
     apply_currency(&mut data, currency);
 
@@ -860,6 +919,9 @@ fn apply_currency(data: &mut DashboardData, currency: &CurrencyFormatter) {
     for row in &mut data.daily {
         row.cost = convert_money_text(row.cost, currency, false);
     }
+    for row in &mut data.activity_timeline {
+        row.cost = convert_money_text(row.cost, currency, false);
+    }
     for row in &mut data.projects {
         row.cost = convert_money_text(row.cost, currency, false);
         row.avg_per_session = convert_money_text(row.avg_per_session, currency, false);
@@ -1007,6 +1069,40 @@ mod tests {
             .sessions
             .iter()
             .all(|session| session.date == today.format("%Y-%m-%d").to_string()));
+    }
+
+    #[test]
+    fn sample_activity_timeline_expands_short_ranges_and_ignores_table_sort() {
+        let currency = CurrencyFormatter::usd();
+        let spend = dashboard_data(
+            Period::Week,
+            Tool::All,
+            &ProjectFilter::All,
+            SortMode::Spend,
+            &currency,
+        );
+        let tokens = dashboard_data(
+            Period::Week,
+            Tool::All,
+            &ProjectFilter::All,
+            SortMode::Tokens,
+            &currency,
+        );
+
+        let spend_days = spend.daily.iter().map(|row| row.day).collect::<Vec<_>>();
+        let sorted_days = tokens.daily.iter().map(|row| row.day).collect::<Vec<_>>();
+        let timeline_labels = tokens
+            .activity_timeline
+            .iter()
+            .map(|row| row.label)
+            .collect::<Vec<_>>();
+
+        assert_ne!(sorted_days, spend_days);
+        assert_eq!(timeline_labels.len(), spend_days.len() * 24);
+        assert!(timeline_labels[0].starts_with(spend_days[0]));
+        assert!(timeline_labels
+            .last()
+            .is_some_and(|label| label.starts_with(spend_days[spend_days.len() - 1])));
     }
 
     #[test]

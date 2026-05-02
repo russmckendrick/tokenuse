@@ -2,15 +2,15 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
-use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, Utc};
+use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, TimeZone, Utc};
 use color_eyre::Result;
 
 use crate::app::{Period, ProjectFilter, SortMode, Tool};
 use crate::currency::CurrencyFormatter;
 use crate::data::{
-    CountMetric, DailyMetric, DashboardData, LimitMetric, LimitsData, ModelMetric, ProjectMetric,
-    ProjectOption, ProjectToolMetric, RecentModelMetric, RecentUsageMetric, SessionDetail,
-    SessionDetailView, SessionMetric, SessionOption, Summary, ToolLimitSection,
+    ActivityMetric, CountMetric, DailyMetric, DashboardData, LimitMetric, LimitsData, ModelMetric,
+    ProjectMetric, ProjectOption, ProjectToolMetric, RecentModelMetric, RecentUsageMetric,
+    SessionDetail, SessionDetailView, SessionMetric, SessionOption, Summary, ToolLimitSection,
 };
 use crate::tools::{self, LimitSnapshot, LimitWindow, ParsedCall};
 
@@ -72,7 +72,7 @@ impl Ingested {
                     && in_period(c, period, now)
             })
             .collect();
-        build_dashboard(&filtered, sort, currency)
+        build_dashboard(&filtered, period, now, sort, currency)
     }
 
     pub fn project_options(
@@ -659,6 +659,8 @@ fn format_plan_type(plan: &str) -> String {
 
 fn build_dashboard(
     calls: &[&ParsedCall],
+    period: Period,
+    now: DateTime<Local>,
     sort: SortMode,
     currency: &CurrencyFormatter,
 ) -> DashboardData {
@@ -695,6 +697,7 @@ fn build_dashboard(
     let project_labels = project_label_lookup(calls.iter().map(|call| &call.project));
 
     let daily = aggregate_daily(calls, sort, currency);
+    let activity_timeline = aggregate_activity_timeline(calls, period, now, currency);
     let projects = aggregate_projects(calls, &project_labels, sort, currency);
     let project_tools = aggregate_project_tools(calls, &project_labels, sort, currency);
     let sessions = aggregate_sessions(calls, &project_labels, sort, currency);
@@ -706,6 +709,7 @@ fn build_dashboard(
     DashboardData {
         summary,
         daily,
+        activity_timeline,
         projects,
         project_tools,
         sessions,
@@ -729,6 +733,7 @@ fn empty_dashboard(currency: &CurrencyFormatter) -> DashboardData {
             written: "0",
         },
         daily: Vec::new(),
+        activity_timeline: Vec::new(),
         projects: Vec::new(),
         project_tools: Vec::new(),
         sessions: Vec::new(),
@@ -823,6 +828,106 @@ fn aggregate_daily(
             value: sort_bar_value(&acc.stats, sort, max, idx, total),
         })
         .collect()
+}
+
+fn aggregate_activity_timeline(
+    calls: &[&ParsedCall],
+    period: Period,
+    now: DateTime<Local>,
+    currency: &CurrencyFormatter,
+) -> Vec<ActivityMetric> {
+    match period {
+        Period::Today => aggregate_hourly_timeline(calls, 24, true, now, currency),
+        Period::Week => aggregate_hourly_timeline(calls, 24 * 7, false, now, currency),
+        Period::ThirtyDays | Period::Month | Period::AllTime => {
+            aggregate_daily_timeline(calls, currency)
+        }
+    }
+}
+
+fn aggregate_hourly_timeline(
+    calls: &[&ParsedCall],
+    hours: i64,
+    hour_only_label: bool,
+    now: DateTime<Local>,
+    currency: &CurrencyFormatter,
+) -> Vec<ActivityMetric> {
+    #[derive(Default)]
+    struct Acc {
+        cost: f64,
+        calls: u64,
+    }
+
+    let now_hour = now.timestamp() / 3600;
+    let start_hour = now_hour.saturating_sub(hours.saturating_sub(1));
+    let mut by_hour: BTreeMap<i64, Acc> = BTreeMap::new();
+
+    for c in calls {
+        let Some(ts) = c.timestamp else { continue };
+        let hour = ts.with_timezone(&Local).timestamp() / 3600;
+        if hour < start_hour || hour > now_hour {
+            continue;
+        }
+        let entry = by_hour.entry(hour).or_default();
+        entry.cost += c.cost_usd;
+        entry.calls += 1;
+    }
+
+    let max_cost = by_hour.values().map(|acc| acc.cost).fold(0.0, f64::max);
+    (start_hour..=now_hour)
+        .map(|hour| {
+            let acc = by_hour.remove(&hour).unwrap_or_default();
+            ActivityMetric {
+                label: leak(format_hour_bucket(hour, hour_only_label)),
+                cost: leak(currency.format_money(acc.cost)),
+                calls: acc.calls,
+                value: scale(acc.cost, max_cost),
+            }
+        })
+        .collect()
+}
+
+fn aggregate_daily_timeline(
+    calls: &[&ParsedCall],
+    currency: &CurrencyFormatter,
+) -> Vec<ActivityMetric> {
+    #[derive(Default)]
+    struct Acc {
+        cost: f64,
+        calls: u64,
+    }
+
+    let mut by_day: BTreeMap<NaiveDate, Acc> = BTreeMap::new();
+    for c in calls {
+        let Some(ts) = c.timestamp else { continue };
+        let date = ts.with_timezone(&Local).date_naive();
+        let entry = by_day.entry(date).or_default();
+        entry.cost += c.cost_usd;
+        entry.calls += 1;
+    }
+
+    let max_cost = by_day.values().map(|acc| acc.cost).fold(0.0, f64::max);
+    by_day
+        .into_iter()
+        .map(|(date, acc)| ActivityMetric {
+            label: leak(date.format("%m-%d").to_string()),
+            cost: leak(currency.format_money(acc.cost)),
+            calls: acc.calls,
+            value: scale(acc.cost, max_cost),
+        })
+        .collect()
+}
+
+fn format_hour_bucket(hour: i64, hour_only: bool) -> String {
+    let Some(utc) = Utc.timestamp_opt(hour.saturating_mul(3600), 0).single() else {
+        return "-".into();
+    };
+    let local = utc.with_timezone(&Local);
+    if hour_only {
+        local.format("%Hh").to_string()
+    } else {
+        local.format("%m-%d %Hh").to_string()
+    }
 }
 
 fn aggregate_projects(
@@ -1878,12 +1983,51 @@ mod tests {
         assert_eq!(spend.daily[0].day, "04-01");
         assert_eq!(date.daily[0].day, "04-29");
         assert_eq!(tokens.daily[0].day, "04-15");
+        assert_eq!(
+            tokens
+                .activity_timeline
+                .iter()
+                .map(|row| row.label)
+                .collect::<Vec<_>>(),
+            vec!["04-01", "04-15", "04-29"]
+        );
+        assert_eq!(tokens.activity_timeline[0].value, 100);
+        assert_eq!(tokens.activity_timeline[1].value, 10);
+        assert_eq!(tokens.activity_timeline[2].value, 50);
         assert_eq!(spend.models[0].name, "spend-model");
         assert_eq!(date.models[0].name, "date-model");
         assert_eq!(tokens.models[0].name, "tokens-model");
         assert_eq!(spend.sessions[0].project, "spend");
         assert_eq!(date.sessions[0].project, "date");
         assert_eq!(tokens.sessions[0].project, "tokens");
+    }
+
+    #[test]
+    fn short_period_activity_timeline_uses_hourly_buckets() {
+        let ingested = Ingested {
+            calls: vec![mk_recent_call("codex", 1.0, 100)],
+            limits: Vec::new(),
+        };
+
+        let today = ingested.dashboard(
+            Period::Today,
+            Tool::All,
+            &ProjectFilter::All,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+        );
+        let week = ingested.dashboard(
+            Period::Week,
+            Tool::All,
+            &ProjectFilter::All,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+        );
+
+        assert_eq!(today.activity_timeline.len(), 24);
+        assert_eq!(week.activity_timeline.len(), 24 * 7);
+        assert_eq!(today.activity_timeline.last().unwrap().calls, 1);
+        assert_eq!(week.activity_timeline.last().unwrap().calls, 1);
     }
 
     #[test]

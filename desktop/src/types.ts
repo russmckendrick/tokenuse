@@ -27,6 +27,13 @@ export type DailyMetric = {
   value: number;
 };
 
+export type ActivityMetric = {
+  label: string;
+  cost: string;
+  calls: number;
+  value: number;
+};
+
 export type ProjectMetric = {
   name: string;
   cost: string;
@@ -71,6 +78,7 @@ export type CountMetric = {
 export type DashboardData = {
   summary: Summary;
   daily: DailyMetric[];
+  activity_timeline: ActivityMetric[];
   projects: ProjectMetric[];
   project_tools: ProjectToolMetric[];
   sessions: SessionMetric[];

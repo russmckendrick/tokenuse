@@ -1,4 +1,5 @@
 mod components;
+mod graphs;
 mod sections;
 
 use ratatui::{
@@ -14,12 +15,13 @@ use crate::{
     theme,
 };
 
-use components::{centered_rect, two_columns, weighted_columns};
+use components::{centered_rect, weighted_columns};
 use sections::{
-    render_config, render_counts, render_currency_modal, render_daily,
+    render_activity_pulse, render_config, render_counts, render_currency_modal, render_daily_trend,
     render_export_dir_picker_modal, render_export_modal, render_footer, render_help_modal,
-    render_kpi_strip, render_limits, render_models, render_project_modal, render_project_tools,
-    render_projects, render_session_modal, render_session_page, render_sessions, render_title_bar,
+    render_kpi_strip, render_limits, render_model_efficiency, render_models, render_project_modal,
+    render_project_tools, render_projects, render_session_modal, render_session_page,
+    render_sessions, render_title_bar,
 };
 
 pub fn render(frame: &mut Frame<'_>, app: &App) {
@@ -56,9 +58,9 @@ fn render_overview(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
             Constraint::Length(3),
             Constraint::Length(5),
             Constraint::Length(1),
-            Constraint::Min(11),
+            Constraint::Length(7),
             Constraint::Length(1),
-            Constraint::Min(10),
+            Constraint::Min(16),
             Constraint::Length(3),
         ])
         .split(area);
@@ -67,28 +69,31 @@ fn render_overview(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
 
     render_title_bar(frame, sections[0], app);
     render_kpi_strip(frame, sections[1], app, &data.summary);
+    render_activity_pulse(frame, sections[3], &data.activity_timeline);
 
-    let middle = two_columns(sections[3]);
-    render_daily(frame, middle[0], &data.daily);
-    render_models(frame, middle[1], &data.models);
-
-    let lower = two_columns(sections[5]);
+    let lower = weighted_columns(sections[5], 58);
     render_project_tools(frame, lower[0], &data.project_tools);
 
     let right_split = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .constraints([
+            Constraint::Percentage(42),
+            Constraint::Length(1),
+            Constraint::Percentage(29),
+            Constraint::Percentage(29),
+        ])
         .split(lower[1]);
+    render_models(frame, right_split[0], &data.models);
     render_counts(
         frame,
-        right_split[0],
+        right_split[2],
         "Shell Commands",
         theme::PRIMARY,
         &data.commands,
     );
     render_counts(
         frame,
-        right_split[1],
+        right_split[3],
         "MCP Servers",
         theme::MAGENTA,
         &data.mcp_servers,
@@ -125,7 +130,7 @@ fn render_dashboard(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
     render_title_bar(frame, sections[0], app);
 
     let top = weighted_columns(sections[2], 35);
-    render_daily(frame, top[0], &data.daily);
+    render_daily_trend(frame, top[0], &data.activity_timeline);
     render_projects(frame, top[1], &data.projects);
 
     render_sessions(frame, sections[4], &data.sessions);
@@ -145,7 +150,7 @@ fn render_dashboard(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
             Constraint::Min(0),
         ])
         .split(middle[1]);
-    render_models(frame, right_stack[0], &data.models);
+    render_model_efficiency(frame, right_stack[0], &data.models);
     render_counts(
         frame,
         right_stack[2],
@@ -298,7 +303,8 @@ mod tests {
         assert!(rendered.contains("Token Use"));
         assert!(rendered.contains("▂▅█▆"));
         assert!(!rendered.contains("v0.0.2"));
-        assert!(rendered.contains("Daily Activity"));
+        assert!(rendered.contains("Activity Trend"));
+        assert!(rendered.contains("Model Efficiency"));
         assert!(rendered.contains("Project Spend by Tool"));
         assert!(rendered.contains("q quit"));
         let first_footer_hint = crate::keymap::keymap().footer("dashboard")[0].clone();
@@ -365,7 +371,7 @@ mod tests {
         assert!(rendered.contains("COST"));
         assert!(rendered.contains("CALLS"));
         assert!(rendered.contains("CACHE HIT"));
-        assert!(rendered.contains("Daily Activity"));
+        assert!(rendered.contains("Activity Pulse"));
         assert!(rendered.contains("Project Spend by Tool"));
         assert!(rendered.contains("Shell Commands"));
         assert!(rendered.contains("MCP Servers"));
@@ -511,6 +517,8 @@ mod tests {
         assert!(rendered.contains("Claude Code"));
         assert!(rendered.contains("Cursor"));
         assert!(rendered.contains("Copilot"));
+        assert!(rendered.contains("Console"));
+        assert!(rendered.contains("24h pulse"));
         assert!(rendered.contains("tokens"));
         assert!(rendered.contains("sorted by 24h spend"));
         assert!(rendered.contains("c config"));

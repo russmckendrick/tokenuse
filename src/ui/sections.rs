@@ -8,13 +8,14 @@ use ratatui::{
 use crate::{
     app::{App, ConfigDownload, FolderPickerEntryKind, Page, Period},
     data::{
-        CountMetric, DailyMetric, ModelMetric, ProjectMetric, ProjectToolMetric, RecentModelMetric,
-        RecentUsageMetric, SessionDetail, SessionMetric, Summary, ToolLimitSection,
+        ActivityMetric, CountMetric, ModelMetric, ProjectMetric, ProjectToolMetric, SessionDetail,
+        SessionMetric, Summary, ToolLimitSection,
     },
     keymap, theme,
 };
 
-use super::components::{bar_cell, centered_rect, BAR_WIDTH};
+use super::components::centered_rect;
+use super::graphs;
 
 pub(super) fn render_title_bar(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let block = theme::panel_block("", theme::PRIMARY);
@@ -150,41 +151,110 @@ fn render_kpi_card(
         .render(area, frame.buffer_mut());
 }
 
-pub(super) fn render_daily(frame: &mut Frame<'_>, area: Rect, rows: &[DailyMetric]) {
-    let table_rows = rows.iter().map(|item| {
-        Row::new(vec![
-            Cell::from(item.day).style(theme::muted()),
-            bar_cell(item.value),
-            Cell::from(item.cost).style(theme::money()),
-            Cell::from(item.calls.to_string()).style(theme::base()),
-        ])
-    });
+pub(super) fn render_activity_pulse(frame: &mut Frame<'_>, area: Rect, rows: &[ActivityMetric]) {
+    render_timeline_panel(frame, area, "Activity Pulse", theme::CYAN, rows, true);
+}
 
-    let table = Table::new(
-        table_rows,
-        [
-            Constraint::Length(8),
-            Constraint::Length(BAR_WIDTH as u16),
-            Constraint::Length(10),
-            Constraint::Length(8),
-        ],
-    )
-    .header(Row::new(vec![
-        Cell::from("date").style(theme::dim()),
-        Cell::from(""),
-        Cell::from("cost").style(theme::dim()),
-        Cell::from("calls").style(theme::dim()),
-    ]))
-    .column_spacing(1)
-    .block(theme::panel_block("Daily Activity", theme::BLUE));
+pub(super) fn render_daily_trend(frame: &mut Frame<'_>, area: Rect, rows: &[ActivityMetric]) {
+    render_timeline_panel(frame, area, "Activity Trend", theme::BLUE, rows, false);
+}
 
-    frame.render_widget(table, area);
+fn render_timeline_panel(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    title: &str,
+    color: Color,
+    rows: &[ActivityMetric],
+    compact: bool,
+) {
+    let block = theme::panel_block(title, color);
+    let inner = block.inner(area);
+    block.render(area, frame.buffer_mut());
+
+    if rows.is_empty() {
+        Paragraph::new(Text::from(vec![graphs::no_data_line("pulse")]))
+            .style(theme::base())
+            .render(inner, frame.buffer_mut());
+        return;
+    }
+
+    let spark_width = inner.width.saturating_sub(11).max(8) as usize;
+    let spend_values: Vec<u64> = rows.iter().map(|row| row.value).collect();
+    let max_calls = rows.iter().map(|row| row.calls).max().unwrap_or(0);
+    let call_values: Vec<u64> = rows
+        .iter()
+        .map(|row| {
+            if max_calls == 0 {
+                0
+            } else {
+                ((row.calls as f64 / max_calls as f64) * 100.0).round() as u64
+            }
+        })
+        .collect();
+
+    let first = rows.first().expect("rows is not empty");
+    let latest = rows.last().expect("rows is not empty");
+    let high = rows
+        .iter()
+        .max_by_key(|row| row.value)
+        .expect("rows is not empty");
+    let total_calls = rows.iter().map(|row| row.calls).sum::<u64>();
+
+    let mut spend_line = vec![Span::styled("spend ", theme::key())];
+    spend_line.extend(graphs::sparkline_spans(&spend_values, spark_width));
+
+    let mut call_line = vec![Span::styled("calls ", theme::base().fg(theme::BLUE_SOFT))];
+    call_line.extend(graphs::sparkline_spans(&call_values, spark_width));
+
+    let mut lines = vec![Line::from(spend_line), Line::from(call_line)];
+    lines.push(Line::from(vec![
+        Span::styled("range ", theme::dim()),
+        Span::styled(first.label, theme::muted()),
+        Span::styled(" to ", theme::dim()),
+        Span::styled(latest.label, theme::muted()),
+        Span::styled("   high ", theme::dim()),
+        Span::styled(high.label, theme::key()),
+        Span::styled(" ", theme::dim()),
+        Span::styled(high.cost, theme::money()),
+        Span::styled("   latest ", theme::dim()),
+        Span::styled(latest.cost, theme::money()),
+        Span::styled("   calls ", theme::dim()),
+        Span::styled(format_compact_u64(total_calls), theme::base()),
+    ]));
+
+    if !compact && inner.height > 4 {
+        let recent = rows
+            .iter()
+            .rev()
+            .take(3)
+            .map(|row| {
+                format!(
+                    "{} {} {}",
+                    row.label,
+                    row.cost,
+                    format_compact_u64(row.calls)
+                )
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>()
+            .join("   ");
+        lines.push(Line::from(vec![
+            Span::styled("recent ", theme::dim()),
+            Span::styled(recent, theme::muted()),
+        ]));
+    }
+
+    Paragraph::new(Text::from(lines))
+        .style(theme::base())
+        .render(inner, frame.buffer_mut());
 }
 
 pub(super) fn render_projects(frame: &mut Frame<'_>, area: Rect, rows: &[ProjectMetric]) {
     let table_rows = rows.iter().map(|item| {
         Row::new(vec![
-            bar_cell(item.value),
+            graphs::rank_cell(item.value),
             Cell::from(item.name).style(theme::muted()),
             Cell::from(item.cost).style(theme::money()),
             Cell::from(item.avg_per_session).style(theme::money()),
@@ -196,7 +266,7 @@ pub(super) fn render_projects(frame: &mut Frame<'_>, area: Rect, rows: &[Project
     let table = Table::new(
         table_rows,
         [
-            Constraint::Length(BAR_WIDTH as u16),
+            Constraint::Length(graphs::RANK_WIDTH as u16),
             Constraint::Min(16),
             Constraint::Length(9),
             Constraint::Length(8),
@@ -221,7 +291,7 @@ pub(super) fn render_projects(frame: &mut Frame<'_>, area: Rect, rows: &[Project
 pub(super) fn render_sessions(frame: &mut Frame<'_>, area: Rect, rows: &[SessionMetric]) {
     let table_rows = rows.iter().map(|item| {
         Row::new(vec![
-            bar_cell(item.value),
+            graphs::rank_cell(item.value),
             Cell::from(item.date).style(theme::muted()),
             Cell::from(item.project).style(theme::muted()),
             Cell::from(item.cost).style(theme::money()),
@@ -232,7 +302,7 @@ pub(super) fn render_sessions(frame: &mut Frame<'_>, area: Rect, rows: &[Session
     let table = Table::new(
         table_rows,
         [
-            Constraint::Length(BAR_WIDTH as u16),
+            Constraint::Length(graphs::RANK_WIDTH as u16),
             Constraint::Length(10),
             Constraint::Min(20),
             Constraint::Length(10),
@@ -255,7 +325,7 @@ pub(super) fn render_sessions(frame: &mut Frame<'_>, area: Rect, rows: &[Session
 pub(super) fn render_project_tools(frame: &mut Frame<'_>, area: Rect, rows: &[ProjectToolMetric]) {
     let table_rows = rows.iter().map(|item| {
         Row::new(vec![
-            bar_cell(item.value),
+            graphs::rank_cell(item.value),
             Cell::from(item.project).style(theme::muted()),
             Cell::from(item.tool).style(theme::base().fg(theme::YELLOW_SOFT)),
             Cell::from(item.cost).style(theme::money()),
@@ -268,7 +338,7 @@ pub(super) fn render_project_tools(frame: &mut Frame<'_>, area: Rect, rows: &[Pr
     let table = Table::new(
         table_rows,
         [
-            Constraint::Length(BAR_WIDTH as u16),
+            Constraint::Length(graphs::RANK_WIDTH as u16),
             Constraint::Min(12),
             Constraint::Length(7),
             Constraint::Length(9),
@@ -293,9 +363,17 @@ pub(super) fn render_project_tools(frame: &mut Frame<'_>, area: Rect, rows: &[Pr
 }
 
 pub(super) fn render_models(frame: &mut Frame<'_>, area: Rect, rows: &[ModelMetric]) {
+    render_models_panel(frame, area, "By Model", rows);
+}
+
+pub(super) fn render_model_efficiency(frame: &mut Frame<'_>, area: Rect, rows: &[ModelMetric]) {
+    render_models_panel(frame, area, "Model Efficiency", rows);
+}
+
+fn render_models_panel(frame: &mut Frame<'_>, area: Rect, title: &str, rows: &[ModelMetric]) {
     let table_rows = rows.iter().map(|item| {
         Row::new(vec![
-            bar_cell(item.value),
+            graphs::rank_cell(item.value),
             Cell::from(item.name).style(theme::base()),
             Cell::from(item.cost).style(theme::money()),
             Cell::from(item.cache).style(theme::base()),
@@ -306,7 +384,7 @@ pub(super) fn render_models(frame: &mut Frame<'_>, area: Rect, rows: &[ModelMetr
     let table = Table::new(
         table_rows,
         [
-            Constraint::Length(BAR_WIDTH as u16),
+            Constraint::Length(graphs::RANK_WIDTH as u16),
             Constraint::Min(10),
             Constraint::Length(9),
             Constraint::Length(7),
@@ -321,7 +399,7 @@ pub(super) fn render_models(frame: &mut Frame<'_>, area: Rect, rows: &[ModelMetr
         Cell::from("calls").style(theme::dim()),
     ]))
     .column_spacing(1)
-    .block(theme::panel_block("By Model", theme::MAGENTA));
+    .block(theme::panel_block(title, theme::MAGENTA));
 
     frame.render_widget(table, area);
 }
@@ -335,7 +413,7 @@ pub(super) fn render_counts(
 ) {
     let table_rows = rows.iter().map(|item| {
         Row::new(vec![
-            bar_cell(item.value),
+            graphs::rank_cell(item.value),
             Cell::from(item.name).style(theme::base()),
             Cell::from(item.calls.to_string()).style(theme::base()),
         ])
@@ -344,7 +422,7 @@ pub(super) fn render_counts(
     let table = Table::new(
         table_rows,
         [
-            Constraint::Length(BAR_WIDTH as u16),
+            Constraint::Length(graphs::RANK_WIDTH as u16),
             Constraint::Min(16),
             Constraint::Length(9),
         ],
@@ -383,18 +461,37 @@ pub(super) fn render_limits(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
     .alignment(Alignment::Right)
     .render(sections[1], frame.buffer_mut());
 
-    let tool_sections = Layout::default()
+    let usage_rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Ratio(1, 4),
-            Constraint::Ratio(1, 4),
-            Constraint::Ratio(1, 4),
-            Constraint::Ratio(1, 4),
+            Constraint::Ratio(1, 2),
+            Constraint::Length(1),
+            Constraint::Ratio(1, 2),
         ])
         .split(sections[2]);
 
-    for (idx, section) in data.sections.iter().enumerate().take(4) {
-        render_tool_usage_section(frame, tool_sections[idx], section);
+    let top = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Ratio(1, 2),
+            Constraint::Length(1),
+            Constraint::Ratio(1, 2),
+        ])
+        .split(usage_rows[0]);
+    let bottom = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Ratio(1, 2),
+            Constraint::Length(1),
+            Constraint::Ratio(1, 2),
+        ])
+        .split(usage_rows[2]);
+
+    for (area, section) in [top[0], top[2], bottom[0], bottom[2]]
+        .into_iter()
+        .zip(data.sections.iter().take(4))
+    {
+        render_tool_usage_section(frame, area, section);
     }
 
     render_footer(frame, sections[3], app);
@@ -403,91 +500,105 @@ pub(super) fn render_limits(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
 }
 
 fn render_tool_usage_section(frame: &mut Frame<'_>, area: Rect, section: &ToolLimitSection) {
-    let mut rows = Vec::new();
+    let title = format!("{} Console · 24h + models", section.tool);
+    let block = theme::panel_block(&title, usage_tool_color(section.tool));
+    let inner = block.inner(area);
+    block.render(area, frame.buffer_mut());
 
-    rows.push(Row::new(vec![
-        Cell::from("usage").style(theme::key()),
-        Cell::from("24h total").style(theme::muted()),
-        usage_cell(&section.usage),
-        Cell::from(section.usage.calls.to_string()).style(theme::base()),
-        Cell::from(section.usage.tokens).style(theme::muted()),
-        Cell::from(section.usage.cost).style(theme::money()),
-        Cell::from(section.usage.last_seen).style(theme::muted()),
-    ]));
+    let split = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(2)])
+        .split(inner);
 
-    rows.extend(section.limits.iter().map(|limit| {
+    render_tool_usage_header(frame, split[0], section);
+    render_tool_usage_rows(frame, split[1], section);
+}
+
+fn render_tool_usage_header(frame: &mut Frame<'_>, area: Rect, section: &ToolLimitSection) {
+    let spark_width = area.width.saturating_sub(12).max(12) as usize;
+    let mut pulse = vec![Span::styled("24h pulse ", theme::key())];
+    pulse.extend(graphs::sparkline_spans(&section.usage.buckets, spark_width));
+
+    let text = Text::from(vec![
+        Line::from(pulse),
+        Line::from(vec![
+            Span::styled(
+                section.usage.cost,
+                theme::money().add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" cost   ", theme::dim()),
+            Span::styled(section.usage.calls.to_string(), theme::base()),
+            Span::styled(" calls   ", theme::dim()),
+            Span::styled(section.usage.tokens, theme::muted()),
+            Span::styled(" tokens   seen ", theme::dim()),
+            Span::styled(section.usage.last_seen, theme::muted()),
+        ]),
+    ]);
+
+    Paragraph::new(text)
+        .style(theme::base())
+        .render(area, frame.buffer_mut());
+}
+
+fn render_tool_usage_rows(frame: &mut Frame<'_>, area: Rect, section: &ToolLimitSection) {
+    let mut rows: Vec<Row<'static>> = section
+        .limits
+        .iter()
+        .map(|limit| {
+            Row::new(vec![
+                Cell::from("limit").style(theme::base().fg(theme::CYAN)),
+                Cell::from(format!("{} {}", limit.scope, limit.window)).style(theme::muted()),
+                graphs::gauge_cell(limit.used),
+                Cell::from(limit.left).style(theme::base()),
+                Cell::from(limit.reset).style(theme::muted()),
+                Cell::from(limit.plan).style(theme::base().fg(theme::YELLOW_SOFT)),
+            ])
+        })
+        .collect();
+
+    rows.extend(section.models.iter().map(|model| {
         Row::new(vec![
-            Cell::from("limit").style(theme::base().fg(theme::CYAN)),
-            Cell::from(format!("{} {}", limit.scope, limit.window)).style(theme::muted()),
-            bar_cell(limit.used),
-            Cell::from(limit.left).style(theme::base()),
-            Cell::from(limit.reset).style(theme::muted()),
-            Cell::from(limit.plan).style(theme::base().fg(theme::YELLOW_SOFT)),
-            Cell::from(""),
+            Cell::from("model").style(theme::base().fg(theme::BLUE_SOFT)),
+            Cell::from(model.name).style(theme::muted()),
+            graphs::rank_cell(model.value),
+            Cell::from(model.calls.to_string()).style(theme::base()),
+            Cell::from(model.tokens).style(theme::muted()),
+            Cell::from(model.cost).style(theme::money()),
         ])
     }));
 
-    rows.extend(section.models.iter().map(model_row));
-
-    let title = format!("{} · 24h usage + models", section.tool);
     let table = Table::new(
         rows,
         [
-            Constraint::Length(7),
-            Constraint::Min(22),
-            Constraint::Length(24),
-            Constraint::Length(10),
-            Constraint::Length(14),
-            Constraint::Length(12),
+            Constraint::Length(6),
+            Constraint::Min(14),
             Constraint::Length(8),
+            Constraint::Length(10),
+            Constraint::Length(10),
+            Constraint::Length(10),
         ],
     )
     .header(Row::new(vec![
         Cell::from("kind").style(theme::dim()),
-        Cell::from("name").style(theme::dim()),
-        Cell::from("24h / used").style(theme::dim()),
-        Cell::from("calls / left").style(theme::dim()),
-        Cell::from("tokens / reset").style(theme::dim()),
-        Cell::from("cost / plan").style(theme::dim()),
-        Cell::from("seen").style(theme::dim()),
+        Cell::from("scope/model").style(theme::dim()),
+        Cell::from("bar").style(theme::dim()),
+        Cell::from("left/call").style(theme::dim()),
+        Cell::from("reset/tok").style(theme::dim()),
+        Cell::from("cost/plan").style(theme::dim()),
     ]))
-    .column_spacing(1)
-    .block(theme::panel_block(&title, theme::MAGENTA));
+    .column_spacing(1);
 
     frame.render_widget(table, area);
 }
 
-fn model_row(model: &RecentModelMetric) -> Row<'static> {
-    Row::new(vec![
-        Cell::from("model").style(theme::base().fg(theme::BLUE_SOFT)),
-        Cell::from(model.name).style(theme::muted()),
-        bar_cell(model.value),
-        Cell::from(model.calls.to_string()).style(theme::base()),
-        Cell::from(model.tokens).style(theme::muted()),
-        Cell::from(model.cost).style(theme::money()),
-        Cell::from(""),
-    ])
-}
-
-fn usage_cell(usage: &RecentUsageMetric) -> Cell<'static> {
-    let spans = usage
-        .buckets
-        .into_iter()
-        .map(|value| {
-            let color = if value == 0 {
-                theme::BAR_EMPTY
-            } else if value < 34 {
-                theme::BLUE_SOFT
-            } else if value < 67 {
-                theme::CYAN
-            } else {
-                theme::PRIMARY
-            };
-            Span::styled(" ", theme::base().bg(color))
-        })
-        .collect::<Vec<_>>();
-
-    Cell::from(Line::from(spans))
+fn usage_tool_color(tool: &str) -> Color {
+    match tool {
+        "Codex" => theme::PRIMARY,
+        "Claude Code" => theme::MAGENTA,
+        "Cursor" => theme::BLUE,
+        "Copilot" => theme::GREEN,
+        _ => theme::CYAN,
+    }
 }
 
 pub(super) fn render_config(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {

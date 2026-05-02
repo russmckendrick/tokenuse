@@ -121,9 +121,9 @@ flowchart LR
     Cfg -- h/? --> Help
 ```
 
-- **Overview** (`Page::Overview`): default landing page. Compact KPI strip plus daily activity, models, project/tool spend, shell commands, and MCP servers. Acts as the at-a-glance landing for everyday use.
-- **Deep Dive** (`Page::DeepDive`): every panel listed under [Aggregation](#aggregation), including top sessions and core tool counts that are not on Overview.
-- **Usage** (`Page::Usage`): per-tool 24-hour activity histogram, optional plan-side rate limit windows, and top-3 models per tool. Built from `Ingested::limits` over the same `ParsedCall` set plus `LimitSnapshot` records. Period and project filters are deliberately ignored, while sort mode controls section/model order. See [TUI usage](../guides/tui-usage.md#usage-page).
+- **Overview** (`Page::Overview`): default command-center landing page. Compact KPI strip plus a chronological activity pulse, models, project/tool spend, shell commands, and MCP servers. Acts as the at-a-glance landing for everyday use.
+- **Deep Dive** (`Page::DeepDive`): analysis workbench with every panel listed under [Aggregation](#aggregation), including a larger chronological activity trend, top sessions, model efficiency, and core tool counts that are not on Overview.
+- **Usage** (`Page::Usage`): per-tool 24-hour console with an activity pulse, optional plan-side rate limit gauges, and top-3 models per tool. Built from `Ingested::limits` over the same `ParsedCall` set plus `LimitSnapshot` records. Period and project filters are deliberately ignored, while sort mode controls section/model order. See [TUI usage](../guides/tui-usage.md#usage-page).
 - **Session** (`Page::Session`): drill-down for one `tool:session_id`. Rendered from `SessionDetailView`, computed by filtering `Ingested.calls` by `session_key(call) == key` and sorting calls with the active sort mode. Live data shows per-call timestamp, model, cost, in/out tokens, cache, tools used, and a 120-char single-line prompt snippet; selecting a call opens a modal with the full stored prompt plus reasoning/web-search counts and bash commands. Sample mode shows a privacy note since per-call records are not bundled.
 - **Config** (`Page::Config`): currency override + local data refresh actions (rates, LiteLLM pricing).
 - **Project picker, Currency picker, Session picker** (`*Modal` structs): each holds `options`, a typeable `query`, and a `filtered: Vec<usize>` mapping; all three share the same case-insensitive substring filter pattern. The project picker pins `All` regardless of query.
@@ -132,6 +132,8 @@ flowchart LR
 - **Help** (`help_open: bool`): full keybinding reference rendered from the shared keymap, openable from any page with `h` or `?`. Closes with `h`, `?`, or `Esc`.
 
 The modal state is checked in priority order in `App::handle_key`: help, call detail, currency, download confirmation, project, session, export folder picker, then export. The active context is passed to the keymap resolver before `App` applies the returned action. The folder picker is the only nested modal and sits on top of the export picker. The desktop app uses the same resolver through the `handle_shortcut` Tauri command, returning frontend effects for Svelte-owned modals and call-detail state.
+
+Terminal graph primitives live in `src/ui/graphs.rs`. They provide relative block sparklines, ranked bars, and compact gauges for TUI panels without adding another charting dependency. `DashboardData.activity_timeline` is the chronological graph source for Overview and Deep Dive: Today and 7 Days use hourly buckets, while longer periods use daily buckets. `DashboardData.daily` remains the sort-aware table source.
 
 ## Project Identity
 
@@ -212,7 +214,7 @@ JSON, CSV, SVG, and PNG exports reflect the **current filtered dashboard view** 
 
 | Format | Output | Notes |
 | --- | --- | --- |
-| JSON | one `.json` file | Pretty-printed `DashboardData` (summary, daily, projects, project_tools, sessions, models, tools, commands, mcp_servers). All `&'static str` panel cells serialize as strings. |
+| JSON | one `.json` file | Pretty-printed `DashboardData` (summary, daily, activity_timeline, projects, project_tools, sessions, models, tools, commands, mcp_servers). All `&'static str` panel cells serialize as strings. |
 | CSV | a directory of `.csv` files | One file per panel: `summary.csv`, `daily.csv`, `projects.csv`, `project_tools.csv`, `sessions.csv`, `models.csv`, `tools.csv`, `commands.csv`, `mcp_servers.csv`. Hand-written RFC 4180 escaping (commas, quotes, newlines). |
 | SVG | one `.svg` file | Multi-panel render of the dashboard at 1800×1500. |
 | PNG | one `.png` file | Same render as SVG, rasterized via `plotters`' bitmap backend. |
