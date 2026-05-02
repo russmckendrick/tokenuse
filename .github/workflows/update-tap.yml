@@ -126,8 +126,6 @@ jobs:
           end
           EOF
 
-          rm -f Casks/tokenuse.rb
-
           cat > Casks/tokenuse-desktop.rb << EOF
           cask "tokenuse-desktop" do
             version "${VERSION#v}"
@@ -147,16 +145,9 @@ jobs:
           end
           EOF
 
-          if [ -f cask_renames.json ]; then
-            jq --sort-keys '. + {"tokenuse": "tokenuse-desktop"}' cask_renames.json > cask_renames.json.tmp
-          else
-            jq --null-input --sort-keys '{"tokenuse": "tokenuse-desktop"}' > cask_renames.json.tmp
-          fi
-          mv cask_renames.json.tmp cask_renames.json
-
           git config user.name "GitHub Action"
           git config user.email "action@github.com"
-          git add -A Casks/tokenuse.rb Casks/tokenuse-desktop.rb Formula/tokenuse.rb cask_renames.json
+          git add -A -- Casks Formula
 
           if git diff --cached --quiet; then
             echo "Formula and cask already up to date"
