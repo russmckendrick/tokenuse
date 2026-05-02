@@ -142,10 +142,6 @@
       </div>
     </div>
 
-    {#if error || snapshot.status}
-      <div class:error={Boolean(error)} class="popover-status">{error ?? snapshot.status}</div>
-    {/if}
-
     <div class="activity-card">
       <div class="card-head">
         <span>Activity</span>
@@ -171,9 +167,13 @@
         {#each modelCards() as model}
           <div>
             <strong>{model.name}</strong>
-            <span>{model.cost}</span>
-            <small>{count(model.calls)} calls · {model.cache} cache</small>
+            <p>
+              <span>{model.cost}</span>
+              <small>{count(model.calls)} calls</small>
+            </p>
           </div>
+        {:else}
+          <div class="empty-model">no model rows</div>
       {/each}
       </div>
     </div>
@@ -269,8 +269,7 @@
 
   .popover-head span,
   small,
-  .activity-meta,
-  .popover-status {
+  .activity-meta {
     color: #a1a7c3;
   }
 
@@ -312,18 +311,6 @@
     color: #ffd60a;
     font-size: 18px;
     line-height: 1.08;
-  }
-
-  .popover-status {
-    min-height: 24px;
-    padding: 4px 7px;
-    border: 1px solid #414866;
-    border-radius: 3px;
-  }
-
-  .popover-status.error {
-    color: #ff5f6d;
-    border-color: #ff5f6d;
   }
 
   .activity-card,
@@ -386,22 +373,26 @@
     min-height: 0;
     align-content: start;
     padding: 7px;
+    overflow: hidden;
   }
 
   .model-grid {
     min-height: 0;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-rows: repeat(2, minmax(78px, 1fr));
+    grid-template-rows: repeat(2, minmax(58px, 1fr));
     gap: 6px;
+    overflow: hidden;
   }
 
   .model-grid div {
     min-width: 0;
-    display: grid;
-    align-content: center;
-    gap: 3px;
-    padding: 7px;
+    min-height: 58px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    padding: 6px 7px;
     border: 1px solid #414866;
     border-radius: 3px;
     background: #202438;
@@ -409,17 +400,32 @@
 
   .model-grid strong {
     color: #cbd4f2;
-    font-size: 12px;
+    font-size: 12.5px;
     line-height: 1.2;
   }
 
+  .model-grid p {
+    min-width: 0;
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
   .model-grid span {
-    font-size: 16px;
+    font-size: 15px;
     line-height: 1.1;
   }
 
   .model-grid small {
     font-size: 10px;
+  }
+
+  .model-grid .empty-model {
+    grid-column: 1 / -1;
+    color: #a1a7c3;
+    text-align: center;
   }
 
   .popover-actions {
