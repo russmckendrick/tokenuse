@@ -432,28 +432,30 @@
         {/each}
       </div>
 
-      <div class="segmented tool-strip" aria-label="Tool">
-        <span>tool</span>
-        <select aria-label="Tool" onchange={setToolFromEvent}>
-          {#each snapshot.tools as tool}
-            <option value={tool.value} selected={snapshot.tool === tool.value}>{tool.label}</option>
-          {/each}
-        </select>
-      </div>
+      <div class="filter-controls">
+        <div class="segmented tool-strip" aria-label="Tool">
+          <span>tool</span>
+          <select aria-label="Tool" onchange={setToolFromEvent}>
+            {#each snapshot.tools as tool}
+              <option value={tool.value} selected={snapshot.tool === tool.value}>{tool.label}</option>
+            {/each}
+          </select>
+        </div>
 
-      <div class="segmented tool-strip sort-strip" aria-label="Sort">
-        <span>sort</span>
-        <select aria-label="Sort" onchange={setSortFromEvent}>
-          {#each snapshot.sorts as sort}
-            <option value={sort.value} selected={snapshot.sort === sort.value}>{sort.label}</option>
-          {/each}
-        </select>
-      </div>
+        <div class="segmented tool-strip sort-strip" aria-label="Sort">
+          <span>sort</span>
+          <select aria-label="Sort" onchange={setSortFromEvent}>
+            {#each snapshot.sorts as sort}
+              <option value={sort.value} selected={snapshot.sort === sort.value}>{sort.label}</option>
+            {/each}
+          </select>
+        </div>
 
-      <button class="project-pill" type="button" onclick={() => openModal('project')}>
-        <span>project</span>
-        <strong>{snapshot.project.label}</strong>
-      </button>
+        <button class="segmented tool-strip project-strip" type="button" aria-label="Project" onclick={() => openModal('project')}>
+          <span>project</span>
+          <strong>{snapshot.project.label}</strong>
+        </button>
+      </div>
     </section>
 
     {#if statusMessage()}

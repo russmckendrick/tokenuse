@@ -4,7 +4,7 @@ Changes that should be included in the next release go here. Keep this file curr
 
 ## Highlights
 
-- Upgraded the desktop dashboard and tray popover with Motion-powered transitions, D3-backed activity charts, and D3 rank heat strips while preserving the dense dark Token Use console style.
+- Upgraded the desktop dashboard and tray popover with Motion-powered transitions, D3-backed activity charts, clean period-change graph redraws, and D3 rank heat strips while preserving the dense dark Token Use console style.
 - Added Gemini CLI ingestion from local `~/.gemini/tmp/<project_hash>/chats/session-*.json|jsonl` files, including exact token usage, cached input reads, thoughts, tool calls, Bash command extraction, and Gemini filters across TUI, desktop, and exports.
 - Added Cursor Agent transcript ingestion from `~/.cursor/projects/**/agent-transcripts`, including Composer JSONL, legacy text transcripts, subagent transcripts, approximate token estimates, tool extraction, Bash command extraction, and `CURSOR_AGENT_HOME` for copied Cursor data folders.
 - Added a confirmed clear-data action to both Config pages that deletes `archive.db` and immediately reimports local tool history while keeping config, rates, pricing snapshots, and exports.

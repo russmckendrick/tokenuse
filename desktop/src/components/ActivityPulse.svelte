@@ -1,6 +1,6 @@
 <script lang="ts">
   import { area, curveMonotoneX, line, scaleLinear } from 'd3';
-  import { staggeredReveal } from '../motion';
+  import { chartRefresh, staggeredReveal } from '../motion';
   import type { ActivityMetric } from '../types';
 
   export let points: ActivityMetric[] = [];
@@ -18,6 +18,7 @@
   let hoverIndex: number | null = null;
   let pendingClientX: number | null = null;
   let hoverFrame: number | null = null;
+  let lastChartKey = '';
 
   $: maxCalls = points.reduce((max, point) => Math.max(max, point.calls), 0);
   $: totalCalls = points.reduce((total, point) => total + point.calls, 0);
@@ -27,6 +28,7 @@
   $: latest = points.length ? points[points.length - 1] : null;
   $: firstLabel = points[0]?.label ?? '-';
   $: lastLabel = latest?.label ?? '-';
+  $: chartKey = `${points.length}:${firstLabel}:${lastLabel}`;
   $: dense = points.length > 192;
   $: domainEnd = Math.max(points.length - 1, 1);
   $: xScale = scaleLinear().domain([0, domainEnd]).range([xInset, chartWidth - xInset]);
@@ -48,6 +50,10 @@
   $: hoverPoint = hoverIndex === null ? null : points[hoverIndex] ?? null;
   $: hoverX = hoverIndex === null ? 0 : bucketX(hoverIndex);
   $: hoverBarX = hoverIndex === null ? 0 : barX(hoverIndex);
+  $: if (chartKey !== lastChartKey) {
+    lastChartKey = chartKey;
+    clearHover();
+  }
 
   function clampPercent(value: number) {
     return Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
@@ -110,59 +116,61 @@
     <div class="activity-chart">
       <div class="pulse-label spend">spend</div>
       <div class="pulse-label calls">calls</div>
-      <div class="chart-frame">
-        <svg
-          bind:this={svgElement}
-          viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-          preserveAspectRatio="none"
-          role="img"
-          aria-label={`Activity from ${firstLabel} to ${lastLabel}`}
-          onpointermove={handlePointerMove}
-          onpointerleave={clearHover}
-        >
-          <rect class="calls-band" x={xInset} y={callsTop - 2} width={chartWidth - xInset * 2} height={callsBottom - callsTop + 2}></rect>
+      {#key chartKey}
+        <div class="chart-frame" use:chartRefresh={{ y: 2 }}>
+          <svg
+            bind:this={svgElement}
+            viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+            preserveAspectRatio="none"
+            role="img"
+            aria-label={`Activity from ${firstLabel} to ${lastLabel}`}
+            onpointermove={handlePointerMove}
+            onpointerleave={clearHover}
+          >
+            <rect class="calls-band" x={xInset} y={callsTop - 2} width={chartWidth - xInset * 2} height={callsBottom - callsTop + 2}></rect>
 
-          <line class="guide spend-guide" x1={xInset} x2={chartWidth - xInset} y1={spendTop} y2={spendTop}></line>
-          <line class="guide middle-guide" x1={xInset} x2={chartWidth - xInset} y1={spendBottom} y2={spendBottom}></line>
-          <line class="guide calls-guide" x1={xInset} x2={chartWidth - xInset} y1={callsBottom} y2={callsBottom}></line>
+            <line class="guide spend-guide" x1={xInset} x2={chartWidth - xInset} y1={spendTop} y2={spendTop}></line>
+            <line class="guide middle-guide" x1={xInset} x2={chartWidth - xInset} y1={spendBottom} y2={spendBottom}></line>
+            <line class="guide calls-guide" x1={xInset} x2={chartWidth - xInset} y1={callsBottom} y2={callsBottom}></line>
 
-          {#each points as point, index}
-            <rect
-              class="spend-bar"
-              class:empty={point.value === 0}
-              class:peak={point === high}
-              x={barX(index)}
-              y={spendY(point.value)}
-              width={bucketBarWidth}
-              height={spendHeight(point.value)}
-            >
-              <title>{point.label} · {point.cost} · {point.calls.toLocaleString()} calls</title>
-            </rect>
-          {/each}
+            {#each points as point, index}
+              <rect
+                class="spend-bar"
+                class:empty={point.value === 0}
+                class:peak={point === high}
+                x={barX(index)}
+                y={spendY(point.value)}
+                width={bucketBarWidth}
+                height={spendHeight(point.value)}
+              >
+                <title>{point.label} · {point.cost} · {point.calls.toLocaleString()} calls</title>
+              </rect>
+            {/each}
 
-          <path class="calls-area" d={callsArea}></path>
-          <path class="calls-line" d={callsLine}></path>
+            <path class="calls-area" d={callsArea}></path>
+            <path class="calls-line" d={callsLine}></path>
+
+            {#if hoverPoint}
+              <line class="hover-line" x1={hoverX} x2={hoverX} y1={spendTop} y2={callsBottom}></line>
+              <rect
+                class="hover-bar"
+                x={hoverBarX}
+                y={spendY(hoverPoint.value)}
+                width={bucketBarWidth}
+                height={spendHeight(hoverPoint.value)}
+              ></rect>
+            {/if}
+          </svg>
 
           {#if hoverPoint}
-            <line class="hover-line" x1={hoverX} x2={hoverX} y1={spendTop} y2={callsBottom}></line>
-            <rect
-              class="hover-bar"
-              x={hoverBarX}
-              y={spendY(hoverPoint.value)}
-              width={bucketBarWidth}
-              height={spendHeight(hoverPoint.value)}
-            ></rect>
+            <div class="pulse-tooltip" style={`left: ${Math.min(92, Math.max(8, (hoverX / chartWidth) * 100))}%`}>
+              <strong>{hoverPoint.label}</strong>
+              <span>{hoverPoint.cost}</span>
+              <span>{hoverPoint.calls.toLocaleString()} calls</span>
+            </div>
           {/if}
-        </svg>
-
-        {#if hoverPoint}
-          <div class="pulse-tooltip" style={`left: ${Math.min(92, Math.max(8, (hoverX / chartWidth) * 100))}%`}>
-            <strong>{hoverPoint.label}</strong>
-            <span>{hoverPoint.cost}</span>
-            <span>{hoverPoint.calls.toLocaleString()} calls</span>
-          </div>
-        {/if}
-      </div>
+        </div>
+      {/key}
     </div>
 
     <div class="pulse-meta">

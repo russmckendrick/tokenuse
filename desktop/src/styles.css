@@ -87,7 +87,7 @@ select {
 select {
   min-height: 34px;
   appearance: none;
-  padding-right: 30px;
+  padding: 7px 28px 7px 9px;
 }
 
 input:focus,
@@ -203,28 +203,33 @@ footer,
   position: relative;
   z-index: 20;
   display: grid;
-  grid-template-columns: auto minmax(160px, 220px) minmax(160px, 220px) minmax(220px, 320px);
+  grid-template-columns: max-content minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  column-gap: 14px;
   padding: 6px 7px;
   border-color: #414866;
+}
+
+.filter-controls {
+  justify-self: end;
+  display: grid;
+  grid-template-columns: minmax(130px, 170px) minmax(145px, 180px) minmax(180px, 245px);
+  align-items: center;
+  gap: 8px;
 }
 
 .tool-strip {
   position: relative;
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr);
+  grid-template-columns: max-content minmax(0, 1fr);
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   overflow: visible;
 }
 
 .tool-strip span {
   color: #a1a7c3;
-}
-
-.sort-strip span {
-  width: 52px;
+  white-space: nowrap;
 }
 
 .tool-strip::after {
@@ -247,12 +252,50 @@ footer,
   border-color: #ff8f40;
 }
 
-.project-pill {
-  justify-content: space-between;
+.project-strip {
+  width: 100%;
   min-width: 0;
+  min-height: 34px;
+  padding: 0;
+  color: #ff8f40;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  justify-content: stretch;
 }
 
-.project-pill span,
+.project-strip:hover {
+  color: #ff8f40;
+  border-color: transparent;
+}
+
+.project-strip span {
+  color: #a1a7c3;
+  font-weight: 600;
+}
+
+.project-strip strong {
+  min-width: 0;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  color: #ff8f40;
+  background: #25293d;
+  border: 1px solid #ff8f40;
+  border-radius: 3px;
+  padding: 5px 28px 5px 9px;
+  font-weight: 800;
+}
+
+.project-strip:hover strong {
+  color: #ffffff;
+  border-color: #62a6ff;
+}
+
+.project-strip:hover::after {
+  border-color: #62a6ff;
+}
+
 .muted-cell,
 small,
 footer,
@@ -260,7 +303,7 @@ th {
   color: #a1a7c3;
 }
 
-.project-pill strong,
+.project-strip strong,
 .config-facts strong {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1057,6 +1100,11 @@ footer b {
   .deep-grid,
   .usage-grid,
   .config-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .filter-controls {
+    justify-self: stretch;
     grid-template-columns: minmax(0, 1fr);
   }
 

@@ -21,6 +21,11 @@ type BarParams = {
   duration?: number;
 };
 
+type ChartRefreshParams = {
+  duration?: number;
+  y?: number;
+};
+
 const reduceQuery = '(prefers-reduced-motion: reduce)';
 
 function reducedMotion() {
@@ -126,6 +131,31 @@ export function animatedBar(node: HTMLElement, params: BarParams) {
         { duration: next.duration ?? 0.28, ease: 'easeOut' }
       );
       previous = value;
+    }
+  };
+}
+
+export function chartRefresh(node: HTMLElement, params: ChartRefreshParams = {}) {
+  if (reducedMotion()) return {};
+
+  const y = params.y ?? 3;
+  let animation: MotionControls | null = null;
+
+  node.style.opacity = '0';
+  node.style.transform = `translateY(${y}px)`;
+
+  const cancelFrame = frame(() => {
+    animation = animate(
+      node,
+      { opacity: [0, 1], transform: [`translateY(${y}px)`, 'translateY(0px)'] },
+      { duration: params.duration ?? 0.18, ease: 'easeOut' }
+    ) as MotionControls;
+  });
+
+  return {
+    destroy() {
+      cancelFrame();
+      stopAnimation(animation);
     }
   };
 }
