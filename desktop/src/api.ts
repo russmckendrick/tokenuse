@@ -30,6 +30,7 @@ export const api = {
   setShowDockOrTaskbarIcon: (enabled: boolean) =>
     invoke<DesktopSnapshot>('set_show_dock_or_taskbar_icon', { enabled }),
   refreshArchive: () => invoke<DesktopSnapshot>('refresh_archive'),
+  clearData: () => invoke<DesktopSnapshot>('clear_data'),
   refreshCurrencyRates: () => invoke<DesktopSnapshot>('refresh_currency_rates'),
   refreshPricingSnapshot: () => invoke<DesktopSnapshot>('refresh_pricing_snapshot'),
   setExportDir: (path: string) => invoke<DesktopSnapshot>('set_export_dir', { path }),

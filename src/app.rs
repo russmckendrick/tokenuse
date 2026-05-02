@@ -575,6 +575,18 @@ struct RefreshOutcome {
     result: Result<Ingested>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClearDataModal {
+    Confirm,
+    Running,
+}
+
+type ClearDataResult = std::result::Result<(Ingested, archive::SyncStats), String>;
+
+struct ClearDataJob {
+    result_rx: Receiver<ClearDataResult>,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 struct UsageTotals {
     calls: u64,
@@ -616,6 +628,15 @@ pub struct BackgroundUsageAlert {
     pub calls: u64,
     pub tokens: u64,
     pub cost_usd: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatusTone {
+    Info,
+    Busy,
+    Success,
+    Warning,
+    Error,
 }
 
 impl Refresher {
@@ -662,6 +683,7 @@ pub struct App {
     pub project_modal: Option<ProjectModal>,
     pub currency_modal: Option<CurrencyModal>,
     pub download_confirm: Option<ConfigDownload>,
+    pub clear_data_modal: Option<ClearDataModal>,
     pub session_modal: Option<SessionModal>,
     pub export_modal: Option<ExportModal>,
     pub export_dir_picker: Option<FolderPickerModal>,
@@ -677,6 +699,8 @@ pub struct App {
     pub paths: ConfigPaths,
     pub currency_table: CurrencyTable,
     pub source: DataSource,
+    clear_data_job: Option<ClearDataJob>,
+    clear_data_tick: usize,
     background_alert_baseline: Option<UsageTotals>,
     background_alert_last_sent: Option<DateTime<Utc>>,
     background_alerts: Vec<BackgroundUsageAlert>,
@@ -699,6 +723,7 @@ impl Default for App {
             project_modal: None,
             currency_modal: None,
             download_confirm: None,
+            clear_data_modal: None,
             session_modal: None,
             export_modal: None,
             export_dir_picker: None,
@@ -715,6 +740,8 @@ impl Default for App {
             currency_table: CurrencyTable::embedded()
                 .expect("embedded currency rates must be valid JSON"),
             source: DataSource::Sample,
+            clear_data_job: None,
+            clear_data_tick: 0,
             background_alert_baseline: None,
             background_alert_last_sent: None,
             background_alerts: Vec::new(),
@@ -808,6 +835,37 @@ impl App {
         self.currency_table.formatter(&self.settings.currency)
     }
 
+    pub fn status_tone(&self) -> StatusTone {
+        let Some(status) = self.status.as_deref() else {
+            return StatusTone::Info;
+        };
+
+        if status.starts_with("data cleared")
+            || status.starts_with("rates refreshed")
+            || status.starts_with("LiteLLM prices refreshed")
+            || status.starts_with("currency set")
+            || status.starts_with("exported")
+            || status.starts_with("reloaded")
+        {
+            StatusTone::Success
+        } else if status.contains("failed") {
+            StatusTone::Error
+        } else if status.contains("unavailable")
+            || status.contains("prior data kept")
+            || status.contains("no local sessions")
+        {
+            StatusTone::Warning
+        } else if status.starts_with("clearing") || status.starts_with("reloading") {
+            StatusTone::Busy
+        } else {
+            StatusTone::Info
+        }
+    }
+
+    pub fn clear_data_spinner_frame(&self) -> usize {
+        self.clear_data_tick
+    }
+
     /// Ask the background refresher to run ingest now (out-of-cycle). The
     /// thread does one ingest at a time, so a queued signal just runs after
     /// the in-flight one finishes - no dedup needed here.
@@ -848,6 +906,8 @@ impl App {
     /// Drain any results the refresher has produced and apply the most recent
     /// successful one. Called every tick from the main loop.
     pub fn poll_reload(&mut self) {
+        self.poll_clear_data();
+
         let Some(refresher) = self.refresher.as_ref() else {
             return;
         };
@@ -901,6 +961,30 @@ impl App {
         }
 
         self.refresh_session_view();
+    }
+
+    fn poll_clear_data(&mut self) {
+        if self.clear_data_job.is_some() {
+            self.clear_data_tick = self.clear_data_tick.wrapping_add(1);
+        }
+
+        let result = match self
+            .clear_data_job
+            .as_ref()
+            .map(|job| job.result_rx.try_recv())
+        {
+            Some(Ok(result)) => Some(result),
+            Some(Err(TryRecvError::Disconnected)) => {
+                Some(Err("clear data worker stopped before reporting".into()))
+            }
+            Some(Err(TryRecvError::Empty)) | None => None,
+        };
+
+        if let Some(result) = result {
+            self.clear_data_job = None;
+            self.clear_data_modal = None;
+            self.apply_clear_data_result(result);
+        }
     }
 
     fn update_background_alerts(&mut self, kind: RefreshKind, ingested: &Ingested) {
@@ -1148,6 +1232,11 @@ impl App {
         } else {
             "embedded snapshot".into()
         };
+        let clear_value = if self.paths.archive_db_file.exists() {
+            "delete archive.db, then rebuild".into()
+        } else {
+            "build archive.db from local history".into()
+        };
 
         vec![
             ConfigRowView {
@@ -1164,6 +1253,11 @@ impl App {
                 name: "LiteLLM prices",
                 value: pricing_value,
                 action: "download",
+            },
+            ConfigRowView {
+                name: "clear data",
+                value: clear_value,
+                action: "clear",
             },
         ]
     }
@@ -1193,6 +1287,13 @@ impl App {
 
         if self.currency_modal.is_some() {
             return keymap::CONTEXT_CURRENCY_PICKER;
+        }
+
+        if let Some(clear_modal) = self.clear_data_modal {
+            return match clear_modal {
+                ClearDataModal::Confirm => keymap::CONTEXT_DOWNLOAD_CONFIRM,
+                ClearDataModal::Running => keymap::CONTEXT_BUSY_MODAL,
+            };
         }
 
         if self.download_confirm.is_some() {
@@ -1277,6 +1378,8 @@ impl App {
     fn cancel_active_context(&mut self) {
         if self.currency_modal.is_some() {
             self.currency_modal = None;
+        } else if self.clear_data_modal == Some(ClearDataModal::Confirm) {
+            self.clear_data_modal = None;
         } else if self.download_confirm.is_some() {
             self.download_confirm = None;
         } else if self.project_modal.is_some() {
@@ -1291,7 +1394,9 @@ impl App {
     }
 
     fn confirm_active_context(&mut self) {
-        if self.download_confirm.is_some() {
+        if self.clear_data_modal == Some(ClearDataModal::Confirm) {
+            self.confirm_clear_data();
+        } else if self.download_confirm.is_some() {
             self.confirm_download();
         } else if self.currency_modal.is_some() {
             self.confirm_currency_picker();
@@ -1656,12 +1761,19 @@ impl App {
             0 => self.open_currency_modal(),
             1 => self.open_download_confirm(ConfigDownload::CurrencyRates),
             2 => self.open_download_confirm(ConfigDownload::PricingSnapshot),
+            3 => self.open_clear_data_confirm(),
             _ => {}
         }
     }
 
     fn open_download_confirm(&mut self, target: ConfigDownload) {
         self.download_confirm = Some(target);
+    }
+
+    fn open_clear_data_confirm(&mut self) {
+        if self.clear_data_job.is_none() {
+            self.clear_data_modal = Some(ClearDataModal::Confirm);
+        }
     }
 
     fn open_currency_modal(&mut self) {
@@ -1690,6 +1802,77 @@ impl App {
                 self.status = Some(format!("config save failed · {e}"));
             }
         }
+    }
+
+    fn confirm_clear_data(&mut self) {
+        self.start_clear_data();
+    }
+
+    pub fn clear_data(&mut self) {
+        self.refresher = None;
+        let result = crate::archive::reset_and_load(&self.paths).map_err(|e| e.to_string());
+        self.apply_clear_data_result(result);
+    }
+
+    fn start_clear_data(&mut self) {
+        if self.clear_data_job.is_some() {
+            return;
+        }
+
+        self.refresher = None;
+        self.clear_data_modal = Some(ClearDataModal::Running);
+        self.clear_data_tick = 0;
+        self.status = Some("clearing data · reimporting local history".into());
+        let paths = self.paths.clone();
+        let (result_tx, result_rx) = mpsc::channel::<ClearDataResult>();
+        std::thread::spawn(move || {
+            let result = crate::archive::reset_and_load(&paths).map_err(|e| e.to_string());
+            let _ = result_tx.send(result);
+        });
+        self.clear_data_job = Some(ClearDataJob { result_rx });
+    }
+
+    fn apply_clear_data_result(&mut self, result: ClearDataResult) {
+        match result {
+            Ok((ingested, _stats)) => {
+                let calls = ingested.calls.len();
+                let limits = ingested.limits.len();
+                self.project_filter = ProjectFilter::All;
+                self.session_view = None;
+                self.session_scroll = 0;
+                self.session_selected = 0;
+                self.call_detail_index = None;
+                self.background_alert_last_sent = None;
+                self.background_alerts.clear();
+                self.sample_forced = false;
+
+                if ingested.is_empty() {
+                    self.source = DataSource::Sample;
+                    self.live_source = None;
+                    self.background_alert_baseline = None;
+                    self.status =
+                        Some("data cleared · no local sessions found · sample data".into());
+                } else {
+                    self.background_alert_baseline = Some(UsageTotals::from_ingested(&ingested));
+                    self.source = DataSource::Live(ingested);
+                    self.live_source = None;
+                    self.status = Some(format!("data cleared · {calls} calls · {limits} limits"));
+                }
+
+                self.refresher = Some(Refresher::spawn(
+                    archive::SYNC_INTERVAL,
+                    RefreshSource::Archive(self.paths.clone()),
+                ));
+            }
+            Err(e) => {
+                self.status = Some(format!("clear data failed · {e}"));
+                self.refresher = Some(Refresher::spawn(
+                    archive::SYNC_INTERVAL,
+                    RefreshSource::Archive(self.paths.clone()),
+                ));
+            }
+        }
+        self.refresh_session_view();
     }
 
     #[cfg(feature = "refresh-currency")]
@@ -2126,6 +2309,8 @@ mod tests {
         assert_eq!(rows[1].action, "download");
         assert_eq!(rows[2].name, "LiteLLM prices");
         assert_eq!(rows[2].action, "download");
+        assert_eq!(rows[3].name, "clear data");
+        assert_eq!(rows[3].action, "clear");
     }
 
     #[test]
@@ -2161,6 +2346,40 @@ mod tests {
         app.handle_key(key(KeyCode::Esc));
         assert_eq!(app.download_confirm, None);
         assert_eq!(app.status, None);
+    }
+
+    #[test]
+    fn config_clear_data_confirmation_opens_and_cancels() {
+        let mut app = App::default();
+
+        app.handle_key(key(KeyCode::Char('c')));
+        app.handle_key(key(KeyCode::End));
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(app.clear_data_modal, Some(ClearDataModal::Confirm));
+
+        app.handle_key(key(KeyCode::Char('q')));
+        assert_eq!(app.clear_data_modal, Some(ClearDataModal::Confirm));
+        assert!(!app.should_quit());
+
+        app.handle_key(key(KeyCode::Char('n')));
+        assert_eq!(app.clear_data_modal, None);
+        assert_eq!(app.status, None);
+    }
+
+    #[test]
+    fn clear_data_statuses_have_distinct_tones() {
+        let mut app = App {
+            status: Some("clearing data · reimporting local history".into()),
+            ..Default::default()
+        };
+        assert_eq!(app.status_tone(), StatusTone::Busy);
+
+        app.status = Some("data cleared · 10 calls · 2 limits".into());
+        assert_eq!(app.status_tone(), StatusTone::Success);
+
+        app.status = Some("clear data failed · locked".into());
+        assert_eq!(app.status_tone(), StatusTone::Error);
     }
 
     #[cfg(not(feature = "refresh-currency"))]

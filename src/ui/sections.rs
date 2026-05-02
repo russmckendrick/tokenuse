@@ -6,7 +6,7 @@ use ratatui::{
 };
 
 use crate::{
-    app::{App, ConfigDownload, FolderPickerEntryKind, Page, Period},
+    app::{App, ClearDataModal, ConfigDownload, FolderPickerEntryKind, Page, Period, StatusTone},
     data::{
         ActivityMetric, CountMetric, ModelMetric, ProjectMetric, ProjectToolMetric, SessionDetail,
         SessionMetric, Summary, ToolLimitSection,
@@ -646,6 +646,7 @@ pub(super) fn render_config(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
     render_footer(frame, sections[6], app);
     render_currency_modal(frame, root, app);
     render_download_confirm_modal(frame, root, app);
+    render_clear_data_confirm_modal(frame, root, app);
 }
 
 fn render_config_rows(frame: &mut Frame<'_>, area: Rect, app: &App) {
@@ -694,9 +695,16 @@ fn render_config_rows(frame: &mut Frame<'_>, area: Rect, app: &App) {
 fn render_config_paths(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let mut lines = Vec::new();
     if let Some(status) = app.status.as_ref() {
+        let status_style = match app.status_tone() {
+            StatusTone::Success => theme::base().fg(theme::GREEN).add_modifier(Modifier::BOLD),
+            StatusTone::Busy => theme::base().fg(theme::CYAN),
+            StatusTone::Warning => theme::money(),
+            StatusTone::Error => theme::base().fg(theme::RED).add_modifier(Modifier::BOLD),
+            StatusTone::Info => theme::muted(),
+        };
         lines.push(Line::from(vec![
             Span::styled("status ", theme::key()),
-            Span::styled(status.as_str(), theme::muted()),
+            Span::styled(status.as_str(), status_style),
         ]));
     }
     lines.extend([
@@ -1164,6 +1172,90 @@ pub(super) fn render_download_confirm_modal(frame: &mut Frame<'_>, area: Rect, a
     Paragraph::new(Text::from(lines))
         .style(theme::base())
         .render(inner, frame.buffer_mut());
+}
+
+fn render_clear_data_confirm_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let Some(modal) = app.clear_data_modal else {
+        return;
+    };
+
+    let width = 78.min(area.width.saturating_sub(4)).max(54);
+    let height = 10.min(area.height.saturating_sub(4)).max(8);
+    let modal_area = centered_rect(width, height, area);
+    Clear.render(modal_area, frame.buffer_mut());
+
+    let title = match modal {
+        ClearDataModal::Confirm => "Clear data?",
+        ClearDataModal::Running => "Clearing data",
+    };
+    let block = theme::panel_block(title, theme::RED);
+    let inner = block.inner(modal_area);
+    block.render(modal_area, frame.buffer_mut());
+
+    let lines = match modal {
+        ClearDataModal::Confirm => vec![
+            Line::from(vec![
+                Span::styled("Delete  ", theme::key()),
+                Span::styled("archive.db", theme::muted()),
+            ]),
+            Line::from(vec![
+                Span::styled("Rebuild ", theme::key()),
+                Span::styled("from local tool history", theme::muted()),
+            ]),
+            Line::from(vec![
+                Span::styled("Keep    ", theme::key()),
+                Span::styled("config, rates, pricing, exports", theme::muted()),
+            ]),
+            Line::from(vec![
+                Span::styled("Note    ", theme::key()),
+                Span::styled("missing source files will not return", theme::muted()),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("Enter/y", theme::key()),
+                Span::styled(" clear data    ", theme::muted()),
+                Span::styled("Esc/n", theme::key()),
+                Span::styled(" cancel", theme::muted()),
+            ]),
+        ],
+        ClearDataModal::Running => vec![
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(
+                    clear_data_activity_bar(app.clear_data_spinner_frame()),
+                    theme::base().fg(theme::CYAN).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled("  rebuilding archive", theme::muted()),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("archive.db", theme::key()),
+                Span::styled(" reset   ", theme::muted()),
+                Span::styled("local history", theme::key()),
+                Span::styled(" reimporting", theme::muted()),
+            ]),
+        ],
+    };
+
+    Paragraph::new(Text::from(lines))
+        .style(theme::base())
+        .render(inner, frame.buffer_mut());
+}
+
+fn clear_data_activity_bar(frame: usize) -> String {
+    const WIDTH: usize = 18;
+    let active = frame % WIDTH;
+    let mut out = String::with_capacity(WIDTH);
+    for idx in 0..WIDTH {
+        let distance = idx.abs_diff(active);
+        out.push(match distance {
+            0 => '█',
+            1 => '▓',
+            2 => '▒',
+            _ => '░',
+        });
+    }
+    out
 }
 
 pub(super) fn render_export_dir_picker_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {

@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::fs;
 use std::path::Path;
 use std::time::Duration;
 
@@ -67,6 +68,33 @@ pub fn sync_and_load(paths: &ConfigPaths) -> Result<Ingested> {
     archive.load()
 }
 
+pub fn reset_and_load(paths: &ConfigPaths) -> Result<(Ingested, SyncStats)> {
+    paths.ensure_dir()?;
+    match fs::remove_file(&paths.archive_db_file) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(remove_err) => {
+            let mut archive = Archive::open(paths).wrap_err_with(|| {
+                format!(
+                    "remove {} failed ({remove_err}); open existing archive",
+                    paths.archive_db_file.display()
+                )
+            })?;
+            archive.reset_database().wrap_err_with(|| {
+                format!("drop existing archive after remove failed ({remove_err})")
+            })?;
+            let stats = archive.sync()?;
+            let ingested = archive.load()?;
+            return Ok((ingested, stats));
+        }
+    }
+
+    let mut archive = Archive::open(paths)?;
+    let stats = archive.sync()?;
+    let ingested = archive.load()?;
+    Ok((ingested, stats))
+}
+
 impl Archive {
     pub fn open(paths: &ConfigPaths) -> Result<Self> {
         paths.ensure_dir()?;
@@ -98,6 +126,18 @@ impl Archive {
     pub fn sync(&mut self) -> Result<SyncStats> {
         let adapters = tools::registry();
         self.sync_with_adapters(&adapters)
+    }
+
+    pub fn reset_database(&mut self) -> Result<()> {
+        self.conn.execute_batch(
+            "
+            DROP TABLE IF EXISTS source_state;
+            DROP TABLE IF EXISTS limit_snapshots;
+            DROP TABLE IF EXISTS calls;
+            PRAGMA user_version = 0;
+            ",
+        )?;
+        self.migrate()
     }
 
     pub fn sync_with_adapters(&mut self, adapters: &[Box<dyn ToolAdapter>]) -> Result<SyncStats> {
@@ -722,6 +762,48 @@ mod tests {
         let loaded = archive.load().unwrap();
         assert_eq!(loaded.calls[0].project, "/Users/me/Code/app");
         assert_eq!(loaded.calls[0].cost_usd, first.cost_usd);
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn reset_database_drops_rows_and_source_fingerprints() {
+        let paths = temp_paths("reset");
+        let mut archive = Archive::open(&paths).unwrap();
+        let ingested = Ingested {
+            calls: vec![sample_call("reset-k1")],
+            limits: vec![sample_limit()],
+        };
+        archive.insert_ingested(&ingested).unwrap();
+        {
+            let tx = archive.conn.transaction().unwrap();
+            upsert_source_fingerprint(
+                &tx,
+                crate::tools::codex::config::TOOL_ID,
+                "/tmp/source.jsonl",
+                "fingerprint",
+            )
+            .unwrap();
+            tx.commit().unwrap();
+        }
+
+        assert!(!archive.is_empty().unwrap());
+        assert_eq!(
+            archive
+                .source_fingerprint(crate::tools::codex::config::TOOL_ID, "/tmp/source.jsonl")
+                .unwrap()
+                .as_deref(),
+            Some("fingerprint")
+        );
+
+        archive.reset_database().unwrap();
+
+        assert!(archive.is_empty().unwrap());
+        assert_eq!(
+            archive
+                .source_fingerprint(crate::tools::codex::config::TOOL_ID, "/tmp/source.jsonl")
+                .unwrap(),
+            None
+        );
         let _ = fs::remove_dir_all(paths.dir);
     }
 

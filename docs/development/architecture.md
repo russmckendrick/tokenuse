@@ -28,6 +28,8 @@ flowchart TD
 
 The durable archive lives at `<config dir>/tokenuse/archive.db`. If it already has rows, startup loads it immediately and queues an incremental background sync so the dashboard opens without reparsing every source. If the archive is empty, startup imports the legacy `~/.cache/tokenuse/ingest-cache.json` snapshot when present, performs one synchronous source sync, then renders from the archive. If the archive cannot be opened or migrated, the app falls back to raw `ingest::load()` for that run.
 
+Both Config pages can also clear local usage data after confirmation. That path deletes `archive.db`, recreates the schema, and immediately syncs local tool sources so per-source fingerprints are rebuilt from scratch. Config files, rates, pricing snapshots, and exports are kept; archive-only history is lost if the original source files are no longer present.
+
 The startup loader lives in `src/runtime.rs` so both frontends use the same config, currency, archive, fallback, and background refresh setup. The desktop app stores an `App` instance behind Tauri managed state and exposes narrow commands for filters, session drill-down, config actions, shortcuts, refresh, export, desktop settings, and the tray popover. It also runs a small backend monitor that continues calling `App::poll_reload()` while the webview is hidden, drains queued background usage alerts, and sends native notifications from Rust. See [Desktop app usage](../guides/desktop-usage.md).
 
 New sessions written while the dashboard is open are visible after archive sync — press `r` (Dashboard, Usage, or Session pages) to sync on a background thread. The dashboard stays responsive: the status bar shows `reloading…` while it runs, the next tick of the main loop drains completed results via `App::poll_reload`, and the status flips to `reloaded · N calls`. The refresher runs one sync at a time; if several results complete between UI ticks, the latest result wins. Failures or empty sync results keep the prior data unchanged.
@@ -88,7 +90,7 @@ The dashboard panels are built from the filtered call set:
 
 ## Pages And Modals
 
-The TUI is a small state machine over five pages (Overview, Deep Dive, Usage, Config, Session) plus six overlay modals. The first three pages are reachable through the tab strip via `Tab` / `Shift-Tab` or their direct keys; Config and Session are sub-pages opened from any tab. `g` cycles the global sort mode, and `Shift-D` toggles the visible data source between live and sample data when live data is available. Shortcut definitions, help groups, and footer hints live in `src/keymap.json`; `src/keymap.rs` validates the embedded JSON and resolves keys to action IDs. `src/app.rs` applies those actions to state, while rendering is dispatched from `src/ui.rs`.
+The TUI is a small state machine over five pages (Overview, Deep Dive, Usage, Config, Session) plus picker, confirmation, detail, and help modals. The first three pages are reachable through the tab strip via `Tab` / `Shift-Tab` or their direct keys; Config and Session are sub-pages opened from any tab. `g` cycles the global sort mode, and `Shift-D` toggles the visible data source between live and sample data when live data is available. Shortcut definitions, help groups, and footer hints live in `src/keymap.json`; `src/keymap.rs` validates the embedded JSON and resolves keys to action IDs. `src/app.rs` applies those actions to state, while rendering is dispatched from `src/ui.rs`.
 
 ```mermaid
 flowchart LR
@@ -114,6 +116,8 @@ flowchart LR
     DD -- e --> Exp
     Exp -- f/b --> FPick[Export folder picker]
     Cfg -- Enter on currency --> Curr[Currency picker]
+    Cfg -- Enter on rates/prices --> DL[Download confirmation]
+    Cfg -- Enter on clear data --> Clear[Clear-data confirmation]
     O -- h/? --> Help[Help modal]
     DD -- h/? --> Help
     U -- h/? --> Help
@@ -125,13 +129,13 @@ flowchart LR
 - **Deep Dive** (`Page::DeepDive`): analysis workbench with every panel listed under [Aggregation](#aggregation), including a larger chronological activity trend, top sessions, model efficiency, and core tool counts that are not on Overview.
 - **Usage** (`Page::Usage`): per-tool 24-hour console with an activity pulse, optional plan-side rate limit gauges, and top-3 models per tool. Built from `Ingested::limits` over the same `ParsedCall` set plus `LimitSnapshot` records. Entering Usage normalizes the visible period to `Period::Today`, the rolling 24-hour window; project filters are deliberately ignored, while sort mode controls section/model order. See [TUI usage](../guides/tui-usage.md#usage-page).
 - **Session** (`Page::Session`): drill-down for one `tool:session_id`. Rendered from `SessionDetailView`, computed by filtering `Ingested.calls` by `session_key(call) == key` and sorting calls with the active sort mode. Live data shows per-call timestamp, model, cost, in/out tokens, cache, tools used, and a 120-char single-line prompt snippet; selecting a call opens a modal with the full stored prompt plus reasoning/web-search counts and bash commands. Sample mode shows a privacy note since per-call records are not bundled.
-- **Config** (`Page::Config`): currency override + local data refresh actions (rates, LiteLLM pricing). The desktop frontend adds native-only controls for open-at-login and Dock/taskbar visibility on its Config page without changing the TUI state machine.
+- **Config** (`Page::Config`): currency override, local data refresh actions (rates, LiteLLM pricing), and clear-data archive rebuild. The desktop frontend adds native-only controls for open-at-login and Dock/taskbar visibility on its Config page without changing the TUI state machine.
 - **Project picker, Currency picker, Session picker** (`*Modal` structs): each holds `options`, a typeable `query`, and a `filtered: Vec<usize>` mapping; all three share the same case-insensitive substring filter pattern. The project picker pins `All` regardless of query.
 - **Export picker** (`ExportModal`): six-row chooser (`JSON`, `CSV`, `SVG`, `PNG`, `HTML`, `PDF`) showing the active session export folder. `Enter` writes to that folder; `f` or `b` opens the folder picker.
 - **Export folder picker** (`FolderPickerModal`): directory-only picker rooted at the current export folder. `Use this folder` updates `App::export_dir` for the running session; `Esc` cancels without saving to `config.json`.
 - **Help** (`help_open: bool`): full keybinding reference rendered from the shared keymap, openable from any page with `h` or `?`. Closes with `h`, `?`, or `Esc`.
 
-The modal state is checked in priority order in `App::handle_key`: help, call detail, currency, download confirmation, project, session, export folder picker, then export. The active context is passed to the keymap resolver before `App` applies the returned action. The folder picker is the only nested modal and sits on top of the export picker. The desktop app uses the same resolver through the `handle_shortcut` Tauri command, returning frontend effects for Svelte-owned modals and call-detail state.
+The modal state is checked in priority order in `App::handle_key`: help, call detail, currency, clear-data confirmation, download confirmation, project, session, export folder picker, then export. The active context is passed to the keymap resolver before `App` applies the returned action. The folder picker is the only nested modal and sits on top of the export picker. The desktop app uses the same resolver through the `handle_shortcut` Tauri command, returning frontend effects for Svelte-owned modals and call-detail state.
 
 Terminal graph primitives live in `src/ui/graphs.rs`. They provide relative block sparklines, ranked bars, and compact gauges for TUI panels without adding another charting dependency. The desktop frontend ports the same visual language with small Svelte components for activity pulses, ranked bars, limit gauges, and per-tool usage consoles. `DashboardData.activity_timeline` is the chronological graph source for Overview and Deep Dive in both frontends: 24 Hours and 7 Days use hourly buckets, This Month uses hourly buckets until day 15 of the month and daily buckets after that, and 30 Days/All Time use daily buckets. `Period::Today` is a rolling last-24-hours filter based on the current time, not a local calendar-day filter. The desktop tray popover requests a dedicated 24-hour snapshot so opening it does not mutate the main window's selected period, tool, project, or sort. `DashboardData.daily` remains the sort-aware table source.
 
@@ -240,6 +244,8 @@ Runtime settings live in the platform config directory under `tokenuse`:
 | `exports/` | Fallback output directory when no Downloads folder can be resolved |
 
 USD is the default display currency. The dashboard still stores calculated spend as `cost_usd`; aggregation sums USD and formats the final display values through the active currency table.
+
+The clear-data Config action deletes and recreates `archive.db`, then reimports local tool history immediately. Rebuilt rows are priced with the current configured pricing table. It intentionally does not delete `config.json`, local `rates.json`, local `pricing-snapshot.json`, or exported files.
 
 `currency/rates.json` is the embedded fallback snapshot. The TUI and desktop configuration pages can download the latest published copy after confirmation from:
 

@@ -16,6 +16,7 @@ pub const CONTEXT_PROJECT_PICKER: &str = "project_picker";
 pub const CONTEXT_SESSION_PICKER: &str = "session_picker";
 pub const CONTEXT_CURRENCY_PICKER: &str = "currency_picker";
 pub const CONTEXT_DOWNLOAD_CONFIRM: &str = "download_confirm";
+pub const CONTEXT_BUSY_MODAL: &str = "busy_modal";
 pub const CONTEXT_EXPORT_PICKER: &str = "export_picker";
 pub const CONTEXT_EXPORT_FOLDER_PICKER: &str = "export_folder_picker";
 pub const CONTEXT_DESKTOP: &str = "desktop";

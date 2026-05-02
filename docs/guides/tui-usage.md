@@ -28,7 +28,7 @@ Press `g` to cycle the dashboard sort mode between spend, latest date, and token
 - **Deep Dive**: the analysis workbench with the full panel set, a larger chronological activity trend, top sessions, project rankings, model efficiency, core tools, shell commands, and MCP servers.
 - **Usage**: rolling 24-hour per-tool consoles with a prominent pulse graph, calls/tokens/cost/last-seen totals, optional rate-limit gauges, and top models. Opening this tab automatically selects the 24 Hours period so the visible filter matches the console window.
 - **Session**: drill into one `tool:session_id`, inspect per-call timestamp, model, cost, token buckets, tools, and prompt snippet, then open a call detail modal for the full stored prompt and metadata.
-- **Config**: display currency and confirmed local downloads for currency rates and LiteLLM pricing snapshots.
+- **Config**: display currency, confirmed local downloads for currency rates and LiteLLM pricing snapshots, and a confirmed clear-data action that rebuilds the archive.
 
 ## Tab Guide
 
@@ -90,6 +90,8 @@ Runtime settings live in the platform config directory under `tokenuse`:
 | `exports/` | Fallback export directory |
 
 USD remains the default display currency. Costs are calculated and stored internally as import-time USD, then converted for display using the configured currency.
+
+The Config page's clear-data action asks for confirmation, deletes `archive.db`, and immediately reimports from local tool history. Config, rates, pricing snapshots, and exports are kept. Archive-only rows disappear if the original source files are gone, and rebuilt rows use the current configured pricing.
 
 ## Export
 

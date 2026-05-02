@@ -207,6 +207,7 @@ export type DesktopSnapshot = {
   version: string;
   source: 'live' | 'sample';
   status: string | null;
+  status_tone: 'info' | 'busy' | 'success' | 'warning' | 'error';
   page: PageId;
   period: PeriodId;
   periods: OptionItem<PeriodId>[];

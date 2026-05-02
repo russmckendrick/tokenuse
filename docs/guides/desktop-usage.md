@@ -19,7 +19,7 @@ The macOS desktop app also ships as a signed and notarized Apple Silicon DMG. Li
 - **Deep Dive**: analysis workbench with a larger activity trend, project rankings, top sessions, project/tool spend, model efficiency, core tools, shell commands, and MCP servers.
 - **Session**: per-call session drill-down with clickable rows for full stored prompt, tool, command, and token metadata.
 - **Usage**: per-tool consoles with 24-hour activity pulses, call/token/cost summaries, plan limit gauges when available, and top model bars. Opening this tab automatically selects 24 Hours so the filter row matches the console window.
-- **Config**: currency selection, desktop behavior toggles, and confirmed local downloads for currency and pricing snapshots.
+- **Config**: currency selection, desktop behavior toggles, confirmed local downloads for currency and pricing snapshots, and a confirmed clear-data action that rebuilds the archive.
 
 The desktop header mirrors the TUI filters: period, tool, sort mode, and project. In-window keyboard shortcuts are resolved through the same embedded keymap as the TUI; sort mode can be changed from the header or with `g`, and cycles between spend, latest date, and token use. `Shift-D` toggles between live and bundled sample data. The app polls snapshots in the background so completed refreshes appear without blocking the UI.
 
@@ -68,6 +68,8 @@ The Config tab includes desktop-only toggles for opening Token Use at login and 
 
 Use the refresh button or keyboard shortcut `r` to sync the archive. Refreshes use the same background archive refresher as the TUI and keep the previous data visible if a sync fails.
 
+The Config tab's clear-data action shows a native warning, deletes `archive.db`, and immediately reimports from local tool history. Config, rates, pricing snapshots, and exports are kept. Archive-only rows disappear if the original source files are gone, and rebuilt rows use the current configured pricing.
+
 If sample data is selected manually with `Shift-D`, refreshes update the cached live data without switching the visible dashboard back until `Shift-D` is pressed again.
 
 ## Project, Session, Currency, And Export Pickers
@@ -92,4 +94,4 @@ The desktop app and TUI share the platform config directory under `tokenuse`:
 | `pricing-snapshot.json` | Optional local LiteLLM-derived pricing snapshot |
 | `exports/` | Fallback export directory |
 
-Changing currency, refreshing the archive, or downloading local rates/pricing from the desktop app affects the same data the TUI reads.
+Changing currency, refreshing or clearing the archive, or downloading local rates/pricing from the desktop app affects the same data the TUI reads.

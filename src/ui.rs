@@ -459,6 +459,7 @@ mod tests {
         assert!(rendered.contains("currency override"));
         assert!(rendered.contains("rates.json"));
         assert!(rendered.contains("LiteLLM prices"));
+        assert!(rendered.contains("clear data"));
         assert!(rendered.contains("Local Files"));
         assert!(rendered.contains("Esc dashboard"));
     }
@@ -487,6 +488,58 @@ mod tests {
         assert!(rendered.contains("published tokenuse currency snapshot"));
         assert!(rendered.contains("Enter/y"));
         assert!(rendered.contains("Esc/n"));
+    }
+
+    #[test]
+    fn config_clear_data_confirmation_modal_render_smoke_test() {
+        let backend = TestBackend::new(170, 64);
+        let mut terminal = Terminal::new(backend).expect("create terminal");
+        let mut app = App::default();
+        app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("draw clear data confirmation modal");
+
+        let buffer = terminal.backend().buffer();
+        let rendered = buffer
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+
+        assert!(rendered.contains("Clear data?"));
+        assert!(rendered.contains("Delete"));
+        assert!(rendered.contains("missing source files will not return"));
+        assert!(rendered.contains("clear data"));
+        assert!(rendered.contains("Esc/n"));
+    }
+
+    #[test]
+    fn config_clear_data_running_modal_render_smoke_test() {
+        let backend = TestBackend::new(170, 64);
+        let mut terminal = Terminal::new(backend).expect("create terminal");
+        let mut app = App::default();
+        app.page = Page::Config;
+        app.clear_data_modal = Some(crate::app::ClearDataModal::Running);
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("draw clear data running modal");
+
+        let rendered = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+
+        assert!(rendered.contains("Clearing data"));
+        assert!(rendered.contains("rebuilding archive"));
+        assert!(rendered.contains("local history"));
     }
 
     #[test]

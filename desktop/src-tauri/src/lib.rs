@@ -20,7 +20,7 @@ use thiserror::Error;
 use tokenuse::{
     app::{
         App, BackgroundUsageAlert, ConfigRowView, DataSource, Page, Period, ProjectFilter,
-        SortMode, Tool,
+        SortMode, StatusTone, Tool,
     },
     data::{DashboardData, LimitsData, ProjectOption, SessionDetailView, SessionOption},
     export::ExportFormat,
@@ -82,6 +82,7 @@ struct DesktopSnapshot {
     version: &'static str,
     source: &'static str,
     status: Option<String>,
+    status_tone: &'static str,
     page: &'static str,
     period: &'static str,
     periods: Vec<OptionItem>,
@@ -291,6 +292,15 @@ async fn refresh_archive(state: State<'_, SharedState>) -> CommandResult<Desktop
 }
 
 #[tauri::command]
+async fn clear_data(state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
+    with_app(state, |app| {
+        app.clear_data();
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[tauri::command]
 async fn refresh_currency_rates(state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
     with_app(state, |app| {
         app.refresh_currency_rates();
@@ -414,6 +424,7 @@ fn snapshot(app: &App) -> DesktopSnapshot {
             DataSource::Sample => "sample",
         },
         status: app.status.clone(),
+        status_tone: status_tone_id(app.status_tone()),
         page: page_id(app.page),
         period: period_id(app.period),
         periods: Period::ALL
@@ -496,6 +507,16 @@ fn tray_snapshot(app: &App) -> TraySnapshot {
             SortMode::Spend,
         ),
         usage: app.usage_for(Tool::All, SortMode::Spend),
+    }
+}
+
+fn status_tone_id(tone: StatusTone) -> &'static str {
+    match tone {
+        StatusTone::Info => "info",
+        StatusTone::Busy => "busy",
+        StatusTone::Success => "success",
+        StatusTone::Warning => "warning",
+        StatusTone::Error => "error",
     }
 }
 
@@ -1308,6 +1329,7 @@ pub fn run() {
             set_open_at_login,
             set_show_dock_or_taskbar_icon,
             refresh_archive,
+            clear_data,
             refresh_currency_rates,
             refresh_pricing_snapshot,
             set_export_dir,

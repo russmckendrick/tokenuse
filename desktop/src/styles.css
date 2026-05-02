@@ -282,6 +282,52 @@ th {
   border-color: #ff5f6d;
 }
 
+.status-line.success {
+  color: #4cf2a0;
+  border-color: #4cf2a0;
+}
+
+.status-line.warning {
+  color: #ffd60a;
+  border-color: #ffd60a;
+}
+
+.status-line.busy {
+  color: #4df3e8;
+  border-color: #4df3e8;
+}
+
+.status-line.busy::after {
+  content: "";
+  display: inline-block;
+  width: 7ch;
+  margin-left: 8px;
+  vertical-align: baseline;
+  animation: status-pulse 900ms steps(4, end) infinite;
+}
+
+@keyframes status-pulse {
+  0% {
+    content: "░▒▓█";
+  }
+
+  25% {
+    content: "▒▓█░";
+  }
+
+  50% {
+    content: "▓█░▒";
+  }
+
+  75% {
+    content: "█░▒▓";
+  }
+
+  100% {
+    content: "░▒▓█";
+  }
+}
+
 main {
   grid-area: main;
   position: relative;
@@ -547,6 +593,17 @@ th:first-child {
   min-height: 26px;
   padding: 3px 6px;
   color: #ff8f40;
+}
+
+.row-action.danger {
+  width: 92px;
+  color: #ff5f6d;
+  border-color: #ff5f6d;
+}
+
+.row-action.danger:hover {
+  color: #ffffff;
+  border-color: #ff5f6d;
 }
 
 .panel-command {

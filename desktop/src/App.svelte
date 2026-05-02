@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { confirm, open as openDialog } from '@tauri-apps/plugin-dialog';
-  import { ArrowLeft, Database, Download, FolderOpen, RefreshCw, Search, X } from 'lucide-svelte';
+  import { ArrowLeft, Database, Download, FolderOpen, RefreshCw, Search, Trash2, X } from 'lucide-svelte';
   import { api } from './api';
   import ActivityPulse from './components/ActivityPulse.svelte';
   import RankBar from './components/RankBar.svelte';
@@ -55,6 +55,7 @@
   let callDetail: SessionDetail | null = null;
   let query = '';
   let exportFormat: ExportFormatId = 'json';
+  let clearingData = false;
   let pollTimer: number | undefined;
 
   onMount(() => {
@@ -307,6 +308,11 @@
       if (confirmed) {
         await commit(() => api.refreshPricingSnapshot());
       }
+    } else if (row.name === 'clear data') {
+      const confirmed = await confirmClearData();
+      if (confirmed) {
+        await runClearData();
+      }
     }
   }
 
@@ -322,6 +328,49 @@
       error = err instanceof Error ? err.message : String(err);
       return false;
     }
+  }
+
+  async function confirmClearData() {
+    try {
+      return await confirm(
+        'Token Use will delete archive.db, rebuild it from local tool history, and keep config, rates, pricing, and exports. Rows whose source files are gone will not return.',
+        {
+          title: 'Clear data?',
+          kind: 'warning',
+          okLabel: 'Clear Data',
+          cancelLabel: 'Cancel'
+        }
+      );
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+      return false;
+    }
+  }
+
+  async function runClearData() {
+    busy = true;
+    clearingData = true;
+    error = null;
+    try {
+      snapshot = await api.clearData();
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    } finally {
+      clearingData = false;
+      busy = false;
+    }
+  }
+
+  function statusMessage() {
+    if (error) return error;
+    if (clearingData) return 'Clearing data · rebuilding local archive';
+    return snapshot?.status ?? null;
+  }
+
+  function statusTone() {
+    if (error) return 'error';
+    if (clearingData) return 'busy';
+    return snapshot?.status_tone ?? 'info';
   }
 </script>
 
@@ -406,9 +455,15 @@
       </button>
     </section>
 
-    {#if snapshot.status || error}
-      <div class:error={Boolean(error)} class="status-line">
-        {error ?? snapshot.status}
+    {#if statusMessage()}
+      <div
+        class:error={statusTone() === 'error'}
+        class:success={statusTone() === 'success'}
+        class:warning={statusTone() === 'warning'}
+        class:busy={statusTone() === 'busy'}
+        class="status-line"
+      >
+        {statusMessage()}
       </div>
     {/if}
 
@@ -504,7 +559,10 @@
                       <td>{row.name}</td>
                       <td class="muted-cell">{row.value}</td>
                       <td class="tight">
-                        <button class="row-action" type="button" onclick={() => configAction(row)}>{row.action}</button>
+                        <button class="row-action" class:danger={row.action === 'clear'} type="button" onclick={() => configAction(row)}>
+                          {#if row.action === 'clear'}<Trash2 size={14} />{/if}
+                          {row.action}
+                        </button>
                       </td>
                     </tr>
                   {/each}
