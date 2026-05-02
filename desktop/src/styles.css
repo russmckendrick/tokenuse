@@ -641,6 +641,86 @@ th:first-child {
   gap: 9px;
 }
 
+.toggle-list {
+  display: grid;
+  gap: 8px;
+}
+
+.toggle-row {
+  position: relative;
+  min-width: 0;
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid #414866;
+  border-radius: 3px;
+  background: #202438;
+}
+
+.toggle-row > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.toggle-row strong,
+.toggle-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toggle-row strong {
+  color: #cbd4f2;
+}
+
+.toggle-row input {
+  position: absolute;
+  right: 8px;
+  width: 46px;
+  height: 26px;
+  opacity: 0;
+}
+
+.toggle-row i {
+  position: relative;
+  width: 46px;
+  height: 26px;
+  border: 1px solid #414866;
+  border-radius: 3px;
+  background: #25293d;
+  pointer-events: none;
+}
+
+.toggle-row i::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+  background: #a1a7c3;
+  transition: transform 120ms ease, background 120ms ease;
+}
+
+.toggle-row input:checked + i {
+  border-color: #ff8f40;
+}
+
+.toggle-row input:checked + i::after {
+  background: #ff8f40;
+  transform: translateX(20px);
+}
+
+.toggle-row input:focus-visible + i {
+  outline: 1px solid #62a6ff;
+  outline-offset: 2px;
+}
+
 .config-facts div {
   display: grid;
   grid-template-columns: 90px minmax(0, 1fr);

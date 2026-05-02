@@ -19,7 +19,7 @@ The macOS desktop app also ships as a signed and notarized Apple Silicon DMG. Li
 - **Deep Dive**: analysis workbench with a larger activity trend, project rankings, top sessions, project/tool spend, model efficiency, core tools, shell commands, and MCP servers.
 - **Session**: per-call session drill-down with clickable rows for full stored prompt, tool, command, and token metadata.
 - **Usage**: four per-tool consoles with 24-hour activity pulses, call/token/cost summaries, plan limit gauges when available, and top model bars. Opening this tab automatically selects 24 Hours so the filter row matches the console window.
-- **Config**: currency selection and confirmed local downloads for currency and pricing snapshots.
+- **Config**: currency selection, desktop behavior toggles, and confirmed local downloads for currency and pricing snapshots.
 
 The desktop header mirrors the TUI filters: period, tool, sort mode, and project. In-window keyboard shortcuts are resolved through the same embedded keymap as the TUI; sort mode can be changed from the header or with `g`, and cycles between spend, latest date, and token use. `Shift-D` toggles between live and bundled sample data. The app polls snapshots in the background so completed refreshes appear without blocking the UI.
 
@@ -35,7 +35,7 @@ Usage consoles switch the visible period to 24 Hours when opened and ignore the 
 
 ## Background Alerts
 
-Closing the desktop window keeps Token Use running in the background. Use the Dock icon, tray or menu-bar icon, or launch Token Use again to show the window, or choose **Quit Token Use** from the menu-bar icon to stop the app.
+Closing the desktop window keeps Token Use running in the background. Left-click the tray or menu-bar icon for a compact 24-hour usage popover, then choose **Open** to show the full dashboard. Right-click the icon and choose **Show Token Use** to open the dashboard directly, or choose **Quit Token Use** to stop the app. When the Dock/taskbar icon is visible, the Dock icon or launching Token Use again also restores the window.
 
 While the app is running, the desktop backend keeps polling completed archive refreshes even if the window is hidden. If an automatic refresh imports a significant amount of new usage since the last alert baseline, Token Use sends a native desktop notification. Notifications are driven by all live imported usage, independent of the visible period, tool, project, or sort filters. Manual refreshes reset the alert baseline without sending a notification.
 
@@ -50,11 +50,19 @@ Background alert thresholds are configured in the shared `config.json` file:
     "min_tokens": 100000,
     "min_calls": 25,
     "cooldown_minutes": 30
+  },
+  "desktop": {
+    "open_at_login": false,
+    "show_dock_or_taskbar_icon": true
   }
 }
 ```
 
-The defaults are conservative: notify after at least `$1.00`, `100k` tokens, or `25` calls of new usage, with a 30-minute cooldown. Linux tray click behavior depends on the desktop environment, so use the tray menu when a left-click does not restore the window. Windows notifications are most reliable from an installed build.
+The defaults are conservative: notify after at least `$1.00`, `100k` tokens, or `25` calls of new usage, with a 30-minute cooldown. Linux tray click behavior depends on the desktop environment, so use the tray menu when a left-click does not open the popover. Windows notifications are most reliable from an installed build.
+
+## Desktop Settings
+
+The Config tab includes desktop-only toggles for opening Token Use at login and showing the Dock/taskbar icon. Open at login is off by default; the Dock/taskbar icon is visible by default so the app keeps normal window-switcher behavior until you opt into a tray-first setup.
 
 ## Refresh
 
@@ -78,7 +86,7 @@ The desktop app and TUI share the platform config directory under `tokenuse`:
 
 | File / directory | Shared purpose |
 | --- | --- |
-| `config.json` | User overrides, currently display currency |
+| `config.json` | User overrides, display currency, background alerts, and desktop preferences |
 | `archive.db` | Durable local usage archive |
 | `rates.json` | Optional local currency snapshot |
 | `pricing-snapshot.json` | Optional local LiteLLM-derived pricing snapshot |

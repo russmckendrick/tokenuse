@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
   import { confirm, open as openDialog } from '@tauri-apps/plugin-dialog';
   import { ArrowLeft, Database, Download, FolderOpen, RefreshCw, Search, X } from 'lucide-svelte';
   import { api } from './api';
@@ -7,6 +8,7 @@
   import RankBar from './components/RankBar.svelte';
   import UsageConsole from './components/UsageConsole.svelte';
   import Panel from './Panel.svelte';
+  import TrayPopover from './TrayPopover.svelte';
   import type {
     ConfigRow,
     CountMetric,
@@ -36,6 +38,16 @@
     { value: 'config', label: 'Config' }
   ];
 
+  function currentWindowLabel() {
+    try {
+      return getCurrentWindow().label;
+    } catch {
+      return 'main';
+    }
+  }
+
+  const isTrayPopover = currentWindowLabel() === 'tray-popover';
+
   let snapshot: DesktopSnapshot | null = null;
   let busy = false;
   let error: string | null = null;
@@ -46,6 +58,8 @@
   let pollTimer: number | undefined;
 
   onMount(() => {
+    if (isTrayPopover) return;
+
     void load();
     pollTimer = window.setInterval(() => void loadSilent(), 3000);
     window.addEventListener('keydown', handleKey);
@@ -183,6 +197,16 @@
     void commit(() => api.setSort(value));
   }
 
+  function setOpenAtLoginFromEvent(event: Event) {
+    const enabled = (event.currentTarget as HTMLInputElement).checked;
+    void commit(() => api.setOpenAtLogin(enabled));
+  }
+
+  function setShowDockOrTaskbarIconFromEvent(event: Event) {
+    const enabled = (event.currentTarget as HTMLInputElement).checked;
+    void commit(() => api.setShowDockOrTaskbarIcon(enabled));
+  }
+
   function filteredProjects(): ProjectOption[] {
     if (!snapshot) return [];
     const needle = query.trim().toLowerCase();
@@ -300,7 +324,9 @@
   }
 </script>
 
-{#if snapshot}
+{#if isTrayPopover}
+  <TrayPopover />
+{:else if snapshot}
   <div class="app-shell" class:is-busy={busy}>
     <header class="topbar">
       <div class="brand">
@@ -483,6 +509,36 @@
                   {/each}
                 </tbody>
               </table>
+            </Panel>
+            <Panel title="Desktop" tone="orange">
+              <div class="toggle-list">
+                <label class="toggle-row">
+                  <span>
+                    <strong>Open at login</strong>
+                    <small>{snapshot.desktop_settings.open_at_login ? 'enabled' : 'disabled'}</small>
+                  </span>
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    checked={snapshot.desktop_settings.open_at_login}
+                    onchange={setOpenAtLoginFromEvent}
+                  />
+                  <i aria-hidden="true"></i>
+                </label>
+                <label class="toggle-row">
+                  <span>
+                    <strong>Dock/taskbar icon</strong>
+                    <small>{snapshot.desktop_settings.show_dock_or_taskbar_icon ? 'shown' : 'hidden'}</small>
+                  </span>
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    checked={snapshot.desktop_settings.show_dock_or_taskbar_icon}
+                    onchange={setShowDockOrTaskbarIconFromEvent}
+                  />
+                  <i aria-hidden="true"></i>
+                </label>
+              </div>
             </Panel>
             <Panel title="Local Data" tone="green">
               <div class="config-facts">

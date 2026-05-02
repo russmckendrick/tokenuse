@@ -11,8 +11,10 @@ use tauri::{
         WINDOW_SUBMENU_ID,
     },
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, RunEvent, Runtime, State, Theme, WindowEvent,
+    AppHandle, LogicalPosition, Manager, PhysicalPosition, RunEvent, Runtime, State, Theme,
+    WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
+use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_notification::NotificationExt;
 use thiserror::Error;
 use tokenuse::{
@@ -32,6 +34,10 @@ type CommandResult<T> = Result<T, CommandError>;
 const APP_NAME: &str = "Token Use";
 const AUTHOR: &str = "Russ McKendrick";
 const HOMEPAGE_URL: &str = "https://www.tokenuse.app";
+const MAIN_WINDOW_LABEL: &str = "main";
+const TRAY_POPOVER_LABEL: &str = "tray-popover";
+const TRAY_POPOVER_WIDTH: f64 = 340.0;
+const TRAY_POPOVER_HEIGHT: f64 = 460.0;
 
 struct DesktopState {
     app: App,
@@ -92,9 +98,25 @@ struct DesktopSnapshot {
     config_rows: Vec<ConfigRowView>,
     currencies: Vec<String>,
     currency: String,
+    desktop_settings: DesktopSettingsState,
     export_dir: String,
     export_formats: Vec<OptionItem>,
     shortcut_footer: Vec<KeyHint>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct DesktopSettingsState {
+    open_at_login: bool,
+    show_dock_or_taskbar_icon: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct TraySnapshot {
+    version: &'static str,
+    status: Option<String>,
+    currency: String,
+    dashboard: DashboardData,
+    usage: LimitsData,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -113,6 +135,23 @@ struct ShortcutResponse {
 #[tauri::command]
 async fn get_snapshot(state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
     with_app(state, |app| Ok(snapshot(app))).await
+}
+
+#[tauri::command]
+async fn get_tray_snapshot(state: State<'_, SharedState>) -> CommandResult<TraySnapshot> {
+    with_app(state, |app| Ok(tray_snapshot(app))).await
+}
+
+#[tauri::command]
+fn open_main_window(app_handle: AppHandle) -> CommandResult<()> {
+    hide_tray_popover_window(&app_handle)?;
+    restore_main_window(&app_handle);
+    Ok(())
+}
+
+#[tauri::command]
+fn hide_tray_popover(app_handle: AppHandle) -> CommandResult<()> {
+    hide_tray_popover_window(&app_handle)
 }
 
 #[tauri::command]
@@ -199,6 +238,44 @@ async fn set_currency(
 ) -> CommandResult<DesktopSnapshot> {
     with_app(state, move |app| {
         app.set_currency(&code);
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn set_open_at_login(
+    enabled: bool,
+    app_handle: AppHandle,
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    sync_open_at_login(&app_handle, enabled)?;
+    with_app(state, move |app| {
+        app.settings.desktop.open_at_login = enabled;
+        save_user_settings(app)?;
+        app.status = Some(format!(
+            "open at login {}",
+            if enabled { "enabled" } else { "disabled" }
+        ));
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn set_show_dock_or_taskbar_icon(
+    enabled: bool,
+    app_handle: AppHandle,
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    apply_dock_or_taskbar_icon(&app_handle, enabled)?;
+    with_app(state, move |app| {
+        app.settings.desktop.show_dock_or_taskbar_icon = enabled;
+        save_user_settings(app)?;
+        app.status = Some(format!(
+            "Dock/taskbar icon {}",
+            if enabled { "shown" } else { "hidden" }
+        ));
         Ok(snapshot(app))
     })
     .await
@@ -323,6 +400,12 @@ where
     .map_err(|e| CommandError::Join(e.to_string()))?
 }
 
+fn save_user_settings(app: &App) -> CommandResult<()> {
+    app.settings
+        .save(&app.paths)
+        .map_err(|e| CommandError::Tokenuse(e.to_string()))
+}
+
 fn snapshot(app: &App) -> DesktopSnapshot {
     DesktopSnapshot {
         version: env!("CARGO_PKG_VERSION"),
@@ -380,6 +463,7 @@ fn snapshot(app: &App) -> DesktopSnapshot {
         config_rows: app.config_rows(),
         currencies: app.currency_table.codes(),
         currency: app.currency().code().to_string(),
+        desktop_settings: desktop_settings(app),
         export_dir: app.export_dir.display().to_string(),
         export_formats: ExportFormat::ALL
             .into_iter()
@@ -389,6 +473,28 @@ fn snapshot(app: &App) -> DesktopSnapshot {
             })
             .collect(),
         shortcut_footer: keymap::keymap().footer("desktop").to_vec(),
+    }
+}
+
+fn desktop_settings(app: &App) -> DesktopSettingsState {
+    DesktopSettingsState {
+        open_at_login: app.settings.desktop.open_at_login,
+        show_dock_or_taskbar_icon: app.settings.desktop.show_dock_or_taskbar_icon,
+    }
+}
+
+fn tray_snapshot(app: &App) -> TraySnapshot {
+    TraySnapshot {
+        version: env!("CARGO_PKG_VERSION"),
+        status: app.status.clone(),
+        currency: app.currency().code().to_string(),
+        dashboard: app.dashboard_for(
+            Period::Today,
+            Tool::All,
+            &ProjectFilter::All,
+            SortMode::Spend,
+        ),
+        usage: app.usage_for(Tool::All, SortMode::Spend),
     }
 }
 
@@ -619,11 +725,20 @@ fn desktop_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R>>
 }
 
 fn restore_main_window<R: Runtime>(app_handle: &AppHandle<R>) {
-    if let Some(window) = app_handle.get_webview_window("main") {
+    if let Some(window) = app_handle.get_webview_window(MAIN_WINDOW_LABEL) {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
     }
+}
+
+fn hide_tray_popover_window<R: Runtime>(app_handle: &AppHandle<R>) -> CommandResult<()> {
+    if let Some(window) = app_handle.get_webview_window(TRAY_POPOVER_LABEL) {
+        window
+            .hide()
+            .map_err(|e| CommandError::Tokenuse(e.to_string()))?;
+    }
+    Ok(())
 }
 
 fn handle_run_event<R: Runtime>(app_handle: &AppHandle<R>, event: RunEvent) {
@@ -657,6 +772,7 @@ fn setup_desktop_runtime<R: Runtime>(
     state: SharedState,
 ) -> tauri::Result<()> {
     setup_tray(app)?;
+    apply_saved_desktop_settings(app.handle(), &state);
     spawn_background_monitor(app.handle().clone(), state);
     Ok(())
 }
@@ -683,15 +799,163 @@ fn setup_tray<R: Runtime>(app: &mut tauri::App<R>) -> tauri::Result<()> {
         })
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {
+                position,
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
                 ..
             } = event
             {
-                restore_main_window(tray.app_handle());
+                let _ = toggle_tray_popover(tray.app_handle(), position);
             }
         })
         .build(app)?;
+
+    Ok(())
+}
+
+fn toggle_tray_popover<R: Runtime>(
+    app_handle: &AppHandle<R>,
+    position: PhysicalPosition<f64>,
+) -> tauri::Result<()> {
+    let window = match app_handle.get_webview_window(TRAY_POPOVER_LABEL) {
+        Some(window) => window,
+        None => create_tray_popover_window(app_handle)?,
+    };
+
+    if window.is_visible().unwrap_or(false) {
+        window.hide()?;
+        return Ok(());
+    }
+
+    position_tray_popover(&window, app_handle, position)?;
+    window.show()?;
+    window.set_focus()?;
+    Ok(())
+}
+
+fn create_tray_popover_window<R: Runtime>(
+    app_handle: &AppHandle<R>,
+) -> tauri::Result<WebviewWindow<R>> {
+    WebviewWindowBuilder::new(
+        app_handle,
+        TRAY_POPOVER_LABEL,
+        WebviewUrl::App("index.html".into()),
+    )
+    .title("Token Use")
+    .inner_size(TRAY_POPOVER_WIDTH, TRAY_POPOVER_HEIGHT)
+    .min_inner_size(TRAY_POPOVER_WIDTH, TRAY_POPOVER_HEIGHT)
+    .max_inner_size(TRAY_POPOVER_WIDTH, TRAY_POPOVER_HEIGHT)
+    .resizable(false)
+    .maximizable(false)
+    .minimizable(false)
+    .decorations(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .visible(false)
+    .focused(false)
+    .theme(Some(Theme::Dark))
+    .shadow(true)
+    .build()
+}
+
+fn position_tray_popover<R: Runtime>(
+    window: &WebviewWindow<R>,
+    app_handle: &AppHandle<R>,
+    position: PhysicalPosition<f64>,
+) -> tauri::Result<()> {
+    let Some(monitor) = app_handle
+        .monitor_from_point(position.x, position.y)?
+        .or(app_handle.primary_monitor()?)
+    else {
+        window.set_position(LogicalPosition::new(position.x, position.y))?;
+        return Ok(());
+    };
+
+    let scale = monitor.scale_factor();
+    let work_area = monitor.work_area();
+    let work_x = f64::from(work_area.position.x) / scale;
+    let work_y = f64::from(work_area.position.y) / scale;
+    let work_width = f64::from(work_area.size.width) / scale;
+    let work_height = f64::from(work_area.size.height) / scale;
+    let click_x = position.x / scale;
+    let click_y = position.y / scale;
+
+    let x = clamp(
+        click_x - (TRAY_POPOVER_WIDTH / 2.0),
+        work_x + 8.0,
+        work_x + work_width - TRAY_POPOVER_WIDTH - 8.0,
+    );
+    let y = if click_y < work_y + (work_height / 2.0) {
+        click_y + 10.0
+    } else {
+        click_y - TRAY_POPOVER_HEIGHT - 10.0
+    };
+    let y = clamp(
+        y,
+        work_y + 8.0,
+        work_y + work_height - TRAY_POPOVER_HEIGHT - 8.0,
+    );
+
+    window.set_position(LogicalPosition::new(x, y))?;
+    Ok(())
+}
+
+fn clamp(value: f64, min: f64, max: f64) -> f64 {
+    if max < min {
+        min
+    } else {
+        value.clamp(min, max)
+    }
+}
+
+fn apply_saved_desktop_settings<R: Runtime>(app_handle: &AppHandle<R>, state: &SharedState) {
+    let settings = match state.lock() {
+        Ok(state) => state.app.settings.desktop.clone(),
+        Err(_) => return,
+    };
+
+    let mut notices = Vec::new();
+    if let Err(e) = sync_open_at_login(app_handle, settings.open_at_login) {
+        notices.push(e.to_string());
+    }
+    if let Err(e) = apply_dock_or_taskbar_icon(app_handle, settings.show_dock_or_taskbar_icon) {
+        notices.push(e.to_string());
+    }
+
+    if !notices.is_empty() {
+        if let Ok(mut state) = state.lock() {
+            state.app.status = Some(notices.join(" · "));
+        }
+    }
+}
+
+fn sync_open_at_login<R: Runtime>(app_handle: &AppHandle<R>, enabled: bool) -> CommandResult<()> {
+    let autostart = app_handle.autolaunch();
+    let result = if enabled {
+        autostart.enable()
+    } else {
+        autostart.disable()
+    };
+    result.map_err(|e| CommandError::Tokenuse(format!("open at login failed · {e}")))
+}
+
+fn apply_dock_or_taskbar_icon<R: Runtime>(
+    app_handle: &AppHandle<R>,
+    visible: bool,
+) -> CommandResult<()> {
+    #[cfg(target_os = "macos")]
+    {
+        app_handle
+            .set_dock_visibility(visible)
+            .map_err(|e| CommandError::Tokenuse(format!("Dock visibility failed · {e}")))?;
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    if let Some(window) = app_handle.get_webview_window(MAIN_WINDOW_LABEL) {
+        window
+            .set_skip_taskbar(!visible)
+            .map_err(|e| CommandError::Tokenuse(format!("taskbar visibility failed · {e}")))?;
+    }
 
     Ok(())
 }
@@ -812,6 +1076,37 @@ mod tests {
     }
 
     #[test]
+    fn tray_snapshot_uses_24h_defaults_without_changing_main_state() {
+        let mut app = App::default();
+        app.period = Period::AllTime;
+        app.tool = Tool::ClaudeCode;
+        app.sort = SortMode::Tokens;
+        app.project_filter = ProjectFilter::Selected {
+            identity: "project-id".into(),
+            label: "Project".into(),
+        };
+
+        let period = app.period;
+        let tool = app.tool;
+        let sort = app.sort;
+        let project_filter = app.project_filter.clone();
+        let expected = app.dashboard_for(
+            Period::Today,
+            Tool::All,
+            &ProjectFilter::All,
+            SortMode::Spend,
+        );
+        let snapshot = tray_snapshot(&app);
+
+        assert_eq!(snapshot.dashboard.summary.cost, expected.summary.cost);
+        assert_eq!(snapshot.dashboard.summary.calls, expected.summary.calls);
+        assert_eq!(app.period, period);
+        assert_eq!(app.tool, tool);
+        assert_eq!(app.sort, sort);
+        assert_eq!(app.project_filter, project_filter);
+    }
+
+    #[test]
     fn background_alert_body_formats_usage_delta() {
         let body = background_alert_body(BackgroundUsageAlert {
             calls: 25,
@@ -863,6 +1158,10 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             restore_main_window(app);
         }))
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            None,
+        ))
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
@@ -873,7 +1172,20 @@ pub fn run() {
         .menu(desktop_menu)
         .manage(shared_state)
         .on_window_event(|window, event| {
-            if window.label() != "main" {
+            if window.label() == TRAY_POPOVER_LABEL {
+                match event {
+                    WindowEvent::CloseRequested { api, .. } => {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                    WindowEvent::Focused(false) => {
+                        let _ = window.hide();
+                    }
+                    _ => {}
+                }
+                return;
+            }
+            if window.label() != MAIN_WINDOW_LABEL {
                 return;
             }
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -886,6 +1198,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_snapshot,
+            get_tray_snapshot,
+            open_main_window,
+            hide_tray_popover,
             set_page,
             set_period,
             set_tool,
@@ -894,6 +1209,8 @@ pub fn run() {
             open_session,
             close_session,
             set_currency,
+            set_open_at_login,
+            set_show_dock_or_taskbar_icon,
             refresh_archive,
             refresh_currency_rates,
             refresh_pricing_snapshot,

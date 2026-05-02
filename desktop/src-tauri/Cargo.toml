@@ -17,6 +17,7 @@ tauri-build = { version = "2", features = [] }
 color-eyre = "0.6"
 serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = ["image-png", "tray-icon"] }
+tauri-plugin-autostart = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-single-instance = "2"

@@ -768,30 +768,36 @@ impl App {
     }
 
     pub fn dashboard(&self) -> DashboardData {
+        self.dashboard_for(self.period, self.tool, &self.project_filter, self.sort)
+    }
+
+    pub fn dashboard_for(
+        &self,
+        period: Period,
+        tool: Tool,
+        project_filter: &ProjectFilter,
+        sort: SortMode,
+    ) -> DashboardData {
         let currency = self.currency();
         match &self.source {
-            DataSource::Live(ingested) => ingested.dashboard(
-                self.period,
-                self.tool,
-                &self.project_filter,
-                self.sort,
-                &currency,
-            ),
-            DataSource::Sample => crate::data::dashboard_data(
-                self.period,
-                self.tool,
-                &self.project_filter,
-                self.sort,
-                &currency,
-            ),
+            DataSource::Live(ingested) => {
+                ingested.dashboard(period, tool, project_filter, sort, &currency)
+            }
+            DataSource::Sample => {
+                crate::data::dashboard_data(period, tool, project_filter, sort, &currency)
+            }
         }
     }
 
     pub fn usage(&self) -> LimitsData {
+        self.usage_for(self.tool, self.sort)
+    }
+
+    pub fn usage_for(&self, tool: Tool, sort: SortMode) -> LimitsData {
         let currency = self.currency();
         match &self.source {
-            DataSource::Live(ingested) => ingested.limits(self.tool, self.sort, &currency),
-            DataSource::Sample => crate::data::limits_data(self.tool, self.sort, &currency),
+            DataSource::Live(ingested) => ingested.limits(tool, sort, &currency),
+            DataSource::Sample => crate::data::limits_data(tool, sort, &currency),
         }
     }
 

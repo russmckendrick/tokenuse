@@ -61,6 +61,8 @@ pub struct UserConfig {
     #[serde(default)]
     pub background_alerts: BackgroundAlertsConfig,
     #[serde(default)]
+    pub desktop: DesktopConfig,
+    #[serde(default)]
     pub overrides: BTreeMap<String, Value>,
 }
 
@@ -69,7 +71,25 @@ impl Default for UserConfig {
         Self {
             currency: DEFAULT_CURRENCY.into(),
             background_alerts: BackgroundAlertsConfig::default(),
+            desktop: DesktopConfig::default(),
             overrides: BTreeMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DesktopConfig {
+    #[serde(default)]
+    pub open_at_login: bool,
+    #[serde(default = "default_show_dock_or_taskbar_icon")]
+    pub show_dock_or_taskbar_icon: bool,
+}
+
+impl Default for DesktopConfig {
+    fn default() -> Self {
+        Self {
+            open_at_login: false,
+            show_dock_or_taskbar_icon: default_show_dock_or_taskbar_icon(),
         }
     }
 }
@@ -191,6 +211,10 @@ fn default_background_alerts_enabled() -> bool {
     true
 }
 
+fn default_show_dock_or_taskbar_icon() -> bool {
+    true
+}
+
 fn default_background_alert_min_cost_usd() -> f64 {
     DEFAULT_BACKGROUND_ALERT_MIN_COST_USD
 }
@@ -236,6 +260,8 @@ mod tests {
         let config = UserConfig::default();
 
         assert!(config.background_alerts.enabled);
+        assert!(!config.desktop.open_at_login);
+        assert!(config.desktop.show_dock_or_taskbar_icon);
         assert_eq!(
             config.background_alerts.min_cost_usd,
             DEFAULT_BACKGROUND_ALERT_MIN_COST_USD
@@ -277,11 +303,37 @@ mod tests {
         let config = UserConfig::load(&paths).unwrap();
 
         assert_eq!(config.currency, "GBP");
+        assert!(!config.desktop.open_at_login);
+        assert!(config.desktop.show_dock_or_taskbar_icon);
         assert!(!config.background_alerts.enabled);
         assert_eq!(config.background_alerts.min_cost_usd, 2.5);
         assert_eq!(config.background_alerts.min_tokens, 250_000);
         assert_eq!(config.background_alerts.min_calls, 50);
         assert_eq!(config.background_alerts.cooldown_minutes, 45);
+
+        let _ = std::fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn custom_desktop_config_loads_from_file() {
+        let paths = temp_paths("custom-desktop");
+        paths.ensure_dir().unwrap();
+        std::fs::write(
+            &paths.config_file,
+            r#"{
+  "desktop": {
+    "open_at_login": true,
+    "show_dock_or_taskbar_icon": false
+  }
+}
+"#,
+        )
+        .unwrap();
+
+        let config = UserConfig::load(&paths).unwrap();
+
+        assert!(config.desktop.open_at_login);
+        assert!(!config.desktop.show_dock_or_taskbar_icon);
 
         let _ = std::fs::remove_dir_all(paths.dir);
     }

@@ -179,6 +179,11 @@ export type ConfigRow = {
   action: string;
 };
 
+export type DesktopSettingsState = {
+  open_at_login: boolean;
+  show_dock_or_taskbar_icon: boolean;
+};
+
 export type ProjectState = {
   identity: string | null;
   label: string;
@@ -218,9 +223,18 @@ export type DesktopSnapshot = {
   config_rows: ConfigRow[];
   currencies: string[];
   currency: string;
+  desktop_settings: DesktopSettingsState;
   export_dir: string;
   export_formats: OptionItem<ExportFormatId>[];
   shortcut_footer: ShortcutHint[];
+};
+
+export type TraySnapshot = {
+  version: string;
+  status: string | null;
+  currency: string;
+  dashboard: DashboardData;
+  usage: LimitsData;
 };
 
 export type ExportResponse = {
