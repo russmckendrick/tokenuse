@@ -1,6 +1,6 @@
 export type PageId = 'overview' | 'deep-dive' | 'usage' | 'config' | 'session';
 export type PeriodId = 'today' | 'week' | 'thirty-days' | 'month' | 'all-time';
-export type ToolId = 'all' | 'claude-code' | 'cursor' | 'codex' | 'copilot';
+export type ToolId = 'all' | 'claude-code' | 'cursor' | 'codex' | 'copilot' | 'gemini';
 export type SortId = 'spend' | 'date' | 'tokens';
 export type ExportFormatId = 'json' | 'csv' | 'svg' | 'png' | 'html' | 'pdf';
 

@@ -73,6 +73,7 @@ pub enum Tool {
     Cursor,
     Codex,
     Copilot,
+    Gemini,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -145,6 +146,7 @@ impl Tool {
             Self::Cursor => "Cursor",
             Self::Codex => "Codex",
             Self::Copilot => "Copilot",
+            Self::Gemini => "Gemini",
         }
     }
 
@@ -154,7 +156,8 @@ impl Tool {
             Self::ClaudeCode => Self::Cursor,
             Self::Cursor => Self::Codex,
             Self::Codex => Self::Copilot,
-            Self::Copilot => Self::All,
+            Self::Copilot => Self::Gemini,
+            Self::Gemini => Self::All,
         }
     }
 }
@@ -1851,8 +1854,16 @@ mod tests {
         let mut app = App::default();
 
         app.handle_key(key(KeyCode::Char('t')));
-
         assert_eq!(app.tool, Tool::ClaudeCode);
+
+        app.handle_key(key(KeyCode::Char('t')));
+        app.handle_key(key(KeyCode::Char('t')));
+        app.handle_key(key(KeyCode::Char('t')));
+        app.handle_key(key(KeyCode::Char('t')));
+        assert_eq!(app.tool, Tool::Gemini);
+
+        app.handle_key(key(KeyCode::Char('t')));
+        assert_eq!(app.tool, Tool::All);
     }
 
     #[test]

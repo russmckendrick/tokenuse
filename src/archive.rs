@@ -400,7 +400,28 @@ fn insert_call(tx: &Transaction<'_>, call: &ParsedCall) -> Result<bool> {
             Utc::now().to_rfc3339(),
         ],
     )?;
+    if inserted == 0 {
+        update_existing_cursor_project(tx, call)?;
+    }
     Ok(inserted > 0)
+}
+
+fn update_existing_cursor_project(tx: &Transaction<'_>, call: &ParsedCall) -> Result<()> {
+    if call.tool != crate::tools::cursor::config::TOOL_ID || call.project == "cursor-workspace" {
+        return Ok(());
+    }
+
+    tx.execute(
+        "
+        UPDATE calls
+        SET project = ?1
+        WHERE tool = ?2
+          AND dedup_key = ?3
+          AND project != ?1
+        ",
+        params![call.project, call.tool, call.dedup_key],
+    )?;
+    Ok(())
 }
 
 fn insert_limit(tx: &Transaction<'_>, limit: &LimitSnapshot) -> Result<bool> {
@@ -533,6 +554,7 @@ fn static_tool(tool: String) -> &'static str {
         crate::tools::cursor::config::TOOL_ID => crate::tools::cursor::config::TOOL_ID,
         crate::tools::codex::config::TOOL_ID => crate::tools::codex::config::TOOL_ID,
         crate::tools::copilot::config::TOOL_ID => crate::tools::copilot::config::TOOL_ID,
+        crate::tools::gemini::config::TOOL_ID => crate::tools::gemini::config::TOOL_ID,
         _ => Box::leak(tool.into_boxed_str()),
     }
 }
@@ -662,6 +684,43 @@ mod tests {
         );
 
         let loaded = archive.load().unwrap();
+        assert_eq!(loaded.calls[0].cost_usd, first.cost_usd);
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn duplicate_cursor_calls_refresh_project_only() {
+        let paths = temp_paths("cursor-project-refresh");
+        let mut archive = Archive::open(&paths).unwrap();
+        let mut first = sample_call("cursor-k1");
+        first.tool = crate::tools::cursor::config::TOOL_ID;
+        first.project = "cursor-workspace".into();
+
+        let mut reparsed = first.clone();
+        reparsed.project = "/Users/me/Code/app".into();
+        reparsed.cost_usd = 999.0;
+
+        assert_eq!(
+            archive
+                .insert_ingested(&Ingested {
+                    calls: vec![first.clone()],
+                    limits: Vec::new(),
+                })
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            archive
+                .insert_ingested(&Ingested {
+                    calls: vec![reparsed],
+                    limits: Vec::new(),
+                })
+                .unwrap(),
+            0
+        );
+
+        let loaded = archive.load().unwrap();
+        assert_eq!(loaded.calls[0].project, "/Users/me/Code/app");
         assert_eq!(loaded.calls[0].cost_usd, first.cost_usd);
         let _ = fs::remove_dir_all(paths.dir);
     }

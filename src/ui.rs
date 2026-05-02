@@ -517,6 +517,7 @@ mod tests {
         assert!(rendered.contains("Claude Code"));
         assert!(rendered.contains("Cursor"));
         assert!(rendered.contains("Copilot"));
+        assert!(rendered.contains("Gemini"));
         assert!(rendered.contains("Console"));
         assert!(rendered.contains("24h pulse"));
         assert!(rendered.contains("tokens"));

@@ -187,6 +187,7 @@ fn matches_tool(call: &ParsedCall, tool: Tool) -> bool {
         Tool::Cursor => call.tool == "cursor",
         Tool::Codex => call.tool == "codex",
         Tool::Copilot => call.tool == "copilot",
+        Tool::Gemini => call.tool == "gemini",
     }
 }
 
@@ -390,11 +391,12 @@ fn build_tool_limit_sections(
         models: HashMap<String, ModelAcc>,
     }
 
-    const TOOLS: [(&str, &str); 4] = [
+    const TOOLS: [(&str, &str); 5] = [
         ("codex", "Codex"),
         ("claude-code", "Claude Code"),
         ("cursor", "Cursor"),
         ("copilot", "Copilot"),
+        ("gemini", "Gemini"),
     ];
 
     let now = Local::now();
@@ -1625,6 +1627,7 @@ fn tool_short_label(tool: &str) -> &'static str {
         "cursor" => "Cursor",
         "codex" => "Codex",
         "copilot" => "Copilot",
+        "gemini" => "Gemini",
         _ => "Other",
     }
 }
@@ -1888,7 +1891,7 @@ mod tests {
         assert_eq!(codex.limits[1].window, "weekly");
         assert_eq!(codex.limits[1].used, 6);
         assert_eq!(codex.limits[1].left, "94% left");
-        assert_eq!(data.sections.len(), 4);
+        assert_eq!(data.sections.len(), 5);
         assert_eq!(data.sections[0].tool, "Codex");
         assert_eq!(data.sections[1].tool, "Claude Code");
     }
@@ -1930,7 +1933,7 @@ mod tests {
             .any(|row| row.scope == "GPT-5.3-Codex-Spark"));
         assert!(claude_section.limits.is_empty());
         assert_eq!(claude.sections[0].tool, "Codex");
-        assert_eq!(claude.sections.len(), 4);
+        assert_eq!(claude.sections.len(), 5);
     }
 
     #[test]
@@ -1941,6 +1944,7 @@ mod tests {
                 mk_recent_call("claude-code", 2.0, 200),
                 mk_recent_call("cursor", 3.0, 300),
                 mk_recent_call("copilot", 4.0, 400),
+                mk_recent_call("gemini", 5.0, 500),
             ],
             limits: Vec::new(),
         };
@@ -1952,7 +1956,10 @@ mod tests {
         );
         let tools: Vec<&str> = data.sections.iter().map(|row| row.tool).collect();
 
-        assert_eq!(tools, vec!["Copilot", "Cursor", "Claude Code", "Codex"]);
+        assert_eq!(
+            tools,
+            vec!["Gemini", "Copilot", "Cursor", "Claude Code", "Codex"]
+        );
         assert!(data
             .sections
             .iter()
@@ -2495,6 +2502,7 @@ mod tests {
             calls: vec![
                 mk_project_call("claude-code", "s1", "/Users/me/Code/widgets", 2.0),
                 mk_project_call("codex", "s1", "/Users/me/Code/widgets", 3.0),
+                mk_project_call("gemini", "s2", "/Users/me/Code/widgets", 4.0),
             ],
             limits: Vec::new(),
         };
@@ -2512,6 +2520,19 @@ mod tests {
         assert_eq!(data.projects[0].tool_mix, "Codex $3.00");
         assert_eq!(data.project_tools.len(), 1);
         assert_eq!(data.project_tools[0].tool, "Codex");
+
+        let gemini = ingested.dashboard(
+            Period::AllTime,
+            Tool::Gemini,
+            &ProjectFilter::All,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+        );
+        assert_eq!(gemini.projects.len(), 1);
+        assert_eq!(gemini.projects[0].cost, "$4.00");
+        assert_eq!(gemini.projects[0].tool_mix, "Gemini $4.00");
+        assert_eq!(gemini.project_tools.len(), 1);
+        assert_eq!(gemini.project_tools[0].tool, "Gemini");
     }
 
     #[test]

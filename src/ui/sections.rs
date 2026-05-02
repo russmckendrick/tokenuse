@@ -461,35 +461,9 @@ pub(super) fn render_limits(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
     .alignment(Alignment::Right)
     .render(sections[1], frame.buffer_mut());
 
-    let usage_rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Ratio(1, 2),
-            Constraint::Length(1),
-            Constraint::Ratio(1, 2),
-        ])
-        .split(sections[2]);
-
-    let top = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Ratio(1, 2),
-            Constraint::Length(1),
-            Constraint::Ratio(1, 2),
-        ])
-        .split(usage_rows[0]);
-    let bottom = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Ratio(1, 2),
-            Constraint::Length(1),
-            Constraint::Ratio(1, 2),
-        ])
-        .split(usage_rows[2]);
-
-    for (area, section) in [top[0], top[2], bottom[0], bottom[2]]
+    for (area, section) in usage_section_areas(sections[2], data.sections.len())
         .into_iter()
-        .zip(data.sections.iter().take(4))
+        .zip(data.sections.iter())
     {
         render_tool_usage_section(frame, area, section);
     }
@@ -497,6 +471,49 @@ pub(super) fn render_limits(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
     render_footer(frame, sections[3], app);
     render_project_modal(frame, root, app);
     render_currency_modal(frame, root, app);
+}
+
+fn usage_section_areas(area: Rect, count: usize) -> Vec<Rect> {
+    if count == 0 {
+        return Vec::new();
+    }
+
+    let row_count = count.div_ceil(2);
+    let mut row_constraints = Vec::with_capacity(row_count.saturating_mul(2).saturating_sub(1));
+    for idx in 0..row_count {
+        if idx > 0 {
+            row_constraints.push(Constraint::Length(1));
+        }
+        row_constraints.push(Constraint::Ratio(1, row_count as u32));
+    }
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(row_constraints)
+        .split(area);
+
+    let mut out = Vec::with_capacity(count);
+    let mut rendered = 0usize;
+    for row_idx in 0..row_count {
+        let row = rows[row_idx * 2];
+        if count - rendered == 1 {
+            out.push(row);
+            break;
+        }
+
+        let cols = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Ratio(1, 2),
+                Constraint::Length(1),
+                Constraint::Ratio(1, 2),
+            ])
+            .split(row);
+        out.push(cols[0]);
+        out.push(cols[2]);
+        rendered += 2;
+    }
+    out
 }
 
 fn render_tool_usage_section(frame: &mut Frame<'_>, area: Rect, section: &ToolLimitSection) {
@@ -597,6 +614,7 @@ fn usage_tool_color(tool: &str) -> Color {
         "Claude Code" => theme::MAGENTA,
         "Cursor" => theme::BLUE,
         "Copilot" => theme::GREEN,
+        "Gemini" => theme::CYAN,
         _ => theme::CYAN,
     }
 }

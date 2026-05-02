@@ -42,7 +42,7 @@ Every adapter emits `ParsedCall` from `src/tools/types.rs`. The important fields
 
 | Field | Meaning |
 | --- | --- |
-| `tool` | Stable internal tool id such as `claude-code`, `cursor`, `codex`, or `copilot` |
+| `tool` | Stable internal tool id such as `claude-code`, `cursor`, `codex`, `copilot`, or `gemini` |
 | `model` | Raw or inferred model name before display shortening |
 | `input_tokens`, `output_tokens` | Billable input/output buckets after adapter-specific normalization |
 | `cache_creation_input_tokens`, `cache_read_input_tokens` | Cache write/read buckets when the tool exposes them |
@@ -161,8 +161,10 @@ A single shared `HashSet<String>` is passed through every adapter during a run. 
 - Claude Code: message id, falling back to timestamp
 - Cursor bubbles: conversation id, timestamp, and token counts
 - Cursor Agent KV: request id
+- Cursor Agent transcripts: transcript path, conversation id, and turn index
 - Codex: rollout path, token event timestamp, and cumulative token totals
 - Copilot: session id and message id
+- Gemini: session id and message id
 
 Session counts are tool-qualified, so `claude-code:s1` and `codex:s1` remain separate sessions even if the raw session id text matches.
 

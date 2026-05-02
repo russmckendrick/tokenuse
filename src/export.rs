@@ -198,6 +198,7 @@ fn filter_slug(period: Period, tool: Tool, project_filter: &ProjectFilter) -> St
         Tool::Cursor => "cursor",
         Tool::Codex => "codex",
         Tool::Copilot => "copilot",
+        Tool::Gemini => "gemini",
     };
     let project = match project_filter {
         ProjectFilter::All => "allprojects".to_string(),
@@ -2541,6 +2542,7 @@ where
         Tool::Cursor => "Cursor",
         Tool::Codex => "Codex",
         Tool::Copilot => "Copilot",
+        Tool::Gemini => "Gemini",
     };
     let project_label = project_filter.label();
     let right_text = format!("[t] {tool_label}    [p] {project_label}");
@@ -3066,6 +3068,7 @@ fn tool_label(tool: Tool) -> &'static str {
         Tool::Cursor => "Cursor",
         Tool::Codex => "Codex",
         Tool::Copilot => "Copilot",
+        Tool::Gemini => "Gemini",
     }
 }
 
@@ -3109,6 +3112,15 @@ mod tests {
             &CurrencyFormatter::usd(),
         );
         (paths, data)
+    }
+
+    #[test]
+    fn gemini_filter_slug_and_label_are_stable() {
+        assert_eq!(
+            filter_slug(Period::Week, Tool::Gemini, &ProjectFilter::All),
+            "week-gemini-allprojects"
+        );
+        assert_eq!(tool_label(Tool::Gemini), "Gemini");
     }
 
     fn context<'a>(

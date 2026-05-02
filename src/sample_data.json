@@ -447,6 +447,21 @@
           { "name": "anthropic-auto", "calls": 17, "tokens": "60K", "cost": "$0.31", "value": 100 },
           { "name": "openai-auto", "calls": 12, "tokens": "36K", "cost": "$0.16", "value": 60 }
         ]
+      },
+      {
+        "tool": "Gemini",
+        "limits": [],
+        "usage": {
+          "buckets": [0, 5, 11, 0, 0, 14, 18, 6, 0, 0, 7, 12, 0, 0, 9, 16, 21, 13, 0, 0, 6, 19, 10, 0],
+          "calls": 22,
+          "tokens": "240K",
+          "cost": "$0.76",
+          "last_seen": "3h"
+        },
+        "models": [
+          { "name": "Gemini 2.5 Pro", "calls": 14, "tokens": "180K", "cost": "$0.62", "value": 100 },
+          { "name": "Gemini 2.5 Flash", "calls": 8, "tokens": "60K", "cost": "$0.14", "value": 33 }
+        ]
       }
     ]
   }

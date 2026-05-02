@@ -430,6 +430,7 @@ fn snapshot(app: &App) -> DesktopSnapshot {
             Tool::Cursor,
             Tool::Codex,
             Tool::Copilot,
+            Tool::Gemini,
         ]
         .into_iter()
         .map(|tool| OptionItem {
@@ -547,6 +548,7 @@ fn parse_tool(value: &str) -> CommandResult<Tool> {
         "cursor" => Ok(Tool::Cursor),
         "codex" => Ok(Tool::Codex),
         "copilot" => Ok(Tool::Copilot),
+        "gemini" => Ok(Tool::Gemini),
         _ => Err(unknown("tool", value)),
     }
 }
@@ -558,6 +560,7 @@ fn tool_id(tool: Tool) -> &'static str {
         Tool::Cursor => "cursor",
         Tool::Codex => "codex",
         Tool::Copilot => "copilot",
+        Tool::Gemini => "gemini",
     }
 }
 
@@ -1160,6 +1163,12 @@ mod tests {
             ExportFormat::Pdf
         ));
         assert_eq!(export_format_id(ExportFormat::Pdf), "pdf");
+    }
+
+    #[test]
+    fn tool_helpers_roundtrip_gemini() {
+        assert!(matches!(parse_tool("gemini").unwrap(), Tool::Gemini));
+        assert_eq!(tool_id(Tool::Gemini), "gemini");
     }
 
     #[test]
