@@ -11,7 +11,7 @@ use tauri::{
         WINDOW_SUBMENU_ID,
     },
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, LogicalPosition, Manager, PhysicalPosition, RunEvent, Runtime, State, Theme,
+    AppHandle, Manager, Monitor, PhysicalPosition, Rect, RunEvent, Runtime, State, Theme,
     WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
@@ -37,7 +37,7 @@ const HOMEPAGE_URL: &str = "https://www.tokenuse.app";
 const MAIN_WINDOW_LABEL: &str = "main";
 const TRAY_POPOVER_LABEL: &str = "tray-popover";
 const TRAY_POPOVER_WIDTH: f64 = 340.0;
-const TRAY_POPOVER_HEIGHT: f64 = 460.0;
+const TRAY_POPOVER_HEIGHT: f64 = 520.0;
 
 struct DesktopState {
     app: App,
@@ -800,12 +800,13 @@ fn setup_tray<R: Runtime>(app: &mut tauri::App<R>) -> tauri::Result<()> {
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {
                 position,
+                rect,
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
                 ..
             } = event
             {
-                let _ = toggle_tray_popover(tray.app_handle(), position);
+                let _ = toggle_tray_popover(tray.app_handle(), position, rect);
             }
         })
         .build(app)?;
@@ -816,6 +817,7 @@ fn setup_tray<R: Runtime>(app: &mut tauri::App<R>) -> tauri::Result<()> {
 fn toggle_tray_popover<R: Runtime>(
     app_handle: &AppHandle<R>,
     position: PhysicalPosition<f64>,
+    rect: Rect,
 ) -> tauri::Result<()> {
     let window = match app_handle.get_webview_window(TRAY_POPOVER_LABEL) {
         Some(window) => window,
@@ -827,7 +829,7 @@ fn toggle_tray_popover<R: Runtime>(
         return Ok(());
     }
 
-    position_tray_popover(&window, app_handle, position)?;
+    position_tray_popover(&window, app_handle, position, rect)?;
     window.show()?;
     window.set_focus()?;
     Ok(())
@@ -862,42 +864,127 @@ fn position_tray_popover<R: Runtime>(
     window: &WebviewWindow<R>,
     app_handle: &AppHandle<R>,
     position: PhysicalPosition<f64>,
+    rect: Rect,
 ) -> tauri::Result<()> {
-    let Some(monitor) = app_handle
-        .monitor_from_point(position.x, position.y)?
-        .or(app_handle.primary_monitor()?)
-    else {
-        window.set_position(LogicalPosition::new(position.x, position.y))?;
+    let monitors = app_handle.available_monitors()?;
+    let Some(monitor) = tray_anchor_monitor(&monitors, rect, position) else {
+        window.set_position(PhysicalPosition::new(
+            position.x.round() as i32,
+            position.y.round() as i32,
+        ))?;
         return Ok(());
     };
 
     let scale = monitor.scale_factor();
     let work_area = monitor.work_area();
-    let work_x = f64::from(work_area.position.x) / scale;
-    let work_y = f64::from(work_area.position.y) / scale;
-    let work_width = f64::from(work_area.size.width) / scale;
-    let work_height = f64::from(work_area.size.height) / scale;
-    let click_x = position.x / scale;
-    let click_y = position.y / scale;
+    let work_x = f64::from(work_area.position.x);
+    let work_y = f64::from(work_area.position.y);
+    let work_width = f64::from(work_area.size.width);
+    let work_height = f64::from(work_area.size.height);
+    let popover_width = TRAY_POPOVER_WIDTH * scale;
+    let popover_height = TRAY_POPOVER_HEIGHT * scale;
+    let margin = 8.0 * scale;
+    let offset = 10.0 * scale;
+    let anchor = tray_anchor_physical(rect, position, scale);
+    let anchor = if monitor_contains(monitor, anchor) {
+        anchor
+    } else {
+        position
+    };
 
     let x = clamp(
-        click_x - (TRAY_POPOVER_WIDTH / 2.0),
-        work_x + 8.0,
-        work_x + work_width - TRAY_POPOVER_WIDTH - 8.0,
+        anchor.x - (popover_width / 2.0),
+        work_x + margin,
+        work_x + work_width - popover_width - margin,
     );
-    let y = if click_y < work_y + (work_height / 2.0) {
-        click_y + 10.0
+    let y = if anchor.y < work_y + (work_height / 2.0) {
+        anchor.y + offset
     } else {
-        click_y - TRAY_POPOVER_HEIGHT - 10.0
+        anchor.y - popover_height - offset
     };
     let y = clamp(
         y,
-        work_y + 8.0,
-        work_y + work_height - TRAY_POPOVER_HEIGHT - 8.0,
+        work_y + margin,
+        work_y + work_height - popover_height - margin,
     );
 
-    window.set_position(LogicalPosition::new(x, y))?;
+    window.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32))?;
     Ok(())
+}
+
+fn tray_anchor_monitor(
+    monitors: &[Monitor],
+    rect: Rect,
+    position: PhysicalPosition<f64>,
+) -> Option<&Monitor> {
+    monitors
+        .iter()
+        .find(|monitor| {
+            let anchor = tray_anchor_physical(rect, position, monitor.scale_factor());
+            monitor_contains(monitor, anchor)
+        })
+        .or_else(|| {
+            monitors
+                .iter()
+                .find(|monitor| monitor_contains(monitor, position))
+        })
+        .or_else(|| closest_monitor(monitors, position))
+}
+
+fn tray_anchor_physical(
+    rect: Rect,
+    fallback: PhysicalPosition<f64>,
+    scale_factor: f64,
+) -> PhysicalPosition<f64> {
+    let position = rect.position.to_physical::<f64>(scale_factor);
+    let size = rect.size.to_physical::<f64>(scale_factor);
+    if size.width <= 0.0 || size.height <= 0.0 {
+        return fallback;
+    }
+    PhysicalPosition::new(
+        position.x + (size.width / 2.0),
+        position.y + (size.height / 2.0),
+    )
+}
+
+fn monitor_contains(monitor: &Monitor, point: PhysicalPosition<f64>) -> bool {
+    let work_area = monitor.work_area();
+    let x = f64::from(work_area.position.x);
+    let y = f64::from(work_area.position.y);
+    let width = f64::from(work_area.size.width);
+    let height = f64::from(work_area.size.height);
+    point.x >= x && point.x <= x + width && point.y >= y && point.y <= y + height
+}
+
+fn closest_monitor(monitors: &[Monitor], point: PhysicalPosition<f64>) -> Option<&Monitor> {
+    monitors.iter().min_by(|a, b| {
+        monitor_distance_squared(a, point)
+            .partial_cmp(&monitor_distance_squared(b, point))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    })
+}
+
+fn monitor_distance_squared(monitor: &Monitor, point: PhysicalPosition<f64>) -> f64 {
+    let work_area = monitor.work_area();
+    let x = f64::from(work_area.position.x);
+    let y = f64::from(work_area.position.y);
+    let width = f64::from(work_area.size.width);
+    let height = f64::from(work_area.size.height);
+    let dx = if point.x < x {
+        x - point.x
+    } else if point.x > x + width {
+        point.x - (x + width)
+    } else {
+        0.0
+    };
+    let dy = if point.y < y {
+        y - point.y
+    } else if point.y > y + height {
+        point.y - (y + height)
+    } else {
+        0.0
+    };
+    dx.mul_add(dx, dy * dy)
 }
 
 fn clamp(value: f64, min: f64, max: f64) -> f64 {

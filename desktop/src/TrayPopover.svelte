@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { ExternalLink, RefreshCw, X } from 'lucide-svelte';
   import { api } from './api';
-  import type { ActivityMetric, ToolLimitSection, TraySnapshot } from './types';
+  import type { ActivityMetric, ModelMetric, TraySnapshot } from './types';
 
   let snapshot: TraySnapshot | null = null;
   let error: string | null = null;
@@ -61,8 +61,8 @@
     return value.toLocaleString();
   }
 
-  function usageSections(): ToolLimitSection[] {
-    return snapshot?.usage.sections ?? [];
+  function modelCards(): ModelMetric[] {
+    return snapshot?.dashboard.models.slice(0, 4) ?? [];
   }
 
   function activityPoints(): ActivityMetric[] {
@@ -162,25 +162,20 @@
       </div>
     </div>
 
-    <div class="tool-list" aria-label="Tool usage">
-      {#each usageSections() as section}
-        <div class="tool-row">
-          <div class="tool-title">
-            <strong>{section.tool}</strong>
-            <span>{section.usage.cost}</span>
+    <div class="model-card">
+      <div class="card-head">
+        <span>Models</span>
+        <strong>{count(modelCards().reduce((total, model) => total + model.calls, 0))} calls</strong>
+      </div>
+      <div class="model-grid" aria-label="Model usage">
+        {#each modelCards() as model}
+          <div>
+            <strong>{model.name}</strong>
+            <span>{model.cost}</span>
+            <small>{count(model.calls)} calls · {model.cache} cache</small>
           </div>
-          <div class="tool-buckets" aria-hidden="true">
-            {#each section.usage.buckets as bucket}
-              <i style={`height: ${bucketHeight(bucket)}`}></i>
-            {/each}
-          </div>
-          <div class="tool-meta">
-            <span>{count(section.usage.calls)} calls</span>
-            <span>{section.usage.tokens}</span>
-            <span>{section.usage.last_seen}</span>
-          </div>
-        </div>
       {/each}
+      </div>
     </div>
   {:else}
     <div class="tray-loading">Token Use</div>
@@ -222,8 +217,6 @@
   .brand-lockup,
   .card-head,
   .activity-meta,
-  .tool-title,
-  .tool-meta,
   .popover-actions {
     min-width: 0;
     display: flex;
@@ -232,7 +225,6 @@
 
   .popover-head,
   .card-head,
-  .tool-title,
   .popover-actions {
     justify-content: space-between;
     gap: 8px;
@@ -278,7 +270,6 @@
   .popover-head span,
   small,
   .activity-meta,
-  .tool-meta,
   .popover-status {
     color: #a1a7c3;
   }
@@ -336,7 +327,7 @@
   }
 
   .activity-card,
-  .tool-row {
+  .model-card {
     min-width: 0;
     display: grid;
     gap: 5px;
@@ -357,13 +348,12 @@
   }
 
   .card-head strong,
-  .tool-title span {
+  .model-grid span {
     color: #ffd60a;
     font-weight: 800;
   }
 
-  .sparkline,
-  .tool-buckets {
+  .sparkline {
     min-width: 0;
     display: grid;
     align-items: end;
@@ -376,8 +366,7 @@
     grid-template-columns: repeat(24, minmax(3px, 1fr));
   }
 
-  .sparkline i,
-  .tool-buckets i {
+  .sparkline i {
     min-height: 2px;
     background: #4df3e8;
   }
@@ -386,35 +375,51 @@
     background: #ff5f6d;
   }
 
-  .activity-meta,
-  .tool-meta {
+  .activity-meta {
     justify-content: space-between;
     gap: 8px;
     font-size: 11px;
   }
 
-  .tool-list {
+  .model-card {
     flex: 1 1 auto;
     min-height: 0;
+    align-content: start;
+    padding: 7px;
+  }
+
+  .model-grid {
+    min-height: 0;
     display: grid;
-    gap: 5px;
-    overflow: auto;
-    scrollbar-gutter: stable;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(78px, 1fr));
+    gap: 6px;
   }
 
-  .tool-row {
-    min-height: 58px;
-    padding: 6px;
+  .model-grid div {
+    min-width: 0;
+    display: grid;
+    align-content: center;
+    gap: 3px;
+    padding: 7px;
+    border: 1px solid #414866;
+    border-radius: 3px;
+    background: #202438;
   }
 
-  .tool-title strong {
+  .model-grid strong {
     color: #cbd4f2;
-    font-size: 13px;
+    font-size: 12px;
+    line-height: 1.2;
   }
 
-  .tool-buckets {
-    height: 18px;
-    grid-template-columns: repeat(24, minmax(2px, 1fr));
+  .model-grid span {
+    font-size: 16px;
+    line-height: 1.1;
+  }
+
+  .model-grid small {
+    font-size: 10px;
   }
 
   .popover-actions {
