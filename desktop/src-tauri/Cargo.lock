@@ -6286,7 +6286,7 @@ dependencies = [
 
 [[package]]
 name = "tokenuse"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "chrono",
  "color-eyre",
@@ -6304,7 +6304,7 @@ dependencies = [
 
 [[package]]
 name = "tokenuse-desktop"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "color-eyre",
  "serde",
