@@ -22,14 +22,14 @@ Tagged releases also build desktop app bundles:
 
 | Platform | Assets |
 | --- | --- |
-| macOS Universal | `tokenuse-desktop-macos-universal.dmg` |
+| macOS ARM64 | `tokenuse-desktop-macos-arm64.dmg` |
 | Windows AMD64 | `tokenuse-desktop-windows-amd64-setup.exe`, `tokenuse-desktop-windows-amd64.msi` |
 | Linux AMD64 | `tokenuse-desktop-linux-amd64.AppImage`, `tokenuse-desktop-linux-amd64.deb`, `tokenuse-desktop-linux-amd64.rpm` |
 | Linux ARM64 | `tokenuse-desktop-linux-arm64.AppImage`, `tokenuse-desktop-linux-arm64.deb`, `tokenuse-desktop-linux-arm64.rpm` |
 
 Each asset has a matching `.sha256` checksum file.
 
-The macOS desktop release job signs with a Developer ID Application certificate, notarizes through App Store Connect, verifies the mounted DMG, and uploads the normalized artifact to the GitHub Release. Windows and Linux desktop assets are unsigned for now and should be verified with their checksum files before installing.
+The macOS desktop release job builds the Apple Silicon DMG, signs it with a Developer ID Application certificate, notarizes through App Store Connect, verifies the mounted DMG, and uploads the normalized artifact to the GitHub Release. Windows and Linux desktop assets are unsigned for now and should be verified with their checksum files before installing.
 
 ## Required Secrets
 
@@ -52,6 +52,6 @@ Use a Developer ID Application certificate for direct-download DMGs. Apple Distr
 After the GitHub Release is created, `.github/workflows/update-tap.yml` updates:
 
 - `Formula/tokenuse.rb` for the TUI on macOS and Linux.
-- `Casks/tokenuse-desktop.rb` for the macOS desktop DMG.
+- `Casks/tokenuse-desktop.rb` for the Apple Silicon macOS desktop DMG.
 
 The tap downloads checksums from the newly published release before writing the formula and cask. Windows and Linux desktop assets are published only to GitHub Releases for now.

@@ -231,7 +231,7 @@ jobs:
     runs-on: macos-latest
 
     env:
-      DESKTOP_DMG: tokenuse-desktop-macos-universal.dmg
+      DESKTOP_DMG: tokenuse-desktop-macos-arm64.dmg
 
     steps:
       - name: "📥 Check out repository"
@@ -240,7 +240,7 @@ jobs:
       - name: "🦀 Install Rust toolchain"
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: aarch64-apple-darwin
 
       - name: "⚡ Restore Rust cache"
         uses: Swatinem/rust-cache@v2
@@ -342,12 +342,12 @@ jobs:
 
       - name: "🏗️ Build notarized desktop DMG"
         working-directory: desktop
-        run: pnpm tauri build --target universal-apple-darwin --bundles dmg --ci
+        run: pnpm tauri build --target aarch64-apple-darwin --bundles dmg --ci
 
       - name: "🔐 Verify notarized DMG"
         working-directory: desktop
         run: |
-          DMG=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name '*.dmg' -type f | head -n 1)
+          DMG=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -name '*.dmg' -type f | head -n 1)
           if [ -z "${DMG}" ]; then
             echo "No desktop DMG was produced" >&2
             exit 1
@@ -373,7 +373,7 @@ jobs:
       - name: "🏷️ Normalize desktop DMG"
         working-directory: desktop
         run: |
-          DMG=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name '*.dmg' -type f | head -n 1)
+          DMG=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -name '*.dmg' -type f | head -n 1)
           cp "${DMG}" "../${DESKTOP_DMG}"
           cd ..
           shasum -a 256 "${DESKTOP_DMG}" > "${DESKTOP_DMG}.sha256"
@@ -381,7 +381,7 @@ jobs:
       - name: "⬆️ Upload desktop artifact"
         uses: actions/upload-artifact@v6
         with:
-          name: tokenuse-desktop-macos-universal
+          name: tokenuse-desktop-macos-arm64
           path: |
             ${{ env.DESKTOP_DMG }}
             ${{ env.DESKTOP_DMG }}.sha256

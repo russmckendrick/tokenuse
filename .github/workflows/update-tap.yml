@@ -41,7 +41,7 @@ jobs:
           mkdir -p build
           VERSION=${{ steps.version.outputs.version }}
 
-          for file in tokenuse-darwin-amd64.sha256 tokenuse-darwin-arm64.sha256 tokenuse-linux-amd64.sha256 tokenuse-linux-arm64.sha256 tokenuse-desktop-macos-universal.dmg.sha256; do
+          for file in tokenuse-darwin-amd64.sha256 tokenuse-darwin-arm64.sha256 tokenuse-linux-amd64.sha256 tokenuse-linux-arm64.sha256 tokenuse-desktop-macos-arm64.dmg.sha256; do
             for attempt in 1 2 3 4 5; do
               if curl -L --fail -o "build/${file}" "https://github.com/${{ github.repository }}/releases/download/${VERSION}/${file}"; then
                 break
@@ -71,7 +71,7 @@ jobs:
           DARWIN_ARM64_SHA=$(cut -d' ' -f1 build/tokenuse-darwin-arm64.sha256)
           LINUX_AMD64_SHA=$(cut -d' ' -f1 build/tokenuse-linux-amd64.sha256)
           LINUX_ARM64_SHA=$(cut -d' ' -f1 build/tokenuse-linux-arm64.sha256)
-          DESKTOP_DMG_SHA=$(cut -d' ' -f1 build/tokenuse-desktop-macos-universal.dmg.sha256)
+          DESKTOP_DMG_SHA=$(cut -d' ' -f1 build/tokenuse-desktop-macos-arm64.dmg.sha256)
 
           cd homebrew-tap
           mkdir -p Casks Formula
@@ -131,10 +131,11 @@ jobs:
             version "${VERSION#v}"
             sha256 "${DESKTOP_DMG_SHA}"
 
-            url "https://github.com/${{ github.repository }}/releases/download/v#{version}/tokenuse-desktop-macos-universal.dmg"
+            url "https://github.com/${{ github.repository }}/releases/download/v#{version}/tokenuse-desktop-macos-arm64.dmg"
             name "Token Use"
             desc "Desktop app for local AI coding tool token and cost usage"
             homepage "https://github.com/${{ github.repository }}"
+            depends_on arch: :arm64
 
             livecheck do
               url :url

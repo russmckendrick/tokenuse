@@ -13,14 +13,14 @@ brew install russmckendrick/tap/tokenuse
 tokenuse
 ```
 
-Install the desktop app with Homebrew Cask:
+Install the Apple Silicon desktop app with Homebrew Cask:
 
 ```bash
 brew install --cask russmckendrick/tap/tokenuse-desktop
 open -a "Token Use"
 ```
 
-The desktop DMG is signed with Developer ID Application, notarized through App Store Connect, and published as `tokenuse-desktop-macos-universal.dmg`.
+The Apple Silicon desktop DMG is signed with Developer ID Application, notarized through App Store Connect, and published as `tokenuse-desktop-macos-arm64.dmg`.
 
 ## Linux TUI
 

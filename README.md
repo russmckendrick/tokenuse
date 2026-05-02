@@ -19,7 +19,7 @@ Use a terminal at least `120x40`. Smaller terminals show a resize notice instead
 
 If no local sessions are found, or archive sync fails before any calls are loaded, the app falls back to bundled sample data and shows that status in the title bar. Press `r` to sync sessions created after startup.
 
-Install the macOS desktop app with Homebrew Cask:
+Install the Apple Silicon macOS desktop app with Homebrew Cask:
 
 ```bash
 brew install --cask russmckendrick/tap/tokenuse-desktop

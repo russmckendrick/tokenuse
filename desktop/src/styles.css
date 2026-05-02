@@ -6,10 +6,26 @@
   line-height: 1.35;
   font-synthesis: none;
   text-rendering: geometricPrecision;
+  color-scheme: dark;
 }
 
 * {
   box-sizing: border-box;
+  scrollbar-color: #414866 #202438;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #414866;
+}
+
+*::-webkit-scrollbar-track {
+  background: #202438;
 }
 
 html,
@@ -19,6 +35,7 @@ body,
   min-width: 100%;
   min-height: 100%;
   margin: 0;
+  color-scheme: dark;
 }
 
 body {
@@ -426,31 +443,7 @@ main {
   overflow: auto;
   padding: 6px;
   overscroll-behavior: contain;
-  scrollbar-color: #414866 #202438;
   scrollbar-gutter: stable;
-  scrollbar-width: thin;
-}
-
-.panel-body::-webkit-scrollbar,
-.deep-grid::-webkit-scrollbar,
-.usage-grid::-webkit-scrollbar,
-.config-grid::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.panel-body::-webkit-scrollbar-thumb,
-.deep-grid::-webkit-scrollbar-thumb,
-.usage-grid::-webkit-scrollbar-thumb,
-.config-grid::-webkit-scrollbar-thumb {
-  background: #414866;
-}
-
-.panel-body::-webkit-scrollbar-track,
-.deep-grid::-webkit-scrollbar-track,
-.usage-grid::-webkit-scrollbar-track,
-.config-grid::-webkit-scrollbar-track {
-  background: #202438;
 }
 
 .kpis {

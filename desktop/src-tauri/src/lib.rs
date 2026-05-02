@@ -11,7 +11,7 @@ use tauri::{
         WINDOW_SUBMENU_ID,
     },
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, Runtime, State, WindowEvent,
+    AppHandle, Manager, RunEvent, Runtime, State, Theme, WindowEvent,
 };
 use tauri_plugin_notification::NotificationExt;
 use thiserror::Error;
@@ -626,6 +626,16 @@ fn restore_main_window<R: Runtime>(app_handle: &AppHandle<R>) {
     }
 }
 
+fn handle_run_event<R: Runtime>(app_handle: &AppHandle<R>, event: RunEvent) {
+    #[cfg(target_os = "macos")]
+    if matches!(event, RunEvent::Reopen { .. }) {
+        restore_main_window(app_handle);
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app_handle, event);
+}
+
 fn mark_quitting<R: Runtime>(app_handle: &AppHandle<R>) {
     let state = app_handle.state::<SharedState>();
     if let Ok(mut state) = state.inner().lock() {
@@ -856,6 +866,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
+            app.set_theme(Some(Theme::Dark));
             setup_desktop_runtime(app, monitor_state.clone())?;
             Ok(())
         })
@@ -890,6 +901,7 @@ pub fn run() {
             export_current,
             handle_shortcut,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tokenuse desktop application");
+        .build(tauri::generate_context!())
+        .expect("error while building tokenuse desktop application")
+        .run(handle_run_event);
 }

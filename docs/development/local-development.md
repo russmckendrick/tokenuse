@@ -42,7 +42,7 @@ Run desktop checks and builds:
 ```bash
 pnpm run check
 pnpm run build
-pnpm run tauri:build:app
+pnpm tauri build --target aarch64-apple-darwin --bundles app --ci
 cd src-tauri
 cargo check
 ```

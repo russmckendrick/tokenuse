@@ -4,14 +4,14 @@ The desktop app is a Tauri v2 + Svelte frontend over the same Rust core as the T
 
 ## Install And Open
 
-Install on macOS with Homebrew Cask:
+Install on Apple Silicon macOS with Homebrew Cask:
 
 ```bash
 brew install --cask russmckendrick/tap/tokenuse-desktop
 open -a "Token Use"
 ```
 
-The macOS desktop app also ships as a signed and notarized universal DMG. Linux desktop builds are published as unsigned AppImage, deb, and rpm assets for AMD64 and ARM64. Windows desktop builds are published as unsigned AMD64 NSIS and MSI installers. Verify the matching `.sha256` file before running or installing unsigned assets.
+The macOS desktop app also ships as a signed and notarized Apple Silicon DMG. Linux desktop builds are published as unsigned AppImage, deb, and rpm assets for AMD64 and ARM64. Windows desktop builds are published as unsigned AMD64 NSIS and MSI installers. Verify the matching `.sha256` file before running or installing unsigned assets.
 
 ## Main Tabs
 
@@ -35,7 +35,7 @@ Usage consoles switch the visible period to 24 Hours when opened and ignore the 
 
 ## Background Alerts
 
-Closing the desktop window keeps Token Use running in the background. Use the tray or menu-bar icon to show the window again, or choose **Quit Token Use** from that menu to stop the app. Opening Token Use while it is already running restores the existing window instead of launching a second copy.
+Closing the desktop window keeps Token Use running in the background. Use the Dock icon, tray or menu-bar icon, or launch Token Use again to show the window, or choose **Quit Token Use** from the menu-bar icon to stop the app.
 
 While the app is running, the desktop backend keeps polling completed archive refreshes even if the window is hidden. If an automatic refresh imports a significant amount of new usage since the last alert baseline, Token Use sends a native desktop notification. Notifications are driven by all live imported usage, independent of the visible period, tool, project, or sort filters. Manual refreshes reset the alert baseline without sending a notification.
 

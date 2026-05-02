@@ -4,7 +4,7 @@
 
 ## Guides
 
-- [Installation](guides/installation.md): install the TUI and macOS desktop app from Homebrew, or download TUI and desktop assets from GitHub Releases.
+- [Installation](guides/installation.md): install the TUI and Apple Silicon macOS desktop app from Homebrew, or download TUI and desktop assets from GitHub Releases.
 - [TUI usage](guides/tui-usage.md): dashboard navigation, filters, keyboard shortcuts, reloads, configuration, session drill-down, export, and the Usage page.
 - [Desktop app usage](guides/desktop-usage.md): install, open, navigate, refresh, configure, and export from the Tauri desktop app.
 
