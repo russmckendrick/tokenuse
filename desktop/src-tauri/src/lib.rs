@@ -123,7 +123,7 @@ async fn set_page(page: String, state: State<'_, SharedState>) -> CommandResult<
             app.session_view = None;
             app.session_scroll = 0;
         }
-        app.page = page;
+        app.set_page(page);
         Ok(snapshot(app))
     })
     .await

@@ -26,7 +26,7 @@ Press `g` to cycle the dashboard sort mode between spend, latest date, and token
 
 - **Overview**: the everyday command center with KPIs, an activity pulse graph, project/tool spend, model spend, shell commands, and MCP servers.
 - **Deep Dive**: the analysis workbench with the full panel set, a larger chronological activity trend, top sessions, project rankings, model efficiency, core tools, shell commands, and MCP servers.
-- **Usage**: rolling 24-hour per-tool consoles with a prominent pulse graph, calls/tokens/cost/last-seen totals, optional rate-limit gauges, and top models.
+- **Usage**: rolling 24-hour per-tool consoles with a prominent pulse graph, calls/tokens/cost/last-seen totals, optional rate-limit gauges, and top models. Opening this tab automatically selects the 24 Hours period so the visible filter matches the console window.
 - **Session**: drill into one `tool:session_id`, inspect per-call timestamp, model, cost, token buckets, tools, and prompt snippet, then open a call detail modal for the full stored prompt and metadata.
 - **Config**: display currency and confirmed local downloads for currency rates and LiteLLM pricing snapshots.
 
@@ -36,9 +36,9 @@ Overview is the fast read. Start there when you want to know whether current spe
 
 Deep Dive is the comparison view. The **Activity Trend** panel uses the same chronological timeline as Overview, then the surrounding tables rank projects, project/tool pairs, sessions, models, tools, commands, and MCP servers by the active sort. Use it when you need to explain why a period changed or decide which project/session to inspect next.
 
-Usage is the live capacity view. Each tool gets its own console. The **24h pulse** line shows hourly relative activity for that tool, followed by totals for calls, tokens, cost, and last seen. Limit rows are gauges from imported plan snapshots when available; model rows are ranked bars for that tool's rolling 24-hour slice.
+Usage is the live capacity view. Each tool gets its own console, and entering the tab switches the visible period selector to 24 Hours. The **24h pulse** line shows hourly relative activity for that tool, followed by totals for calls, tokens, cost, and last seen. Limit rows are gauges from imported plan snapshots when available; model rows are ranked bars for that tool's rolling 24-hour slice.
 
-Activity Pulse and Activity Trend use hourly buckets for 24 Hours and 7 Days, then daily buckets for 30 Days, This Month, and All Time. The 24 Hours period is rolling from the current time, not a calendar-day midnight cutoff. Graph bars and pulse lines are relative to the visible panel. They are designed for quick comparison inside the terminal, not exact accounting; use the adjacent numeric columns for exact cost, call, token, reset, and plan values.
+Activity Pulse and Activity Trend use hourly buckets for 24 Hours and 7 Days. This Month also uses hourly buckets during the first 14 days of the month, then switches to daily buckets from the 15th onward. 30 Days and All Time use daily buckets. The 24 Hours period is rolling from the current time, not a calendar-day midnight cutoff. Graph bars and pulse lines are relative to the visible panel. They are designed for quick comparison inside the terminal, not exact accounting; use the adjacent numeric columns for exact cost, call, token, reset, and plan values.
 
 ## Keyboard
 
@@ -68,7 +68,7 @@ In the session page, use `Up` / `Down`, `PgUp` / `PgDn`, `Home` / `End` to move 
 
 ## Usage Page
 
-The Usage page is always a rolling 24-hour view. It ignores the active period, project filter, and tool filter so every supported tool gets its own section.
+The Usage page is always a rolling 24-hour view. Opening it automatically selects the 24 Hours period. The page ignores the project filter; the tool filter can still narrow the visible console sections.
 The active sort mode controls the order of tool sections and model rows; rate-limit rows keep their scope/window order.
 
 Each tool section includes:

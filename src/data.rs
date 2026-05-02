@@ -587,7 +587,7 @@ fn rebase_limit_dates(data: &mut LimitsData, base: NaiveDate, delta: Duration) {
 }
 
 fn sample_activity_timeline(rows: &[DailyMetric], period: Period) -> Vec<ActivityMetric> {
-    if !matches!(period, Period::Today | Period::Week) {
+    if !period.uses_hourly_activity_timeline(Local::now()) {
         return rows.iter().map(ActivityMetric::from_daily).collect();
     }
 

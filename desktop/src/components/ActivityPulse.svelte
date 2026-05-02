@@ -12,6 +12,8 @@
   $: latest = points.length ? points[points.length - 1] : null;
   $: firstLabel = points[0]?.label ?? '-';
   $: lastLabel = latest?.label ?? '-';
+  $: dense = points.length > 192;
+  $: minBarWidth = dense ? 1 : 3;
 
   function heightFromValue(value: number) {
     const clamped = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
@@ -33,7 +35,7 @@
 {#if points.length}
   <div class="activity-pulse" class:compact={density === 'compact'}>
     <div class="pulse-label spend">spend</div>
-    <div class="pulse-track" style={`grid-template-columns: repeat(${points.length}, minmax(3px, 1fr));`}>
+    <div class="pulse-track" class:dense style={`grid-template-columns: repeat(${points.length}, minmax(${minBarWidth}px, 1fr));`}>
       {#each points as point}
         <span
           class="pulse-bar spend-bar"
@@ -45,7 +47,7 @@
     </div>
 
     <div class="pulse-label calls">calls</div>
-    <div class="pulse-track calls-track" style={`grid-template-columns: repeat(${points.length}, minmax(3px, 1fr));`}>
+    <div class="pulse-track calls-track" class:dense style={`grid-template-columns: repeat(${points.length}, minmax(${minBarWidth}px, 1fr));`}>
       {#each points as point}
         <span
           class="pulse-bar calls-bar"
@@ -103,6 +105,10 @@
     gap: 2px;
     align-items: end;
     border-top: 2px solid #7ebcff;
+  }
+
+  .pulse-track.dense {
+    gap: 1px;
   }
 
   .calls-track {

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Datelike, Local, Utc};
 use color_eyre::Result;
 use crossterm::event::{
     KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
@@ -30,6 +30,8 @@ pub enum Period {
 }
 
 impl Period {
+    const MONTH_DAILY_START_DAY: u32 = 15;
+
     pub const ALL: [Self; 5] = [
         Self::Today,
         Self::Week,
@@ -56,6 +58,11 @@ impl Period {
             Self::Month => '4',
             Self::AllTime => '5',
         }
+    }
+
+    pub fn uses_hourly_activity_timeline(self, now: DateTime<Local>) -> bool {
+        matches!(self, Self::Today | Self::Week)
+            || (self == Self::Month && now.day() < Self::MONTH_DAILY_START_DAY)
     }
 }
 
@@ -1215,8 +1222,8 @@ impl App {
             keymap::ACTION_CLOSE_CALL_DETAIL => self.close_call_detail(),
             keymap::ACTION_CLOSE_MODAL | keymap::ACTION_CANCEL => self.cancel_active_context(),
             keymap::ACTION_CONFIRM => self.confirm_active_context(),
-            keymap::ACTION_NEXT_TAB => self.page = self.page.next_tab(),
-            keymap::ACTION_PREV_TAB => self.page = self.page.prev_tab(),
+            keymap::ACTION_NEXT_TAB => self.set_page(self.page.next_tab()),
+            keymap::ACTION_PREV_TAB => self.set_page(self.page.prev_tab()),
             keymap::ACTION_PERIOD_TODAY => self.period = Period::Today,
             keymap::ACTION_PERIOD_WEEK => self.period = Period::Week,
             keymap::ACTION_PERIOD_THIRTY_DAYS => self.period = Period::ThirtyDays,
@@ -1229,10 +1236,10 @@ impl App {
             keymap::ACTION_OPEN_SESSION_PICKER => self.open_session_modal(),
             keymap::ACTION_OPEN_EXPORT_PICKER => self.open_export_modal(),
             keymap::ACTION_OPEN_EXPORT_FOLDER_PICKER => self.open_export_dir_picker(),
-            keymap::ACTION_PAGE_OVERVIEW => self.page = Page::Overview,
-            keymap::ACTION_PAGE_DEEP_DIVE => self.page = Page::DeepDive,
-            keymap::ACTION_PAGE_USAGE => self.page = Page::Usage,
-            keymap::ACTION_PAGE_CONFIG => self.page = Page::Config,
+            keymap::ACTION_PAGE_OVERVIEW => self.set_page(Page::Overview),
+            keymap::ACTION_PAGE_DEEP_DIVE => self.set_page(Page::DeepDive),
+            keymap::ACTION_PAGE_USAGE => self.set_page(Page::Usage),
+            keymap::ACTION_PAGE_CONFIG => self.set_page(Page::Config),
             keymap::ACTION_CLOSE_SESSION => self.leave_session(),
             keymap::ACTION_RELOAD => self.reload(),
             keymap::ACTION_MOVE_UP => self.move_active_selection(-1),
@@ -1563,12 +1570,19 @@ impl App {
         }
     }
 
-    pub fn set_period(&mut self, period: Period) {
-        self.period = period;
-    }
-
     pub fn set_tool(&mut self, tool: Tool) {
         self.tool = tool;
+    }
+
+    pub fn set_page(&mut self, page: Page) {
+        self.page = page;
+        if page == Page::Usage {
+            self.period = Period::Today;
+        }
+    }
+
+    pub fn set_period(&mut self, period: Period) {
+        self.period = period;
     }
 
     pub fn set_sort(&mut self, sort: SortMode) {
@@ -1852,10 +1866,12 @@ mod tests {
     #[test]
     fn u_opens_usage_and_u_or_escape_returns_to_a_main_tab() {
         let mut app = App::default();
+        app.set_period(Period::AllTime);
         assert_eq!(app.page, Page::Overview);
 
         app.handle_key(key(KeyCode::Char('u')));
         assert_eq!(app.page, Page::Usage);
+        assert_eq!(app.period, Period::Today);
 
         // From Usage, `u` returns to Overview (the home tab).
         app.handle_key(key(KeyCode::Char('u')));
@@ -1872,31 +1888,52 @@ mod tests {
     #[test]
     fn tab_cycles_between_main_tabs() {
         let mut app = App::default();
+        app.set_period(Period::AllTime);
         assert_eq!(app.page, Page::Overview);
 
         app.handle_key(key(KeyCode::Tab));
         assert_eq!(app.page, Page::DeepDive);
         app.handle_key(key(KeyCode::Tab));
         assert_eq!(app.page, Page::Usage);
+        assert_eq!(app.period, Period::Today);
         app.handle_key(key(KeyCode::Tab));
         assert_eq!(app.page, Page::Overview);
 
+        app.set_period(Period::AllTime);
         app.handle_key(key(KeyCode::BackTab));
         assert_eq!(app.page, Page::Usage);
+        assert_eq!(app.period, Period::Today);
     }
 
     #[test]
     fn direct_keys_jump_between_tabs() {
         let mut app = App::default();
+        app.set_period(Period::AllTime);
 
         app.handle_key(key(KeyCode::Char('d')));
         assert_eq!(app.page, Page::DeepDive);
 
         app.handle_key(key(KeyCode::Char('u')));
         assert_eq!(app.page, Page::Usage);
+        assert_eq!(app.period, Period::Today);
 
         app.handle_key(key(KeyCode::Char('o')));
         assert_eq!(app.page, Page::Overview);
+    }
+
+    #[test]
+    fn set_page_usage_selects_rolling_24_hour_period() {
+        let mut app = App::default();
+
+        app.set_period(Period::Month);
+        app.set_page(Page::Usage);
+        assert_eq!(app.page, Page::Usage);
+        assert_eq!(app.period, Period::Today);
+
+        app.set_period(Period::AllTime);
+        app.set_page(Page::DeepDive);
+        assert_eq!(app.page, Page::DeepDive);
+        assert_eq!(app.period, Period::AllTime);
     }
 
     #[test]
@@ -2026,7 +2063,7 @@ mod tests {
     #[test]
     fn usage_ignores_period_and_project_filters() {
         let mut app = App {
-            period: Period::Today,
+            period: Period::AllTime,
             project_filter: ProjectFilter::Selected {
                 identity: "missing".into(),
                 label: "missing".into(),
@@ -2038,6 +2075,7 @@ mod tests {
         let data = app.usage();
 
         assert_eq!(app.page, Page::Usage);
+        assert_eq!(app.period, Period::Today);
         assert!(!data.sections.is_empty());
     }
 

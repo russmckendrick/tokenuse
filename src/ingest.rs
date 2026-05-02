@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
-use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, TimeZone, Utc};
+use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, TimeZone, Timelike, Utc};
 use color_eyre::Result;
 
 use crate::app::{Period, ProjectFilter, SortMode, Tool};
@@ -839,10 +839,29 @@ fn aggregate_activity_timeline(
     match period {
         Period::Today => aggregate_hourly_timeline(calls, 24, true, now, currency),
         Period::Week => aggregate_hourly_timeline(calls, 24 * 7, false, now, currency),
+        Period::Month if period.uses_hourly_activity_timeline(now) => {
+            aggregate_hourly_timeline(calls, month_to_date_hours(now), false, now, currency)
+        }
         Period::ThirtyDays | Period::Month | Period::AllTime => {
             aggregate_daily_timeline(calls, currency)
         }
     }
+}
+
+fn month_to_date_hours(now: DateTime<Local>) -> i64 {
+    let now_hour = now.timestamp() / 3600;
+    let Some(month_start) = Local
+        .with_ymd_and_hms(now.year(), now.month(), 1, 0, 0, 0)
+        .single()
+    else {
+        return (now.day0() as i64)
+            .saturating_mul(24)
+            .saturating_add(now.hour() as i64)
+            .saturating_add(1)
+            .max(1);
+    };
+    let start_hour = month_start.timestamp() / 3600;
+    now_hour.saturating_sub(start_hour).saturating_add(1).max(1)
 }
 
 fn aggregate_hourly_timeline(
@@ -1763,6 +1782,23 @@ mod tests {
         }
     }
 
+    fn mk_timed_call(
+        tool: &'static str,
+        session_id: &str,
+        timestamp: DateTime<Local>,
+        cost: f64,
+    ) -> ParsedCall {
+        ParsedCall {
+            tool,
+            timestamp: Some(timestamp.with_timezone(&chrono::Utc)),
+            cost_usd: cost,
+            session_id: session_id.into(),
+            project: "/Users/me/Code/widgets".into(),
+            model: "test-model".into(),
+            ..ParsedCall::default()
+        }
+    }
+
     fn mk_sort_call(
         tool: &'static str,
         session_id: &str,
@@ -2045,6 +2081,93 @@ mod tests {
         assert_eq!(week.activity_timeline.len(), 24 * 7);
         assert_eq!(today.activity_timeline.last().unwrap().calls, 1);
         assert_eq!(week.activity_timeline.last().unwrap().calls, 1);
+    }
+
+    #[test]
+    fn early_month_activity_timeline_uses_hourly_buckets() {
+        let now = Local
+            .with_ymd_and_hms(2026, 5, 2, 15, 30, 0)
+            .single()
+            .unwrap();
+        let calls = vec![
+            mk_timed_call(
+                "codex",
+                "first",
+                Local
+                    .with_ymd_and_hms(2026, 5, 1, 8, 15, 0)
+                    .single()
+                    .unwrap(),
+                2.0,
+            ),
+            mk_timed_call(
+                "codex",
+                "latest",
+                Local
+                    .with_ymd_and_hms(2026, 5, 2, 15, 5, 0)
+                    .single()
+                    .unwrap(),
+                4.0,
+            ),
+        ];
+        let refs = calls.iter().collect::<Vec<_>>();
+        let data = build_dashboard(
+            &refs,
+            Period::Month,
+            now,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+        );
+
+        assert_eq!(
+            data.activity_timeline.len(),
+            month_to_date_hours(now) as usize
+        );
+        assert_eq!(data.activity_timeline.first().unwrap().label, "05-01 00h");
+        assert_eq!(data.activity_timeline.last().unwrap().label, "05-02 15h");
+        assert_eq!(data.activity_timeline.last().unwrap().calls, 1);
+    }
+
+    #[test]
+    fn mid_month_activity_timeline_returns_to_daily_buckets() {
+        let now = Local
+            .with_ymd_and_hms(2026, 5, 15, 12, 30, 0)
+            .single()
+            .unwrap();
+        let calls = vec![
+            mk_timed_call(
+                "codex",
+                "first",
+                Local
+                    .with_ymd_and_hms(2026, 5, 1, 8, 15, 0)
+                    .single()
+                    .unwrap(),
+                2.0,
+            ),
+            mk_timed_call(
+                "codex",
+                "mid",
+                Local
+                    .with_ymd_and_hms(2026, 5, 15, 12, 5, 0)
+                    .single()
+                    .unwrap(),
+                4.0,
+            ),
+        ];
+        let refs = calls.iter().collect::<Vec<_>>();
+        let data = build_dashboard(
+            &refs,
+            Period::Month,
+            now,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+        );
+
+        let labels = data
+            .activity_timeline
+            .iter()
+            .map(|row| row.label)
+            .collect::<Vec<_>>();
+        assert_eq!(labels, vec!["05-01", "05-15"]);
     }
 
     #[test]
