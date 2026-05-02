@@ -27,7 +27,7 @@ Dashboard sections render the full sorted row set. Sections with more rows than 
 
 ## Reading The Dashboard
 
-The **Activity Pulse** and **Activity Trend** panels use two stacked graph lines. Orange/red bars show relative spend, cyan/blue bars show relative call volume, and the footer summarizes the visible range, peak bucket, latest bucket, and total calls. 24 Hours and 7 Days use hourly buckets so short views do not collapse into one or two bars. This Month stays hourly during the first 14 days of the month, then switches to daily buckets from the 15th onward; 30 Days and All Time use daily buckets. The 24 Hours period is rolling from the current time, not a calendar-day midnight cutoff.
+The **Activity Pulse** and **Activity Trend** panels use D3-backed SVG charts. Orange/red bars show relative spend by bucket, cyan/blue line and area marks show call-volume cadence, and hovering a bucket shows the period label, cost, and call count without changing filters. D3-backed heat strips in ranking tables use stepped blue/yellow/red cells for relative magnitude. The footer summarizes the visible range, peak bucket, latest bucket, and total calls. 24 Hours and 7 Days use hourly buckets so short views do not collapse into one or two bars. This Month stays hourly during the first 14 days of the month, then switches to daily buckets from the 15th onward; 30 Days and All Time use daily buckets. The 24 Hours period is rolling from the current time, not a calendar-day midnight cutoff.
 
 Ranked table bars use the same stepped color ramp as the TUI: blue is lower relative volume, yellow/orange is hotter, and red marks the current high end of the table. These bars are relative to the visible table, not exported pixel charts.
 
@@ -35,7 +35,7 @@ Usage consoles switch the visible period to 24 Hours when opened and ignore the 
 
 ## Background Alerts
 
-Closing the desktop window keeps Token Use running in the background. Left-click the tray or menu-bar icon for a compact 24-hour usage popover, then choose **Open** to show the full dashboard. Right-click the icon and choose **Show Token Use** to open the dashboard directly, or choose **Quit Token Use** to stop the app. When the Dock/taskbar icon is visible, the Dock icon or launching Token Use again also restores the window.
+Closing the desktop window keeps Token Use running in the background. Left-click the tray or menu-bar icon for a compact 24-hour usage popover with a D3 sparkline, then choose **Open** to show the full dashboard. Right-click the icon and choose **Show Token Use** to open the dashboard directly, or choose **Quit Token Use** to stop the app. When the Dock/taskbar icon is visible, the Dock icon or launching Token Use again also restores the window.
 
 While the app is running, the desktop backend keeps polling completed archive refreshes even if the window is hidden. If an automatic refresh imports a significant amount of new usage since the last alert baseline, Token Use sends a native desktop notification. Notifications are driven by all live imported usage, independent of the visible period, tool, project, or sort filters. Manual refreshes reset the alert baseline without sending a notification.
 

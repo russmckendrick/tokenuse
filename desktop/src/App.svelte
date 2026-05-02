@@ -7,6 +7,7 @@
   import ActivityPulse from './components/ActivityPulse.svelte';
   import RankBar from './components/RankBar.svelte';
   import UsageConsole from './components/UsageConsole.svelte';
+  import { fadeIn, reveal, staggeredReveal } from './motion';
   import Panel from './Panel.svelte';
   import TrayPopover from './TrayPopover.svelte';
   import type {
@@ -469,7 +470,7 @@
 
     <main>
       {#if activePage() === 'overview'}
-        <section class="page overview-page">
+        <section class="page overview-page" use:staggeredReveal={{ selector: ':scope > *', y: 5, stagger: 0.035 }}>
           {@render Kpis(snapshot.dashboard.summary, snapshot.currency)}
           <Panel title="Activity Pulse" tone="cyan">
             <ActivityPulse points={snapshot.dashboard.activity_timeline} />
@@ -494,7 +495,7 @@
           </section>
         </section>
       {:else if activePage() === 'deep-dive'}
-        <section class="page deep-page">
+        <section class="page deep-page" use:reveal={{ y: 5 }}>
           <section class="grid deep-grid">
             <div class="deep-trend">
               <Panel title="Activity Trend" tone="blue">
@@ -538,7 +539,7 @@
           </section>
         </section>
       {:else if activePage() === 'usage'}
-        <section class="page usage-page">
+        <section class="page usage-page" use:reveal={{ y: 5 }}>
           <section class="usage-grid">
             {#each snapshot.usage.sections as section, index}
               <UsageConsole {section} tone={usageTone(section.tool, index)} />
@@ -546,7 +547,7 @@
           </section>
         </section>
       {:else if activePage() === 'config'}
-        <section class="page config-page">
+        <section class="page config-page" use:reveal={{ y: 5 }}>
           <section class="config-grid">
             <Panel title="Configuration" tone="cyan">
               <table>
@@ -625,9 +626,9 @@
   </div>
 
   {#if modal}
-    <div class="scrim" role="presentation">
+    <div class="scrim" role="presentation" use:fadeIn>
       <button class="backdrop" type="button" aria-label="Close dialog" onclick={closeModal}></button>
-      <section class="modal" role="dialog" aria-modal="true" tabindex="-1">
+      <section class="modal" role="dialog" aria-modal="true" tabindex="-1" use:reveal={{ y: 8 }}>
         <div class="modal-head">
           <div class="modal-title">
             {#if modal !== 'export'}<Search size={16} />{/if}
@@ -696,9 +697,9 @@
   {/if}
 
   {#if callDetail}
-    <div class="scrim" role="presentation">
+    <div class="scrim" role="presentation" use:fadeIn>
       <button class="backdrop" type="button" aria-label="Close call detail" onclick={closeCallDetail}></button>
-      <section class="modal detail-modal" role="dialog" aria-modal="true" tabindex="-1">
+      <section class="modal detail-modal" role="dialog" aria-modal="true" tabindex="-1" use:reveal={{ y: 8 }}>
         <div class="modal-head">
           <div class="modal-title">call detail</div>
           <button class="icon-button" type="button" title="Close" onclick={closeCallDetail}><X size={16} /></button>
@@ -732,11 +733,11 @@
     </div>
   {/if}
 {:else}
-  <div class="loading">Token Use</div>
+  <div class="loading" use:reveal>Token Use</div>
 {/if}
 
 {#snippet Kpis(summary: Summary, currency: string)}
-  <section class="kpis">
+  <section class="kpis" use:staggeredReveal={{ selector: ':scope > div', y: 4, stagger: 0.025 }}>
     <div><span>cost</span><strong>{summary.cost}</strong><small>{currency}</small></div>
     <div><span>calls</span><strong>{summary.calls}</strong><small>{summary.input} in</small></div>
     <div><span>sessions</span><strong>{summary.sessions}</strong><small>active set</small></div>
@@ -842,7 +843,7 @@
 {/snippet}
 
 {#snippet SessionDetailPanel(session: SessionDetailView | null)}
-  <section class="session-page">
+  <section class="session-page" use:reveal={{ y: 5 }}>
     <div class="session-head">
       <button type="button" onclick={() => commit(() => api.closeSession())}><ArrowLeft size={15} /> Deep Dive</button>
       {#if session}

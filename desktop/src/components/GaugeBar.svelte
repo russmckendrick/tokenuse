@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { animatedBar } from '../motion';
+
   export let used = 0;
   export let ariaLabel = 'usage limit';
 
@@ -7,7 +9,7 @@
 </script>
 
 <span class="gauge-bar" aria-label={`${ariaLabel}: ${Math.round(clamped)}% used`}>
-  <span class={`gauge-fill ${tone}`} style={`width: ${clamped}%`}></span>
+  <span class={`gauge-fill ${tone}`} use:animatedBar={{ value: clamped }}></span>
 </span>
 
 <style>
@@ -23,8 +25,8 @@
 
   .gauge-fill {
     display: block;
+    width: 100%;
     height: 100%;
-    min-width: 2px;
   }
 
   .gauge-fill.cool {

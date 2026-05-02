@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import { ExternalLink, RefreshCw, X } from 'lucide-svelte';
   import { api } from './api';
+  import TraySparkline from './components/TraySparkline.svelte';
+  import { reveal, staggeredReveal } from './motion';
   import type { ActivityMetric, ModelMetric, TraySnapshot } from './types';
 
   let snapshot: TraySnapshot | null = null;
@@ -86,13 +88,9 @@
     return activityPoints().reduce((total, point) => total + point.calls, 0);
   }
 
-  function bucketHeight(value: number) {
-    const clamped = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
-    return clamped === 0 ? '2px' : `${Math.max(8, clamped)}%`;
-  }
 </script>
 
-<div class="tray-popover" class:is-busy={busy}>
+<div class="tray-popover" class:is-busy={busy} use:reveal={{ y: 4 }}>
   <div class="popover-head">
     <div class="brand-lockup">
       <svg class="brand-bars" viewBox="0 0 440 560" aria-hidden="true">
@@ -119,7 +117,7 @@
   </div>
 
   {#if snapshot}
-    <div class="metric-grid" aria-label="24 hour summary">
+    <div class="metric-grid" aria-label="24 hour summary" use:staggeredReveal={{ selector: ':scope > div', y: 3, stagger: 0.02 }}>
       <div>
         <span>cost</span>
         <strong>{snapshot.dashboard.summary.cost}</strong>
@@ -148,9 +146,7 @@
         <strong>{latestPoint()?.cost ?? '-'}</strong>
       </div>
       <div class="sparkline" aria-hidden="true">
-        {#each activityPoints() as point}
-          <i class:peak={point === peakPoint()} style={`height: ${bucketHeight(point.value)}`}></i>
-        {/each}
+        <TraySparkline points={activityPoints()} />
       </div>
       <div class="activity-meta">
         <span>high {peakPoint()?.label ?? '-'}</span>
@@ -163,7 +159,7 @@
         <span>Models</span>
         <strong>{count(modelCards().reduce((total, model) => total + model.calls, 0))} calls</strong>
       </div>
-      <div class="model-grid" aria-label="Model usage">
+      <div class="model-grid" aria-label="Model usage" use:staggeredReveal={{ selector: ':scope > div', y: 3, stagger: 0.02 }}>
         {#each modelCards() as model}
           <div>
             <strong>{model.name}</strong>
@@ -178,7 +174,7 @@
       </div>
     </div>
   {:else}
-    <div class="tray-loading">Token Use</div>
+    <div class="tray-loading" use:reveal>Token Use</div>
   {/if}
 
   <div class="popover-actions">
@@ -342,24 +338,8 @@
 
   .sparkline {
     min-width: 0;
-    display: grid;
-    align-items: end;
-    gap: 1px;
-    border-bottom: 1px solid #4df3e8;
-  }
-
-  .sparkline {
     height: 36px;
-    grid-template-columns: repeat(24, minmax(3px, 1fr));
-  }
-
-  .sparkline i {
-    min-height: 2px;
-    background: #4df3e8;
-  }
-
-  .sparkline i.peak {
-    background: #ff5f6d;
+    overflow: hidden;
   }
 
   .activity-meta {

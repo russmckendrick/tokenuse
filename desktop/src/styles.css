@@ -61,6 +61,7 @@ button {
   justify-content: center;
   gap: 6px;
   cursor: default;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
 }
 
 button:hover {
@@ -444,6 +445,7 @@ main {
   overflow: hidden;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  will-change: opacity, transform;
 }
 
 .panel h2 {
@@ -507,6 +509,7 @@ main {
   align-content: center;
   gap: 2px;
   background: #202438;
+  will-change: opacity, transform;
 }
 
 .kpis span,
@@ -903,6 +906,7 @@ footer b {
   background: #202438;
   padding: 10px;
   overflow: hidden;
+  will-change: opacity, transform;
 }
 
 .detail-modal {
@@ -1108,5 +1112,23 @@ footer b {
   .session-kpis,
   .detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  button,
+  .panel,
+  .kpis > div,
+  .modal {
+    will-change: auto;
   }
 }

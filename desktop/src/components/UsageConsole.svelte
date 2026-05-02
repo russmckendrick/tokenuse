@@ -1,8 +1,10 @@
 <script lang="ts">
   import Panel from '../Panel.svelte';
+  import { staggeredReveal } from '../motion';
   import type { RecentModelMetric, ToolLimitSection } from '../types';
   import GaugeBar from './GaugeBar.svelte';
   import RankBar from './RankBar.svelte';
+  import UsageActivityChart from './UsageActivityChart.svelte';
 
   export let section: ToolLimitSection;
   export let tone = 'cyan';
@@ -15,29 +17,16 @@
     return value.toLocaleString();
   }
 
-  function pulseHeight(value: number) {
-    const clamped = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
-    return clamped === 0 ? '0%' : `${Math.max(10, clamped)}%`;
-  }
-
   function modelLabel(model: RecentModelMetric) {
     return `${model.name}: ${count(model.calls)} calls`;
   }
 </script>
 
 <Panel title={`${section.tool} Console · 24h + models`} {tone}>
-  <div class="usage-console">
+  <div class="usage-console" use:staggeredReveal={{ selector: '.console-pulse, .console-stats div, .console-row', y: 3, stagger: 0.012 }}>
     <div class="console-head">
-      <div class="console-pulse" style={`grid-template-columns: repeat(${buckets.length || 24}, minmax(3px, 1fr));`}>
-        {#if buckets.length}
-          {#each buckets as bucket}
-            <span class:quiet={!hasUsage} style={`height: ${pulseHeight(bucket)}`}></span>
-          {/each}
-        {:else}
-          {#each Array.from({ length: 24 }) as _}
-            <span class="quiet"></span>
-          {/each}
-        {/if}
+      <div class="console-pulse">
+        <UsageActivityChart {buckets} active={hasUsage} {tone} ariaLabel={`${section.tool} 24 hour activity`} />
       </div>
 
       <div class="console-stats">
@@ -103,30 +92,7 @@
 
   .console-pulse {
     min-height: 64px;
-    display: grid;
-    gap: 2px;
-    align-items: end;
-    padding: 6px 0 2px;
-    border-top: 2px dotted #6e7492;
-    border-bottom: 2px solid #7ebcff;
-  }
-
-  .console-pulse span {
-    min-width: 2px;
-    background: #4df3e8;
-  }
-
-  .console-pulse span:nth-child(3n) {
-    background: #62a6ff;
-  }
-
-  .console-pulse span:nth-child(5n) {
-    background: #ff8f40;
-  }
-
-  .console-pulse span.quiet {
-    height: 2px;
-    background: #6e7492;
+    min-width: 0;
   }
 
   .console-stats {

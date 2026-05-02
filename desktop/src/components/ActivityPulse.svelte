@@ -1,8 +1,23 @@
 <script lang="ts">
+  import { area, curveMonotoneX, line, scaleLinear } from 'd3';
+  import { staggeredReveal } from '../motion';
   import type { ActivityMetric } from '../types';
 
   export let points: ActivityMetric[] = [];
   export let density: 'compact' | 'roomy' = 'roomy';
+
+  const chartWidth = 640;
+  const chartHeight = 116;
+  const xInset = 10;
+  const spendTop = 12;
+  const spendBottom = 52;
+  const callsTop = 70;
+  const callsBottom = 108;
+
+  let svgElement: SVGSVGElement | null = null;
+  let hoverIndex: number | null = null;
+  let pendingClientX: number | null = null;
+  let hoverFrame: number | null = null;
 
   $: maxCalls = points.reduce((max, point) => Math.max(max, point.calls), 0);
   $: totalCalls = points.reduce((total, point) => total + point.calls, 0);
@@ -13,16 +28,47 @@
   $: firstLabel = points[0]?.label ?? '-';
   $: lastLabel = latest?.label ?? '-';
   $: dense = points.length > 192;
-  $: minBarWidth = dense ? 1 : 3;
+  $: domainEnd = Math.max(points.length - 1, 1);
+  $: xScale = scaleLinear().domain([0, domainEnd]).range([xInset, chartWidth - xInset]);
+  $: bucketSpan = (chartWidth - xInset * 2) / Math.max(points.length, 1);
+  $: bucketBarWidth = Math.max(dense ? 1 : 2, Math.min(dense ? 5 : 14, bucketSpan * (dense ? 0.82 : 0.62)));
+  $: spendScale = scaleLinear().domain([0, 100]).range([spendBottom, spendTop]);
+  $: callsScale = scaleLinear().domain([0, Math.max(maxCalls, 1)]).range([callsBottom, callsTop]);
+  $: callsLine =
+    line<ActivityMetric>()
+      .x((_, index) => bucketX(index))
+      .y((point) => callsScale(point.calls))
+      .curve(curveMonotoneX)(points) ?? '';
+  $: callsArea =
+    area<ActivityMetric>()
+      .x((_, index) => bucketX(index))
+      .y0(callsBottom)
+      .y1((point) => callsScale(point.calls))
+      .curve(curveMonotoneX)(points) ?? '';
+  $: hoverPoint = hoverIndex === null ? null : points[hoverIndex] ?? null;
+  $: hoverX = hoverIndex === null ? 0 : bucketX(hoverIndex);
+  $: hoverBarX = hoverIndex === null ? 0 : barX(hoverIndex);
 
-  function heightFromValue(value: number) {
-    const clamped = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
-    return clamped === 0 ? '0%' : `${Math.max(12, clamped)}%`;
+  function clampPercent(value: number) {
+    return Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
   }
 
-  function heightFromCalls(calls: number) {
-    if (maxCalls === 0) return '0%';
-    return `${Math.max(12, Math.round((calls / maxCalls) * 100))}%`;
+  function bucketX(index: number) {
+    return points.length <= 1 ? chartWidth / 2 : xScale(index);
+  }
+
+  function barX(index: number) {
+    return Math.max(xInset, Math.min(chartWidth - xInset - bucketBarWidth, bucketX(index) - bucketBarWidth / 2));
+  }
+
+  function spendY(value: number) {
+    if (value <= 0) return spendBottom - 1;
+    return spendScale(clampPercent(value));
+  }
+
+  function spendHeight(value: number) {
+    if (value <= 0) return 1;
+    return Math.max(2, spendBottom - spendScale(clampPercent(value)));
   }
 
   function compactCount(value: number) {
@@ -30,31 +76,93 @@
     if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
     return value.toLocaleString();
   }
+
+  function handlePointerMove(event: PointerEvent) {
+    if (!svgElement || !points.length) return;
+    pendingClientX = event.clientX;
+
+    if (hoverFrame !== null) return;
+    hoverFrame = window.requestAnimationFrame(() => {
+      hoverFrame = null;
+      if (!svgElement || pendingClientX === null) return;
+
+      const rect = svgElement.getBoundingClientRect();
+      const localX = ((pendingClientX - rect.left) / rect.width) * chartWidth;
+      const nextIndex = Math.max(0, Math.min(points.length - 1, Math.round(xScale.invert(localX))));
+      if (nextIndex !== hoverIndex) {
+        hoverIndex = nextIndex;
+      }
+    });
+  }
+
+  function clearHover() {
+    if (hoverFrame !== null) {
+      window.cancelAnimationFrame(hoverFrame);
+      hoverFrame = null;
+    }
+    pendingClientX = null;
+    hoverIndex = null;
+  }
 </script>
 
 {#if points.length}
-  <div class="activity-pulse" class:compact={density === 'compact'}>
-    <div class="pulse-label spend">spend</div>
-    <div class="pulse-track" class:dense style={`grid-template-columns: repeat(${points.length}, minmax(${minBarWidth}px, 1fr));`}>
-      {#each points as point}
-        <span
-          class="pulse-bar spend-bar"
-          class:peak={point === high}
-          style={`height: ${heightFromValue(point.value)}`}
-          title={`${point.label} · ${point.cost}`}
-        ></span>
-      {/each}
-    </div>
+  <div class="activity-pulse" class:compact={density === 'compact'} use:staggeredReveal={{ selector: '.activity-chart, .pulse-meta span', y: 3 }}>
+    <div class="activity-chart">
+      <div class="pulse-label spend">spend</div>
+      <div class="pulse-label calls">calls</div>
+      <div class="chart-frame">
+        <svg
+          bind:this={svgElement}
+          viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+          preserveAspectRatio="none"
+          role="img"
+          aria-label={`Activity from ${firstLabel} to ${lastLabel}`}
+          onpointermove={handlePointerMove}
+          onpointerleave={clearHover}
+        >
+          <rect class="calls-band" x={xInset} y={callsTop - 2} width={chartWidth - xInset * 2} height={callsBottom - callsTop + 2}></rect>
 
-    <div class="pulse-label calls">calls</div>
-    <div class="pulse-track calls-track" class:dense style={`grid-template-columns: repeat(${points.length}, minmax(${minBarWidth}px, 1fr));`}>
-      {#each points as point}
-        <span
-          class="pulse-bar calls-bar"
-          style={`height: ${heightFromCalls(point.calls)}`}
-          title={`${point.label} · ${point.calls.toLocaleString()} calls`}
-        ></span>
-      {/each}
+          <line class="guide spend-guide" x1={xInset} x2={chartWidth - xInset} y1={spendTop} y2={spendTop}></line>
+          <line class="guide middle-guide" x1={xInset} x2={chartWidth - xInset} y1={spendBottom} y2={spendBottom}></line>
+          <line class="guide calls-guide" x1={xInset} x2={chartWidth - xInset} y1={callsBottom} y2={callsBottom}></line>
+
+          {#each points as point, index}
+            <rect
+              class="spend-bar"
+              class:empty={point.value === 0}
+              class:peak={point === high}
+              x={barX(index)}
+              y={spendY(point.value)}
+              width={bucketBarWidth}
+              height={spendHeight(point.value)}
+            >
+              <title>{point.label} · {point.cost} · {point.calls.toLocaleString()} calls</title>
+            </rect>
+          {/each}
+
+          <path class="calls-area" d={callsArea}></path>
+          <path class="calls-line" d={callsLine}></path>
+
+          {#if hoverPoint}
+            <line class="hover-line" x1={hoverX} x2={hoverX} y1={spendTop} y2={callsBottom}></line>
+            <rect
+              class="hover-bar"
+              x={hoverBarX}
+              y={spendY(hoverPoint.value)}
+              width={bucketBarWidth}
+              height={spendHeight(hoverPoint.value)}
+            ></rect>
+          {/if}
+        </svg>
+
+        {#if hoverPoint}
+          <div class="pulse-tooltip" style={`left: ${Math.min(92, Math.max(8, (hoverX / chartWidth) * 100))}%`}>
+            <strong>{hoverPoint.label}</strong>
+            <span>{hoverPoint.cost}</span>
+            <span>{hoverPoint.calls.toLocaleString()} calls</span>
+          </div>
+        {/if}
+      </div>
     </div>
 
     <div class="pulse-meta">
@@ -73,18 +181,25 @@
     height: 100%;
     min-height: 108px;
     display: grid;
-    grid-template-columns: 52px minmax(0, 1fr);
-    grid-template-rows: minmax(28px, 1fr) minmax(28px, 1fr) auto;
-    gap: 2px 8px;
-    align-items: end;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 6px;
   }
 
   .activity-pulse.compact {
     min-height: 86px;
   }
 
+  .activity-chart {
+    min-width: 0;
+    min-height: 72px;
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    grid-template-rows: 1fr 1fr;
+    gap: 2px 8px;
+    align-items: center;
+  }
+
   .pulse-label {
-    align-self: center;
     font-weight: 800;
   }
 
@@ -96,46 +211,122 @@
     color: #7ebcff;
   }
 
-  .pulse-track {
+  .chart-frame {
     position: relative;
+    grid-column: 2;
+    grid-row: 1 / -1;
     min-width: 0;
     height: 100%;
-    min-height: 30px;
-    display: grid;
-    gap: 2px;
-    align-items: end;
-    border-top: 2px solid #7ebcff;
+    min-height: 72px;
+    overflow: hidden;
+    background:
+      linear-gradient(#292d42, #292d42) 0 50% / 100% 1px no-repeat,
+      linear-gradient(90deg, rgba(77, 243, 232, 0.035), rgba(255, 143, 64, 0.035));
   }
 
-  .pulse-track.dense {
-    gap: 1px;
+  svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 72px;
   }
 
-  .calls-track {
-    border-top-style: dotted;
-    border-bottom: 2px solid #7ebcff;
+  .guide {
+    vector-effect: non-scaling-stroke;
+    stroke: #414866;
+    stroke-width: 1;
   }
 
-  .pulse-bar {
-    min-width: 2px;
-    justify-self: stretch;
-    align-self: end;
+  .calls-band {
+    fill: rgba(98, 166, 255, 0.035);
+  }
+
+  .spend-guide {
+    stroke: #414866;
+    opacity: 0.55;
+  }
+
+  .middle-guide {
+    stroke-dasharray: 2 4;
+    opacity: 0.7;
+  }
+
+  .calls-guide {
+    stroke: #414866;
+    opacity: 0.85;
   }
 
   .spend-bar {
-    background: #ff8f40;
+    fill: #ff8f40;
+    opacity: 0.76;
+  }
+
+  .spend-bar.empty {
+    fill: #414866;
+    opacity: 0.42;
   }
 
   .spend-bar.peak {
-    background: #ff5f6d;
+    fill: #ff5f6d;
+    opacity: 0.9;
   }
 
-  .calls-bar {
-    background: #4df3e8;
+  .calls-area {
+    fill: rgba(77, 243, 232, 0.12);
+    stroke: none;
+  }
+
+  .calls-line {
+    fill: none;
+    stroke: #4df3e8;
+    stroke-width: 2.5;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .hover-bar {
+    fill: transparent;
+    stroke: #ffd60a;
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .hover-line {
+    stroke: #ffd60a;
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .pulse-tooltip {
+    position: absolute;
+    top: 4px;
+    z-index: 2;
+    display: grid;
+    gap: 1px;
+    min-width: 118px;
+    padding: 5px 7px;
+    color: #cbd4f2;
+    background: #202438;
+    border: 1px solid #ffd60a;
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+
+  .pulse-tooltip strong,
+  .pulse-tooltip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pulse-tooltip strong {
+    color: #ffd60a;
+  }
+
+  .pulse-tooltip span {
+    color: #a1a7c3;
   }
 
   .pulse-meta {
-    grid-column: 1 / -1;
     min-width: 0;
     display: flex;
     flex-wrap: wrap;
@@ -164,5 +355,11 @@
     place-items: center;
     color: #a1a7c3;
     border: 1px solid #292d42;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pulse-tooltip {
+      transition: none;
+    }
   }
 </style>
