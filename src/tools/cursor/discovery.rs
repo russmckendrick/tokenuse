@@ -146,9 +146,13 @@ fn project_from_home_folder(raw: &str, base: &str, home: Option<&Path>) -> Optio
 
     let root = home.join(base);
     if let Some(existing) = existing_project_path(&root, rest) {
-        return Some(existing.display().to_string());
+        return Some(project_path_string(&existing));
     }
-    Some(root.join(rest).display().to_string())
+    Some(project_path_string(&root.join(rest)))
+}
+
+fn project_path_string(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
 }
 
 fn encoded_path_id(path: &Path) -> Option<String> {
