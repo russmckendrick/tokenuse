@@ -11,7 +11,13 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, layout::Rect, Terminal};
-use tokenuse::{app::App, archive, config::ConfigPaths, ingest, runtime, ui};
+use tokenuse::{
+    app::App,
+    archive,
+    config::ConfigPaths,
+    copy::{copy, template},
+    ingest, runtime, ui,
+};
 
 fn main() -> Result<()> {
     color_eyre::install()?;
@@ -97,24 +103,33 @@ fn handle_subcommand() -> Result<bool> {
 }
 
 fn print_help() {
+    let copy = copy();
     println!(
         "{name} {version}
 {description}
 
-USAGE:
+{usage}
     {name} [FLAGS]
 
-FLAGS:
-    -h, --help                     Print this help message
-    -V, --version                  Print version information
-        --list-projects            Print the ingested project inventory and exit
-        --refresh-prices           Refresh embedded pricing snapshot (requires refresh-prices feature)
-        --generate-currency-json   Regenerate embedded currency rates (requires refresh-currency feature)
+{flags}
+    -h, --help                     {help_flag}
+    -V, --version                  {version_flag}
+        --list-projects            {list_projects_flag}
+        --refresh-prices           {refresh_prices_flag}
+        --generate-currency-json   {generate_currency_flag}
 
-Run with no flags to launch the interactive dashboard.",
+{launch_dashboard}",
         name = env!("CARGO_PKG_NAME"),
         version = env!("CARGO_PKG_VERSION"),
         description = env!("CARGO_PKG_DESCRIPTION"),
+        usage = copy.cli.usage,
+        flags = copy.cli.flags,
+        help_flag = copy.cli.help_flag,
+        version_flag = copy.cli.version_flag,
+        list_projects_flag = copy.cli.list_projects_flag,
+        refresh_prices_flag = copy.cli.refresh_prices_flag,
+        generate_currency_flag = copy.cli.generate_currency_flag,
+        launch_dashboard = copy.cli.launch_dashboard,
     );
 }
 
@@ -123,12 +138,18 @@ fn print_project_inventory() -> Result<()> {
     let ingested = match archive::sync_and_load(&paths) {
         Ok(ingested) => ingested,
         Err(e) => {
-            eprintln!("archive failed · raw ingest ({e})");
+            eprintln!(
+                "{}",
+                template(
+                    &copy().cli.archive_failed_raw_ingest,
+                    &[("error", e.to_string())]
+                )
+            );
             ingest::load()?
         }
     };
     if ingested.is_empty() {
-        println!("no local sessions found");
+        println!("{}", copy().cli.no_local_sessions_found);
         return Ok(());
     }
 
@@ -137,52 +158,58 @@ fn print_project_inventory() -> Result<()> {
     let raw_projects: BTreeSet<&str> = rows.iter().map(|row| row.raw_project.as_str()).collect();
 
     println!(
-        "{} projects, {} raw variants, {} project-agent rows, {} calls",
-        projects.len(),
-        raw_projects.len(),
-        rows.len(),
-        ingested.calls.len()
+        "{}",
+        template(
+            &copy().cli.project_inventory_summary,
+            &[
+                ("projects", projects.len().to_string()),
+                ("raw_projects", raw_projects.len().to_string()),
+                ("rows", rows.len().to_string()),
+                ("calls", ingested.calls.len().to_string())
+            ]
+        )
     );
     println!();
 
     let project_w = rows
         .iter()
         .map(|row| row.project.len())
-        .chain(std::iter::once("project".len()))
+        .chain(std::iter::once(copy().tables.project.len()))
         .max()
-        .unwrap_or("project".len());
+        .unwrap_or(copy().tables.project.len());
     let agent_w = rows
         .iter()
         .map(|row| row.tool.len())
-        .chain(std::iter::once("agent".len()))
+        .chain(std::iter::once(copy().tables.agent.len()))
         .max()
-        .unwrap_or("agent".len());
+        .unwrap_or(copy().tables.agent.len());
     let calls_w = rows
         .iter()
         .map(|row| row.calls.to_string().len())
-        .chain(std::iter::once("calls".len()))
+        .chain(std::iter::once(copy().tables.calls.len()))
         .max()
-        .unwrap_or("calls".len());
+        .unwrap_or(copy().tables.calls.len());
     let sessions_w = rows
         .iter()
         .map(|row| row.sessions.to_string().len())
-        .chain(std::iter::once("sess".len()))
+        .chain(std::iter::once(copy().tables.sess.len()))
         .max()
-        .unwrap_or("sess".len());
+        .unwrap_or(copy().tables.sess.len());
     let cost_w = rows
         .iter()
         .map(|row| row.cost.len())
-        .chain(std::iter::once("cost".len()))
+        .chain(std::iter::once(copy().tables.cost.len()))
         .max()
-        .unwrap_or("cost".len());
+        .unwrap_or(copy().tables.cost.len());
 
     println!(
-        "{:<project_w$}  {:<agent_w$}  {:>calls_w$}  {:>sessions_w$}  {:>cost_w$}  raw project",
-        "project",
-        "agent",
-        "calls",
-        "sess",
-        "cost",
+        "{:<project_w$}  {:<agent_w$}  {:>calls_w$}  {:>sessions_w$}  {:>cost_w$}  {}",
+        copy().tables.project,
+        copy().tables.agent,
+        copy().tables.calls,
+        copy().tables.sess,
+        copy().tables.cost,
+        copy().tables.raw_project,
         project_w = project_w,
         agent_w = agent_w,
         calls_w = calls_w,
@@ -214,13 +241,19 @@ fn print_project_inventory() -> Result<()> {
 fn refresh_prices() -> Result<()> {
     let target = std::path::PathBuf::from("src/pricing/snapshot.json");
     tokenuse::pricing::refresh::run(&target)?;
-    println!("wrote {}", target.display());
+    println!(
+        "{}",
+        template(
+            &copy().cli.wrote_path,
+            &[("path", target.display().to_string())]
+        )
+    );
     Ok(())
 }
 
 #[cfg(not(feature = "refresh-prices"))]
 fn refresh_prices() -> Result<()> {
-    eprintln!("--refresh-prices requires the refresh-prices feature");
+    eprintln!("{}", copy().cli.refresh_prices_requires_feature);
     Ok(())
 }
 
@@ -228,13 +261,19 @@ fn refresh_prices() -> Result<()> {
 fn refresh_currency() -> Result<()> {
     let target = std::path::PathBuf::from("currency/rates.json");
     tokenuse::currency::refresh::run(&target)?;
-    println!("wrote {}", target.display());
+    println!(
+        "{}",
+        template(
+            &copy().cli.wrote_path,
+            &[("path", target.display().to_string())]
+        )
+    );
     Ok(())
 }
 
 #[cfg(not(feature = "refresh-currency"))]
 fn refresh_currency() -> Result<()> {
-    eprintln!("--generate-currency-json requires the refresh-currency feature");
+    eprintln!("{}", copy().cli.generate_currency_requires_feature);
     Ok(())
 }
 

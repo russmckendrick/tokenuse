@@ -7,6 +7,7 @@ use ratatui::{
 
 use crate::{
     app::{App, ClearDataModal, ConfigDownload, FolderPickerEntryKind, Page, Period, StatusTone},
+    copy::{copy, template, CopyKeyHint},
     data::{
         ActivityMetric, CountMetric, ModelMetric, ProjectMetric, ProjectToolMetric, SessionDetail,
         SessionMetric, Summary, ToolLimitSection,
@@ -18,6 +19,7 @@ use super::components::centered_rect;
 use super::graphs;
 
 pub(super) fn render_title_bar(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let copy = copy();
     let block = theme::panel_block("", theme::PRIMARY);
     let inner = block.inner(area);
     block.render(area, frame.buffer_mut());
@@ -32,9 +34,15 @@ pub(super) fn render_title_bar(frame: &mut Frame<'_>, area: Rect, app: &App) {
         .split(inner);
 
     Paragraph::new(Line::from(vec![
-        Span::styled("▂▅█▆", theme::key().add_modifier(Modifier::BOLD)),
+        Span::styled(
+            copy.brand.mark.as_str(),
+            theme::key().add_modifier(Modifier::BOLD),
+        ),
         Span::raw("  "),
-        Span::styled("Token Use", theme::key().add_modifier(Modifier::BOLD)),
+        Span::styled(
+            copy.brand.name.as_str(),
+            theme::key().add_modifier(Modifier::BOLD),
+        ),
     ]))
     .style(theme::base())
     .render(columns[0], frame.buffer_mut());
@@ -73,6 +81,7 @@ pub(super) fn render_title_bar(frame: &mut Frame<'_>, area: Rect, app: &App) {
 }
 
 pub(super) fn render_kpi_strip(frame: &mut Frame<'_>, area: Rect, app: &App, summary: &Summary) {
+    let copy = copy();
     let cells = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -90,7 +99,7 @@ pub(super) fn render_kpi_strip(frame: &mut Frame<'_>, area: Rect, app: &App, sum
     render_kpi_card(
         frame,
         cells[0],
-        "COST",
+        &copy.metrics.cost.to_ascii_uppercase(),
         summary.cost,
         theme::money().add_modifier(Modifier::BOLD),
         &format!("{currency_code} · {period_label}"),
@@ -98,15 +107,15 @@ pub(super) fn render_kpi_strip(frame: &mut Frame<'_>, area: Rect, app: &App, sum
     render_kpi_card(
         frame,
         cells[1],
-        "CALLS",
+        &copy.metrics.calls.to_ascii_uppercase(),
         summary.calls,
         theme::base().add_modifier(Modifier::BOLD),
-        &format!("{} in", summary.input),
+        &format!("{} {}", summary.input, copy.metrics.r#in),
     );
     render_kpi_card(
         frame,
         cells[2],
-        "SESSIONS",
+        &copy.metrics.sessions.to_ascii_uppercase(),
         summary.sessions,
         theme::base().add_modifier(Modifier::BOLD),
         period_label,
@@ -114,20 +123,24 @@ pub(super) fn render_kpi_strip(frame: &mut Frame<'_>, area: Rect, app: &App, sum
     render_kpi_card(
         frame,
         cells[3],
-        "CACHE HIT",
+        &copy.metrics.cache_hit.to_ascii_uppercase(),
         summary.cache_hit,
         theme::base()
             .fg(theme::PRIMARY)
             .add_modifier(Modifier::BOLD),
-        &format!("{} cached", summary.cached),
+        &format!("{} {}", summary.cached, copy.metrics.cached),
     );
     render_kpi_card(
         frame,
         cells[4],
-        "IN / OUT",
+        &format!(
+            "{} / {}",
+            copy.metrics.r#in.to_ascii_uppercase(),
+            copy.metrics.out.to_ascii_uppercase()
+        ),
         summary.input,
         theme::base().add_modifier(Modifier::BOLD),
-        &format!("/ {} out", summary.output),
+        &format!("/ {} {}", summary.output, copy.metrics.out),
     );
 }
 
@@ -152,11 +165,25 @@ fn render_kpi_card(
 }
 
 pub(super) fn render_activity_pulse(frame: &mut Frame<'_>, area: Rect, rows: &[ActivityMetric]) {
-    render_timeline_panel(frame, area, "Activity Pulse", theme::CYAN, rows, true);
+    render_timeline_panel(
+        frame,
+        area,
+        copy().panels.activity_pulse.as_str(),
+        theme::CYAN,
+        rows,
+        true,
+    );
 }
 
 pub(super) fn render_daily_trend(frame: &mut Frame<'_>, area: Rect, rows: &[ActivityMetric]) {
-    render_timeline_panel(frame, area, "Activity Trend", theme::BLUE, rows, false);
+    render_timeline_panel(
+        frame,
+        area,
+        copy().panels.activity_trend.as_str(),
+        theme::BLUE,
+        rows,
+        false,
+    );
 }
 
 fn render_timeline_panel(
@@ -172,9 +199,11 @@ fn render_timeline_panel(
     block.render(area, frame.buffer_mut());
 
     if rows.is_empty() {
-        Paragraph::new(Text::from(vec![graphs::no_data_line("pulse")]))
-            .style(theme::base())
-            .render(inner, frame.buffer_mut());
+        Paragraph::new(Text::from(vec![graphs::no_data_line(
+            copy().timeline.pulse.as_str(),
+        )]))
+        .style(theme::base())
+        .render(inner, frame.buffer_mut());
         return;
     }
 
@@ -200,25 +229,32 @@ fn render_timeline_panel(
         .expect("rows is not empty");
     let total_calls = rows.iter().map(|row| row.calls).sum::<u64>();
 
-    let mut spend_line = vec![Span::styled("spend ", theme::key())];
+    let copy = copy();
+    let mut spend_line = vec![Span::styled(
+        format!("{} ", copy.timeline.spend),
+        theme::key(),
+    )];
     spend_line.extend(graphs::sparkline_spans(&spend_values, spark_width));
 
-    let mut call_line = vec![Span::styled("calls ", theme::base().fg(theme::BLUE_SOFT))];
+    let mut call_line = vec![Span::styled(
+        format!("{} ", copy.timeline.calls),
+        theme::base().fg(theme::BLUE_SOFT),
+    )];
     call_line.extend(graphs::sparkline_spans(&call_values, spark_width));
 
     let mut lines = vec![Line::from(spend_line), Line::from(call_line)];
     lines.push(Line::from(vec![
-        Span::styled("range ", theme::dim()),
+        Span::styled(format!("{} ", copy.timeline.range), theme::dim()),
         Span::styled(first.label, theme::muted()),
-        Span::styled(" to ", theme::dim()),
+        Span::styled(format!(" {} ", copy.timeline.to), theme::dim()),
         Span::styled(latest.label, theme::muted()),
-        Span::styled("   high ", theme::dim()),
+        Span::styled(format!("   {} ", copy.timeline.high), theme::dim()),
         Span::styled(high.label, theme::key()),
         Span::styled(" ", theme::dim()),
         Span::styled(high.cost, theme::money()),
-        Span::styled("   latest ", theme::dim()),
+        Span::styled(format!("   {} ", copy.timeline.latest), theme::dim()),
         Span::styled(latest.cost, theme::money()),
-        Span::styled("   calls ", theme::dim()),
+        Span::styled(format!("   {} ", copy.timeline.calls), theme::dim()),
         Span::styled(format_compact_u64(total_calls), theme::base()),
     ]));
 
@@ -241,7 +277,7 @@ fn render_timeline_panel(
             .collect::<Vec<_>>()
             .join("   ");
         lines.push(Line::from(vec![
-            Span::styled("recent ", theme::dim()),
+            Span::styled(format!("{} ", copy.timeline.recent), theme::dim()),
             Span::styled(recent, theme::muted()),
         ]));
     }
@@ -252,6 +288,7 @@ fn render_timeline_panel(
 }
 
 pub(super) fn render_projects(frame: &mut Frame<'_>, area: Rect, rows: &[ProjectMetric]) {
+    let copy = copy();
     let table_rows = rows.iter().map(|item| {
         Row::new(vec![
             graphs::rank_cell(item.value),
@@ -275,20 +312,24 @@ pub(super) fn render_projects(frame: &mut Frame<'_>, area: Rect, rows: &[Project
         ],
     )
     .header(Row::new(vec![
-        Cell::from(""),
-        Cell::from(""),
-        Cell::from("cost").style(theme::dim()),
-        Cell::from("avg/s").style(theme::dim()),
-        Cell::from("sess").style(theme::dim()),
-        Cell::from("tools").style(theme::dim()),
+        Cell::from(copy.tables.blank.as_str()),
+        Cell::from(copy.tables.blank.as_str()),
+        Cell::from(copy.tables.cost.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.avg_per_session.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.sess.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.tools.as_str()).style(theme::dim()),
     ]))
     .column_spacing(1)
-    .block(theme::panel_block("By Project", theme::GREEN));
+    .block(theme::panel_block(
+        copy.panels.by_project.as_str(),
+        theme::GREEN,
+    ));
 
     frame.render_widget(table, area);
 }
 
 pub(super) fn render_sessions(frame: &mut Frame<'_>, area: Rect, rows: &[SessionMetric]) {
+    let copy = copy();
     let table_rows = rows.iter().map(|item| {
         Row::new(vec![
             graphs::rank_cell(item.value),
@@ -310,19 +351,23 @@ pub(super) fn render_sessions(frame: &mut Frame<'_>, area: Rect, rows: &[Session
         ],
     )
     .header(Row::new(vec![
-        Cell::from(""),
-        Cell::from("date").style(theme::dim()),
-        Cell::from("project").style(theme::dim()),
-        Cell::from("cost").style(theme::dim()),
-        Cell::from("calls").style(theme::dim()),
+        Cell::from(copy.tables.blank.as_str()),
+        Cell::from(copy.tables.date.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.project.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.cost.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.calls.as_str()).style(theme::dim()),
     ]))
     .column_spacing(1)
-    .block(theme::panel_block("Top Sessions", theme::RED));
+    .block(theme::panel_block(
+        copy.panels.top_sessions.as_str(),
+        theme::RED,
+    ));
 
     frame.render_widget(table, area);
 }
 
 pub(super) fn render_project_tools(frame: &mut Frame<'_>, area: Rect, rows: &[ProjectToolMetric]) {
+    let copy = copy();
     let table_rows = rows.iter().map(|item| {
         Row::new(vec![
             graphs::rank_cell(item.value),
@@ -348,29 +393,33 @@ pub(super) fn render_project_tools(frame: &mut Frame<'_>, area: Rect, rows: &[Pr
         ],
     )
     .header(Row::new(vec![
-        Cell::from(""),
-        Cell::from("project").style(theme::dim()),
-        Cell::from("tool").style(theme::dim()),
-        Cell::from("cost").style(theme::dim()),
-        Cell::from("calls").style(theme::dim()),
-        Cell::from("sess").style(theme::dim()),
-        Cell::from("avg/s").style(theme::dim()),
+        Cell::from(copy.tables.blank.as_str()),
+        Cell::from(copy.tables.project.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.tool.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.cost.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.calls.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.sess.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.avg_per_session.as_str()).style(theme::dim()),
     ]))
     .column_spacing(1)
-    .block(theme::panel_block("Project Spend by Tool", theme::YELLOW));
+    .block(theme::panel_block(
+        copy.panels.project_spend_by_tool.as_str(),
+        theme::YELLOW,
+    ));
 
     frame.render_widget(table, area);
 }
 
 pub(super) fn render_models(frame: &mut Frame<'_>, area: Rect, rows: &[ModelMetric]) {
-    render_models_panel(frame, area, "By Model", rows);
+    render_models_panel(frame, area, copy().panels.by_model.as_str(), rows);
 }
 
 pub(super) fn render_model_efficiency(frame: &mut Frame<'_>, area: Rect, rows: &[ModelMetric]) {
-    render_models_panel(frame, area, "Model Efficiency", rows);
+    render_models_panel(frame, area, copy().panels.model_efficiency.as_str(), rows);
 }
 
 fn render_models_panel(frame: &mut Frame<'_>, area: Rect, title: &str, rows: &[ModelMetric]) {
+    let copy = copy();
     let table_rows = rows.iter().map(|item| {
         Row::new(vec![
             graphs::rank_cell(item.value),
@@ -392,11 +441,11 @@ fn render_models_panel(frame: &mut Frame<'_>, area: Rect, title: &str, rows: &[M
         ],
     )
     .header(Row::new(vec![
-        Cell::from(""),
-        Cell::from(""),
-        Cell::from("cost").style(theme::dim()),
-        Cell::from("cache").style(theme::dim()),
-        Cell::from("calls").style(theme::dim()),
+        Cell::from(copy.tables.blank.as_str()),
+        Cell::from(copy.tables.blank.as_str()),
+        Cell::from(copy.tables.cost.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.cache.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.calls.as_str()).style(theme::dim()),
     ]))
     .column_spacing(1)
     .block(theme::panel_block(title, theme::MAGENTA));
@@ -411,6 +460,7 @@ pub(super) fn render_counts(
     color: Color,
     rows: &[CountMetric],
 ) {
+    let copy = copy();
     let table_rows = rows.iter().map(|item| {
         Row::new(vec![
             graphs::rank_cell(item.value),
@@ -428,9 +478,9 @@ pub(super) fn render_counts(
         ],
     )
     .header(Row::new(vec![
-        Cell::from(""),
-        Cell::from(""),
-        Cell::from("calls").style(theme::dim()),
+        Cell::from(copy.tables.blank.as_str()),
+        Cell::from(copy.tables.blank.as_str()),
+        Cell::from(copy.tables.calls.as_str()).style(theme::dim()),
     ]))
     .column_spacing(1)
     .block(theme::panel_block(title, color));
@@ -454,7 +504,10 @@ pub(super) fn render_limits(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
     render_title_bar(frame, sections[0], app);
 
     Paragraph::new(Line::from(Span::styled(
-        format!("sorted by 24h {}", app.sort.label().to_lowercase()),
+        template(
+            &copy().filters.sorted_by_24h,
+            &[("sort", app.sort.label().to_lowercase())],
+        ),
         theme::muted(),
     )))
     .style(theme::base())
@@ -517,7 +570,10 @@ fn usage_section_areas(area: Rect, count: usize) -> Vec<Rect> {
 }
 
 fn render_tool_usage_section(frame: &mut Frame<'_>, area: Rect, section: &ToolLimitSection) {
-    let title = format!("{} Console · 24h + models", section.tool);
+    let title = template(
+        &copy().usage.console_title,
+        &[("tool", section.tool.to_string())],
+    );
     let block = theme::panel_block(&title, usage_tool_color(section.tool));
     let inner = block.inner(area);
     block.render(area, frame.buffer_mut());
@@ -533,7 +589,8 @@ fn render_tool_usage_section(frame: &mut Frame<'_>, area: Rect, section: &ToolLi
 
 fn render_tool_usage_header(frame: &mut Frame<'_>, area: Rect, section: &ToolLimitSection) {
     let spark_width = area.width.saturating_sub(12).max(12) as usize;
-    let mut pulse = vec![Span::styled("24h pulse ", theme::key())];
+    let copy = copy();
+    let mut pulse = vec![Span::styled(format!("{} ", copy.usage.pulse), theme::key())];
     pulse.extend(graphs::sparkline_spans(&section.usage.buckets, spark_width));
 
     let text = Text::from(vec![
@@ -543,11 +600,14 @@ fn render_tool_usage_header(frame: &mut Frame<'_>, area: Rect, section: &ToolLim
                 section.usage.cost,
                 theme::money().add_modifier(Modifier::BOLD),
             ),
-            Span::styled(" cost   ", theme::dim()),
+            Span::styled(format!(" {}   ", copy.metrics.cost), theme::dim()),
             Span::styled(section.usage.calls.to_string(), theme::base()),
-            Span::styled(" calls   ", theme::dim()),
+            Span::styled(format!(" {}   ", copy.metrics.calls), theme::dim()),
             Span::styled(section.usage.tokens, theme::muted()),
-            Span::styled(" tokens   seen ", theme::dim()),
+            Span::styled(
+                format!(" {}   {} ", copy.metrics.tokens, copy.usage.seen),
+                theme::dim(),
+            ),
             Span::styled(section.usage.last_seen, theme::muted()),
         ]),
     ]);
@@ -558,12 +618,13 @@ fn render_tool_usage_header(frame: &mut Frame<'_>, area: Rect, section: &ToolLim
 }
 
 fn render_tool_usage_rows(frame: &mut Frame<'_>, area: Rect, section: &ToolLimitSection) {
+    let copy = copy();
     let mut rows: Vec<Row<'static>> = section
         .limits
         .iter()
         .map(|limit| {
             Row::new(vec![
-                Cell::from("limit").style(theme::base().fg(theme::CYAN)),
+                Cell::from(copy.usage.limit.as_str()).style(theme::base().fg(theme::CYAN)),
                 Cell::from(format!("{} {}", limit.scope, limit.window)).style(theme::muted()),
                 graphs::gauge_cell(limit.used),
                 Cell::from(limit.left).style(theme::base()),
@@ -575,7 +636,7 @@ fn render_tool_usage_rows(frame: &mut Frame<'_>, area: Rect, section: &ToolLimit
 
     rows.extend(section.models.iter().map(|model| {
         Row::new(vec![
-            Cell::from("model").style(theme::base().fg(theme::BLUE_SOFT)),
+            Cell::from(copy.usage.model.as_str()).style(theme::base().fg(theme::BLUE_SOFT)),
             Cell::from(model.name).style(theme::muted()),
             graphs::rank_cell(model.value),
             Cell::from(model.calls.to_string()).style(theme::base()),
@@ -596,12 +657,12 @@ fn render_tool_usage_rows(frame: &mut Frame<'_>, area: Rect, section: &ToolLimit
         ],
     )
     .header(Row::new(vec![
-        Cell::from("kind").style(theme::dim()),
-        Cell::from("scope/model").style(theme::dim()),
-        Cell::from("bar").style(theme::dim()),
-        Cell::from("left/call").style(theme::dim()),
-        Cell::from("reset/tok").style(theme::dim()),
-        Cell::from("cost/plan").style(theme::dim()),
+        Cell::from(copy.tables.kind.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.scope_model.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.bar.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.left_call.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.reset_tok.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.cost_plan.as_str()).style(theme::dim()),
     ]))
     .column_spacing(1);
 
@@ -620,6 +681,7 @@ fn usage_tool_color(tool: &str) -> Color {
 }
 
 pub(super) fn render_config(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
+    let copy = copy();
     let sections = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -634,9 +696,9 @@ pub(super) fn render_config(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
         .split(area);
 
     Paragraph::new(Line::from(vec![
-        Span::styled("[ Configuration ]", theme::key()),
+        Span::styled(format!("[ {} ]", copy.nav.configuration), theme::key()),
         Span::raw("    "),
-        Span::styled("Dashboard", theme::dim()),
+        Span::styled(copy.nav.dashboard.as_str(), theme::dim()),
     ]))
     .style(theme::base())
     .render(sections[0], frame.buffer_mut());
@@ -650,6 +712,7 @@ pub(super) fn render_config(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
 }
 
 fn render_config_rows(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let copy = copy();
     let rows_data = app.config_rows();
     let rows = rows_data.iter().enumerate().map(|(idx, row)| {
         let is_selected = idx == app.config_selected;
@@ -681,18 +744,22 @@ fn render_config_rows(frame: &mut Frame<'_>, area: Rect, app: &App) {
         ],
     )
     .header(Row::new(vec![
-        Cell::from(""),
-        Cell::from("setting").style(theme::dim()),
-        Cell::from("value").style(theme::dim()),
-        Cell::from("enter").style(theme::dim()),
+        Cell::from(copy.tables.blank.as_str()),
+        Cell::from(copy.tables.setting.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.value.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.enter.as_str()).style(theme::dim()),
     ]))
     .column_spacing(1)
-    .block(theme::panel_block("Configuration", theme::PRIMARY));
+    .block(theme::panel_block(
+        copy.nav.configuration.as_str(),
+        theme::PRIMARY,
+    ));
 
     frame.render_widget(table, area);
 }
 
 fn render_config_paths(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let copy = copy();
     let mut lines = Vec::new();
     if let Some(status) = app.status.as_ref() {
         let status_style = match app.status_tone() {
@@ -703,33 +770,42 @@ fn render_config_paths(frame: &mut Frame<'_>, area: Rect, app: &App) {
             StatusTone::Info => theme::muted(),
         };
         lines.push(Line::from(vec![
-            Span::styled("status ", theme::key()),
-            Span::styled(status.as_str(), status_style),
+            Span::styled(format!("{} ", copy.tables.status), theme::key()),
+            Span::styled(status.text.as_str(), status_style),
         ]));
     }
     lines.extend([
-        path_line("config dir", app.paths.dir.display().to_string()),
-        path_line("config file", app.paths.config_file.display().to_string()),
         path_line(
-            "archive db",
+            copy.config.paths.config_dir.as_str(),
+            app.paths.dir.display().to_string(),
+        ),
+        path_line(
+            copy.config.paths.config_file.as_str(),
+            app.paths.config_file.display().to_string(),
+        ),
+        path_line(
+            copy.config.paths.archive_db.as_str(),
             app.paths.archive_db_file.display().to_string(),
         ),
         path_line(
-            "rates data",
+            copy.config.paths.rates_data.as_str(),
             app.paths.currency_rates_file.display().to_string(),
         ),
         path_line(
-            "pricing data",
+            copy.config.paths.pricing_data.as_str(),
             app.paths.pricing_snapshot_file.display().to_string(),
         ),
     ]);
     lines.push(Line::from(vec![
-        Span::styled("rates source ", theme::key()),
+        Span::styled(format!("{} ", copy.config.paths.rates_source), theme::key()),
         Span::styled(app.currency_table.source().label(), theme::muted()),
     ]));
 
     Paragraph::new(Text::from(lines))
-        .block(theme::panel_block("Local Files", theme::CYAN))
+        .block(theme::panel_block(
+            copy.panels.local_files.as_str(),
+            theme::CYAN,
+        ))
         .style(theme::base())
         .render(area, frame.buffer_mut());
 }
@@ -764,12 +840,13 @@ pub(super) fn render_session_page(frame: &mut Frame<'_>, area: Rect, root: Rect,
 }
 
 fn render_session_header(frame: &mut Frame<'_>, area: Rect, _app: &App) {
+    let copy = copy();
     Paragraph::new(Line::from(vec![
-        Span::styled("[ Session ]", theme::key()),
+        Span::styled(format!("[ {} ]", copy.nav.session), theme::key()),
         Span::raw("    "),
-        Span::styled("Dashboard", theme::dim()),
+        Span::styled(copy.nav.dashboard.as_str(), theme::dim()),
         Span::raw("    "),
-        Span::styled("Config", theme::dim()),
+        Span::styled(copy.nav.config.as_str(), theme::dim()),
     ]))
     .style(theme::base())
     .render(area, frame.buffer_mut());
@@ -778,11 +855,14 @@ fn render_session_header(frame: &mut Frame<'_>, area: Rect, _app: &App) {
 fn render_session_summary(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let Some(view) = app.session_view.as_ref() else {
         let text = Text::from(vec![Line::from(vec![Span::styled(
-            "no session loaded · press s to pick one",
+            copy().session.no_session_loaded.as_str(),
             theme::muted(),
         )])]);
         Paragraph::new(text)
-            .block(theme::panel_block("Session", theme::PRIMARY))
+            .block(theme::panel_block(
+                copy().nav.session.as_str(),
+                theme::PRIMARY,
+            ))
             .style(theme::base())
             .render(area, frame.buffer_mut());
         return;
@@ -801,21 +881,21 @@ fn render_session_summary(frame: &mut Frame<'_>, area: Rect, app: &App) {
                 view.total_cost.as_str(),
                 theme::money().add_modifier(Modifier::BOLD),
             ),
-            Span::styled(" cost   ", theme::muted()),
+            Span::styled(format!(" {}   ", copy().metrics.cost), theme::muted()),
             Span::styled(
                 view.total_calls.to_string(),
                 theme::base().add_modifier(Modifier::BOLD),
             ),
-            Span::styled(" calls   ", theme::muted()),
+            Span::styled(format!(" {}   ", copy().metrics.calls), theme::muted()),
             Span::styled(view.date_range.as_str(), theme::muted()),
         ]),
         Line::from(vec![
             Span::styled(view.total_input.as_str(), theme::muted()),
-            Span::styled(" in   ", theme::dim()),
+            Span::styled(format!(" {}   ", copy().metrics.r#in), theme::dim()),
             Span::styled(view.total_output.as_str(), theme::muted()),
-            Span::styled(" out   ", theme::dim()),
+            Span::styled(format!(" {}   ", copy().metrics.out), theme::dim()),
             Span::styled(view.total_cache_read.as_str(), theme::muted()),
-            Span::styled(" cached", theme::dim()),
+            Span::styled(format!(" {}", copy().metrics.cached), theme::dim()),
         ]),
     ];
 
@@ -824,7 +904,10 @@ fn render_session_summary(frame: &mut Frame<'_>, area: Rect, app: &App) {
     }
 
     Paragraph::new(Text::from(lines))
-        .block(theme::panel_block("Session", theme::PRIMARY))
+        .block(theme::panel_block(
+            copy().nav.session.as_str(),
+            theme::PRIMARY,
+        ))
         .style(theme::base())
         .render(area, frame.buffer_mut());
 }
@@ -862,11 +945,13 @@ fn render_session_calls(frame: &mut Frame<'_>, area: Rect, app: &App) {
             ])
         });
 
-    let title = format!(
-        "Calls · {}–{} of {}",
-        if total == 0 { 0 } else { start + 1 },
-        end,
-        total
+    let title = template(
+        &copy().session.calls_title,
+        &[
+            ("start", if total == 0 { 0 } else { start + 1 }.to_string()),
+            ("end", end.to_string()),
+            ("total", total.to_string()),
+        ],
     );
     let table = Table::new(
         rows,
@@ -883,15 +968,15 @@ fn render_session_calls(frame: &mut Frame<'_>, area: Rect, app: &App) {
         ],
     )
     .header(Row::new(vec![
-        Cell::from("time").style(theme::dim()),
-        Cell::from("model").style(theme::dim()),
-        Cell::from("cost").style(theme::dim()),
-        Cell::from("in").style(theme::dim()),
-        Cell::from("out").style(theme::dim()),
-        Cell::from("cache r").style(theme::dim()),
-        Cell::from("cache w").style(theme::dim()),
-        Cell::from("tools").style(theme::dim()),
-        Cell::from("prompt").style(theme::dim()),
+        Cell::from(copy().tables.time.as_str()).style(theme::dim()),
+        Cell::from(copy().tables.model.as_str()).style(theme::dim()),
+        Cell::from(copy().tables.cost.as_str()).style(theme::dim()),
+        Cell::from(copy().tables.r#in.as_str()).style(theme::dim()),
+        Cell::from(copy().tables.out.as_str()).style(theme::dim()),
+        Cell::from(copy().tables.cache_r.as_str()).style(theme::dim()),
+        Cell::from(copy().tables.cache_w.as_str()).style(theme::dim()),
+        Cell::from(copy().tables.tools.as_str()).style(theme::dim()),
+        Cell::from(copy().tables.prompt.as_str()).style(theme::dim()),
     ]))
     .column_spacing(1)
     .block(theme::panel_block(&title, theme::CYAN));
@@ -909,11 +994,14 @@ fn render_call_detail_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let modal_area = centered_rect(width, height, area);
     Clear.render(modal_area, frame.buffer_mut());
 
-    let title = format!(
-        "Call Detail · {}",
-        app.call_detail_index
-            .map(|idx| idx.saturating_add(1).to_string())
-            .unwrap_or_else(|| "-".into())
+    let title = template(
+        &copy().session.call_detail_title,
+        &[(
+            "index",
+            app.call_detail_index
+                .map(|idx| idx.saturating_add(1).to_string())
+                .unwrap_or_else(|| "-".into()),
+        )],
     );
     let block = theme::panel_block(&title, theme::PRIMARY);
     let inner = block.inner(modal_area);
@@ -927,48 +1015,52 @@ fn render_call_detail_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
 }
 
 fn call_detail_lines(call: &SessionDetail) -> Vec<Line<'static>> {
+    let copy = copy();
     let mut lines = vec![
         Line::from(vec![
-            Span::styled("time ", theme::dim()),
+            Span::styled(format!("{} ", copy.tables.time), theme::dim()),
             Span::styled(call.timestamp.clone(), theme::muted()),
             Span::raw("   "),
-            Span::styled("model ", theme::dim()),
+            Span::styled(format!("{} ", copy.tables.model), theme::dim()),
             Span::styled(call.model.clone(), theme::base()),
             Span::raw("   "),
-            Span::styled("cost ", theme::dim()),
+            Span::styled(format!("{} ", copy.tables.cost), theme::dim()),
             Span::styled(
                 call.cost.clone(),
                 theme::money().add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(vec![
-            Span::styled("in ", theme::dim()),
+            Span::styled(format!("{} ", copy.tables.r#in), theme::dim()),
             Span::styled(format_compact_u64(call.input_tokens), theme::base()),
             Span::raw("   "),
-            Span::styled("out ", theme::dim()),
+            Span::styled(format!("{} ", copy.tables.out), theme::dim()),
             Span::styled(format_compact_u64(call.output_tokens), theme::base()),
             Span::raw("   "),
-            Span::styled("cache r ", theme::dim()),
+            Span::styled(format!("{} ", copy.tables.cache_r), theme::dim()),
             Span::styled(format_compact_u64(call.cache_read), theme::muted()),
             Span::raw("   "),
-            Span::styled("cache w ", theme::dim()),
+            Span::styled(format!("{} ", copy.tables.cache_w), theme::dim()),
             Span::styled(format_compact_u64(call.cache_write), theme::muted()),
             Span::raw("   "),
-            Span::styled("reasoning ", theme::dim()),
+            Span::styled(format!("{} ", copy.session.reasoning), theme::dim()),
             Span::styled(format_compact_u64(call.reasoning_tokens), theme::muted()),
             Span::raw("   "),
-            Span::styled("web ", theme::dim()),
+            Span::styled(format!("{} ", copy.session.web), theme::dim()),
             Span::styled(format_compact_u64(call.web_search_requests), theme::muted()),
         ]),
         Line::from(vec![
-            Span::styled("tools ", theme::dim()),
+            Span::styled(format!("{} ", copy.tables.tools), theme::dim()),
             Span::styled(call.tools.clone(), theme::base().fg(theme::BLUE_SOFT)),
         ]),
     ];
 
     if !call.bash_commands.is_empty() {
         lines.push(Line::from(""));
-        lines.push(Line::from(vec![Span::styled("bash", theme::key())]));
+        lines.push(Line::from(vec![Span::styled(
+            copy.session.bash.clone(),
+            theme::key(),
+        )]));
         for command in &call.bash_commands {
             lines.push(Line::from(vec![
                 Span::styled("$ ", theme::dim()),
@@ -978,7 +1070,10 @@ fn call_detail_lines(call: &SessionDetail) -> Vec<Line<'static>> {
     }
 
     lines.push(Line::from(""));
-    lines.push(Line::from(vec![Span::styled("prompt", theme::key())]));
+    lines.push(Line::from(vec![Span::styled(
+        copy.tables.prompt.clone(),
+        theme::key(),
+    )]));
     lines.push(Line::from(Span::styled(
         if call.prompt_full.is_empty() {
             "-".to_string()
@@ -990,7 +1085,7 @@ fn call_detail_lines(call: &SessionDetail) -> Vec<Line<'static>> {
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
         Span::styled("Esc/Enter", theme::key()),
-        Span::styled(" close", theme::muted()),
+        Span::styled(format!(" {}", copy.session.close), theme::muted()),
     ]));
 
     lines
@@ -1020,12 +1115,13 @@ pub(super) fn render_help_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let modal_area = centered_rect(width, height, area);
     Clear.render(modal_area, frame.buffer_mut());
 
-    let block = theme::panel_block("Help · keybindings", theme::PRIMARY);
+    let copy = copy();
+    let block = theme::panel_block(copy.modals.help_title.as_str(), theme::PRIMARY);
     let inner = block.inner(modal_area);
     block.render(modal_area, frame.buffer_mut());
 
     let mut lines: Vec<Line> = Vec::new();
-    for (i, group) in keymap::keymap().help_groups().iter().enumerate() {
+    for (i, group) in copy.keymap.help.iter().enumerate() {
         if i > 0 {
             lines.push(Line::from(""));
         }
@@ -1059,10 +1155,11 @@ pub(super) fn render_export_modal(frame: &mut Frame<'_>, area: Rect, app: &App) 
     let modal_area = centered_rect(width, height, area);
     Clear.render(modal_area, frame.buffer_mut());
 
-    let title = format!(
-        "Export {}/{}",
-        modal.selected.saturating_add(1),
-        modal.options.len().max(1)
+    let copy = copy();
+    let title = selection_title(
+        copy.modals.export.as_str(),
+        modal.selected,
+        modal.options.len(),
     );
     let block = theme::panel_block(&title, theme::YELLOW);
     let inner = block.inner(modal_area);
@@ -1079,11 +1176,14 @@ pub(super) fn render_export_modal(frame: &mut Frame<'_>, area: Rect, app: &App) 
 
     Paragraph::new(Text::from(vec![
         Line::from(vec![
-            Span::styled("Format ", theme::key()),
-            Span::styled("current period & filters apply", theme::dim()),
+            Span::styled(format!("{} ", copy.modals.format), theme::key()),
+            Span::styled(
+                copy.modals.current_period_filters_apply.as_str(),
+                theme::dim(),
+            ),
         ]),
         Line::from(vec![
-            Span::styled("Folder ", theme::key()),
+            Span::styled(format!("{} ", copy.modals.folder), theme::key()),
             Span::styled(app.export_dir.display().to_string(), theme::muted()),
         ]),
     ]))
@@ -1114,11 +1214,14 @@ pub(super) fn render_export_modal(frame: &mut Frame<'_>, area: Rect, app: &App) 
 
     Paragraph::new(Line::from(vec![
         Span::styled("Enter", theme::key()),
-        Span::styled(" export   ", theme::muted()),
+        Span::styled(format!(" {}   ", copy.actions.export_lower), theme::muted()),
         Span::styled("f/b", theme::key()),
-        Span::styled(" browse folder   ", theme::muted()),
+        Span::styled(
+            format!(" {}   ", copy.actions.browse_folder),
+            theme::muted(),
+        ),
         Span::styled("Esc", theme::key()),
-        Span::styled(" close", theme::muted()),
+        Span::styled(format!(" {}", copy.actions.close_lower), theme::muted()),
     ]))
     .style(theme::base())
     .render(layout[2], frame.buffer_mut());
@@ -1134,6 +1237,7 @@ pub(super) fn render_download_confirm_modal(frame: &mut Frame<'_>, area: Rect, a
     let modal_area = centered_rect(width, height, area);
     Clear.render(modal_area, frame.buffer_mut());
 
+    let copy = copy();
     let block = theme::panel_block(target.title(), theme::YELLOW);
     let inner = block.inner(modal_area);
     block.render(modal_area, frame.buffer_mut());
@@ -1145,27 +1249,30 @@ pub(super) fn render_download_confirm_modal(frame: &mut Frame<'_>, area: Rect, a
 
     let lines = vec![
         Line::from(vec![
-            Span::styled("File   ", theme::key()),
+            Span::styled(format!("{:<7}", copy.modals.file), theme::key()),
             Span::styled(target.file_name(), theme::base()),
         ]),
         Line::from(vec![
-            Span::styled("Source ", theme::key()),
+            Span::styled(format!("{:<7}", copy.modals.source), theme::key()),
             Span::styled(target.source(), theme::muted()),
         ]),
         Line::from(vec![
-            Span::styled("Write  ", theme::key()),
+            Span::styled(format!("{:<7}", copy.modals.write), theme::key()),
             Span::styled(output.display().to_string(), theme::muted()),
         ]),
         Line::from(vec![
-            Span::styled("After  ", theme::key()),
+            Span::styled(format!("{:<7}", copy.modals.after), theme::key()),
             Span::styled(target.effect(), theme::muted()),
         ]),
         Line::from(""),
         Line::from(vec![
             Span::styled("Enter/y", theme::key()),
-            Span::styled(" download    ", theme::muted()),
+            Span::styled(
+                format!(" {}    ", copy.actions.download_lower),
+                theme::muted(),
+            ),
             Span::styled("Esc/n", theme::key()),
-            Span::styled(" cancel", theme::muted()),
+            Span::styled(format!(" {}", copy.actions.cancel_lower), theme::muted()),
         ]),
     ];
 
@@ -1184,9 +1291,10 @@ fn render_clear_data_confirm_modal(frame: &mut Frame<'_>, area: Rect, app: &App)
     let modal_area = centered_rect(width, height, area);
     Clear.render(modal_area, frame.buffer_mut());
 
+    let copy = copy();
     let title = match modal {
-        ClearDataModal::Confirm => "Clear data?",
-        ClearDataModal::Running => "Clearing data",
+        ClearDataModal::Confirm => copy.modals.clear_data_question.as_str(),
+        ClearDataModal::Running => copy.modals.clearing_data.as_str(),
     };
     let block = theme::panel_block(title, theme::RED);
     let inner = block.inner(modal_area);
@@ -1195,27 +1303,33 @@ fn render_clear_data_confirm_modal(frame: &mut Frame<'_>, area: Rect, app: &App)
     let lines = match modal {
         ClearDataModal::Confirm => vec![
             Line::from(vec![
-                Span::styled("Delete  ", theme::key()),
-                Span::styled("archive.db", theme::muted()),
+                Span::styled(format!("{:<8}", copy.modals.delete), theme::key()),
+                Span::styled(copy.modals.archive_db.as_str(), theme::muted()),
             ]),
             Line::from(vec![
-                Span::styled("Rebuild ", theme::key()),
-                Span::styled("from local tool history", theme::muted()),
+                Span::styled(format!("{:<8}", copy.modals.rebuild), theme::key()),
+                Span::styled(copy.modals.from_local_history.as_str(), theme::muted()),
             ]),
             Line::from(vec![
-                Span::styled("Keep    ", theme::key()),
-                Span::styled("config, rates, pricing, exports", theme::muted()),
+                Span::styled(format!("{:<8}", copy.modals.keep), theme::key()),
+                Span::styled(
+                    copy.modals.config_rates_pricing_exports.as_str(),
+                    theme::muted(),
+                ),
             ]),
             Line::from(vec![
-                Span::styled("Note    ", theme::key()),
-                Span::styled("missing source files will not return", theme::muted()),
+                Span::styled(format!("{:<8}", copy.modals.note), theme::key()),
+                Span::styled(copy.modals.missing_source_files.as_str(), theme::muted()),
             ]),
             Line::from(""),
             Line::from(vec![
                 Span::styled("Enter/y", theme::key()),
-                Span::styled(" clear data    ", theme::muted()),
+                Span::styled(
+                    format!(" {}    ", copy.actions.clear_data_lower),
+                    theme::muted(),
+                ),
                 Span::styled("Esc/n", theme::key()),
-                Span::styled(" cancel", theme::muted()),
+                Span::styled(format!(" {}", copy.actions.cancel_lower), theme::muted()),
             ]),
         ],
         ClearDataModal::Running => vec![
@@ -1225,14 +1339,17 @@ fn render_clear_data_confirm_modal(frame: &mut Frame<'_>, area: Rect, app: &App)
                     clear_data_activity_bar(app.clear_data_spinner_frame()),
                     theme::base().fg(theme::CYAN).add_modifier(Modifier::BOLD),
                 ),
-                Span::styled("  rebuilding archive", theme::muted()),
+                Span::styled(
+                    format!("  {}", copy.modals.rebuilding_archive),
+                    theme::muted(),
+                ),
             ]),
             Line::from(""),
             Line::from(vec![
-                Span::styled("archive.db", theme::key()),
-                Span::styled(" reset   ", theme::muted()),
-                Span::styled("local history", theme::key()),
-                Span::styled(" reimporting", theme::muted()),
+                Span::styled(copy.modals.archive_db.as_str(), theme::key()),
+                Span::styled(format!(" {}   ", copy.modals.reset), theme::muted()),
+                Span::styled(copy.modals.local_history.as_str(), theme::key()),
+                Span::styled(format!(" {}", copy.modals.reimporting), theme::muted()),
             ]),
         ],
     };
@@ -1270,10 +1387,11 @@ pub(super) fn render_export_dir_picker_modal(frame: &mut Frame<'_>, area: Rect, 
     let modal_area = centered_rect(width, height, area);
     Clear.render(modal_area, frame.buffer_mut());
 
-    let title = format!(
-        "Export Folder {}/{}",
-        picker.selected.saturating_add(1),
-        picker.entries.len().max(1)
+    let copy = copy();
+    let title = selection_title(
+        copy.modals.export_folder.as_str(),
+        picker.selected,
+        picker.entries.len(),
     );
     let block = theme::panel_block(&title, theme::CYAN);
     let inner = block.inner(modal_area);
@@ -1290,7 +1408,7 @@ pub(super) fn render_export_dir_picker_modal(frame: &mut Frame<'_>, area: Rect, 
         .split(inner);
 
     Paragraph::new(Line::from(vec![
-        Span::styled("Current ", theme::key()),
+        Span::styled(format!("{} ", copy.modals.current), theme::key()),
         Span::styled(picker.current_dir.display().to_string(), theme::muted()),
     ]))
     .style(theme::base())
@@ -1298,11 +1416,11 @@ pub(super) fn render_export_dir_picker_modal(frame: &mut Frame<'_>, area: Rect, 
 
     Paragraph::new(Line::from(vec![
         Span::styled("Enter", theme::key()),
-        Span::styled(" select/open   ", theme::muted()),
+        Span::styled(format!(" {}   ", copy.actions.select_open), theme::muted()),
         Span::styled("Backspace/Left", theme::key()),
-        Span::styled(" parent   ", theme::muted()),
+        Span::styled(format!(" {}   ", copy.actions.parent), theme::muted()),
         Span::styled("Esc", theme::key()),
-        Span::styled(" cancel", theme::muted()),
+        Span::styled(format!(" {}", copy.actions.cancel_lower), theme::muted()),
     ]))
     .style(theme::base())
     .render(layout[1], frame.buffer_mut());
@@ -1323,9 +1441,9 @@ pub(super) fn render_export_dir_picker_modal(frame: &mut Frame<'_>, area: Rect, 
                 theme::BACKGROUND
             };
             let kind = match entry.kind {
-                FolderPickerEntryKind::UseCurrent => "use",
-                FolderPickerEntryKind::Parent => "up",
-                FolderPickerEntryKind::Directory => "dir",
+                FolderPickerEntryKind::UseCurrent => copy.modals.r#use.as_str(),
+                FolderPickerEntryKind::Parent => copy.modals.up.as_str(),
+                FolderPickerEntryKind::Directory => copy.modals.dir.as_str(),
             };
             let name_style = if is_selected {
                 theme::key().bg(bg)
@@ -1355,7 +1473,10 @@ pub(super) fn render_export_dir_picker_modal(frame: &mut Frame<'_>, area: Rect, 
 
     let footer = match picker.error.as_ref() {
         Some(error) => Line::from(Span::styled(error.as_str(), theme::base().fg(theme::RED))),
-        None => Line::from(Span::styled("hidden folders are not shown", theme::dim())),
+        None => Line::from(Span::styled(
+            copy.modals.hidden_folders.as_str(),
+            theme::dim(),
+        )),
     };
     Paragraph::new(footer)
         .style(theme::base())
@@ -1374,20 +1495,14 @@ pub(super) fn render_session_modal(frame: &mut Frame<'_>, area: Rect, app: &App)
     let modal_area = centered_rect(width, height, area);
     Clear.render(modal_area, frame.buffer_mut());
 
-    let title = if modal.query.is_empty() {
-        format!(
-            "Session {}/{}",
-            modal.selected.saturating_add(1),
-            modal.filtered.len().max(1)
-        )
-    } else {
-        format!(
-            "Session {}/{} (of {})",
-            modal.selected.saturating_add(1),
-            modal.filtered.len().max(1),
-            modal.options.len()
-        )
-    };
+    let copy = copy();
+    let title = picker_title(
+        copy.modals.session.as_str(),
+        modal.selected,
+        modal.filtered.len(),
+        modal.options.len(),
+        modal.query.is_empty(),
+    );
     let block = theme::panel_block(&title, theme::RED);
     let inner = block.inner(modal_area);
     block.render(modal_area, frame.buffer_mut());
@@ -1446,11 +1561,11 @@ pub(super) fn render_session_modal(frame: &mut Frame<'_>, area: Rect, app: &App)
     )
     .header(Row::new(vec![
         Cell::from(""),
-        Cell::from("date").style(theme::dim()),
-        Cell::from("tool").style(theme::dim()),
-        Cell::from("project").style(theme::dim()),
-        Cell::from("cost").style(theme::dim()),
-        Cell::from("calls").style(theme::dim()),
+        Cell::from(copy.tables.date.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.tool.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.project.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.cost.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.calls.as_str()).style(theme::dim()),
     ]))
     .column_spacing(1);
 
@@ -1464,7 +1579,7 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Page::Usage => "usage",
         Page::Overview | Page::DeepDive => "dashboard",
     };
-    let commands = footer_line(keymap::keymap().footer(footer), app);
+    let commands = footer_line(copy().footer(footer), app);
 
     Paragraph::new(commands)
         .alignment(Alignment::Center)
@@ -1473,7 +1588,7 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
         .render(area, frame.buffer_mut());
 }
 
-fn footer_line(hints: &[keymap::KeyHint], app: &App) -> Line<'static> {
+fn footer_line(hints: &[CopyKeyHint], app: &App) -> Line<'static> {
     let mut spans = Vec::new();
     for (idx, hint) in hints.iter().enumerate() {
         if idx > 0 {
@@ -1505,6 +1620,38 @@ fn footer_period_action(action: &str) -> Option<Period> {
     }
 }
 
+fn selection_title(name: &str, selected: usize, count: usize) -> String {
+    template(
+        &copy().modals.selection_title,
+        &[
+            ("name", name.to_string()),
+            ("index", selected.saturating_add(1).to_string()),
+            ("total", count.max(1).to_string()),
+        ],
+    )
+}
+
+fn picker_title(
+    name: &str,
+    selected: usize,
+    filtered: usize,
+    total: usize,
+    unfiltered: bool,
+) -> String {
+    if unfiltered {
+        return selection_title(name, selected, filtered);
+    }
+    template(
+        &copy().modals.filtered_selection_title,
+        &[
+            ("name", name.to_string()),
+            ("index", selected.saturating_add(1).to_string()),
+            ("count", filtered.max(1).to_string()),
+            ("total", total.to_string()),
+        ],
+    )
+}
+
 pub(super) fn render_project_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let Some(modal) = app.project_modal.as_ref() else {
         return;
@@ -1517,20 +1664,14 @@ pub(super) fn render_project_modal(frame: &mut Frame<'_>, area: Rect, app: &App)
     let modal_area = centered_rect(width, height, area);
     Clear.render(modal_area, frame.buffer_mut());
 
-    let title = if modal.query.is_empty() {
-        format!(
-            "Project {}/{}",
-            modal.selected.saturating_add(1),
-            modal.filtered.len().max(1)
-        )
-    } else {
-        format!(
-            "Project {}/{} (of {})",
-            modal.selected.saturating_add(1),
-            modal.filtered.len().max(1),
-            modal.options.len()
-        )
-    };
+    let copy = copy();
+    let title = picker_title(
+        copy.modals.project.as_str(),
+        modal.selected,
+        modal.filtered.len(),
+        modal.options.len(),
+        modal.query.is_empty(),
+    );
     let block = theme::panel_block(&title, theme::GREEN);
     let inner = block.inner(modal_area);
     block.render(modal_area, frame.buffer_mut());
@@ -1585,9 +1726,9 @@ pub(super) fn render_project_modal(frame: &mut Frame<'_>, area: Rect, app: &App)
     )
     .header(Row::new(vec![
         Cell::from(""),
-        Cell::from("project").style(theme::dim()),
-        Cell::from("cost").style(theme::dim()),
-        Cell::from("calls").style(theme::dim()),
+        Cell::from(copy.tables.project.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.cost.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.calls.as_str()).style(theme::dim()),
     ]))
     .column_spacing(1);
 
@@ -1597,15 +1738,12 @@ pub(super) fn render_project_modal(frame: &mut Frame<'_>, area: Rect, app: &App)
 fn render_filter_input(frame: &mut Frame<'_>, area: Rect, query: &str) {
     let line = if query.is_empty() {
         Line::from(vec![
-            Span::styled("Filter ", theme::key()),
-            Span::styled(
-                "type to search · Backspace to delete · Ctrl-U clear",
-                theme::dim(),
-            ),
+            Span::styled(format!("{} ", copy().filters.filter), theme::key()),
+            Span::styled(copy().filters.filter_help.as_str(), theme::dim()),
         ])
     } else {
         Line::from(vec![
-            Span::styled("Filter ", theme::key()),
+            Span::styled(format!("{} ", copy().filters.filter), theme::key()),
             Span::styled(
                 query.to_string(),
                 theme::base().add_modifier(Modifier::BOLD),
@@ -1630,20 +1768,14 @@ pub(super) fn render_currency_modal(frame: &mut Frame<'_>, area: Rect, app: &App
     let modal_area = centered_rect(width, height, area);
     Clear.render(modal_area, frame.buffer_mut());
 
-    let title = if modal.query.is_empty() {
-        format!(
-            "Currency {}/{}",
-            modal.selected.saturating_add(1),
-            modal.filtered.len().max(1)
-        )
-    } else {
-        format!(
-            "Currency {}/{} (of {})",
-            modal.selected.saturating_add(1),
-            modal.filtered.len().max(1),
-            modal.options.len()
-        )
-    };
+    let copy = copy();
+    let title = picker_title(
+        copy.modals.currency.as_str(),
+        modal.selected,
+        modal.filtered.len(),
+        modal.options.len(),
+        modal.query.is_empty(),
+    );
     let block = theme::panel_block(&title, theme::PRIMARY);
     let inner = block.inner(modal_area);
     block.render(modal_area, frame.buffer_mut());
@@ -1675,7 +1807,11 @@ pub(super) fn render_currency_modal(frame: &mut Frame<'_>, area: Rect, app: &App
                 theme::BACKGROUND
             };
             let marker = if is_selected { ">" } else { " " };
-            let active = if is_active { "active" } else { "" };
+            let active = if is_active {
+                copy.modals.active.as_str()
+            } else {
+                copy.tables.blank.as_str()
+            };
             let rate = app
                 .currency_table
                 .rate(code)
@@ -1705,9 +1841,9 @@ pub(super) fn render_currency_modal(frame: &mut Frame<'_>, area: Rect, app: &App
     )
     .header(Row::new(vec![
         Cell::from(""),
-        Cell::from("code").style(theme::dim()),
-        Cell::from("per USD").style(theme::dim()),
-        Cell::from(""),
+        Cell::from(copy.tables.code.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.per_usd.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.blank.as_str()),
     ]))
     .column_spacing(1);
 

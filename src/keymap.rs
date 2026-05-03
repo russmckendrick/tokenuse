@@ -4,7 +4,7 @@ use std::{
 };
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 pub const CONTEXT_DASHBOARD: &str = "dashboard";
 pub const CONTEXT_USAGE_PAGE: &str = "usage_page";
@@ -104,33 +104,17 @@ const SUPPORTED_ACTIONS: &[&str] = &[
 pub struct Keymap {
     actions: Vec<ActionDef>,
     shortcuts: Vec<ShortcutDef>,
-    help: Vec<HintGroup>,
-    footers: HashMap<String, Vec<KeyHint>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ActionDef {
     pub id: String,
-    pub label: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ShortcutDef {
     pub context: String,
     pub keys: Vec<String>,
-    pub action: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct HintGroup {
-    pub title: String,
-    pub items: Vec<KeyHint>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct KeyHint {
-    pub keys: String,
-    pub label: String,
     pub action: String,
 }
 
@@ -176,14 +160,6 @@ impl Keymap {
         &self.actions
     }
 
-    pub fn help_groups(&self) -> &[HintGroup] {
-        &self.help
-    }
-
-    pub fn footer(&self, name: &str) -> &[KeyHint] {
-        self.footers.get(name).map(Vec::as_slice).unwrap_or(&[])
-    }
-
     pub fn resolve_tui(&self, context: &str, key: KeyEvent) -> Option<&str> {
         let input = NormalizedKey::from_tui(key)?;
         self.resolve_normalized(context, &input)
@@ -214,9 +190,6 @@ impl Keymap {
         for action in &self.actions {
             if action.id.trim().is_empty() {
                 return Err("action id cannot be empty".into());
-            }
-            if action.label.trim().is_empty() {
-                return Err(format!("action {} has an empty label", action.id));
             }
             if !supported.contains(action.id.as_str()) {
                 return Err(format!("unsupported action id {}", action.id));
@@ -254,30 +227,6 @@ impl Keymap {
                         shortcut.action
                     ));
                 }
-            }
-        }
-
-        for group in &self.help {
-            if group.title.trim().is_empty() {
-                return Err("help group title cannot be empty".into());
-            }
-            if group.items.is_empty() {
-                return Err(format!("help group {} has no items", group.title));
-            }
-            for item in &group.items {
-                ensure_hint("help", item, &declared)?;
-            }
-        }
-
-        for (name, items) in &self.footers {
-            if name.trim().is_empty() {
-                return Err("footer name cannot be empty".into());
-            }
-            if items.is_empty() {
-                return Err(format!("footer {name} has no items"));
-            }
-            for item in items {
-                ensure_hint(name, item, &declared)?;
             }
         }
 
@@ -379,19 +328,6 @@ fn ensure_action<'a>(declared: &HashSet<&'a str>, action: &'a str) -> Result<(),
     }
 }
 
-fn ensure_hint(context: &str, item: &KeyHint, declared: &HashSet<&str>) -> Result<(), String> {
-    if item.keys.trim().is_empty() {
-        return Err(format!("{context} hint for {} has empty keys", item.action));
-    }
-    if item.label.trim().is_empty() {
-        return Err(format!(
-            "{context} hint for {} has empty label",
-            item.action
-        ));
-    }
-    ensure_action(declared, &item.action)
-}
-
 fn parse_key(input: &str) -> Result<NormalizedKey, String> {
     let mut ctrl = false;
     let mut alt = false;
@@ -469,10 +405,8 @@ mod tests {
 
     const VALID_MINIMAL: &str = r#"
         {
-          "actions": [{ "id": "quit", "label": "quit" }],
-          "shortcuts": [{ "context": "dashboard", "keys": ["q"], "action": "quit" }],
-          "help": [{ "title": "General", "items": [{ "keys": "q", "label": "quit", "action": "quit" }] }],
-          "footers": { "dashboard": [{ "keys": "q", "label": "quit", "action": "quit" }] }
+          "actions": [{ "id": "quit" }],
+          "shortcuts": [{ "context": "dashboard", "keys": ["q"], "action": "quit" }]
         }
     "#;
 
@@ -486,8 +420,7 @@ mod tests {
         );
 
         assert_eq!(action, Some(ACTION_CYCLE_SORT));
-        assert!(!keymap.help_groups().is_empty());
-        assert!(!keymap.footer("desktop").is_empty());
+        assert!(!keymap.actions().is_empty());
     }
 
     #[test]
@@ -540,13 +473,11 @@ mod tests {
     fn rejects_duplicate_context_keys() {
         let json = r#"
             {
-              "actions": [{ "id": "quit", "label": "quit" }],
+              "actions": [{ "id": "quit" }],
               "shortcuts": [
                 { "context": "dashboard", "keys": ["q"], "action": "quit" },
                 { "context": "dashboard", "keys": ["Q"], "action": "quit" }
-              ],
-              "help": [{ "title": "General", "items": [{ "keys": "q", "label": "quit", "action": "quit" }] }],
-              "footers": { "dashboard": [{ "keys": "q", "label": "quit", "action": "quit" }] }
+              ]
             }
         "#;
 
@@ -559,10 +490,8 @@ mod tests {
     fn rejects_unsupported_action_ids() {
         let json = r#"
             {
-              "actions": [{ "id": "not_real", "label": "not real" }],
-              "shortcuts": [],
-              "help": [],
-              "footers": {}
+              "actions": [{ "id": "not_real" }],
+              "shortcuts": []
             }
         "#;
 
@@ -575,43 +504,14 @@ mod tests {
     fn rejects_unknown_shortcut_actions() {
         let json = r#"
             {
-              "actions": [{ "id": "quit", "label": "quit" }],
-              "shortcuts": [{ "context": "dashboard", "keys": ["q"], "action": "open_help" }],
-              "help": [{ "title": "General", "items": [{ "keys": "q", "label": "quit", "action": "quit" }] }],
-              "footers": { "dashboard": [{ "keys": "q", "label": "quit", "action": "quit" }] }
+              "actions": [{ "id": "quit" }],
+              "shortcuts": [{ "context": "dashboard", "keys": ["q"], "action": "open_help" }]
             }
         "#;
 
         let err = Keymap::from_json(json).unwrap_err();
 
         assert!(err.contains("unknown action id open_help"));
-    }
-
-    #[test]
-    fn rejects_unknown_help_and_footer_actions() {
-        let help_json = r#"
-            {
-              "actions": [{ "id": "quit", "label": "quit" }],
-              "shortcuts": [{ "context": "dashboard", "keys": ["q"], "action": "quit" }],
-              "help": [{ "title": "General", "items": [{ "keys": "h", "label": "help", "action": "open_help" }] }],
-              "footers": { "dashboard": [{ "keys": "q", "label": "quit", "action": "quit" }] }
-            }
-        "#;
-        let footer_json = r#"
-            {
-              "actions": [{ "id": "quit", "label": "quit" }],
-              "shortcuts": [{ "context": "dashboard", "keys": ["q"], "action": "quit" }],
-              "help": [{ "title": "General", "items": [{ "keys": "q", "label": "quit", "action": "quit" }] }],
-              "footers": { "dashboard": [{ "keys": "h", "label": "help", "action": "open_help" }] }
-            }
-        "#;
-
-        assert!(Keymap::from_json(help_json)
-            .unwrap_err()
-            .contains("unknown action id open_help"));
-        assert!(Keymap::from_json(footer_json)
-            .unwrap_err()
-            .contains("unknown action id open_help"));
     }
 
     #[test]

@@ -1,10 +1,11 @@
 <script lang="ts">
   import { area, curveMonotoneX, line, scaleLinear } from 'd3';
   import { chartRefresh, staggeredReveal } from '../motion';
-  import type { ActivityMetric } from '../types';
+  import type { ActivityMetric, CopyDeck } from '../types';
 
   export let points: ActivityMetric[] = [];
   export let density: 'compact' | 'roomy' = 'roomy';
+  export let copy: CopyDeck;
 
   const chartWidth = 640;
   const chartHeight = 116;
@@ -114,8 +115,8 @@
 {#if points.length}
   <div class="activity-pulse" class:compact={density === 'compact'} use:staggeredReveal={{ selector: '.activity-chart, .pulse-meta span', y: 3 }}>
     <div class="activity-chart">
-      <div class="pulse-label spend">spend</div>
-      <div class="pulse-label calls">calls</div>
+      <div class="pulse-label spend">{copy.timeline.spend}</div>
+      <div class="pulse-label calls">{copy.timeline.calls}</div>
       {#key chartKey}
         <div class="chart-frame" use:chartRefresh={{ y: 2 }}>
           <svg
@@ -123,7 +124,7 @@
             viewBox={`0 0 ${chartWidth} ${chartHeight}`}
             preserveAspectRatio="none"
             role="img"
-            aria-label={`Activity from ${firstLabel} to ${lastLabel}`}
+            aria-label={copy.timeline.activity_aria.replace('{first}', firstLabel).replace('{last}', lastLabel)}
             onpointermove={handlePointerMove}
             onpointerleave={clearHover}
           >
@@ -143,7 +144,7 @@
                 width={bucketBarWidth}
                 height={spendHeight(point.value)}
               >
-                <title>{point.label} · {point.cost} · {point.calls.toLocaleString()} calls</title>
+                <title>{point.label} · {point.cost} · {point.calls.toLocaleString()} {copy.metrics.calls}</title>
               </rect>
             {/each}
 
@@ -166,7 +167,7 @@
             <div class="pulse-tooltip" style={`left: ${Math.min(92, Math.max(8, (hoverX / chartWidth) * 100))}%`}>
               <strong>{hoverPoint.label}</strong>
               <span>{hoverPoint.cost}</span>
-              <span>{hoverPoint.calls.toLocaleString()} calls</span>
+              <span>{hoverPoint.calls.toLocaleString()} {copy.metrics.calls}</span>
             </div>
           {/if}
         </div>
@@ -174,14 +175,14 @@
     </div>
 
     <div class="pulse-meta">
-      <span>range <strong>{firstLabel}</strong> to <strong>{lastLabel}</strong></span>
-      <span>high <strong>{high?.label ?? '-'}</strong> <b>{high?.cost ?? '-'}</b></span>
-      <span>latest <b>{latest?.cost ?? '-'}</b></span>
-      <span>calls <strong>{compactCount(totalCalls)}</strong></span>
+      <span>{copy.timeline.range} <strong>{firstLabel}</strong> {copy.timeline.to} <strong>{lastLabel}</strong></span>
+      <span>{copy.timeline.high} <strong>{high?.label ?? '-'}</strong> <b>{high?.cost ?? '-'}</b></span>
+      <span>{copy.timeline.latest} <b>{latest?.cost ?? '-'}</b></span>
+      <span>{copy.timeline.calls} <strong>{compactCount(totalCalls)}</strong></span>
     </div>
   </div>
 {:else}
-  <div class="activity-empty">no activity in this view</div>
+  <div class="activity-empty">{copy.timeline.no_activity}</div>
 {/if}
 
 <style>

@@ -107,34 +107,34 @@
         <rect x="360" y="120" width="80" height="440" rx="16" fill="url(#tray-brand-bar-gradient)" />
       </svg>
       <div>
-        <strong>Token Use</strong>
-        <span>24 Hours</span>
+        <strong>{snapshot?.copy.brand.name ?? ''}</strong>
+        <span>{snapshot?.copy.tray.hours_24 ?? ''}</span>
       </div>
     </div>
-    <button class="close-button" type="button" title="Close" onclick={closePopover}>
+    <button class="close-button" type="button" title={snapshot?.copy.actions.close ?? ''} onclick={closePopover}>
       <X size={15} />
     </button>
   </div>
 
   {#if snapshot}
-    <div class="metric-grid" aria-label="24 hour summary" use:staggeredReveal={{ selector: ':scope > div', y: 3, stagger: 0.02 }}>
+    <div class="metric-grid" aria-label={snapshot.copy.tray.summary_aria} use:staggeredReveal={{ selector: ':scope > div', y: 3, stagger: 0.02 }}>
       <div>
-        <span>cost</span>
+        <span>{snapshot.copy.metrics.cost}</span>
         <strong>{snapshot.dashboard.summary.cost}</strong>
         <small>{snapshot.currency}</small>
       </div>
       <div>
-        <span>calls</span>
+        <span>{snapshot.copy.metrics.calls}</span>
         <strong>{snapshot.dashboard.summary.calls}</strong>
-        <small>{snapshot.dashboard.summary.sessions} sessions</small>
+        <small>{snapshot.dashboard.summary.sessions} {snapshot.copy.metrics.sessions}</small>
       </div>
       <div>
-        <span>tokens</span>
+        <span>{snapshot.copy.metrics.tokens}</span>
         <strong>{snapshot.dashboard.summary.input}</strong>
-        <small>{snapshot.dashboard.summary.output} out</small>
+        <small>{snapshot.dashboard.summary.output} {snapshot.copy.metrics.out}</small>
       </div>
       <div>
-        <span>cache</span>
+        <span>{snapshot.copy.metrics.cache}</span>
         <strong>{snapshot.dashboard.summary.cache_hit}</strong>
         <small>{snapshot.dashboard.summary.cached}</small>
       </div>
@@ -142,49 +142,49 @@
 
     <div class="activity-card">
       <div class="card-head">
-        <span>Activity</span>
+        <span>{snapshot.copy.tray.activity}</span>
         <strong>{latestPoint()?.cost ?? '-'}</strong>
       </div>
       <div class="sparkline" aria-hidden="true">
         <TraySparkline points={activityPoints()} />
       </div>
       <div class="activity-meta">
-        <span>high {peakPoint()?.label ?? '-'}</span>
-        <span>{count(totalCalls())} calls</span>
+        <span>{snapshot.copy.tray.high} {peakPoint()?.label ?? '-'}</span>
+        <span>{count(totalCalls())} {snapshot.copy.metrics.calls}</span>
       </div>
     </div>
 
     <div class="model-card">
       <div class="card-head">
-        <span>Models</span>
-        <strong>{count(modelCards().reduce((total, model) => total + model.calls, 0))} calls</strong>
+        <span>{snapshot.copy.tray.models}</span>
+        <strong>{count(modelCards().reduce((total, model) => total + model.calls, 0))} {snapshot.copy.metrics.calls}</strong>
       </div>
-      <div class="model-grid" aria-label="Model usage" use:staggeredReveal={{ selector: ':scope > div', y: 3, stagger: 0.02 }}>
+      <div class="model-grid" aria-label={snapshot.copy.desktop.model_usage} use:staggeredReveal={{ selector: ':scope > div', y: 3, stagger: 0.02 }}>
         {#each modelCards() as model}
           <div>
             <strong>{model.name}</strong>
             <p>
               <span>{model.cost}</span>
-              <small>{count(model.calls)} calls</small>
+              <small>{count(model.calls)} {snapshot.copy.metrics.calls}</small>
             </p>
           </div>
         {:else}
-          <div class="empty-model">no model rows</div>
+          <div class="empty-model">{snapshot.copy.tray.no_model_rows}</div>
       {/each}
       </div>
     </div>
   {:else}
-    <div class="tray-loading" use:reveal>Token Use</div>
+    <div class="tray-loading" aria-busy="true" use:reveal></div>
   {/if}
 
   <div class="popover-actions">
-    <button class="secondary-action" type="button" title="Refresh" onclick={load}>
+    <button class="secondary-action" type="button" title={snapshot?.copy.actions.refresh ?? ''} onclick={load}>
       <RefreshCw size={15} />
-      Refresh
+      {snapshot?.copy.actions.refresh ?? ''}
     </button>
     <button class="primary-action" type="button" onclick={openFullApp}>
       <ExternalLink size={15} />
-      Open
+      {snapshot?.copy.actions.open ?? ''}
     </button>
   </div>
 </div>

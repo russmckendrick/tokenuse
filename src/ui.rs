@@ -11,6 +11,7 @@ use ratatui::{
 
 use crate::{
     app::{App, Page},
+    copy::copy,
     data::DashboardData,
     theme,
 };
@@ -87,14 +88,14 @@ fn render_overview(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
     render_counts(
         frame,
         right_split[2],
-        "Shell Commands",
+        copy().panels.shell_commands.as_str(),
         theme::PRIMARY,
         &data.commands,
     );
     render_counts(
         frame,
         right_split[3],
-        "MCP Servers",
+        copy().panels.mcp_servers.as_str(),
         theme::MAGENTA,
         &data.mcp_servers,
     );
@@ -154,7 +155,7 @@ fn render_dashboard(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
     render_counts(
         frame,
         right_stack[2],
-        "Core Tools",
+        copy().panels.core_tools.as_str(),
         theme::CYAN,
         &data.tools,
     );
@@ -163,14 +164,14 @@ fn render_dashboard(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
     render_counts(
         frame,
         bottom[0],
-        "Shell Commands",
+        copy().panels.shell_commands.as_str(),
         theme::PRIMARY,
         &data.commands,
     );
     render_counts(
         frame,
         bottom[1],
-        "MCP Servers",
+        copy().panels.mcp_servers.as_str(),
         theme::MAGENTA,
         &data.mcp_servers,
     );
@@ -216,19 +217,23 @@ fn table_panel_height(rows: usize, min: u16, max: u16) -> u16 {
 }
 
 fn render_small_terminal_notice(frame: &mut Frame<'_>, area: Rect) {
-    let block = theme::panel_block("tokenuse", theme::PRIMARY);
+    let copy = copy();
+    let block = theme::panel_block(copy.brand.command.as_str(), theme::PRIMARY);
     let text = Text::from(vec![
         Line::from(vec![
-            Span::styled("terminal too small", theme::key()),
-            Span::styled(" for the dashboard", theme::muted()),
+            Span::styled(copy.empty.terminal_too_small.as_str(), theme::key()),
+            Span::styled(
+                copy.empty.terminal_dashboard_suffix.as_str(),
+                theme::muted(),
+            ),
         ]),
         Line::from(vec![Span::styled(
-            "resize to at least 120x40 for the full MVP layout",
+            copy.empty.terminal_resize.as_str(),
             theme::muted(),
         )]),
         Line::from(vec![
             Span::styled("q", theme::key()),
-            Span::styled(" quit", theme::muted()),
+            Span::styled(format!(" {}", copy.keymap.actions["quit"]), theme::muted()),
         ]),
     ]);
 
@@ -300,14 +305,15 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
 
-        assert!(rendered.contains("Token Use"));
-        assert!(rendered.contains("▂▅█▆"));
+        let copy = copy();
+        assert!(rendered.contains(&copy.brand.name));
+        assert!(rendered.contains(&copy.brand.mark));
         assert!(!rendered.contains("v0.0.2"));
-        assert!(rendered.contains("Activity Trend"));
-        assert!(rendered.contains("Model Efficiency"));
-        assert!(rendered.contains("Project Spend by Tool"));
+        assert!(rendered.contains(&copy.panels.activity_trend));
+        assert!(rendered.contains(&copy.panels.model_efficiency));
+        assert!(rendered.contains(&copy.panels.project_spend_by_tool));
         assert!(rendered.contains("q quit"));
-        let first_footer_hint = crate::keymap::keymap().footer("dashboard")[0].clone();
+        let first_footer_hint = copy.footer("dashboard")[0].clone();
         assert!(rendered.contains(&format!(
             "{} {}",
             first_footer_hint.keys, first_footer_hint.label
@@ -328,7 +334,7 @@ mod tests {
         let backend = TestBackend::new(170, 64);
         let mut terminal = Terminal::new(backend).expect("create terminal");
         let mut app = App::default();
-        app.status = Some("auto-refreshed · 12399 calls".into());
+        app.status = Some(crate::app::AppStatus::info("auto-refreshed · 12399 calls"));
         app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
 
         terminal
@@ -364,17 +370,18 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
 
-        assert!(rendered.contains("Token Use"));
-        assert!(rendered.contains("Overview"));
-        assert!(rendered.contains("Deep Dive"));
-        assert!(rendered.contains("Usage"));
-        assert!(rendered.contains("COST"));
-        assert!(rendered.contains("CALLS"));
-        assert!(rendered.contains("CACHE HIT"));
-        assert!(rendered.contains("Activity Pulse"));
-        assert!(rendered.contains("Project Spend by Tool"));
-        assert!(rendered.contains("Shell Commands"));
-        assert!(rendered.contains("MCP Servers"));
+        let copy = copy();
+        assert!(rendered.contains(&copy.brand.name));
+        assert!(rendered.contains(&copy.nav.overview));
+        assert!(rendered.contains(&copy.nav.deep_dive));
+        assert!(rendered.contains(&copy.nav.usage));
+        assert!(rendered.contains(&copy.metrics.cost.to_ascii_uppercase()));
+        assert!(rendered.contains(&copy.metrics.calls.to_ascii_uppercase()));
+        assert!(rendered.contains(&copy.metrics.cache_hit.to_ascii_uppercase()));
+        assert!(rendered.contains(&copy.panels.activity_pulse));
+        assert!(rendered.contains(&copy.panels.project_spend_by_tool));
+        assert!(rendered.contains(&copy.panels.shell_commands));
+        assert!(rendered.contains(&copy.panels.mcp_servers));
         assert!(rendered.contains("Tab"));
     }
 
@@ -397,11 +404,12 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect::<String>();
-        assert!(rendered.contains("Help"));
+        let copy = copy();
+        assert!(rendered.contains(&copy.modals.help_title));
         assert!(rendered.contains("keybindings"));
-        assert!(rendered.contains("Period"));
-        assert!(rendered.contains("Pickers"));
-        let help_item = &crate::keymap::keymap().help_groups()[0].items[1];
+        assert!(rendered.contains(&copy.keymap.help[1].title));
+        assert!(rendered.contains(&copy.keymap.help[6].title));
+        let help_item = &copy.keymap.help[0].items[1];
         assert!(rendered.contains(&help_item.label));
 
         app.handle_key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));
@@ -432,9 +440,9 @@ mod tests {
             .collect::<String>();
 
         assert!(rendered.contains("Project 1/"));
-        assert!(rendered.contains("All"));
-        assert!(rendered.contains("cost"));
-        assert!(rendered.contains("calls"));
+        assert!(rendered.contains(&copy().tools.all));
+        assert!(rendered.contains(&copy().tables.cost));
+        assert!(rendered.contains(&copy().tables.calls));
     }
 
     #[test]
@@ -455,12 +463,13 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
 
-        assert!(rendered.contains("Configuration"));
-        assert!(rendered.contains("currency override"));
-        assert!(rendered.contains("rates.json"));
-        assert!(rendered.contains("LiteLLM prices"));
-        assert!(rendered.contains("clear data"));
-        assert!(rendered.contains("Local Files"));
+        let copy = copy();
+        assert!(rendered.contains(&copy.nav.configuration));
+        assert!(rendered.contains(&copy.config.rows.currency_override.name));
+        assert!(rendered.contains(&copy.config.rows.rates_json.name));
+        assert!(rendered.contains(&copy.config.rows.litellm_prices.name));
+        assert!(rendered.contains(&copy.config.rows.clear_data.name));
+        assert!(rendered.contains(&copy.panels.local_files));
         assert!(rendered.contains("Esc dashboard"));
     }
 
@@ -484,8 +493,9 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
 
-        assert!(rendered.contains("Download rates.json?"));
-        assert!(rendered.contains("published tokenuse currency snapshot"));
+        let copy = copy();
+        assert!(rendered.contains(&copy.modals.download_rates_title));
+        assert!(rendered.contains(&copy.modals.rates_source));
         assert!(rendered.contains("Enter/y"));
         assert!(rendered.contains("Esc/n"));
     }
@@ -510,10 +520,11 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
 
-        assert!(rendered.contains("Clear data?"));
-        assert!(rendered.contains("Delete"));
-        assert!(rendered.contains("missing source files will not return"));
-        assert!(rendered.contains("clear data"));
+        let copy = copy();
+        assert!(rendered.contains(&copy.modals.clear_data_question));
+        assert!(rendered.contains(&copy.modals.delete));
+        assert!(rendered.contains(&copy.modals.missing_source_files));
+        assert!(rendered.contains(&copy.actions.clear_data_lower));
         assert!(rendered.contains("Esc/n"));
     }
 
@@ -537,9 +548,10 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
 
-        assert!(rendered.contains("Clearing data"));
-        assert!(rendered.contains("rebuilding archive"));
-        assert!(rendered.contains("local history"));
+        let copy = copy();
+        assert!(rendered.contains(&copy.modals.clearing_data));
+        assert!(rendered.contains(&copy.modals.rebuilding_archive));
+        assert!(rendered.contains(&copy.modals.local_history));
     }
 
     #[test]
@@ -560,20 +572,21 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
 
-        assert!(rendered.contains("Usage"));
-        assert!(rendered.contains("Codex"));
+        let copy = copy();
+        assert!(rendered.contains(&copy.nav.usage));
+        assert!(rendered.contains(&copy.tools.codex));
         assert!(rendered.contains("5h"));
         assert!(rendered.contains("weekly"));
         assert!(rendered.contains("% left"));
         assert!(rendered.contains("24h"));
-        assert!(rendered.contains("models"));
-        assert!(rendered.contains("Claude Code"));
-        assert!(rendered.contains("Cursor"));
-        assert!(rendered.contains("Copilot"));
-        assert!(rendered.contains("Gemini"));
+        assert!(rendered.contains(&copy.usage.models));
+        assert!(rendered.contains(&copy.tools.claude_code));
+        assert!(rendered.contains(&copy.tools.cursor));
+        assert!(rendered.contains(&copy.tools.copilot));
+        assert!(rendered.contains(&copy.tools.gemini));
         assert!(rendered.contains("Console"));
-        assert!(rendered.contains("24h pulse"));
-        assert!(rendered.contains("tokens"));
+        assert!(rendered.contains(&copy.usage.pulse));
+        assert!(rendered.contains(&copy.metrics.tokens));
         assert!(rendered.contains("sorted by 24h spend"));
         assert!(rendered.contains("c config"));
     }
@@ -599,7 +612,7 @@ mod tests {
 
         assert!(rendered.contains("Currency 1/"));
         assert!(rendered.contains("USD"));
-        assert!(rendered.contains("per USD"));
+        assert!(rendered.contains(&copy().tables.per_usd));
     }
 
     #[test]
@@ -620,7 +633,7 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
 
-        assert!(rendered.contains("Call Detail"));
+        assert!(rendered.contains(&copy().session.call_detail));
         assert!(rendered.contains("gpt-5"));
         assert!(rendered.contains("cargo test"));
         assert!(rendered.contains("run the checks and show me failures"));

@@ -1,6 +1,7 @@
 pub mod app;
 pub mod archive;
 pub mod config;
+pub mod copy;
 pub mod currency;
 pub mod data;
 pub mod export;

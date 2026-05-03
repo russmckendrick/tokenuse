@@ -174,6 +174,7 @@ export type SessionDetailView = {
 };
 
 export type ConfigRow = {
+  id: string;
   name: string;
   value: string;
   action: string;
@@ -195,6 +196,44 @@ export type ShortcutHint = {
   action: string;
 };
 
+export type CopyHintGroup = {
+  title: string;
+  items: ShortcutHint[];
+};
+
+export type CopyDeck = {
+  brand: Record<string, string>;
+  nav: Record<string, string>;
+  periods: Record<string, string>;
+  sorts: Record<string, string>;
+  tools: Record<string, string>;
+  metrics: Record<string, string>;
+  filters: Record<string, string>;
+  panels: Record<string, string>;
+  tables: Record<string, string>;
+  timeline: Record<string, string>;
+  usage: Record<string, string>;
+  config: {
+    rows: Record<string, { name: string; action: string }>;
+    values: Record<string, string>;
+    paths: Record<string, string>;
+  };
+  session: Record<string, string>;
+  modals: Record<string, string>;
+  actions: Record<string, string>;
+  desktop: Record<string, string>;
+  tray: Record<string, string>;
+  empty: Record<string, string>;
+  export: Record<string, unknown>;
+  cli: Record<string, string>;
+  keymap: {
+    actions: Record<string, string>;
+    help: CopyHintGroup[];
+    footers: Record<string, ShortcutHint[]>;
+  };
+  status: Record<string, string>;
+};
+
 export type ShortcutInput = {
   key: string;
   ctrl: boolean;
@@ -204,6 +243,7 @@ export type ShortcutInput = {
 };
 
 export type DesktopSnapshot = {
+  copy: CopyDeck;
   version: string;
   source: 'live' | 'sample';
   status: string | null;
@@ -231,6 +271,7 @@ export type DesktopSnapshot = {
 };
 
 export type TraySnapshot = {
+  copy: CopyDeck;
   version: string;
   status: string | null;
   currency: string;

@@ -2,13 +2,14 @@
   import { animatedBar } from '../motion';
 
   export let used = 0;
-  export let ariaLabel = 'usage limit';
+  export let ariaLabel = '';
+  export let usedSuffix = 'used';
 
   $: clamped = Math.max(0, Math.min(100, Number.isFinite(used) ? used : 0));
   $: tone = clamped >= 88 ? 'hot' : clamped >= 60 ? 'warm' : 'cool';
 </script>
 
-<span class="gauge-bar" aria-label={`${ariaLabel}: ${Math.round(clamped)}% used`}>
+<span class="gauge-bar" aria-label={`${ariaLabel}: ${Math.round(clamped)}% ${usedSuffix}`}>
   <span class={`gauge-fill ${tone}`} use:animatedBar={{ value: clamped }}></span>
 </span>
 

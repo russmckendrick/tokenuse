@@ -79,7 +79,7 @@ The desktop app uses native dialogs where that makes sense:
 - Project and session pickers include search.
 - Session call rows open a detail modal with `Enter`, `Space`, or a mouse click.
 - Currency selection writes the same `config.json` setting used by the TUI.
-- Export format selection writes JSON, CSV, SVG, PNG, or a self-contained HTML/PDF workbook report from the current filtered view. Workbook exports also include the selected Session's full call detail when a session is open.
+- Export format selection writes JSON, CSV, SVG, PNG, or a self-contained HTML/PDF workbook report from the current filtered view. Workbook exports include inline SVG activity and rank-bar charts, and also include the selected Session's full call detail when a session is open.
 - Folder selection uses the Tauri dialog plugin and is runtime-only, matching TUI behavior.
 
 ## Shared Local Data

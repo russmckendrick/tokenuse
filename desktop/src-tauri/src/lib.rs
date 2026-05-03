@@ -19,19 +19,19 @@ use tauri_plugin_notification::NotificationExt;
 use thiserror::Error;
 use tokenuse::{
     app::{
-        App, BackgroundUsageAlert, ConfigRowView, DataSource, Page, Period, ProjectFilter,
-        SortMode, StatusTone, Tool,
+        App, AppStatus, BackgroundUsageAlert, ConfigRowView, DataSource, Page, Period,
+        ProjectFilter, SortMode, StatusTone, Tool,
     },
+    copy::{self, CopyDeck, CopyKeyHint},
     data::{DashboardData, LimitsData, ProjectOption, SessionDetailView, SessionOption},
     export::ExportFormat,
-    keymap::{self, KeyHint, KeyInput},
+    keymap::{self, KeyInput},
     runtime,
 };
 
 type SharedState = Arc<Mutex<DesktopState>>;
 type CommandResult<T> = Result<T, CommandError>;
 
-const APP_NAME: &str = "Token Use";
 const AUTHOR: &str = "Russ McKendrick";
 const HOMEPAGE_URL: &str = "https://www.tokenuse.app";
 const MAIN_WINDOW_LABEL: &str = "main";
@@ -80,6 +80,7 @@ struct ProjectState {
 #[derive(Debug, Clone, Serialize)]
 struct DesktopSnapshot {
     version: &'static str,
+    copy: &'static CopyDeck,
     source: &'static str,
     status: Option<String>,
     status_tone: &'static str,
@@ -102,7 +103,7 @@ struct DesktopSnapshot {
     desktop_settings: DesktopSettingsState,
     export_dir: String,
     export_formats: Vec<OptionItem>,
-    shortcut_footer: Vec<KeyHint>,
+    shortcut_footer: Vec<CopyKeyHint>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -114,6 +115,7 @@ struct DesktopSettingsState {
 #[derive(Debug, Clone, Serialize)]
 struct TraySnapshot {
     version: &'static str,
+    copy: &'static CopyDeck,
     status: Option<String>,
     currency: String,
     dashboard: DashboardData,
@@ -254,9 +256,17 @@ async fn set_open_at_login(
     with_app(state, move |app| {
         app.settings.desktop.open_at_login = enabled;
         save_user_settings(app)?;
-        app.status = Some(format!(
-            "open at login {}",
-            if enabled { "enabled" } else { "disabled" }
+        let state = if enabled {
+            copy::copy().desktop.enabled.as_str()
+        } else {
+            copy::copy().desktop.disabled.as_str()
+        };
+        app.status = Some(AppStatus::new(
+            copy::template(
+                &copy::copy().status.open_at_login_state,
+                &[("state", state.to_string())],
+            ),
+            StatusTone::Success,
         ));
         Ok(snapshot(app))
     })
@@ -273,9 +283,17 @@ async fn set_show_dock_or_taskbar_icon(
     with_app(state, move |app| {
         app.settings.desktop.show_dock_or_taskbar_icon = enabled;
         save_user_settings(app)?;
-        app.status = Some(format!(
-            "Dock/taskbar icon {}",
-            if enabled { "shown" } else { "hidden" }
+        let state = if enabled {
+            copy::copy().desktop.shown.as_str()
+        } else {
+            copy::copy().desktop.hidden.as_str()
+        };
+        app.status = Some(AppStatus::new(
+            copy::template(
+                &copy::copy().status.dock_taskbar_icon_state,
+                &[("state", state.to_string())],
+            ),
+            StatusTone::Success,
         ));
         Ok(snapshot(app))
     })
@@ -325,7 +343,9 @@ async fn set_export_dir(
 ) -> CommandResult<DesktopSnapshot> {
     with_app(state, move |app| {
         if path.trim().is_empty() {
-            return Err(CommandError::Tokenuse("export folder path is empty".into()));
+            return Err(CommandError::Tokenuse(
+                copy::copy().status.export_folder_path_empty.clone(),
+            ));
         }
         app.set_export_dir(PathBuf::from(path));
         Ok(snapshot(app))
@@ -419,11 +439,12 @@ fn save_user_settings(app: &App) -> CommandResult<()> {
 fn snapshot(app: &App) -> DesktopSnapshot {
     DesktopSnapshot {
         version: env!("CARGO_PKG_VERSION"),
+        copy: copy::copy(),
         source: match app.source {
             DataSource::Live(_) => "live",
             DataSource::Sample => "sample",
         },
-        status: app.status.clone(),
+        status: app.status_text().map(str::to_string),
         status_tone: status_tone_id(app.status_tone()),
         page: page_id(app.page),
         period: period_id(app.period),
@@ -460,7 +481,7 @@ fn snapshot(app: &App) -> DesktopSnapshot {
         project: match &app.project_filter {
             ProjectFilter::All => ProjectState {
                 identity: None,
-                label: "All".into(),
+                label: copy::copy().tools.all.clone(),
             },
             ProjectFilter::Selected { identity, label } => ProjectState {
                 identity: Some(identity.clone()),
@@ -484,7 +505,7 @@ fn snapshot(app: &App) -> DesktopSnapshot {
                 label: format.label(),
             })
             .collect(),
-        shortcut_footer: keymap::keymap().footer("desktop").to_vec(),
+        shortcut_footer: copy::copy().footer("desktop").to_vec(),
     }
 }
 
@@ -498,7 +519,8 @@ fn desktop_settings(app: &App) -> DesktopSettingsState {
 fn tray_snapshot(app: &App) -> TraySnapshot {
     TraySnapshot {
         version: env!("CARGO_PKG_VERSION"),
-        status: app.status.clone(),
+        copy: copy::copy(),
+        status: app.status_text().map(str::to_string),
         currency: app.currency().code().to_string(),
         dashboard: app.dashboard_for(
             Period::Today,
@@ -640,15 +662,15 @@ fn about_metadata() -> AboutMetadata<'static> {
     let version = app_version_label();
 
     AboutMetadata {
-        name: Some(APP_NAME.into()),
+        name: Some(copy::copy().brand.name.clone()),
         version: Some(version),
         #[cfg(target_os = "macos")]
         short_version: Some(String::new()),
         authors: Some(vec![AUTHOR.into()]),
-        comments: Some("Local AI token usage analytics.".into()),
+        comments: Some(copy::copy().brand.comments.clone()),
         copyright: Some(format!("Author: {AUTHOR}")),
         website: Some(HOMEPAGE_URL.into()),
-        website_label: Some("tokenuse.app".into()),
+        website_label: Some(copy::copy().brand.website_label.clone()),
         ..Default::default()
     }
 }
@@ -687,12 +709,12 @@ fn desktop_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R>>
             #[cfg(target_os = "macos")]
             &Submenu::with_items(
                 app_handle,
-                APP_NAME,
+                copy::copy().brand.name.as_str(),
                 true,
                 &[
                     &PredefinedMenuItem::about(
                         app_handle,
-                        Some("About Token Use"),
+                        Some(copy::copy().brand.about_title.as_str()),
                         Some(about_metadata),
                     )?,
                     &PredefinedMenuItem::separator(app_handle)?,
@@ -802,15 +824,27 @@ fn setup_desktop_runtime<R: Runtime>(
 }
 
 fn setup_tray<R: Runtime>(app: &mut tauri::App<R>) -> tauri::Result<()> {
-    let show_item = MenuItem::with_id(app, "show", "Show Token Use", true, None::<&str>)?;
-    let quit_item = MenuItem::with_id(app, "quit", "Quit Token Use", true, None::<&str>)?;
+    let show_item = MenuItem::with_id(
+        app,
+        "show",
+        copy::copy().actions.show_app.as_str(),
+        true,
+        None::<&str>,
+    )?;
+    let quit_item = MenuItem::with_id(
+        app,
+        "quit",
+        copy::copy().actions.quit_app.as_str(),
+        true,
+        None::<&str>,
+    )?;
     let separator = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(app, &[&show_item, &separator, &quit_item])?;
 
     TrayIconBuilder::new()
         .icon(tray_icon()?)
         .icon_as_template(cfg!(target_os = "macos"))
-        .tooltip(APP_NAME)
+        .tooltip(copy::copy().brand.name.as_str())
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -867,7 +901,7 @@ fn create_tray_popover_window<R: Runtime>(
         TRAY_POPOVER_LABEL,
         WebviewUrl::App("index.html".into()),
     )
-    .title("Token Use")
+    .title(copy::copy().brand.name.as_str())
     .inner_size(TRAY_POPOVER_WIDTH, TRAY_POPOVER_HEIGHT)
     .min_inner_size(TRAY_POPOVER_WIDTH, TRAY_POPOVER_HEIGHT)
     .max_inner_size(TRAY_POPOVER_WIDTH, TRAY_POPOVER_HEIGHT)
@@ -1035,7 +1069,7 @@ fn apply_saved_desktop_settings<R: Runtime>(app_handle: &AppHandle<R>, state: &S
 
     if !notices.is_empty() {
         if let Ok(mut state) = state.lock() {
-            state.app.status = Some(notices.join(" · "));
+            state.app.status = Some(AppStatus::new(notices.join(" · "), StatusTone::Warning));
         }
     }
 }
@@ -1047,7 +1081,12 @@ fn sync_open_at_login<R: Runtime>(app_handle: &AppHandle<R>, enabled: bool) -> C
     } else {
         autostart.disable()
     };
-    result.map_err(|e| CommandError::Tokenuse(format!("open at login failed · {e}")))
+    result.map_err(|e| {
+        CommandError::Tokenuse(copy::template(
+            &copy::copy().status.open_at_login_failed,
+            &[("error", e.to_string())],
+        ))
+    })
 }
 
 fn apply_dock_or_taskbar_icon<R: Runtime>(
@@ -1058,14 +1097,24 @@ fn apply_dock_or_taskbar_icon<R: Runtime>(
     {
         app_handle
             .set_dock_visibility(visible)
-            .map_err(|e| CommandError::Tokenuse(format!("Dock visibility failed · {e}")))?;
+            .map_err(|e| {
+                CommandError::Tokenuse(copy::template(
+                    &copy::copy().status.dock_visibility_failed,
+                    &[("error", e.to_string())],
+                ))
+            })?;
     }
 
     #[cfg(not(target_os = "macos"))]
     if let Some(window) = app_handle.get_webview_window(MAIN_WINDOW_LABEL) {
         window
             .set_skip_taskbar(!visible)
-            .map_err(|e| CommandError::Tokenuse(format!("taskbar visibility failed · {e}")))?;
+            .map_err(|e| {
+                CommandError::Tokenuse(copy::template(
+                    &copy::copy().status.taskbar_visibility_failed,
+                    &[("error", e.to_string())],
+                ))
+            })?;
     }
 
     Ok(())
@@ -1106,7 +1155,7 @@ fn send_background_alert<R: Runtime>(app_handle: &AppHandle<R>, alert: Backgroun
     let _ = app_handle
         .notification()
         .builder()
-        .title("Token Use usage alert")
+        .title(copy::copy().brand.usage_alert_title.as_str())
         .body(background_alert_body(alert))
         .show();
 }
@@ -1128,11 +1177,14 @@ fn background_alert_body(alert: BackgroundUsageAlert) -> String {
     }
 
     let summary = if parts.is_empty() {
-        "usage changed".into()
+        copy::copy().status.background_usage_changed.clone()
     } else {
         parts.join(", ")
     };
-    format!("Usage jumped by {summary} since the last alert baseline.")
+    copy::template(
+        &copy::copy().status.background_usage_body,
+        &[("summary", summary)],
+    )
 }
 
 fn format_compact_count(n: u64) -> String {
@@ -1190,6 +1242,20 @@ mod tests {
     fn tool_helpers_roundtrip_gemini() {
         assert!(matches!(parse_tool("gemini").unwrap(), Tool::Gemini));
         assert_eq!(tool_id(Tool::Gemini), "gemini");
+    }
+
+    #[test]
+    fn desktop_snapshot_includes_copy_and_config_row_ids() {
+        let app = App::default();
+        let snapshot = snapshot(&app);
+
+        assert_eq!(snapshot.copy.brand.name, copy::copy().brand.name);
+        assert_eq!(snapshot.config_rows[0].id, "currency_override");
+        assert_eq!(snapshot.config_rows[1].id, "rates_json");
+        assert_eq!(
+            snapshot.shortcut_footer[0].label,
+            copy::copy().footer("desktop")[0].label
+        );
     }
 
     #[test]

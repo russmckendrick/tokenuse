@@ -10,9 +10,10 @@ use plotters::prelude::*;
 
 use crate::app::{Period, ProjectFilter, SortMode, Tool};
 use crate::config::ConfigPaths;
+use crate::copy::{copy, template};
 use crate::data::{
-    CountMetric, DailyMetric, DashboardData, ModelMetric, ProjectMetric, ProjectToolMetric,
-    SessionDetailView, SessionMetric, Summary,
+    ActivityMetric, CountMetric, DailyMetric, DashboardData, ModelMetric, ProjectMetric,
+    ProjectToolMetric, SessionDetailView, SessionMetric, Summary,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,13 +28,14 @@ pub enum ExportFormat {
 
 impl ExportFormat {
     pub fn label(self) -> &'static str {
+        let copy = copy();
         match self {
-            Self::Json => "JSON",
-            Self::Csv => "CSV (one file per panel)",
-            Self::Svg => "SVG (full dashboard)",
-            Self::Png => "PNG (full dashboard)",
-            Self::Html => "HTML (full workbook report)",
-            Self::Pdf => "PDF (full workbook report)",
+            Self::Json => copy.export.json.as_str(),
+            Self::Csv => copy.export.csv.as_str(),
+            Self::Svg => copy.export.svg.as_str(),
+            Self::Png => copy.export.png.as_str(),
+            Self::Html => copy.export.html.as_str(),
+            Self::Pdf => copy.export.pdf.as_str(),
         }
     }
 
@@ -236,9 +238,13 @@ fn write_csv_dir(dir: &Path, data: &DashboardData) -> Result<()> {
     write_project_tools_csv(dir, &data.project_tools)?;
     write_sessions_csv(dir, &data.sessions)?;
     write_models_csv(dir, &data.models)?;
-    write_counts_csv(dir, "tools.csv", &data.tools)?;
-    write_counts_csv(dir, "commands.csv", &data.commands)?;
-    write_counts_csv(dir, "mcp_servers.csv", &data.mcp_servers)?;
+    write_counts_csv(dir, &copy().export.csv_files.tools_file, &data.tools)?;
+    write_counts_csv(dir, &copy().export.csv_files.commands_file, &data.commands)?;
+    write_counts_csv(
+        dir,
+        &copy().export.csv_files.mcp_servers_file,
+        &data.mcp_servers,
+    )?;
     Ok(())
 }
 
@@ -276,16 +282,16 @@ fn csv_escape(value: &str) -> String {
 fn write_summary_csv(dir: &Path, summary: &Summary) -> Result<()> {
     write_csv(
         dir,
-        "summary.csv",
+        &copy().export.csv_files.summary_file,
         &[
-            "cost",
-            "calls",
-            "sessions",
-            "cache_hit",
-            "input",
-            "output",
-            "cached",
-            "written",
+            copy().tables.cost.as_str(),
+            copy().tables.calls.as_str(),
+            copy().tables.sessions.as_str(),
+            copy().tables.cache_hit.as_str(),
+            copy().metrics.input.as_str(),
+            copy().metrics.output.as_str(),
+            copy().metrics.cached.as_str(),
+            copy().metrics.written.as_str(),
         ],
         &[vec![
             summary.cost.to_string(),
@@ -305,7 +311,16 @@ fn write_daily_csv(dir: &Path, rows: &[DailyMetric]) -> Result<()> {
         .iter()
         .map(|r| vec![r.day.to_string(), r.cost.to_string(), r.calls.to_string()])
         .collect();
-    write_csv(dir, "daily.csv", &["day", "cost", "calls"], &data)
+    write_csv(
+        dir,
+        &copy().export.csv_files.daily_file,
+        &[
+            copy().tables.day.as_str(),
+            copy().tables.cost.as_str(),
+            copy().tables.calls.as_str(),
+        ],
+        &data,
+    )
 }
 
 fn write_projects_csv(dir: &Path, rows: &[ProjectMetric]) -> Result<()> {
@@ -323,8 +338,14 @@ fn write_projects_csv(dir: &Path, rows: &[ProjectMetric]) -> Result<()> {
         .collect();
     write_csv(
         dir,
-        "projects.csv",
-        &["name", "cost", "avg_per_session", "sessions", "tool_mix"],
+        &copy().export.csv_files.projects_file,
+        &[
+            copy().tables.name.as_str(),
+            copy().tables.cost.as_str(),
+            copy().tables.avg_per_session.as_str(),
+            copy().tables.sessions.as_str(),
+            copy().tables.tool_mix.as_str(),
+        ],
         &data,
     )
 }
@@ -345,14 +366,14 @@ fn write_project_tools_csv(dir: &Path, rows: &[ProjectToolMetric]) -> Result<()>
         .collect();
     write_csv(
         dir,
-        "project_tools.csv",
+        &copy().export.csv_files.project_tools_file,
         &[
-            "project",
-            "tool",
-            "cost",
-            "calls",
-            "sessions",
-            "avg_per_session",
+            copy().tables.project.as_str(),
+            copy().tables.tool.as_str(),
+            copy().tables.cost.as_str(),
+            copy().tables.calls.as_str(),
+            copy().tables.sessions.as_str(),
+            copy().tables.avg_per_session.as_str(),
         ],
         &data,
     )
@@ -372,8 +393,13 @@ fn write_sessions_csv(dir: &Path, rows: &[SessionMetric]) -> Result<()> {
         .collect();
     write_csv(
         dir,
-        "sessions.csv",
-        &["date", "project", "cost", "calls"],
+        &copy().export.csv_files.sessions_file,
+        &[
+            copy().tables.date.as_str(),
+            copy().tables.project.as_str(),
+            copy().tables.cost.as_str(),
+            copy().tables.calls.as_str(),
+        ],
         &data,
     )
 }
@@ -392,8 +418,13 @@ fn write_models_csv(dir: &Path, rows: &[ModelMetric]) -> Result<()> {
         .collect();
     write_csv(
         dir,
-        "models.csv",
-        &["name", "cost", "cache", "calls"],
+        &copy().export.csv_files.models_file,
+        &[
+            copy().tables.name.as_str(),
+            copy().tables.cost.as_str(),
+            copy().tables.cache.as_str(),
+            copy().tables.calls.as_str(),
+        ],
         &data,
     )
 }
@@ -403,7 +434,12 @@ fn write_counts_csv(dir: &Path, name: &str, rows: &[CountMetric]) -> Result<()> 
         .iter()
         .map(|r| vec![r.name.to_string(), r.calls.to_string()])
         .collect();
-    write_csv(dir, name, &["name", "calls"], &data)
+    write_csv(
+        dir,
+        name,
+        &[copy().tables.name.as_str(), copy().tables.calls.as_str()],
+        &data,
+    )
 }
 
 fn write_html_report(path: &Path, context: &ExportContext<'_>, stamp: &str) -> Result<()> {
@@ -420,6 +456,7 @@ fn build_html_report(context: &ExportContext<'_>, stamp: &str) -> String {
 
     push_report_header(&mut out, context, &generated_at, stamp);
     push_summary_cards(&mut out, &context.dashboard.summary, context.currency_code);
+    push_activity_timeline_html(&mut out, &context.dashboard.activity_timeline);
     push_dashboard_workbook(&mut out, context.dashboard);
     if let Some(session) = context.session {
         push_session_workbook(&mut out, session);
@@ -439,6 +476,7 @@ fn build_pdf_html_report(context: &ExportContext<'_>, stamp: &str) -> String {
 
     push_report_header(&mut out, context, &generated_at, stamp);
     push_summary_cards_pdf(&mut out, &context.dashboard.summary, context.currency_code);
+    push_activity_timeline_pdf(&mut out, &context.dashboard.activity_timeline);
     push_dashboard_workbook_pdf(&mut out, context.dashboard);
     if let Some(session) = context.session {
         push_session_workbook_pdf(&mut out, session);
@@ -461,10 +499,12 @@ fn push_report_document_open(out: &mut String, title: &str, css: &str, main_clas
 }
 
 fn report_title(context: &ExportContext<'_>) -> String {
-    format!(
-        "Token Use report - {} - {}",
-        period_label(context.period),
-        tool_label(context.tool)
+    template(
+        &copy().export.report_title,
+        &[
+            ("period", period_label(context.period).to_string()),
+            ("tool", tool_label(context.tool).to_string()),
+        ],
     )
 }
 
@@ -484,12 +524,6 @@ const HTML_REPORT_CSS: &str = r##"
   --red: #c53f4d;
   --cyan: #008b8a;
   --magenta: #b347b8;
-  --heat-empty: #edf0f7;
-  --heat-1: #62a6ff;
-  --heat-2: #4cf2a0;
-  --heat-3: #ffd60a;
-  --heat-4: #ff9c48;
-  --heat-5: #ff5f6d;
   font-family: "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace;
 }
 
@@ -764,31 +798,25 @@ th.num {
   font-weight: 800;
 }
 
-.heat {
-  display: inline-flex;
-  align-items: end;
-  gap: 2px;
-  min-width: 86px;
+.activity-export {
+  margin: 14px 0;
 }
 
-.heat span {
-  width: 5px;
+.activity-body {
+  padding: 12px;
+}
+
+.activity-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.export-rank-bar {
+  display: block;
+  width: 86px;
   height: 16px;
-  background: var(--heat-empty);
 }
-
-.heat .filled.l0,
-.heat .filled.l1 { background: var(--heat-1); }
-.heat .filled.l2,
-.heat .filled.l3 { background: var(--heat-2); }
-.heat .filled.l4,
-.heat .filled.l5,
-.heat .filled.l6 { background: var(--heat-3); }
-.heat .filled.l7,
-.heat .filled.l8 { background: var(--heat-4); }
-.heat .filled.l9,
-.heat .filled.l10,
-.heat .filled.l11 { background: var(--heat-5); }
 
 .session-kpis {
   padding: 12px;
@@ -865,7 +893,6 @@ const PDF_REPORT_CSS: &str = r##"
 .pdf-report {
   --paper: #ffffff;
   --panel: #ffffff;
-  --heat-empty: #f1f4fa;
   width: 100%;
   margin: 0;
   padding: 0;
@@ -1036,26 +1063,15 @@ body {
   font-weight: 800;
 }
 
-.pdf-heat span {
-  display: inline-block;
-  width: 5px;
-  height: 15px;
-  margin-right: 2px;
-  background: var(--heat-empty);
+.pdf-report .activity-svg {
+  width: 100%;
+  height: auto;
 }
 
-.pdf-heat .filled.l0,
-.pdf-heat .filled.l1 { background: var(--heat-1); }
-.pdf-heat .filled.l2,
-.pdf-heat .filled.l3 { background: var(--heat-2); }
-.pdf-heat .filled.l4,
-.pdf-heat .filled.l5,
-.pdf-heat .filled.l6 { background: var(--heat-3); }
-.pdf-heat .filled.l7,
-.pdf-heat .filled.l8 { background: var(--heat-4); }
-.pdf-heat .filled.l9,
-.pdf-heat .filled.l10,
-.pdf-heat .filled.l11 { background: var(--heat-5); }
+.pdf-report .export-rank-bar {
+  width: 72px;
+  height: 12px;
+}
 
 .pdf-month {
   margin: 0;
@@ -1155,18 +1171,20 @@ fn push_report_header(
 ) {
     out.push_str("<header class=\"report-head\">\n<div class=\"brand-row\">\n");
     out.push_str(BARS_LOGO_SVG);
-    out.push_str(
-        "<div><p class=\"eyebrow\">Full workbook report</p><h1>Token Use</h1></div>\n</div>\n",
-    );
+    out.push_str("<div><p class=\"eyebrow\">");
+    out.push_str(&escape_html(&copy().export.full_workbook_report));
+    out.push_str("</p><h1>");
+    out.push_str(&escape_html(&copy().brand.name));
+    out.push_str("</h1></div>\n</div>\n");
     out.push_str("<div class=\"meta-grid\">\n");
-    push_meta(out, "generated", generated_at);
-    push_meta(out, "export id", stamp);
-    push_meta(out, "source", context.source_label);
-    push_meta(out, "currency", context.currency_code);
-    push_meta(out, "period", period_label(context.period));
-    push_meta(out, "tool", tool_label(context.tool));
-    push_meta(out, "project", context.project_filter.label());
-    push_meta(out, "sort", context.sort.label());
+    push_meta(out, &copy().export.generated, generated_at);
+    push_meta(out, &copy().export.export_id, stamp);
+    push_meta(out, &copy().export.source, context.source_label);
+    push_meta(out, &copy().export.currency, context.currency_code);
+    push_meta(out, &copy().export.period, period_label(context.period));
+    push_meta(out, &copy().export.tool, tool_label(context.tool));
+    push_meta(out, &copy().export.project, context.project_filter.label());
+    push_meta(out, &copy().export.sort, context.sort.label());
     out.push_str("</div>\n</header>\n");
 }
 
@@ -1181,31 +1199,95 @@ fn push_meta(out: &mut String, label: &str, value: &str) {
 }
 
 fn push_summary_cards(out: &mut String, summary: &Summary, currency_code: &str) {
-    out.push_str("<section class=\"kpis\" aria-label=\"Summary metrics\">\n");
-    push_kpi(out, "cost", summary.cost, currency_code, "cost");
-    push_kpi(out, "calls", summary.calls, summary.input, "calls");
-    push_kpi(out, "sessions", summary.sessions, "active set", "sessions");
-    push_kpi(out, "cache hit", summary.cache_hit, summary.cached, "cache");
-    let tokens = format!("{} out", summary.output);
-    push_kpi(out, "input", summary.input, &tokens, "tokens");
-    let written = format!("{} written", summary.written);
-    push_kpi(out, "cached", summary.cached, &written, "cache");
+    out.push_str("<section class=\"kpis\" aria-label=\"");
+    out.push_str(&escape_html(&copy().export.summary_metrics_aria));
+    out.push_str("\">\n");
+    push_kpi(
+        out,
+        &copy().metrics.cost,
+        summary.cost,
+        currency_code,
+        "cost",
+    );
+    push_kpi(
+        out,
+        &copy().metrics.calls,
+        summary.calls,
+        summary.input,
+        "calls",
+    );
+    push_kpi(
+        out,
+        &copy().metrics.sessions,
+        summary.sessions,
+        &copy().metrics.active_set,
+        "sessions",
+    );
+    push_kpi(
+        out,
+        &copy().metrics.cache_hit,
+        summary.cache_hit,
+        summary.cached,
+        "cache",
+    );
+    let tokens = format!("{} {}", summary.output, copy().metrics.out);
+    push_kpi(out, &copy().metrics.input, summary.input, &tokens, "tokens");
+    let written = format!("{} {}", summary.written, copy().metrics.written);
+    push_kpi(
+        out,
+        &copy().metrics.cached,
+        summary.cached,
+        &written,
+        "cache",
+    );
     out.push_str("</section>\n");
 }
 
 fn push_summary_cards_pdf(out: &mut String, summary: &Summary, currency_code: &str) {
-    let tokens = format!("{} out", summary.output);
-    let written = format!("{} written", summary.written);
+    let tokens = format!("{} {}", summary.output, copy().metrics.out);
+    let written = format!("{} {}", summary.written, copy().metrics.written);
     let cards = [
-        ("cost", summary.cost, currency_code, "cost"),
-        ("calls", summary.calls, summary.input, "calls"),
-        ("sessions", summary.sessions, "active set", "sessions"),
-        ("cache hit", summary.cache_hit, summary.cached, "cache"),
-        ("input", summary.input, tokens.as_str(), "tokens"),
-        ("cached", summary.cached, written.as_str(), "cache"),
+        (
+            copy().metrics.cost.as_str(),
+            summary.cost,
+            currency_code,
+            "cost",
+        ),
+        (
+            copy().metrics.calls.as_str(),
+            summary.calls,
+            summary.input,
+            "calls",
+        ),
+        (
+            copy().metrics.sessions.as_str(),
+            summary.sessions,
+            copy().metrics.active_set.as_str(),
+            "sessions",
+        ),
+        (
+            copy().metrics.cache_hit.as_str(),
+            summary.cache_hit,
+            summary.cached,
+            "cache",
+        ),
+        (
+            copy().metrics.input.as_str(),
+            summary.input,
+            tokens.as_str(),
+            "tokens",
+        ),
+        (
+            copy().metrics.cached.as_str(),
+            summary.cached,
+            written.as_str(),
+            "cache",
+        ),
     ];
 
-    out.push_str("<table class=\"pdf-kpis\" aria-label=\"Summary metrics\">");
+    out.push_str("<table class=\"pdf-kpis\" aria-label=\"");
+    out.push_str(&escape_html(&copy().export.summary_metrics_aria));
+    out.push_str("\">");
     for row in cards.chunks(3) {
         out.push_str("<tr>");
         for (label, value, detail, icon) in row {
@@ -1236,24 +1318,433 @@ fn push_kpi(out: &mut String, label: &str, value: &str, detail: &str, icon: &str
     out.push_str("</small></div></article>\n");
 }
 
+fn push_activity_timeline_html(out: &mut String, rows: &[ActivityMetric]) {
+    push_section_open(
+        out,
+        &copy().panels.activity_timeline,
+        "tone-cyan activity-export",
+        "pulse",
+    );
+    out.push_str("<div class=\"activity-body\">");
+    out.push_str(&activity_timeline_svg(rows, ActivitySvgSize::Html));
+    out.push_str("</div>");
+    push_section_close(out);
+}
+
+fn push_activity_timeline_pdf(out: &mut String, rows: &[ActivityMetric]) {
+    push_pdf_panel_open(out, &copy().panels.activity_timeline, "tone-cyan", "pulse");
+    out.push_str(&activity_timeline_svg(rows, ActivitySvgSize::Pdf));
+    push_pdf_panel_close(out);
+}
+
+#[derive(Clone, Copy)]
+enum ActivitySvgSize {
+    Html,
+    Pdf,
+}
+
+impl ActivitySvgSize {
+    fn dimensions(self) -> (f64, f64) {
+        match self {
+            Self::Html => (1100.0, 240.0),
+            Self::Pdf => (520.0, 158.0),
+        }
+    }
+
+    fn font_size(self) -> f64 {
+        match self {
+            Self::Html => 13.0,
+            Self::Pdf => 9.0,
+        }
+    }
+
+    fn stroke_width(self) -> f64 {
+        match self {
+            Self::Html => 2.4,
+            Self::Pdf => 1.6,
+        }
+    }
+}
+
+fn activity_timeline_svg(rows: &[ActivityMetric], size: ActivitySvgSize) -> String {
+    let (width, height) = size.dimensions();
+    let font_size = size.font_size();
+    let label_x = 4.0;
+    let chart_left = match size {
+        ActivitySvgSize::Html => 56.0,
+        ActivitySvgSize::Pdf => 38.0,
+    };
+    let chart_right = width
+        - match size {
+            ActivitySvgSize::Html => 24.0,
+            ActivitySvgSize::Pdf => 12.0,
+        };
+    let spend_top = match size {
+        ActivitySvgSize::Html => 24.0,
+        ActivitySvgSize::Pdf => 18.0,
+    };
+    let spend_bottom = match size {
+        ActivitySvgSize::Html => 96.0,
+        ActivitySvgSize::Pdf => 62.0,
+    };
+    let calls_top = match size {
+        ActivitySvgSize::Html => 126.0,
+        ActivitySvgSize::Pdf => 82.0,
+    };
+    let calls_bottom = height
+        - match size {
+            ActivitySvgSize::Html => 44.0,
+            ActivitySvgSize::Pdf => 28.0,
+        };
+    let meta_y = height
+        - match size {
+            ActivitySvgSize::Html => 16.0,
+            ActivitySvgSize::Pdf => 10.0,
+        };
+
+    let mut out = String::with_capacity(rows.len().saturating_mul(96).saturating_add(2048));
+    let _ = write!(
+        out,
+        r##"<svg class="activity-svg" data-export-chart="activity-timeline" xmlns="http://www.w3.org/2000/svg" width="{}" height="{}" viewBox="0 0 {} {}" role="img" aria-label="{}">"##,
+        format_svg_number(width),
+        format_svg_number(height),
+        format_svg_number(width),
+        format_svg_number(height),
+        escape_html(&copy().timeline.activity_export_aria)
+    );
+    out.push_str("<title>");
+    out.push_str(&escape_html(&copy().panels.activity_timeline));
+    out.push_str("</title>");
+    let _ = write!(
+        out,
+        r##"<rect x="0.5" y="0.5" width="{}" height="{}" fill="#fbfcff" stroke="#e4e8f2"/>"##,
+        format_svg_number(width - 1.0),
+        format_svg_number(height - 1.0)
+    );
+
+    if rows.is_empty() {
+        let _ = write!(
+            out,
+            r##"<text x="{}" y="{}" fill="#5f667a" font-family="JetBrains Mono, SFMono-Regular, Menlo, Consolas, monospace" font-size="{}" font-weight="700">{}</text></svg>"##,
+            format_svg_number(chart_left),
+            format_svg_number(height / 2.0),
+            format_svg_number(font_size),
+            escape_html(&copy().timeline.no_activity)
+        );
+        return out;
+    }
+
+    let max_calls = rows.iter().map(|row| row.calls).max().unwrap_or(0).max(1);
+    let total_calls = rows.iter().map(|row| row.calls).sum::<u64>();
+    let high_idx = rows
+        .iter()
+        .enumerate()
+        .max_by_key(|(_, row)| row.value)
+        .map(|(idx, _)| idx)
+        .unwrap_or(0);
+    let high = &rows[high_idx];
+    let latest = rows.last().expect("rows is not empty");
+    let first = rows.first().expect("rows is not empty");
+    let dense = rows.len() > 192;
+    let bucket_span = (chart_right - chart_left) / rows.len().max(1) as f64;
+    let bar_width = (bucket_span * if dense { 0.82 } else { 0.62 }).clamp(
+        if dense { 1.0 } else { 2.0 },
+        if dense { 6.0 } else { 16.0 },
+    );
+
+    let _ = write!(
+        out,
+        r##"<rect x="{}" y="{}" width="{}" height="{}" fill="#f0f7fb"/>"##,
+        format_svg_number(chart_left),
+        format_svg_number(calls_top - 2.0),
+        format_svg_number(chart_right - chart_left),
+        format_svg_number(calls_bottom - calls_top + 2.0)
+    );
+
+    for y in [spend_top, spend_bottom, calls_bottom] {
+        let _ = write!(
+            out,
+            r##"<line x1="{}" x2="{}" y1="{}" y2="{}" stroke="#cfd5e6" stroke-width="1"/>"##,
+            format_svg_number(chart_left),
+            format_svg_number(chart_right),
+            format_svg_number(y),
+            format_svg_number(y)
+        );
+    }
+    let _ = write!(
+        out,
+        r##"<line x1="{}" x2="{}" y1="{}" y2="{}" stroke="#cfd5e6" stroke-width="1" stroke-dasharray="3 6"/>"##,
+        format_svg_number(chart_left),
+        format_svg_number(chart_right),
+        format_svg_number((calls_top + calls_bottom) / 2.0),
+        format_svg_number((calls_top + calls_bottom) / 2.0)
+    );
+    let _ = write!(
+        out,
+        r##"<text x="{}" y="{}" fill="#ff8f40" font-family="JetBrains Mono, SFMono-Regular, Menlo, Consolas, monospace" font-size="{}" font-weight="800">{}</text>"##,
+        format_svg_number(label_x),
+        format_svg_number(spend_bottom - 6.0),
+        format_svg_number(font_size),
+        escape_html(&copy().timeline.spend)
+    );
+    let _ = write!(
+        out,
+        r##"<text x="{}" y="{}" fill="#2d72d9" font-family="JetBrains Mono, SFMono-Regular, Menlo, Consolas, monospace" font-size="{}" font-weight="800">{}</text>"##,
+        format_svg_number(label_x),
+        format_svg_number(calls_bottom - 6.0),
+        format_svg_number(font_size),
+        escape_html(&copy().timeline.calls)
+    );
+
+    let mut line_points = String::new();
+    let mut area_points = String::new();
+    for (idx, row) in rows.iter().enumerate() {
+        let x = timeline_x(idx, rows.len(), chart_left, chart_right);
+        let call_y =
+            calls_bottom - ((row.calls as f64 / max_calls as f64) * (calls_bottom - calls_top));
+        let _ = write!(
+            line_points,
+            "{}{},{}",
+            if line_points.is_empty() { "" } else { " " },
+            format_svg_number(x),
+            format_svg_number(call_y)
+        );
+        let _ = write!(
+            area_points,
+            "{}{},{}",
+            if area_points.is_empty() { "" } else { " " },
+            format_svg_number(x),
+            format_svg_number(call_y)
+        );
+    }
+
+    let first_x = timeline_x(0, rows.len(), chart_left, chart_right);
+    let last_x = timeline_x(rows.len() - 1, rows.len(), chart_left, chart_right);
+    let area_polygon = format!(
+        "{},{} {} {},{}",
+        format_svg_number(first_x),
+        format_svg_number(calls_bottom),
+        area_points,
+        format_svg_number(last_x),
+        format_svg_number(calls_bottom)
+    );
+    let _ = write!(
+        out,
+        r##"<polygon points="{}" fill="#4df3e8" opacity="0.12"/>"##,
+        area_polygon
+    );
+
+    for (idx, row) in rows.iter().enumerate() {
+        let x = timeline_x(idx, rows.len(), chart_left, chart_right);
+        let clamped = row.value.min(100) as f64;
+        let y = if row.value == 0 {
+            spend_bottom - 1.0
+        } else {
+            spend_bottom - (clamped / 100.0) * (spend_bottom - spend_top)
+        };
+        let h = if row.value == 0 {
+            1.0
+        } else {
+            (spend_bottom - y).max(2.0)
+        };
+        let fill = if idx == high_idx && row.value > 0 {
+            "#ff5f6d"
+        } else {
+            "#ff8f40"
+        };
+        let opacity = if row.value == 0 { "0.35" } else { "0.78" };
+        let title = format!(
+            "{} - {} - {} {}",
+            row.label,
+            row.cost,
+            format_u64(row.calls),
+            copy().metrics.calls
+        );
+        let _ = write!(
+            out,
+            r##"<rect x="{}" y="{}" width="{}" height="{}" fill="{}" opacity="{}"><title>{}</title></rect>"##,
+            format_svg_number((x - bar_width / 2.0).clamp(chart_left, chart_right - bar_width)),
+            format_svg_number(y),
+            format_svg_number(bar_width),
+            format_svg_number(h),
+            fill,
+            opacity,
+            escape_html(&title)
+        );
+    }
+
+    let _ = write!(
+        out,
+        r##"<polyline points="{}" fill="none" stroke="#4df3e8" stroke-width="{}" stroke-linejoin="round" stroke-linecap="round"/>"##,
+        line_points,
+        format_svg_number(size.stroke_width())
+    );
+    let meta = format!(
+        "{} {} {} {}   {} {} {}   {} {}   {} {}",
+        copy().timeline.range,
+        first.label,
+        copy().timeline.to,
+        latest.label,
+        copy().timeline.high,
+        high.label,
+        high.cost,
+        copy().timeline.latest,
+        latest.cost,
+        copy().timeline.calls,
+        format_u64(total_calls)
+    );
+    let _ = write!(
+        out,
+        r##"<text x="{}" y="{}" fill="#5f667a" font-family="JetBrains Mono, SFMono-Regular, Menlo, Consolas, monospace" font-size="{}">{}</text>"##,
+        format_svg_number(chart_left),
+        format_svg_number(meta_y),
+        format_svg_number(font_size),
+        escape_html(&meta)
+    );
+    out.push_str("</svg>");
+    out
+}
+
+fn timeline_x(index: usize, len: usize, left: f64, right: f64) -> f64 {
+    if len <= 1 {
+        (left + right) / 2.0
+    } else {
+        left + (index as f64 / (len - 1) as f64) * (right - left)
+    }
+}
+
+#[derive(Clone, Copy)]
+enum RankBarSize {
+    Html,
+    Pdf,
+}
+
+impl RankBarSize {
+    fn dimensions(self) -> (f64, f64) {
+        match self {
+            Self::Html => (86.0, 16.0),
+            Self::Pdf => (72.0, 12.0),
+        }
+    }
+
+    fn empty_fill(self) -> &'static str {
+        match self {
+            Self::Html => "#edf0f7",
+            Self::Pdf => "#f1f4fa",
+        }
+    }
+}
+
+fn rank_bar_svg(value: u64, size: RankBarSize) -> String {
+    const CELLS: usize = 12;
+    const COLORS: [&str; 6] = [
+        "#62a6ff", "#7ebcff", "#f5cf6c", "#ffd60a", "#ff9c48", "#ff5f6d",
+    ];
+
+    let (width, height) = size.dimensions();
+    let clamped = value.min(100);
+    let filled = if clamped == 0 {
+        0
+    } else {
+        ((clamped as f64 / 100.0) * CELLS as f64).ceil() as usize
+    };
+    let gap = 1.0;
+    let cell_w = (width - gap * (CELLS.saturating_sub(1)) as f64) / CELLS as f64;
+    let marker_x = (clamped as f64 / 100.0) * width;
+    let mut out = String::with_capacity(900);
+    let _ = write!(
+        out,
+        r##"<svg class="export-rank-bar" data-export-rank="true" xmlns="http://www.w3.org/2000/svg" width="{}" height="{}" viewBox="0 0 {} {}" role="img" aria-label="{}">"##,
+        format_svg_number(width),
+        format_svg_number(height),
+        format_svg_number(width),
+        format_svg_number(height),
+        escape_html(&template(
+            &copy().timeline.relative_rank,
+            &[("value", clamped.to_string())]
+        ))
+    );
+    let _ = write!(
+        out,
+        "<title>{}</title>",
+        escape_html(&template(
+            &copy().timeline.relative_rank,
+            &[("value", clamped.to_string())]
+        ))
+    );
+    for idx in 0..CELLS {
+        let active = idx < filled;
+        let x = idx as f64 * (cell_w + gap);
+        let color = if active {
+            COLORS[idx * COLORS.len() / CELLS]
+        } else {
+            size.empty_fill()
+        };
+        let stroke = if active { color } else { "#cfd5e6" };
+        let opacity = if active {
+            0.78 + (idx as f64 / (CELLS - 1) as f64) * 0.22
+        } else {
+            0.72
+        };
+        let _ = write!(
+            out,
+            r##"<rect x="{}" y="0.5" width="{}" height="{}" fill="{}" stroke="{}" opacity="{}"/>"##,
+            format_svg_number(x),
+            format_svg_number(cell_w),
+            format_svg_number(height - 1.0),
+            color,
+            stroke,
+            format_svg_number(opacity)
+        );
+    }
+    if clamped > 0 && clamped < 100 {
+        let _ = write!(
+            out,
+            r##"<line x1="{}" x2="{}" y1="0" y2="{}" stroke="#1b2030" stroke-width="1" opacity="0.8"/>"##,
+            format_svg_number(marker_x.clamp(1.0, width - 1.0)),
+            format_svg_number(marker_x.clamp(1.0, width - 1.0)),
+            format_svg_number(height)
+        );
+    }
+    out.push_str("</svg>");
+    out
+}
+
+fn format_svg_number(value: f64) -> String {
+    let rounded = value.round();
+    if (value - rounded).abs() < 0.005 {
+        format!("{rounded:.0}")
+    } else {
+        format!("{value:.2}")
+    }
+}
+
 fn push_dashboard_workbook(out: &mut String, data: &DashboardData) {
-    out.push_str("<section class=\"workbook-grid\" aria-label=\"Dashboard workbook\">\n");
+    out.push_str("<section class=\"workbook-grid\" aria-label=\"");
+    out.push_str(&escape_html(&copy().export.dashboard_workbook_aria));
+    out.push_str("\">\n");
     push_daily_html(out, &data.daily);
     push_projects_html(out, &data.projects);
     push_sessions_html(out, &data.sessions);
     push_project_tools_html(out, &data.project_tools);
     push_models_html(out, &data.models);
-    push_counts_html(out, "Core Tools", "tone-cyan", "tools", &data.tools);
     push_counts_html(
         out,
-        "Shell Commands",
+        &copy().panels.core_tools,
+        "tone-cyan",
+        "tools",
+        &data.tools,
+    );
+    push_counts_html(
+        out,
+        &copy().panels.shell_commands,
         "tone-orange",
         "terminal",
         &data.commands,
     );
     push_counts_html(
         out,
-        "MCP Servers",
+        &copy().panels.mcp_servers,
         "tone-magenta",
         "network",
         &data.mcp_servers,
@@ -1262,23 +1753,31 @@ fn push_dashboard_workbook(out: &mut String, data: &DashboardData) {
 }
 
 fn push_dashboard_workbook_pdf(out: &mut String, data: &DashboardData) {
-    out.push_str("<section class=\"pdf-workbook\" aria-label=\"Dashboard workbook\">\n");
+    out.push_str("<section class=\"pdf-workbook\" aria-label=\"");
+    out.push_str(&escape_html(&copy().export.dashboard_workbook_aria));
+    out.push_str("\">\n");
     push_daily_pdf(out, &data.daily);
     push_projects_pdf(out, &data.projects);
     push_sessions_pdf(out, &data.sessions);
     push_project_tools_pdf(out, &data.project_tools);
     push_models_pdf(out, &data.models);
-    push_counts_pdf(out, "Core Tools", "tone-cyan", "tools", &data.tools);
     push_counts_pdf(
         out,
-        "Shell Commands",
+        &copy().panels.core_tools,
+        "tone-cyan",
+        "tools",
+        &data.tools,
+    );
+    push_counts_pdf(
+        out,
+        &copy().panels.shell_commands,
         "tone-orange",
         "terminal",
         &data.commands,
     );
     push_counts_pdf(
         out,
-        "MCP Servers",
+        &copy().panels.mcp_servers,
         "tone-magenta",
         "network",
         &data.mcp_servers,
@@ -1287,16 +1786,21 @@ fn push_dashboard_workbook_pdf(out: &mut String, data: &DashboardData) {
 }
 
 fn push_session_workbook(out: &mut String, session: &SessionDetailView) {
-    push_section_open(out, "Selected Session", "tone-red wide", "session");
+    push_section_open(
+        out,
+        &copy().panels.selected_session,
+        "tone-red wide",
+        "session",
+    );
     out.push_str("<div class=\"session-kpis\">\n<div class=\"call-facts\">\n");
-    push_meta(out, "project", &session.project);
-    push_meta(out, "tool", session.tool);
-    push_meta(out, "date range", &session.date_range);
-    push_meta(out, "cost", &session.total_cost);
-    push_meta(out, "calls", &session.total_calls.to_string());
-    push_meta(out, "input", &session.total_input);
-    push_meta(out, "output", &session.total_output);
-    push_meta(out, "cache read", &session.total_cache_read);
+    push_meta(out, &copy().tables.project, &session.project);
+    push_meta(out, &copy().tables.tool, session.tool);
+    push_meta(out, &copy().export.date_range, &session.date_range);
+    push_meta(out, &copy().tables.cost, &session.total_cost);
+    push_meta(out, &copy().tables.calls, &session.total_calls.to_string());
+    push_meta(out, &copy().metrics.input, &session.total_input);
+    push_meta(out, &copy().metrics.output, &session.total_output);
+    push_meta(out, &copy().metrics.cache_read, &session.total_cache_read);
     out.push_str("</div>\n");
     if let Some(note) = &session.note {
         out.push_str("<p class=\"report-footnote\">");
@@ -1308,7 +1812,14 @@ fn push_session_workbook(out: &mut String, session: &SessionDetailView) {
     push_table_open(
         out,
         &[
-            "time", "model", "cost", "input", "output", "cache", "tools", "prompt",
+            copy().tables.time.as_str(),
+            copy().tables.model.as_str(),
+            copy().tables.cost.as_str(),
+            copy().metrics.input.as_str(),
+            copy().metrics.output.as_str(),
+            copy().tables.cache.as_str(),
+            copy().tables.tools.as_str(),
+            copy().tables.prompt.as_str(),
         ],
     );
     if session.calls.is_empty() {
@@ -1333,29 +1844,50 @@ fn push_session_workbook(out: &mut String, session: &SessionDetailView) {
         out.push_str("<details class=\"call-detail\"><summary>");
         let _ = write!(
             out,
-            "Call {} - {} - {}",
+            "{} {} - {} - {}",
+            copy().panels.calls,
             idx + 1,
             escape_html(&call.model),
             escape_html(&call.cost)
         );
         out.push_str("</summary>\n<div class=\"call-facts\">\n");
-        push_meta(out, "time", &call.timestamp);
-        push_meta(out, "model", &call.model);
-        push_meta(out, "cost", &call.cost);
-        push_meta(out, "tools", &call.tools);
-        push_meta(out, "input", &format_u64(call.input_tokens));
-        push_meta(out, "output", &format_u64(call.output_tokens));
-        push_meta(out, "cache read", &format_u64(call.cache_read));
-        push_meta(out, "cache write", &format_u64(call.cache_write));
-        push_meta(out, "reasoning", &format_u64(call.reasoning_tokens));
-        push_meta(out, "web search", &format_u64(call.web_search_requests));
+        push_meta(out, &copy().tables.time, &call.timestamp);
+        push_meta(out, &copy().tables.model, &call.model);
+        push_meta(out, &copy().tables.cost, &call.cost);
+        push_meta(out, &copy().tables.tools, &call.tools);
+        push_meta(out, &copy().metrics.input, &format_u64(call.input_tokens));
+        push_meta(out, &copy().metrics.output, &format_u64(call.output_tokens));
+        push_meta(
+            out,
+            &copy().metrics.cache_read,
+            &format_u64(call.cache_read),
+        );
+        push_meta(
+            out,
+            &copy().metrics.cache_write,
+            &format_u64(call.cache_write),
+        );
+        push_meta(
+            out,
+            &copy().session.reasoning,
+            &format_u64(call.reasoning_tokens),
+        );
+        push_meta(
+            out,
+            &copy().session.web_search,
+            &format_u64(call.web_search_requests),
+        );
         out.push_str("</div>\n");
         if !call.bash_commands.is_empty() {
-            out.push_str("<h4>Shell commands</h4><pre>");
+            out.push_str("<h4>");
+            out.push_str(&escape_html(&copy().panels.shell_commands));
+            out.push_str("</h4><pre>");
             out.push_str(&escape_html(&call.bash_commands.join("\n")));
             out.push_str("</pre>\n");
         }
-        out.push_str("<h4>Prompt</h4><pre>");
+        out.push_str("<h4>");
+        out.push_str(&escape_html(&copy().tables.prompt));
+        out.push_str("</h4><pre>");
         let prompt = if call.prompt_full.is_empty() {
             &call.prompt
         } else {
@@ -1368,18 +1900,27 @@ fn push_session_workbook(out: &mut String, session: &SessionDetailView) {
 }
 
 fn push_session_workbook_pdf(out: &mut String, session: &SessionDetailView) {
-    push_pdf_panel_open(out, "Selected Session", "tone-red", "session");
+    push_pdf_panel_open(out, &copy().panels.selected_session, "tone-red", "session");
     out.push_str("<table class=\"pdf-facts\"><tbody>");
     let total_calls = session.total_calls.to_string();
     let facts = [
-        ("project", session.project.as_str()),
-        ("tool", session.tool),
-        ("date range", session.date_range.as_str()),
-        ("cost", session.total_cost.as_str()),
-        ("calls", total_calls.as_str()),
-        ("input", session.total_input.as_str()),
-        ("output", session.total_output.as_str()),
-        ("cache read", session.total_cache_read.as_str()),
+        (copy().tables.project.as_str(), session.project.as_str()),
+        (copy().tables.tool.as_str(), session.tool),
+        (
+            copy().export.date_range.as_str(),
+            session.date_range.as_str(),
+        ),
+        (copy().tables.cost.as_str(), session.total_cost.as_str()),
+        (copy().tables.calls.as_str(), total_calls.as_str()),
+        (copy().metrics.input.as_str(), session.total_input.as_str()),
+        (
+            copy().metrics.output.as_str(),
+            session.total_output.as_str(),
+        ),
+        (
+            copy().metrics.cache_read.as_str(),
+            session.total_cache_read.as_str(),
+        ),
     ];
     push_pdf_fact_rows(out, &facts, 4);
     out.push_str("</tbody></table>");
@@ -1392,7 +1933,14 @@ fn push_session_workbook_pdf(out: &mut String, session: &SessionDetailView) {
     push_pdf_table_open(
         out,
         &[
-            "time", "model", "cost", "input", "output", "cache", "tools", "prompt",
+            copy().tables.time.as_str(),
+            copy().tables.model.as_str(),
+            copy().tables.cost.as_str(),
+            copy().metrics.input.as_str(),
+            copy().metrics.output.as_str(),
+            copy().tables.cache.as_str(),
+            copy().tables.tools.as_str(),
+            copy().tables.prompt.as_str(),
         ],
     );
     if session.calls.is_empty() {
@@ -1417,7 +1965,8 @@ fn push_session_workbook_pdf(out: &mut String, session: &SessionDetailView) {
         out.push_str("<div class=\"pdf-call-detail\"><h3>");
         let _ = write!(
             out,
-            "Call {} - {} - {}",
+            "{} {} - {} - {}",
+            copy().panels.calls,
             idx + 1,
             escape_html(&call.model),
             escape_html(&call.cost)
@@ -1430,25 +1979,29 @@ fn push_session_workbook_pdf(out: &mut String, session: &SessionDetailView) {
         let reasoning = format_u64(call.reasoning_tokens);
         let web_search = format_u64(call.web_search_requests);
         let call_facts = [
-            ("time", call.timestamp.as_str()),
-            ("model", call.model.as_str()),
-            ("cost", call.cost.as_str()),
-            ("tools", call.tools.as_str()),
-            ("input", input.as_str()),
-            ("output", output.as_str()),
-            ("cache read", cache_read.as_str()),
-            ("cache write", cache_write.as_str()),
-            ("reasoning", reasoning.as_str()),
-            ("web search", web_search.as_str()),
+            (copy().tables.time.as_str(), call.timestamp.as_str()),
+            (copy().tables.model.as_str(), call.model.as_str()),
+            (copy().tables.cost.as_str(), call.cost.as_str()),
+            (copy().tables.tools.as_str(), call.tools.as_str()),
+            (copy().metrics.input.as_str(), input.as_str()),
+            (copy().metrics.output.as_str(), output.as_str()),
+            (copy().metrics.cache_read.as_str(), cache_read.as_str()),
+            (copy().metrics.cache_write.as_str(), cache_write.as_str()),
+            (copy().session.reasoning.as_str(), reasoning.as_str()),
+            (copy().session.web_search.as_str(), web_search.as_str()),
         ];
         push_pdf_fact_rows(out, &call_facts, 5);
         out.push_str("</tbody></table>");
         if !call.bash_commands.is_empty() {
-            out.push_str("<h4>Shell commands</h4><pre>");
+            out.push_str("<h4>");
+            out.push_str(&escape_html(&copy().panels.shell_commands));
+            out.push_str("</h4><pre>");
             out.push_str(&escape_html(&call.bash_commands.join("\n")));
             out.push_str("</pre>");
         }
-        out.push_str("<h4>Prompt</h4><pre>");
+        out.push_str("<h4>");
+        out.push_str(&escape_html(&copy().tables.prompt));
+        out.push_str("</h4><pre>");
         let prompt = if call.prompt_full.is_empty() {
             &call.prompt
         } else {
@@ -1462,9 +2015,11 @@ fn push_session_workbook_pdf(out: &mut String, session: &SessionDetailView) {
 }
 
 fn push_daily_pdf(out: &mut String, rows: &[DailyMetric]) {
-    push_pdf_panel_open(out, "Daily Activity", "tone-blue", "calendar");
+    push_pdf_panel_open(out, &copy().panels.daily_activity, "tone-blue", "calendar");
     if rows.is_empty() {
-        out.push_str("<p class=\"empty\">no data</p>");
+        out.push_str("<p class=\"empty\">");
+        out.push_str(&escape_html(&copy().empty.no_data));
+        out.push_str("</p>");
         push_pdf_panel_close(out);
         return;
     }
@@ -1483,7 +2038,15 @@ fn push_daily_pdf(out: &mut String, rows: &[DailyMetric]) {
 }
 
 fn push_daily_table_pdf(out: &mut String, rows: &[DailyMetric]) {
-    push_pdf_table_open(out, &["date", "activity", "cost", "calls"]);
+    push_pdf_table_open(
+        out,
+        &[
+            copy().tables.date.as_str(),
+            copy().tables.activity.as_str(),
+            copy().tables.cost.as_str(),
+            copy().tables.calls.as_str(),
+        ],
+    );
     for row in rows {
         out.push_str("<tr>");
         push_pdf_text_cell(out, "", row.day);
@@ -1512,7 +2075,7 @@ fn push_pdf_calendar_month(out: &mut String, year: i32, month: u32, days: &[Cale
     out.push_str(month_name(month));
     let _ = write!(out, " {year}");
     out.push_str("</h3><table class=\"pdf-calendar\"><thead><tr>");
-    for weekday in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] {
+    for weekday in &copy().export.calendar_weekdays {
         out.push_str("<th>");
         out.push_str(weekday);
         out.push_str("</th>");
@@ -1534,11 +2097,12 @@ fn push_pdf_calendar_month(out: &mut String, year: i32, month: u32, days: &[Cale
                 let calls = format_u64(row.calls);
                 let _ = write!(
                     out,
-                    "<td class=\"i{}\"><strong>{}</strong><span class=\"cost\">{}</span><span class=\"calls\">{} calls</span></td>",
+                    "<td class=\"i{}\"><strong>{}</strong><span class=\"cost\">{}</span><span class=\"calls\">{} {}</span></td>",
                     calendar_intensity(row.value),
                     day,
                     escape_html(row.cost),
                     calls,
+                    escape_html(&copy().metrics.calls),
                 );
             } else {
                 let _ = write!(out, "<td><strong>{day}</strong></td>");
@@ -1552,8 +2116,18 @@ fn push_pdf_calendar_month(out: &mut String, year: i32, month: u32, days: &[Cale
 }
 
 fn push_projects_pdf(out: &mut String, rows: &[ProjectMetric]) {
-    push_pdf_panel_open(out, "By Project", "tone-green", "project");
-    push_pdf_table_open(out, &["", "project", "cost", "avg/s", "sessions", "tools"]);
+    push_pdf_panel_open(out, &copy().panels.by_project, "tone-green", "project");
+    push_pdf_table_open(
+        out,
+        &[
+            copy().tables.blank.as_str(),
+            copy().tables.project.as_str(),
+            copy().tables.cost.as_str(),
+            copy().tables.avg_per_session.as_str(),
+            copy().tables.sessions.as_str(),
+            copy().tables.tools.as_str(),
+        ],
+    );
     if rows.is_empty() {
         push_pdf_empty_row(out, 6);
     } else {
@@ -1574,8 +2148,17 @@ fn push_projects_pdf(out: &mut String, rows: &[ProjectMetric]) {
 }
 
 fn push_sessions_pdf(out: &mut String, rows: &[SessionMetric]) {
-    push_pdf_panel_open(out, "Top Sessions", "tone-red", "session");
-    push_pdf_table_open(out, &["", "date", "project", "cost", "calls"]);
+    push_pdf_panel_open(out, &copy().panels.top_sessions, "tone-red", "session");
+    push_pdf_table_open(
+        out,
+        &[
+            copy().tables.blank.as_str(),
+            copy().tables.date.as_str(),
+            copy().tables.project.as_str(),
+            copy().tables.cost.as_str(),
+            copy().tables.calls.as_str(),
+        ],
+    );
     if rows.is_empty() {
         push_pdf_empty_row(out, 5);
     } else {
@@ -1594,10 +2177,23 @@ fn push_sessions_pdf(out: &mut String, rows: &[SessionMetric]) {
 }
 
 fn push_project_tools_pdf(out: &mut String, rows: &[ProjectToolMetric]) {
-    push_pdf_panel_open(out, "Project Spend by Tool", "tone-yellow", "split");
+    push_pdf_panel_open(
+        out,
+        &copy().panels.project_spend_by_tool,
+        "tone-yellow",
+        "split",
+    );
     push_pdf_table_open(
         out,
-        &["", "project", "tool", "cost", "calls", "sessions", "avg/s"],
+        &[
+            copy().tables.blank.as_str(),
+            copy().tables.project.as_str(),
+            copy().tables.tool.as_str(),
+            copy().tables.cost.as_str(),
+            copy().tables.calls.as_str(),
+            copy().tables.sessions.as_str(),
+            copy().tables.avg_per_session.as_str(),
+        ],
     );
     if rows.is_empty() {
         push_pdf_empty_row(out, 7);
@@ -1619,8 +2215,17 @@ fn push_project_tools_pdf(out: &mut String, rows: &[ProjectToolMetric]) {
 }
 
 fn push_models_pdf(out: &mut String, rows: &[ModelMetric]) {
-    push_pdf_panel_open(out, "By Model", "tone-magenta", "model");
-    push_pdf_table_open(out, &["", "model", "cost", "cache", "calls"]);
+    push_pdf_panel_open(out, &copy().panels.by_model, "tone-magenta", "model");
+    push_pdf_table_open(
+        out,
+        &[
+            copy().tables.blank.as_str(),
+            copy().tables.model.as_str(),
+            copy().tables.cost.as_str(),
+            copy().tables.cache.as_str(),
+            copy().tables.calls.as_str(),
+        ],
+    );
     if rows.is_empty() {
         push_pdf_empty_row(out, 5);
     } else {
@@ -1640,7 +2245,14 @@ fn push_models_pdf(out: &mut String, rows: &[ModelMetric]) {
 
 fn push_counts_pdf(out: &mut String, title: &str, tone: &str, icon: &str, rows: &[CountMetric]) {
     push_pdf_panel_open(out, title, tone, icon);
-    push_pdf_table_open(out, &["", "name", "calls"]);
+    push_pdf_table_open(
+        out,
+        &[
+            copy().tables.blank.as_str(),
+            copy().tables.name.as_str(),
+            copy().tables.calls.as_str(),
+        ],
+    );
     if rows.is_empty() {
         push_pdf_empty_row(out, 3);
     } else {
@@ -1694,8 +2306,9 @@ fn push_pdf_table_close(out: &mut String) {
 fn push_pdf_empty_row(out: &mut String, colspan: usize) {
     let _ = write!(
         out,
-        "<tr><td class=\"empty\" colspan=\"{}\">no data</td></tr>",
-        colspan
+        "<tr><td class=\"empty\" colspan=\"{}\">{}</td></tr>",
+        colspan,
+        escape_html(&copy().empty.no_data)
     );
 }
 
@@ -1741,18 +2354,7 @@ fn push_pdf_fact_rows(out: &mut String, facts: &[(&str, &str)], cols: usize) {
 }
 
 fn heat_html_pdf(value: u64) -> String {
-    let cells = 12u64;
-    let filled = ((value.min(100) as f64 / 100.0) * cells as f64).ceil() as u64;
-    let mut out = String::from("<span class=\"pdf-heat\" aria-hidden=\"true\">");
-    for idx in 0..cells {
-        if idx < filled {
-            let _ = write!(out, "<span class=\"filled l{}\"></span>", idx);
-        } else {
-            out.push_str("<span></span>");
-        }
-    }
-    out.push_str("</span>");
-    out
+    rank_bar_svg(value, RankBarSize::Pdf)
 }
 
 fn compact_pdf_tool_mix(value: &str) -> String {
@@ -1777,9 +2379,16 @@ fn compact_pdf_tool_mix(value: &str) -> String {
 }
 
 fn push_daily_html(out: &mut String, rows: &[DailyMetric]) {
-    push_section_open(out, "Daily Activity", "tone-blue wide", "calendar");
+    push_section_open(
+        out,
+        &copy().panels.daily_activity,
+        "tone-blue wide",
+        "calendar",
+    );
     if rows.is_empty() {
-        out.push_str("<p class=\"empty\">no data</p>\n");
+        out.push_str("<p class=\"empty\">");
+        out.push_str(&escape_html(&copy().empty.no_data));
+        out.push_str("</p>\n");
         push_section_close(out);
         return;
     }
@@ -1805,7 +2414,7 @@ fn push_daily_html(out: &mut String, rows: &[DailyMetric]) {
         out.push_str(month_name(month));
         let _ = write!(out, " {year}");
         out.push_str("</h3><div class=\"calendar-grid\">\n");
-        for weekday in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] {
+        for weekday in &copy().export.calendar_weekdays {
             out.push_str("<div class=\"calendar-weekday\">");
             out.push_str(weekday);
             out.push_str("</div>");
@@ -1830,7 +2439,15 @@ fn push_daily_html(out: &mut String, rows: &[DailyMetric]) {
 }
 
 fn push_daily_table_html(out: &mut String, rows: &[DailyMetric]) {
-    push_table_open(out, &["date", "activity", "cost", "calls"]);
+    push_table_open(
+        out,
+        &[
+            copy().tables.date.as_str(),
+            copy().tables.activity.as_str(),
+            copy().tables.cost.as_str(),
+            copy().tables.calls.as_str(),
+        ],
+    );
     for row in rows {
         out.push_str("<tr>");
         push_text_cell(out, "", row.day);
@@ -1906,12 +2523,13 @@ fn month_name(month: u32) -> &'static str {
 fn push_calendar_day(out: &mut String, day: u32, row: &DailyMetric) {
     let _ = write!(
         out,
-        "<div class=\"calendar-cell i{}\"><div class=\"calendar-day-head\"><strong>{}</strong><span>{}</span></div><div class=\"calendar-cost\">{}</div><div class=\"calendar-calls\">{} calls</div></div>",
+        "<div class=\"calendar-cell i{}\"><div class=\"calendar-day-head\"><strong>{}</strong><span>{}</span></div><div class=\"calendar-cost\">{}</div><div class=\"calendar-calls\">{} {}</div></div>",
         calendar_intensity(row.value),
         day,
         escape_html(row.day),
         escape_html(row.cost),
         format_u64(row.calls),
+        escape_html(&copy().metrics.calls),
     );
 }
 
@@ -1924,8 +2542,18 @@ fn calendar_intensity(value: u64) -> u64 {
 }
 
 fn push_projects_html(out: &mut String, rows: &[ProjectMetric]) {
-    push_section_open(out, "By Project", "tone-green wide", "project");
-    push_table_open(out, &["", "project", "cost", "avg/s", "sessions", "tools"]);
+    push_section_open(out, &copy().panels.by_project, "tone-green wide", "project");
+    push_table_open(
+        out,
+        &[
+            copy().tables.blank.as_str(),
+            copy().tables.project.as_str(),
+            copy().tables.cost.as_str(),
+            copy().tables.avg_per_session.as_str(),
+            copy().tables.sessions.as_str(),
+            copy().tables.tools.as_str(),
+        ],
+    );
     if rows.is_empty() {
         push_empty_row(out, 6);
     } else {
@@ -1945,8 +2573,17 @@ fn push_projects_html(out: &mut String, rows: &[ProjectMetric]) {
 }
 
 fn push_sessions_html(out: &mut String, rows: &[SessionMetric]) {
-    push_section_open(out, "Top Sessions", "tone-red wide", "session");
-    push_table_open(out, &["", "date", "project", "cost", "calls"]);
+    push_section_open(out, &copy().panels.top_sessions, "tone-red wide", "session");
+    push_table_open(
+        out,
+        &[
+            copy().tables.blank.as_str(),
+            copy().tables.date.as_str(),
+            copy().tables.project.as_str(),
+            copy().tables.cost.as_str(),
+            copy().tables.calls.as_str(),
+        ],
+    );
     if rows.is_empty() {
         push_empty_row(out, 5);
     } else {
@@ -1965,10 +2602,23 @@ fn push_sessions_html(out: &mut String, rows: &[SessionMetric]) {
 }
 
 fn push_project_tools_html(out: &mut String, rows: &[ProjectToolMetric]) {
-    push_section_open(out, "Project Spend by Tool", "tone-yellow", "split");
+    push_section_open(
+        out,
+        &copy().panels.project_spend_by_tool,
+        "tone-yellow",
+        "split",
+    );
     push_table_open(
         out,
-        &["", "project", "tool", "cost", "calls", "sessions", "avg/s"],
+        &[
+            copy().tables.blank.as_str(),
+            copy().tables.project.as_str(),
+            copy().tables.tool.as_str(),
+            copy().tables.cost.as_str(),
+            copy().tables.calls.as_str(),
+            copy().tables.sessions.as_str(),
+            copy().tables.avg_per_session.as_str(),
+        ],
     );
     if rows.is_empty() {
         push_empty_row(out, 7);
@@ -1990,8 +2640,17 @@ fn push_project_tools_html(out: &mut String, rows: &[ProjectToolMetric]) {
 }
 
 fn push_models_html(out: &mut String, rows: &[ModelMetric]) {
-    push_section_open(out, "By Model", "tone-magenta", "model");
-    push_table_open(out, &["", "model", "cost", "cache", "calls"]);
+    push_section_open(out, &copy().panels.by_model, "tone-magenta", "model");
+    push_table_open(
+        out,
+        &[
+            copy().tables.blank.as_str(),
+            copy().tables.model.as_str(),
+            copy().tables.cost.as_str(),
+            copy().tables.cache.as_str(),
+            copy().tables.calls.as_str(),
+        ],
+    );
     if rows.is_empty() {
         push_empty_row(out, 5);
     } else {
@@ -2011,7 +2670,14 @@ fn push_models_html(out: &mut String, rows: &[ModelMetric]) {
 
 fn push_counts_html(out: &mut String, title: &str, tone: &str, icon: &str, rows: &[CountMetric]) {
     push_section_open(out, title, tone, icon);
-    push_table_open(out, &["", "name", "calls"]);
+    push_table_open(
+        out,
+        &[
+            copy().tables.blank.as_str(),
+            copy().tables.name.as_str(),
+            copy().tables.calls.as_str(),
+        ],
+    );
     if rows.is_empty() {
         push_empty_row(out, 3);
     } else {
@@ -2059,19 +2725,19 @@ fn push_table_open(out: &mut String, headers: &[&str]) {
 }
 
 fn is_num_header(header: &str) -> bool {
-    matches!(
-        header,
-        "cost"
-            | "calls"
-            | "avg/s"
-            | "sessions"
-            | "used"
-            | "left"
-            | "tokens"
-            | "input"
-            | "output"
-            | "cache"
-    )
+    let copy = copy();
+    [
+        copy.tables.cost.as_str(),
+        copy.tables.calls.as_str(),
+        copy.tables.avg_per_session.as_str(),
+        copy.tables.sessions.as_str(),
+        copy.tables.used.as_str(),
+        copy.metrics.tokens.as_str(),
+        copy.metrics.input.as_str(),
+        copy.metrics.output.as_str(),
+        copy.tables.cache.as_str(),
+    ]
+    .contains(&header)
 }
 
 fn push_table_close(out: &mut String) {
@@ -2081,8 +2747,9 @@ fn push_table_close(out: &mut String) {
 fn push_empty_row(out: &mut String, colspan: usize) {
     let _ = writeln!(
         out,
-        "<tr><td class=\"empty\" colspan=\"{}\">no data</td></tr>",
-        colspan
+        "<tr><td class=\"empty\" colspan=\"{}\">{}</td></tr>",
+        colspan,
+        escape_html(&copy().empty.no_data)
     );
 }
 
@@ -2111,18 +2778,7 @@ fn push_raw_cell(out: &mut String, class: &str, value: &str) {
 }
 
 fn heat_html(value: u64) -> String {
-    let cells = 12u64;
-    let filled = ((value.min(100) as f64 / 100.0) * cells as f64).ceil() as u64;
-    let mut out = String::from("<span class=\"heat\" aria-hidden=\"true\">");
-    for idx in 0..cells {
-        if idx < filled {
-            let _ = write!(out, "<span class=\"filled l{}\"></span>", idx);
-        } else {
-            out.push_str("<span></span>");
-        }
-    }
-    out.push_str("</span>");
-    out
+    rank_bar_svg(value, RankBarSize::Html)
 }
 
 fn icon_svg(kind: &str) -> &'static str {
@@ -2150,6 +2806,9 @@ fn icon_svg(kind: &str) -> &'static str {
         }
         "network" => {
             r#"<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="18" r="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 11l8-4M8 13l8 4" fill="none" stroke="currentColor" stroke-width="2"/></svg>"#
+        }
+        "pulse" => {
+            r#"<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h4l2-6 4 12 2-6h4" fill="none" stroke="currentColor" stroke-width="2"/></svg>"#
         }
         "cost" => {
             r#"<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M17 7.5c-.8-1-2.4-1.8-4.4-1.8-2.4 0-4.1 1.1-4.1 2.8 0 4.5 9 1.8 9 6.6 0 1.9-1.9 3.2-4.6 3.2-2.2 0-4.1-.8-5.1-2" fill="none" stroke="currentColor" stroke-width="2"/></svg>"#
@@ -2221,7 +2880,7 @@ const ROW_GAP: i32 = 12;
 struct Layout {
     row1_h: i32, // Daily | Projects
     sessions_h: i32,
-    row3_h: i32, // Project Spend by Tool | By Model
+    row3_h: i32,
     row4_h: i32, // Core Tools | Shell Commands
     mcp_h: i32,
     canvas_h: u32,
@@ -2359,7 +3018,7 @@ where
         y,
         half_w,
         layout.row1_h,
-        "Daily Activity",
+        &copy().panels.daily_activity,
         &BLUE,
         |x, y, w, h| draw_daily(&root, x, y, w, h, &data.daily),
     )?;
@@ -2369,7 +3028,7 @@ where
         y,
         half_w,
         layout.row1_h,
-        "By Project",
+        &copy().panels.by_project,
         &GREEN,
         |x, y, w, h| draw_projects(&root, x, y, w, h, &data.projects),
     )?;
@@ -2382,7 +3041,7 @@ where
         y,
         panel_w,
         layout.sessions_h,
-        "Top Sessions",
+        &copy().panels.top_sessions,
         &RED,
         |x, y, w, h| draw_sessions(&root, x, y, w, h, &data.sessions),
     )?;
@@ -2395,7 +3054,7 @@ where
         y,
         half_w,
         layout.row3_h,
-        "Project Spend by Tool",
+        &copy().panels.project_spend_by_tool,
         &YELLOW,
         |x, y, w, h| draw_project_tools(&root, x, y, w, h, &data.project_tools),
     )?;
@@ -2405,7 +3064,7 @@ where
         y,
         half_w,
         layout.row3_h,
-        "By Model",
+        &copy().panels.by_model,
         &MAGENTA,
         |x, y, w, h| draw_models(&root, x, y, w, h, &data.models),
     )?;
@@ -2418,7 +3077,7 @@ where
         y,
         half_w,
         layout.row4_h,
-        "Core Tools",
+        &copy().panels.core_tools,
         &CYAN,
         |x, y, w, h| draw_counts(&root, x, y, w, h, &data.tools),
     )?;
@@ -2428,7 +3087,7 @@ where
         y,
         half_w,
         layout.row4_h,
-        "Shell Commands",
+        &copy().panels.shell_commands,
         &PRIMARY,
         |x, y, w, h| draw_counts(&root, x, y, w, h, &data.commands),
     )?;
@@ -2441,7 +3100,7 @@ where
         y,
         panel_w,
         layout.mcp_h,
-        "MCP Servers",
+        &copy().panels.mcp_servers,
         &MAGENTA,
         |x, y, w, h| draw_counts(&root, x, y, w, h, &data.mcp_servers),
     )?;
@@ -2512,11 +3171,11 @@ where
     DB::ErrorType: 'static,
 {
     let chips = [
-        (Period::Today, "24 Hours"),
-        (Period::Week, "7 Days"),
-        (Period::ThirtyDays, "30 Days"),
-        (Period::Month, "This Month"),
-        (Period::AllTime, "All Time"),
+        (Period::Today, Period::Today.label()),
+        (Period::Week, Period::Week.label()),
+        (Period::ThirtyDays, Period::ThirtyDays.label()),
+        (Period::Month, Period::Month.label()),
+        (Period::AllTime, Period::AllTime.label()),
     ];
 
     let mut cx = x;
@@ -2536,14 +3195,7 @@ where
     }
 
     // Right-aligned filter chips
-    let tool_label = match tool {
-        Tool::All => "All",
-        Tool::ClaudeCode => "Claude Code",
-        Tool::Cursor => "Cursor",
-        Tool::Codex => "Codex",
-        Tool::Copilot => "Copilot",
-        Tool::Gemini => "Gemini",
-    };
+    let tool_label = tool.label();
     let project_label = project_filter.label();
     let right_text = format!("[t] {tool_label}    [p] {project_label}");
     let right_w = right_text.chars().count() as i32 * CHAR_W;
@@ -2576,7 +3228,8 @@ where
 
     // Title line
     let title = format!(
-        "tokenuse  ·  {}  ·  {}",
+        "{}  ·  {}  ·  {}",
+        copy().brand.command,
         period_label(period),
         tool_label(tool)
     );
@@ -2585,16 +3238,51 @@ where
 
     // Big numbers row
     let mut cx = pad_x;
-    draw_metric(root, &mut cx, row_y, summary.cost, "cost", &YELLOW)?;
-    draw_metric(root, &mut cx, row_y, summary.calls, "calls", &TEXT)?;
-    draw_metric(root, &mut cx, row_y, summary.sessions, "sessions", &TEXT)?;
-    draw_metric(root, &mut cx, row_y, summary.cache_hit, "cache hit", &TEXT)?;
+    draw_metric(
+        root,
+        &mut cx,
+        row_y,
+        summary.cost,
+        &copy().metrics.cost,
+        &YELLOW,
+    )?;
+    draw_metric(
+        root,
+        &mut cx,
+        row_y,
+        summary.calls,
+        &copy().metrics.calls,
+        &TEXT,
+    )?;
+    draw_metric(
+        root,
+        &mut cx,
+        row_y,
+        summary.sessions,
+        &copy().metrics.sessions,
+        &TEXT,
+    )?;
+    draw_metric(
+        root,
+        &mut cx,
+        row_y,
+        summary.cache_hit,
+        &copy().metrics.cache_hit,
+        &TEXT,
+    )?;
     row_y += 32;
 
     // Tokens row
     let line = format!(
-        "{} in   {} out   {} cached   {} written",
-        summary.input, summary.output, summary.cached, summary.written,
+        "{} {}   {} {}   {} {}   {} {}",
+        summary.input,
+        copy().metrics.r#in,
+        summary.output,
+        copy().metrics.out,
+        summary.cached,
+        copy().metrics.cached,
+        summary.written,
+        copy().metrics.written,
     );
     root.draw_text(&line, &body_style(&MUTED), (pad_x, row_y))?;
     Ok(())
@@ -2702,7 +3390,7 @@ where
     DB: DrawingBackend,
     DB::ErrorType: 'static,
 {
-    root.draw_text("no data", &body_style(&DIM), (x, y))?;
+    root.draw_text(&copy().empty.no_data, &body_style(&DIM), (x, y))?;
     Ok(())
 }
 
@@ -2723,9 +3411,15 @@ where
     let calls_w = 80;
 
     let head_y = y;
-    draw_text_left(root, x, head_y, "date", &head_style())?;
-    draw_text_right(root, x + w - calls_w, head_y, "cost", &head_style())?;
-    draw_text_right(root, x + w, head_y, "calls", &head_style())?;
+    draw_text_left(root, x, head_y, &copy().tables.date, &head_style())?;
+    draw_text_right(
+        root,
+        x + w - calls_w,
+        head_y,
+        &copy().tables.cost,
+        &head_style(),
+    )?;
+    draw_text_right(root, x + w, head_y, &copy().tables.calls, &head_style())?;
 
     if rows.is_empty() {
         return empty_note(root, x, y + PANEL_HEADER_GAP);
@@ -2762,24 +3456,36 @@ where
 
     let head_y = y;
     let name_x = x + bar_w + 8;
-    draw_text_left(root, name_x, head_y, "project", &head_style())?;
+    draw_text_left(root, name_x, head_y, &copy().tables.project, &head_style())?;
     let cost_x = x + w - tools_w - sess_w - avg_w - cost_w;
-    draw_text_right(root, cost_x + cost_w, head_y, "cost", &head_style())?;
+    draw_text_right(
+        root,
+        cost_x + cost_w,
+        head_y,
+        &copy().tables.cost,
+        &head_style(),
+    )?;
     draw_text_right(
         root,
         cost_x + cost_w + avg_w,
         head_y,
-        "avg/s",
+        &copy().tables.avg_per_session,
         &head_style(),
     )?;
     draw_text_right(
         root,
         cost_x + cost_w + avg_w + sess_w,
         head_y,
-        "sess",
+        &copy().tables.sess,
         &head_style(),
     )?;
-    draw_text_left(root, x + w - tools_w + 6, head_y, "tools", &head_style())?;
+    draw_text_left(
+        root,
+        x + w - tools_w + 6,
+        head_y,
+        &copy().tables.tools,
+        &head_style(),
+    )?;
 
     if rows.is_empty() {
         return empty_note(root, x, y + PANEL_HEADER_GAP);
@@ -2830,16 +3536,28 @@ where
     let cost_w = 110;
 
     let head_y = y;
-    draw_text_left(root, x + bar_w + 8, head_y, "date", &head_style())?;
+    draw_text_left(
+        root,
+        x + bar_w + 8,
+        head_y,
+        &copy().tables.date,
+        &head_style(),
+    )?;
     draw_text_left(
         root,
         x + bar_w + 8 + date_w,
         head_y,
-        "project",
+        &copy().tables.project,
         &head_style(),
     )?;
-    draw_text_right(root, x + w - calls_w, head_y, "cost", &head_style())?;
-    draw_text_right(root, x + w, head_y, "calls", &head_style())?;
+    draw_text_right(
+        root,
+        x + w - calls_w,
+        head_y,
+        &copy().tables.cost,
+        &head_style(),
+    )?;
+    draw_text_right(root, x + w, head_y, &copy().tables.calls, &head_style())?;
 
     if rows.is_empty() {
         return empty_note(root, x, y + PANEL_HEADER_GAP);
@@ -2885,31 +3603,37 @@ where
 
     let head_y = y;
     let name_x = x + bar_w + 8;
-    draw_text_left(root, name_x, head_y, "project", &head_style())?;
+    draw_text_left(root, name_x, head_y, &copy().tables.project, &head_style())?;
     let tool_x = x + w - avg_w - sess_w - calls_w - cost_w - tool_w;
-    draw_text_left(root, tool_x, head_y, "tool", &head_style())?;
+    draw_text_left(root, tool_x, head_y, &copy().tables.tool, &head_style())?;
     draw_text_right(
         root,
         tool_x + tool_w + cost_w,
         head_y,
-        "cost",
+        &copy().tables.cost,
         &head_style(),
     )?;
     draw_text_right(
         root,
         tool_x + tool_w + cost_w + calls_w,
         head_y,
-        "calls",
+        &copy().tables.calls,
         &head_style(),
     )?;
     draw_text_right(
         root,
         tool_x + tool_w + cost_w + calls_w + sess_w,
         head_y,
-        "sess",
+        &copy().tables.sess,
         &head_style(),
     )?;
-    draw_text_right(root, x + w, head_y, "avg/s", &head_style())?;
+    draw_text_right(
+        root,
+        x + w,
+        head_y,
+        &copy().tables.avg_per_session,
+        &head_style(),
+    )?;
 
     if rows.is_empty() {
         return empty_note(root, x, y + PANEL_HEADER_GAP);
@@ -2972,17 +3696,23 @@ where
 
     let name_x = x + bar_w + 8;
     let head_y = y;
-    draw_text_left(root, name_x, head_y, "model", &head_style())?;
+    draw_text_left(root, name_x, head_y, &copy().tables.model, &head_style())?;
     let cost_x = x + w - calls_w - cache_w - cost_w;
-    draw_text_right(root, cost_x + cost_w, head_y, "cost", &head_style())?;
+    draw_text_right(
+        root,
+        cost_x + cost_w,
+        head_y,
+        &copy().tables.cost,
+        &head_style(),
+    )?;
     draw_text_right(
         root,
         cost_x + cost_w + cache_w,
         head_y,
-        "cache",
+        &copy().tables.cache,
         &head_style(),
     )?;
-    draw_text_right(root, x + w, head_y, "calls", &head_style())?;
+    draw_text_right(root, x + w, head_y, &copy().tables.calls, &head_style())?;
 
     if rows.is_empty() {
         return empty_note(root, x, y + PANEL_HEADER_GAP);
@@ -3027,8 +3757,8 @@ where
     let bar_w = 100;
     let name_x = x + bar_w + 8;
 
-    draw_text_left(root, name_x, y, "name", &head_style())?;
-    draw_text_right(root, x + w, y, "calls", &head_style())?;
+    draw_text_left(root, name_x, y, &copy().tables.name, &head_style())?;
+    draw_text_right(root, x + w, y, &copy().tables.calls, &head_style())?;
 
     if rows.is_empty() {
         return empty_note(root, x, y + PANEL_HEADER_GAP);
@@ -3052,24 +3782,11 @@ where
 }
 
 fn period_label(period: Period) -> &'static str {
-    match period {
-        Period::Today => "24 Hours",
-        Period::Week => "7 Days",
-        Period::ThirtyDays => "30 Days",
-        Period::Month => "This Month",
-        Period::AllTime => "All Time",
-    }
+    period.label()
 }
 
 fn tool_label(tool: Tool) -> &'static str {
-    match tool {
-        Tool::All => "All tools",
-        Tool::ClaudeCode => "Claude Code",
-        Tool::Cursor => "Cursor",
-        Tool::Codex => "Codex",
-        Tool::Copilot => "Copilot",
-        Tool::Gemini => "Gemini",
-    }
+    tool.label()
 }
 
 #[cfg(test)]
@@ -3247,6 +3964,8 @@ mod tests {
         let body = fs::read_to_string(&path).unwrap();
         assert!(body.contains("<style>"));
         assert!(body.contains("brand-mark"));
+        assert!(body.contains("data-export-chart=\"activity-timeline\""));
+        assert!(body.contains("data-export-rank=\"true\""));
         assert!(body.contains("Daily Activity"));
         assert!(body.contains("calendar-grid"));
         assert!(body.contains("calendar-cell"));
@@ -3254,6 +3973,40 @@ mod tests {
         assert!(body.contains("Full workbook report"));
         assert!(!body.contains("<script"));
         let _ = fs::remove_dir_all(&paths.dir);
+    }
+
+    #[test]
+    fn pdf_report_source_includes_inline_svg_charts() {
+        let (_paths, data) = fixture();
+        let context = context(&data, None);
+        let body = build_pdf_html_report(&context, "pdf-source");
+
+        assert!(body.contains("data-export-chart=\"activity-timeline\""));
+        assert!(body.contains("data-export-rank=\"true\""));
+        assert!(body.contains("xmlns=\"http://www.w3.org/2000/svg\""));
+        assert!(!body.contains("<script"));
+    }
+
+    #[test]
+    fn activity_timeline_svg_handles_empty_single_point_and_escaped_labels() {
+        let (_paths, mut data) = fixture();
+
+        data.activity_timeline.clear();
+        let empty = build_html_report(&context(&data, None), "empty-activity");
+        assert!(empty.contains("data-export-chart=\"activity-timeline\""));
+        assert!(empty.contains("no activity in this view"));
+
+        data.activity_timeline = vec![ActivityMetric {
+            label: "<only & bucket>",
+            cost: "$0.00",
+            calls: 0,
+            value: 0,
+        }];
+        let single = build_html_report(&context(&data, None), "single-activity");
+        assert!(single.contains("&lt;only &amp; bucket&gt;"));
+        assert!(single.contains("$0.00 - 0 calls"));
+        assert!(!single.contains("<only & bucket>"));
+        assert!(!single.contains("NaN"));
     }
 
     #[test]

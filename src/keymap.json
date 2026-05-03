@@ -1,301 +1,1020 @@
 {
   "actions": [
-    { "id": "quit", "label": "quit" },
-    { "id": "open_help", "label": "open help" },
-    { "id": "close_help", "label": "close help" },
-    { "id": "close_call_detail", "label": "close call detail" },
-    { "id": "close_modal", "label": "close modal" },
-    { "id": "cancel", "label": "cancel" },
-    { "id": "confirm", "label": "select" },
-    { "id": "next_tab", "label": "next tab" },
-    { "id": "prev_tab", "label": "previous tab" },
-    { "id": "period_today", "label": "24h" },
-    { "id": "period_week", "label": "7 days" },
-    { "id": "period_thirty_days", "label": "30 days" },
-    { "id": "period_month", "label": "this month" },
-    { "id": "period_all_time", "label": "all time" },
-    { "id": "cycle_tool", "label": "cycle tool" },
-    { "id": "cycle_sort", "label": "cycle sort mode" },
-    { "id": "toggle_data_source", "label": "toggle live/sample data" },
-    { "id": "open_project_picker", "label": "project picker" },
-    { "id": "open_session_picker", "label": "session picker" },
-    { "id": "open_export_picker", "label": "export current view" },
-    { "id": "open_export_folder_picker", "label": "browse export folder" },
-    { "id": "page_overview", "label": "Overview" },
-    { "id": "page_deep_dive", "label": "Deep Dive" },
-    { "id": "page_usage", "label": "Usage" },
-    { "id": "page_config", "label": "Configuration" },
-    { "id": "close_session", "label": "back to Deep Dive" },
-    { "id": "reload", "label": "reload" },
-    { "id": "move_up", "label": "move up" },
-    { "id": "move_down", "label": "move down" },
-    { "id": "move_page_up", "label": "page up" },
-    { "id": "move_page_down", "label": "page down" },
-    { "id": "move_home", "label": "first item" },
-    { "id": "move_end", "label": "last item" },
-    { "id": "query_backspace", "label": "delete last char" },
-    { "id": "query_clear", "label": "clear filter" },
-    { "id": "go_parent", "label": "parent folder" }
-  ],
-  "shortcuts": [
-    { "context": "dashboard", "keys": ["q", "Esc"], "action": "quit" },
-    { "context": "dashboard", "keys": ["h", "?"], "action": "open_help" },
-    { "context": "dashboard", "keys": ["g"], "action": "cycle_sort" },
-    { "context": "dashboard", "keys": ["Shift+D"], "action": "toggle_data_source" },
-    { "context": "dashboard", "keys": ["Tab"], "action": "next_tab" },
-    { "context": "dashboard", "keys": ["Shift+Tab"], "action": "prev_tab" },
-    { "context": "dashboard", "keys": ["1"], "action": "period_today" },
-    { "context": "dashboard", "keys": ["2"], "action": "period_week" },
-    { "context": "dashboard", "keys": ["3"], "action": "period_thirty_days" },
-    { "context": "dashboard", "keys": ["4"], "action": "period_month" },
-    { "context": "dashboard", "keys": ["5"], "action": "period_all_time" },
-    { "context": "dashboard", "keys": ["t"], "action": "cycle_tool" },
-    { "context": "dashboard", "keys": ["p"], "action": "open_project_picker" },
-    { "context": "dashboard", "keys": ["c"], "action": "page_config" },
-    { "context": "dashboard", "keys": ["o"], "action": "page_overview" },
-    { "context": "dashboard", "keys": ["d"], "action": "page_deep_dive" },
-    { "context": "dashboard", "keys": ["u"], "action": "page_usage" },
-    { "context": "dashboard", "keys": ["r"], "action": "reload" },
-    { "context": "dashboard", "keys": ["s"], "action": "open_session_picker" },
-    { "context": "dashboard", "keys": ["e"], "action": "open_export_picker" },
-
-    { "context": "usage_page", "keys": ["q"], "action": "quit" },
-    { "context": "usage_page", "keys": ["h", "?"], "action": "open_help" },
-    { "context": "usage_page", "keys": ["g"], "action": "cycle_sort" },
-    { "context": "usage_page", "keys": ["Shift+D"], "action": "toggle_data_source" },
-    { "context": "usage_page", "keys": ["Esc", "d"], "action": "page_deep_dive" },
-    { "context": "usage_page", "keys": ["o", "u"], "action": "page_overview" },
-    { "context": "usage_page", "keys": ["Tab"], "action": "next_tab" },
-    { "context": "usage_page", "keys": ["Shift+Tab"], "action": "prev_tab" },
-    { "context": "usage_page", "keys": ["1"], "action": "period_today" },
-    { "context": "usage_page", "keys": ["2"], "action": "period_week" },
-    { "context": "usage_page", "keys": ["3"], "action": "period_thirty_days" },
-    { "context": "usage_page", "keys": ["4"], "action": "period_month" },
-    { "context": "usage_page", "keys": ["5"], "action": "period_all_time" },
-    { "context": "usage_page", "keys": ["t"], "action": "cycle_tool" },
-    { "context": "usage_page", "keys": ["c"], "action": "page_config" },
-    { "context": "usage_page", "keys": ["r"], "action": "reload" },
-    { "context": "usage_page", "keys": ["e"], "action": "open_export_picker" },
-
-    { "context": "config_page", "keys": ["q"], "action": "quit" },
-    { "context": "config_page", "keys": ["h", "?"], "action": "open_help" },
-    { "context": "config_page", "keys": ["g"], "action": "cycle_sort" },
-    { "context": "config_page", "keys": ["Shift+D"], "action": "toggle_data_source" },
-    { "context": "config_page", "keys": ["Esc", "d", "c"], "action": "page_deep_dive" },
-    { "context": "config_page", "keys": ["Up"], "action": "move_up" },
-    { "context": "config_page", "keys": ["Down"], "action": "move_down" },
-    { "context": "config_page", "keys": ["Home"], "action": "move_home" },
-    { "context": "config_page", "keys": ["End"], "action": "move_end" },
-    { "context": "config_page", "keys": ["Enter"], "action": "confirm" },
-
-    { "context": "session_page", "keys": ["q"], "action": "quit" },
-    { "context": "session_page", "keys": ["h", "?"], "action": "open_help" },
-    { "context": "session_page", "keys": ["g"], "action": "cycle_sort" },
-    { "context": "session_page", "keys": ["Shift+D"], "action": "toggle_data_source" },
-    { "context": "session_page", "keys": ["Esc", "d"], "action": "close_session" },
-    { "context": "session_page", "keys": ["Up"], "action": "move_up" },
-    { "context": "session_page", "keys": ["Down"], "action": "move_down" },
-    { "context": "session_page", "keys": ["PgUp"], "action": "move_page_up" },
-    { "context": "session_page", "keys": ["PgDn"], "action": "move_page_down" },
-    { "context": "session_page", "keys": ["Home"], "action": "move_home" },
-    { "context": "session_page", "keys": ["End"], "action": "move_end" },
-    { "context": "session_page", "keys": ["Enter"], "action": "confirm" },
-    { "context": "session_page", "keys": ["r"], "action": "reload" },
-    { "context": "session_page", "keys": ["s"], "action": "open_session_picker" },
-    { "context": "session_page", "keys": ["e"], "action": "open_export_picker" },
-
-    { "context": "help", "keys": ["Esc", "h", "?"], "action": "close_help" },
-    { "context": "help", "keys": ["q"], "action": "quit" },
-
-    { "context": "call_detail", "keys": ["Esc", "Enter"], "action": "close_call_detail" },
-    { "context": "call_detail", "keys": ["q"], "action": "quit" },
-
-    { "context": "project_picker", "keys": ["Esc"], "action": "cancel" },
-    { "context": "project_picker", "keys": ["Up"], "action": "move_up" },
-    { "context": "project_picker", "keys": ["Down"], "action": "move_down" },
-    { "context": "project_picker", "keys": ["Home"], "action": "move_home" },
-    { "context": "project_picker", "keys": ["End"], "action": "move_end" },
-    { "context": "project_picker", "keys": ["Backspace"], "action": "query_backspace" },
-    { "context": "project_picker", "keys": ["Ctrl+U"], "action": "query_clear" },
-    { "context": "project_picker", "keys": ["Enter"], "action": "confirm" },
-
-    { "context": "session_picker", "keys": ["Esc"], "action": "cancel" },
-    { "context": "session_picker", "keys": ["Up"], "action": "move_up" },
-    { "context": "session_picker", "keys": ["Down"], "action": "move_down" },
-    { "context": "session_picker", "keys": ["Home"], "action": "move_home" },
-    { "context": "session_picker", "keys": ["End"], "action": "move_end" },
-    { "context": "session_picker", "keys": ["Backspace"], "action": "query_backspace" },
-    { "context": "session_picker", "keys": ["Ctrl+U"], "action": "query_clear" },
-    { "context": "session_picker", "keys": ["Enter"], "action": "confirm" },
-
-    { "context": "currency_picker", "keys": ["Esc"], "action": "cancel" },
-    { "context": "currency_picker", "keys": ["Up"], "action": "move_up" },
-    { "context": "currency_picker", "keys": ["Down"], "action": "move_down" },
-    { "context": "currency_picker", "keys": ["Home"], "action": "move_home" },
-    { "context": "currency_picker", "keys": ["End"], "action": "move_end" },
-    { "context": "currency_picker", "keys": ["Backspace"], "action": "query_backspace" },
-    { "context": "currency_picker", "keys": ["Ctrl+U"], "action": "query_clear" },
-    { "context": "currency_picker", "keys": ["Enter"], "action": "confirm" },
-
-    { "context": "download_confirm", "keys": ["Esc", "n"], "action": "cancel" },
-    { "context": "download_confirm", "keys": ["Enter", "y"], "action": "confirm" },
-
-    { "context": "export_picker", "keys": ["Esc"], "action": "cancel" },
-    { "context": "export_picker", "keys": ["f", "b"], "action": "open_export_folder_picker" },
-    { "context": "export_picker", "keys": ["Up"], "action": "move_up" },
-    { "context": "export_picker", "keys": ["Down"], "action": "move_down" },
-    { "context": "export_picker", "keys": ["Home"], "action": "move_home" },
-    { "context": "export_picker", "keys": ["End"], "action": "move_end" },
-    { "context": "export_picker", "keys": ["Enter"], "action": "confirm" },
-
-    { "context": "export_folder_picker", "keys": ["Esc"], "action": "cancel" },
-    { "context": "export_folder_picker", "keys": ["Up"], "action": "move_up" },
-    { "context": "export_folder_picker", "keys": ["Down"], "action": "move_down" },
-    { "context": "export_folder_picker", "keys": ["PgUp"], "action": "move_page_up" },
-    { "context": "export_folder_picker", "keys": ["PgDn"], "action": "move_page_down" },
-    { "context": "export_folder_picker", "keys": ["Home"], "action": "move_home" },
-    { "context": "export_folder_picker", "keys": ["End"], "action": "move_end" },
-    { "context": "export_folder_picker", "keys": ["Backspace", "Left"], "action": "go_parent" },
-    { "context": "export_folder_picker", "keys": ["Enter"], "action": "confirm" },
-
-    { "context": "desktop", "keys": ["g"], "action": "cycle_sort" },
-    { "context": "desktop", "keys": ["Shift+D"], "action": "toggle_data_source" },
-    { "context": "desktop", "keys": ["1"], "action": "period_today" },
-    { "context": "desktop", "keys": ["2"], "action": "period_week" },
-    { "context": "desktop", "keys": ["3"], "action": "period_thirty_days" },
-    { "context": "desktop", "keys": ["4"], "action": "period_month" },
-    { "context": "desktop", "keys": ["5"], "action": "period_all_time" },
-    { "context": "desktop", "keys": ["o"], "action": "page_overview" },
-    { "context": "desktop", "keys": ["d"], "action": "page_deep_dive" },
-    { "context": "desktop", "keys": ["u"], "action": "page_usage" },
-    { "context": "desktop", "keys": ["c"], "action": "page_config" },
-    { "context": "desktop", "keys": ["p"], "action": "open_project_picker" },
-    { "context": "desktop", "keys": ["s"], "action": "open_session_picker" },
-    { "context": "desktop", "keys": ["e"], "action": "open_export_picker" },
-    { "context": "desktop", "keys": ["r"], "action": "reload" },
-    { "context": "desktop", "keys": ["t"], "action": "cycle_tool" },
-    { "context": "desktop_session_page", "keys": ["Esc"], "action": "close_session" },
-    { "context": "desktop_modal", "keys": ["Esc"], "action": "close_modal" },
-    { "context": "desktop_call_detail", "keys": ["Esc"], "action": "close_call_detail" }
-  ],
-  "help": [
     {
-      "title": "General",
-      "items": [
-        { "keys": "q", "label": "quit", "action": "quit" },
-        { "keys": "h  ?", "label": "toggle this help", "action": "open_help" },
-        { "keys": "Esc", "label": "close modal · back from page", "action": "cancel" }
-      ]
+      "id": "quit"
     },
     {
-      "title": "Period",
-      "items": [
-        { "keys": "1", "label": "24h", "action": "period_today" },
-        { "keys": "2", "label": "7 days", "action": "period_week" },
-        { "keys": "3", "label": "30 days", "action": "period_thirty_days" },
-        { "keys": "4", "label": "this month", "action": "period_month" },
-        { "keys": "5", "label": "all time", "action": "period_all_time" }
-      ]
+      "id": "open_help"
     },
     {
-      "title": "Filter",
-      "items": [
-        { "keys": "t", "label": "cycle tool", "action": "cycle_tool" },
-        { "keys": "g", "label": "cycle sort mode", "action": "cycle_sort" },
-        { "keys": "p", "label": "project picker (typeable)", "action": "open_project_picker" }
-      ]
+      "id": "close_help"
     },
     {
-      "title": "Tabs",
-      "items": [
-        { "keys": "Tab  Shift-Tab", "label": "cycle main tabs", "action": "next_tab" },
-        { "keys": "o", "label": "Overview", "action": "page_overview" },
-        { "keys": "d", "label": "Deep Dive", "action": "page_deep_dive" },
-        { "keys": "u", "label": "Usage / rate limits", "action": "page_usage" }
-      ]
+      "id": "close_call_detail"
     },
     {
-      "title": "Pages",
-      "items": [
-        { "keys": "c", "label": "configuration", "action": "page_config" },
-        { "keys": "s", "label": "session drill-down", "action": "open_session_picker" }
-      ]
+      "id": "close_modal"
     },
     {
-      "title": "Actions",
-      "items": [
-        { "keys": "e", "label": "export current view", "action": "open_export_picker" },
-        { "keys": "f/b in export", "label": "browse export folder", "action": "open_export_folder_picker" },
-        { "keys": "Shift-D", "label": "toggle live/sample data", "action": "toggle_data_source" },
-        { "keys": "r", "label": "reload (re-run ingest)", "action": "reload" }
-      ]
+      "id": "cancel"
     },
     {
-      "title": "Pickers",
-      "items": [
-        { "keys": "type", "label": "filter list as you type", "action": "confirm" },
-        { "keys": "Backspace", "label": "delete last char", "action": "query_backspace" },
-        { "keys": "Ctrl-U", "label": "clear filter", "action": "query_clear" },
-        { "keys": "Up/Down  Home/End", "label": "navigate", "action": "move_up" },
-        { "keys": "Enter", "label": "select", "action": "confirm" }
-      ]
+      "id": "confirm"
     },
     {
-      "title": "Session page",
-      "items": [
-        { "keys": "Up/Down  PgUp/PgDn", "label": "select calls", "action": "move_up" },
-        { "keys": "Enter / click", "label": "call details", "action": "confirm" },
-        { "keys": "Home/End", "label": "jump to ends", "action": "move_home" },
-        { "keys": "d  Esc", "label": "back to dashboard", "action": "close_session" }
-      ]
+      "id": "next_tab"
+    },
+    {
+      "id": "prev_tab"
+    },
+    {
+      "id": "period_today"
+    },
+    {
+      "id": "period_week"
+    },
+    {
+      "id": "period_thirty_days"
+    },
+    {
+      "id": "period_month"
+    },
+    {
+      "id": "period_all_time"
+    },
+    {
+      "id": "cycle_tool"
+    },
+    {
+      "id": "cycle_sort"
+    },
+    {
+      "id": "toggle_data_source"
+    },
+    {
+      "id": "open_project_picker"
+    },
+    {
+      "id": "open_session_picker"
+    },
+    {
+      "id": "open_export_picker"
+    },
+    {
+      "id": "open_export_folder_picker"
+    },
+    {
+      "id": "page_overview"
+    },
+    {
+      "id": "page_deep_dive"
+    },
+    {
+      "id": "page_usage"
+    },
+    {
+      "id": "page_config"
+    },
+    {
+      "id": "close_session"
+    },
+    {
+      "id": "reload"
+    },
+    {
+      "id": "move_up"
+    },
+    {
+      "id": "move_down"
+    },
+    {
+      "id": "move_page_up"
+    },
+    {
+      "id": "move_page_down"
+    },
+    {
+      "id": "move_home"
+    },
+    {
+      "id": "move_end"
+    },
+    {
+      "id": "query_backspace"
+    },
+    {
+      "id": "query_clear"
+    },
+    {
+      "id": "go_parent"
     }
   ],
-  "footers": {
-    "dashboard": [
-      { "keys": "q", "label": "quit", "action": "quit" },
-      { "keys": "Tab", "label": "tabs", "action": "next_tab" },
-      { "keys": "1", "label": "24h", "action": "period_today" },
-      { "keys": "2", "label": "week", "action": "period_week" },
-      { "keys": "3", "label": "30 days", "action": "period_thirty_days" },
-      { "keys": "4", "label": "month", "action": "period_month" },
-      { "keys": "5", "label": "all", "action": "period_all_time" },
-      { "keys": "g", "label": "sort", "action": "cycle_sort" },
-      { "keys": "h", "label": "help", "action": "open_help" }
-    ],
-    "config": [
-      { "keys": "q", "label": "quit", "action": "quit" },
-      { "keys": "Esc", "label": "dashboard", "action": "page_deep_dive" },
-      { "keys": "Up/Down", "label": "move", "action": "move_up" },
-      { "keys": "Enter", "label": "select", "action": "confirm" },
-      { "keys": "h", "label": "help", "action": "open_help" }
-    ],
-    "session": [
-      { "keys": "q", "label": "quit", "action": "quit" },
-      { "keys": "Esc/d", "label": "dashboard", "action": "close_session" },
-      { "keys": "Up/Down", "label": "move", "action": "move_up" },
-      { "keys": "Enter", "label": "detail", "action": "confirm" },
-      { "keys": "s", "label": "pick", "action": "open_session_picker" },
-      { "keys": "e", "label": "export", "action": "open_export_picker" },
-      { "keys": "g", "label": "sort", "action": "cycle_sort" },
-      { "keys": "h", "label": "help", "action": "open_help" }
-    ],
-    "usage": [
-      { "keys": "q", "label": "quit", "action": "quit" },
-      { "keys": "Tab", "label": "tabs", "action": "next_tab" },
-      { "keys": "o/d", "label": "overview/deep", "action": "page_overview" },
-      { "keys": "c", "label": "config", "action": "page_config" },
-      { "keys": "e", "label": "export", "action": "open_export_picker" },
-      { "keys": "g", "label": "sort", "action": "cycle_sort" },
-      { "keys": "h", "label": "help", "action": "open_help" }
-    ],
-    "desktop": [
-      { "keys": "1-5", "label": "period", "action": "period_today" },
-      { "keys": "t", "label": "tool", "action": "cycle_tool" },
-      { "keys": "g", "label": "sort", "action": "cycle_sort" },
-      { "keys": "p", "label": "project", "action": "open_project_picker" },
-      { "keys": "s", "label": "session", "action": "open_session_picker" },
-      { "keys": "e", "label": "export", "action": "open_export_picker" },
-      { "keys": "r", "label": "refresh", "action": "reload" }
-    ]
-  }
+  "shortcuts": [
+    {
+      "context": "dashboard",
+      "keys": [
+        "q",
+        "Esc"
+      ],
+      "action": "quit"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "h",
+        "?"
+      ],
+      "action": "open_help"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "g"
+      ],
+      "action": "cycle_sort"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "Shift+D"
+      ],
+      "action": "toggle_data_source"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "Tab"
+      ],
+      "action": "next_tab"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "Shift+Tab"
+      ],
+      "action": "prev_tab"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "1"
+      ],
+      "action": "period_today"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "2"
+      ],
+      "action": "period_week"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "3"
+      ],
+      "action": "period_thirty_days"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "4"
+      ],
+      "action": "period_month"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "5"
+      ],
+      "action": "period_all_time"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "t"
+      ],
+      "action": "cycle_tool"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "p"
+      ],
+      "action": "open_project_picker"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "c"
+      ],
+      "action": "page_config"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "o"
+      ],
+      "action": "page_overview"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "d"
+      ],
+      "action": "page_deep_dive"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "u"
+      ],
+      "action": "page_usage"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "r"
+      ],
+      "action": "reload"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "s"
+      ],
+      "action": "open_session_picker"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "e"
+      ],
+      "action": "open_export_picker"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
+        "q"
+      ],
+      "action": "quit"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
+        "h",
+        "?"
+      ],
+      "action": "open_help"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
+        "g"
+      ],
+      "action": "cycle_sort"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
+        "Shift+D"
+      ],
+      "action": "toggle_data_source"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
+        "Esc",
+        "d"
+      ],
+      "action": "page_deep_dive"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
+        "o",
+        "u"
+      ],
+      "action": "page_overview"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
+        "Tab"
+      ],
+      "action": "next_tab"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
+        "Shift+Tab"
+      ],
+      "action": "prev_tab"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
+        "1"
+      ],
+      "action": "period_today"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
+        "2"
+      ],
+      "action": "period_week"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
+        "3"
+      ],
+      "action": "period_thirty_days"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
+        "4"
+      ],
+      "action": "period_month"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
+        "5"
+      ],
+      "action": "period_all_time"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
+        "t"
+      ],
+      "action": "cycle_tool"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
+        "c"
+      ],
+      "action": "page_config"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
+        "r"
+      ],
+      "action": "reload"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
+        "e"
+      ],
+      "action": "open_export_picker"
+    },
+    {
+      "context": "config_page",
+      "keys": [
+        "q"
+      ],
+      "action": "quit"
+    },
+    {
+      "context": "config_page",
+      "keys": [
+        "h",
+        "?"
+      ],
+      "action": "open_help"
+    },
+    {
+      "context": "config_page",
+      "keys": [
+        "g"
+      ],
+      "action": "cycle_sort"
+    },
+    {
+      "context": "config_page",
+      "keys": [
+        "Shift+D"
+      ],
+      "action": "toggle_data_source"
+    },
+    {
+      "context": "config_page",
+      "keys": [
+        "Esc",
+        "d",
+        "c"
+      ],
+      "action": "page_deep_dive"
+    },
+    {
+      "context": "config_page",
+      "keys": [
+        "Up"
+      ],
+      "action": "move_up"
+    },
+    {
+      "context": "config_page",
+      "keys": [
+        "Down"
+      ],
+      "action": "move_down"
+    },
+    {
+      "context": "config_page",
+      "keys": [
+        "Home"
+      ],
+      "action": "move_home"
+    },
+    {
+      "context": "config_page",
+      "keys": [
+        "End"
+      ],
+      "action": "move_end"
+    },
+    {
+      "context": "config_page",
+      "keys": [
+        "Enter"
+      ],
+      "action": "confirm"
+    },
+    {
+      "context": "session_page",
+      "keys": [
+        "q"
+      ],
+      "action": "quit"
+    },
+    {
+      "context": "session_page",
+      "keys": [
+        "h",
+        "?"
+      ],
+      "action": "open_help"
+    },
+    {
+      "context": "session_page",
+      "keys": [
+        "g"
+      ],
+      "action": "cycle_sort"
+    },
+    {
+      "context": "session_page",
+      "keys": [
+        "Shift+D"
+      ],
+      "action": "toggle_data_source"
+    },
+    {
+      "context": "session_page",
+      "keys": [
+        "Esc",
+        "d"
+      ],
+      "action": "close_session"
+    },
+    {
+      "context": "session_page",
+      "keys": [
+        "Up"
+      ],
+      "action": "move_up"
+    },
+    {
+      "context": "session_page",
+      "keys": [
+        "Down"
+      ],
+      "action": "move_down"
+    },
+    {
+      "context": "session_page",
+      "keys": [
+        "PgUp"
+      ],
+      "action": "move_page_up"
+    },
+    {
+      "context": "session_page",
+      "keys": [
+        "PgDn"
+      ],
+      "action": "move_page_down"
+    },
+    {
+      "context": "session_page",
+      "keys": [
+        "Home"
+      ],
+      "action": "move_home"
+    },
+    {
+      "context": "session_page",
+      "keys": [
+        "End"
+      ],
+      "action": "move_end"
+    },
+    {
+      "context": "session_page",
+      "keys": [
+        "Enter"
+      ],
+      "action": "confirm"
+    },
+    {
+      "context": "session_page",
+      "keys": [
+        "r"
+      ],
+      "action": "reload"
+    },
+    {
+      "context": "session_page",
+      "keys": [
+        "s"
+      ],
+      "action": "open_session_picker"
+    },
+    {
+      "context": "session_page",
+      "keys": [
+        "e"
+      ],
+      "action": "open_export_picker"
+    },
+    {
+      "context": "help",
+      "keys": [
+        "Esc",
+        "h",
+        "?"
+      ],
+      "action": "close_help"
+    },
+    {
+      "context": "help",
+      "keys": [
+        "q"
+      ],
+      "action": "quit"
+    },
+    {
+      "context": "call_detail",
+      "keys": [
+        "Esc",
+        "Enter"
+      ],
+      "action": "close_call_detail"
+    },
+    {
+      "context": "call_detail",
+      "keys": [
+        "q"
+      ],
+      "action": "quit"
+    },
+    {
+      "context": "project_picker",
+      "keys": [
+        "Esc"
+      ],
+      "action": "cancel"
+    },
+    {
+      "context": "project_picker",
+      "keys": [
+        "Up"
+      ],
+      "action": "move_up"
+    },
+    {
+      "context": "project_picker",
+      "keys": [
+        "Down"
+      ],
+      "action": "move_down"
+    },
+    {
+      "context": "project_picker",
+      "keys": [
+        "Home"
+      ],
+      "action": "move_home"
+    },
+    {
+      "context": "project_picker",
+      "keys": [
+        "End"
+      ],
+      "action": "move_end"
+    },
+    {
+      "context": "project_picker",
+      "keys": [
+        "Backspace"
+      ],
+      "action": "query_backspace"
+    },
+    {
+      "context": "project_picker",
+      "keys": [
+        "Ctrl+U"
+      ],
+      "action": "query_clear"
+    },
+    {
+      "context": "project_picker",
+      "keys": [
+        "Enter"
+      ],
+      "action": "confirm"
+    },
+    {
+      "context": "session_picker",
+      "keys": [
+        "Esc"
+      ],
+      "action": "cancel"
+    },
+    {
+      "context": "session_picker",
+      "keys": [
+        "Up"
+      ],
+      "action": "move_up"
+    },
+    {
+      "context": "session_picker",
+      "keys": [
+        "Down"
+      ],
+      "action": "move_down"
+    },
+    {
+      "context": "session_picker",
+      "keys": [
+        "Home"
+      ],
+      "action": "move_home"
+    },
+    {
+      "context": "session_picker",
+      "keys": [
+        "End"
+      ],
+      "action": "move_end"
+    },
+    {
+      "context": "session_picker",
+      "keys": [
+        "Backspace"
+      ],
+      "action": "query_backspace"
+    },
+    {
+      "context": "session_picker",
+      "keys": [
+        "Ctrl+U"
+      ],
+      "action": "query_clear"
+    },
+    {
+      "context": "session_picker",
+      "keys": [
+        "Enter"
+      ],
+      "action": "confirm"
+    },
+    {
+      "context": "currency_picker",
+      "keys": [
+        "Esc"
+      ],
+      "action": "cancel"
+    },
+    {
+      "context": "currency_picker",
+      "keys": [
+        "Up"
+      ],
+      "action": "move_up"
+    },
+    {
+      "context": "currency_picker",
+      "keys": [
+        "Down"
+      ],
+      "action": "move_down"
+    },
+    {
+      "context": "currency_picker",
+      "keys": [
+        "Home"
+      ],
+      "action": "move_home"
+    },
+    {
+      "context": "currency_picker",
+      "keys": [
+        "End"
+      ],
+      "action": "move_end"
+    },
+    {
+      "context": "currency_picker",
+      "keys": [
+        "Backspace"
+      ],
+      "action": "query_backspace"
+    },
+    {
+      "context": "currency_picker",
+      "keys": [
+        "Ctrl+U"
+      ],
+      "action": "query_clear"
+    },
+    {
+      "context": "currency_picker",
+      "keys": [
+        "Enter"
+      ],
+      "action": "confirm"
+    },
+    {
+      "context": "download_confirm",
+      "keys": [
+        "Esc",
+        "n"
+      ],
+      "action": "cancel"
+    },
+    {
+      "context": "download_confirm",
+      "keys": [
+        "Enter",
+        "y"
+      ],
+      "action": "confirm"
+    },
+    {
+      "context": "export_picker",
+      "keys": [
+        "Esc"
+      ],
+      "action": "cancel"
+    },
+    {
+      "context": "export_picker",
+      "keys": [
+        "f",
+        "b"
+      ],
+      "action": "open_export_folder_picker"
+    },
+    {
+      "context": "export_picker",
+      "keys": [
+        "Up"
+      ],
+      "action": "move_up"
+    },
+    {
+      "context": "export_picker",
+      "keys": [
+        "Down"
+      ],
+      "action": "move_down"
+    },
+    {
+      "context": "export_picker",
+      "keys": [
+        "Home"
+      ],
+      "action": "move_home"
+    },
+    {
+      "context": "export_picker",
+      "keys": [
+        "End"
+      ],
+      "action": "move_end"
+    },
+    {
+      "context": "export_picker",
+      "keys": [
+        "Enter"
+      ],
+      "action": "confirm"
+    },
+    {
+      "context": "export_folder_picker",
+      "keys": [
+        "Esc"
+      ],
+      "action": "cancel"
+    },
+    {
+      "context": "export_folder_picker",
+      "keys": [
+        "Up"
+      ],
+      "action": "move_up"
+    },
+    {
+      "context": "export_folder_picker",
+      "keys": [
+        "Down"
+      ],
+      "action": "move_down"
+    },
+    {
+      "context": "export_folder_picker",
+      "keys": [
+        "PgUp"
+      ],
+      "action": "move_page_up"
+    },
+    {
+      "context": "export_folder_picker",
+      "keys": [
+        "PgDn"
+      ],
+      "action": "move_page_down"
+    },
+    {
+      "context": "export_folder_picker",
+      "keys": [
+        "Home"
+      ],
+      "action": "move_home"
+    },
+    {
+      "context": "export_folder_picker",
+      "keys": [
+        "End"
+      ],
+      "action": "move_end"
+    },
+    {
+      "context": "export_folder_picker",
+      "keys": [
+        "Backspace",
+        "Left"
+      ],
+      "action": "go_parent"
+    },
+    {
+      "context": "export_folder_picker",
+      "keys": [
+        "Enter"
+      ],
+      "action": "confirm"
+    },
+    {
+      "context": "desktop",
+      "keys": [
+        "g"
+      ],
+      "action": "cycle_sort"
+    },
+    {
+      "context": "desktop",
+      "keys": [
+        "Shift+D"
+      ],
+      "action": "toggle_data_source"
+    },
+    {
+      "context": "desktop",
+      "keys": [
+        "1"
+      ],
+      "action": "period_today"
+    },
+    {
+      "context": "desktop",
+      "keys": [
+        "2"
+      ],
+      "action": "period_week"
+    },
+    {
+      "context": "desktop",
+      "keys": [
+        "3"
+      ],
+      "action": "period_thirty_days"
+    },
+    {
+      "context": "desktop",
+      "keys": [
+        "4"
+      ],
+      "action": "period_month"
+    },
+    {
+      "context": "desktop",
+      "keys": [
+        "5"
+      ],
+      "action": "period_all_time"
+    },
+    {
+      "context": "desktop",
+      "keys": [
+        "o"
+      ],
+      "action": "page_overview"
+    },
+    {
+      "context": "desktop",
+      "keys": [
+        "d"
+      ],
+      "action": "page_deep_dive"
+    },
+    {
+      "context": "desktop",
+      "keys": [
+        "u"
+      ],
+      "action": "page_usage"
+    },
+    {
+      "context": "desktop",
+      "keys": [
+        "c"
+      ],
+      "action": "page_config"
+    },
+    {
+      "context": "desktop",
+      "keys": [
+        "p"
+      ],
+      "action": "open_project_picker"
+    },
+    {
+      "context": "desktop",
+      "keys": [
+        "s"
+      ],
+      "action": "open_session_picker"
+    },
+    {
+      "context": "desktop",
+      "keys": [
+        "e"
+      ],
+      "action": "open_export_picker"
+    },
+    {
+      "context": "desktop",
+      "keys": [
+        "r"
+      ],
+      "action": "reload"
+    },
+    {
+      "context": "desktop",
+      "keys": [
+        "t"
+      ],
+      "action": "cycle_tool"
+    },
+    {
+      "context": "desktop_session_page",
+      "keys": [
+        "Esc"
+      ],
+      "action": "close_session"
+    },
+    {
+      "context": "desktop_modal",
+      "keys": [
+        "Esc"
+      ],
+      "action": "close_modal"
+    },
+    {
+      "context": "desktop_call_detail",
+      "keys": [
+        "Esc"
+      ],
+      "action": "close_call_detail"
+    }
+  ]
 }

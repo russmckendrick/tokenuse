@@ -3,8 +3,11 @@ use std::sync::OnceLock;
 use chrono::{Datelike, Duration, Local, NaiveDate};
 use serde::{Deserialize, Serialize};
 
-use crate::app::{Period, ProjectFilter, SortMode, Tool};
 use crate::currency::CurrencyFormatter;
+use crate::{
+    app::{Period, ProjectFilter, SortMode, Tool},
+    copy::copy,
+};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DashboardData {
@@ -337,7 +340,7 @@ impl ProjectOption {
     pub fn all(cost: String, calls: u64) -> Self {
         Self {
             identity: None,
-            label: "All".into(),
+            label: copy().tools.all.clone(),
             cost,
             calls,
         }
@@ -754,7 +757,7 @@ pub fn session_options(
             key: format!("sample:{idx}"),
             date: session.date.into(),
             project: session.project.into(),
-            tool: "Sample",
+            tool: copy().tools.sample.as_str(),
             cost: session.cost.into(),
             calls: session.calls,
             value: session.value,
@@ -773,19 +776,16 @@ pub fn session_detail(
     Some(SessionDetailView {
         key: key.into(),
         session_id: key.trim_start_matches("sample:").into(),
-        project: "(sample data)".into(),
-        tool: "Sample",
-        date_range: "-".into(),
+        project: copy().session.sample_project.clone(),
+        tool: copy().tools.sample.as_str(),
+        date_range: copy().session.sample_date_range.clone(),
         total_cost: "$0.00".into(),
         total_calls: 0,
         total_input: "0".into(),
         total_output: "0".into(),
         total_cache_read: "0".into(),
         calls: Vec::new(),
-        note: Some(
-            "sample data does not include per-call records · run with live sessions to drill in"
-                .into(),
-        ),
+        note: Some(copy().session.sample_note.clone()),
     })
 }
 

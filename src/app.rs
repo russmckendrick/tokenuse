@@ -12,6 +12,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 
 use crate::archive;
 use crate::config::{ConfigPaths, UserConfig};
+use crate::copy::{self, copy};
 use crate::currency::{CurrencyFormatter, CurrencyTable};
 use crate::data::{
     DashboardData, LimitsData, ProjectOption, SessionDetail, SessionDetailView, SessionOption,
@@ -41,12 +42,13 @@ impl Period {
     ];
 
     pub fn label(self) -> &'static str {
+        let copy = copy();
         match self {
-            Self::Today => "24 Hours",
-            Self::Week => "7 Days",
-            Self::ThirtyDays => "30 Days",
-            Self::Month => "This Month",
-            Self::AllTime => "All Time",
+            Self::Today => copy.periods.today.as_str(),
+            Self::Week => copy.periods.week.as_str(),
+            Self::ThirtyDays => copy.periods.thirty_days.as_str(),
+            Self::Month => copy.periods.month.as_str(),
+            Self::AllTime => copy.periods.all_time.as_str(),
         }
     }
 
@@ -87,10 +89,11 @@ impl SortMode {
     pub const ALL: [Self; 3] = [Self::Spend, Self::Date, Self::Tokens];
 
     pub fn label(self) -> &'static str {
+        let copy = copy();
         match self {
-            Self::Spend => "Spend",
-            Self::Date => "Date",
-            Self::Tokens => "Tokens",
+            Self::Spend => copy.sorts.spend.as_str(),
+            Self::Date => copy.sorts.date.as_str(),
+            Self::Tokens => copy.sorts.tokens.as_str(),
         }
     }
 
@@ -116,12 +119,13 @@ impl Page {
     pub const TABS: [Page; 3] = [Page::Overview, Page::DeepDive, Page::Usage];
 
     pub fn label(self) -> &'static str {
+        let copy = copy();
         match self {
-            Self::Overview => "Overview",
-            Self::DeepDive => "Deep Dive",
-            Self::Usage => "Usage",
-            Self::Config => "Config",
-            Self::Session => "Session",
+            Self::Overview => copy.nav.overview.as_str(),
+            Self::DeepDive => copy.nav.deep_dive.as_str(),
+            Self::Usage => copy.nav.usage.as_str(),
+            Self::Config => copy.nav.config.as_str(),
+            Self::Session => copy.nav.session.as_str(),
         }
     }
 
@@ -140,13 +144,14 @@ impl Page {
 
 impl Tool {
     pub fn label(self) -> &'static str {
+        let copy = copy();
         match self {
-            Self::All => "All",
-            Self::ClaudeCode => "Claude Code",
-            Self::Cursor => "Cursor",
-            Self::Codex => "Codex",
-            Self::Copilot => "Copilot",
-            Self::Gemini => "Gemini",
+            Self::All => copy.tools.all.as_str(),
+            Self::ClaudeCode => copy.tools.claude_code.as_str(),
+            Self::Cursor => copy.tools.cursor.as_str(),
+            Self::Codex => copy.tools.codex.as_str(),
+            Self::Copilot => copy.tools.copilot.as_str(),
+            Self::Gemini => copy.tools.gemini.as_str(),
         }
     }
 
@@ -193,7 +198,7 @@ pub enum ProjectFilter {
 impl ProjectFilter {
     pub fn label(&self) -> &str {
         match self {
-            Self::All => "All",
+            Self::All => copy().tools.all.as_str(),
             Self::Selected { label, .. } => label,
         }
     }
@@ -317,30 +322,34 @@ pub enum ConfigDownload {
 
 impl ConfigDownload {
     pub fn title(self) -> &'static str {
+        let copy = copy();
         match self {
-            Self::CurrencyRates => "Download rates.json?",
-            Self::PricingSnapshot => "Download LiteLLM prices?",
+            Self::CurrencyRates => copy.modals.download_rates_title.as_str(),
+            Self::PricingSnapshot => copy.modals.download_prices_title.as_str(),
         }
     }
 
     pub fn file_name(self) -> &'static str {
+        let copy = copy();
         match self {
-            Self::CurrencyRates => "rates.json",
-            Self::PricingSnapshot => "pricing-snapshot.json",
+            Self::CurrencyRates => copy.modals.rates_file.as_str(),
+            Self::PricingSnapshot => copy.modals.pricing_file.as_str(),
         }
     }
 
     pub fn source(self) -> &'static str {
+        let copy = copy();
         match self {
-            Self::CurrencyRates => "published tokenuse currency snapshot",
-            Self::PricingSnapshot => "LiteLLM model price table",
+            Self::CurrencyRates => copy.modals.rates_source.as_str(),
+            Self::PricingSnapshot => copy.modals.prices_source.as_str(),
         }
     }
 
     pub fn effect(self) -> &'static str {
+        let copy = copy();
         match self {
-            Self::CurrencyRates => "display rates update immediately",
-            Self::PricingSnapshot => "new prices apply to newly imported calls",
+            Self::CurrencyRates => copy.modals.rates_effect.as_str(),
+            Self::PricingSnapshot => copy.modals.prices_effect.as_str(),
         }
     }
 }
@@ -425,7 +434,7 @@ impl FolderPickerModal {
 fn folder_picker_entries(dir: &Path) -> (Vec<FolderPickerEntry>, Option<String>) {
     let mut entries = vec![FolderPickerEntry {
         kind: FolderPickerEntryKind::UseCurrent,
-        label: "Use this folder".into(),
+        label: copy().modals.use_this_folder.clone(),
         path: dir.to_path_buf(),
     }];
 
@@ -459,7 +468,10 @@ fn folder_picker_entries(dir: &Path) -> (Vec<FolderPickerEntry>, Option<String>)
             }
             None
         }
-        Err(e) => Some(format!("could not read folder · {e}")),
+        Err(e) => Some(copy::template(
+            &copy().modals.could_not_read_folder,
+            &[("error", e.to_string())],
+        )),
     };
 
     subdirs.sort_by(|a, b| {
@@ -531,6 +543,7 @@ impl SessionModal {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ConfigRowView {
+    pub id: &'static str,
     pub name: &'static str,
     pub value: String,
     pub action: &'static str,
@@ -639,6 +652,37 @@ pub enum StatusTone {
     Error,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AppStatus {
+    pub text: String,
+    pub tone: StatusTone,
+}
+
+impl AppStatus {
+    pub fn new(text: impl Into<String>, tone: StatusTone) -> Self {
+        Self {
+            text: text.into(),
+            tone,
+        }
+    }
+
+    pub fn info(text: impl Into<String>) -> Self {
+        Self::new(text, StatusTone::Info)
+    }
+}
+
+impl From<String> for AppStatus {
+    fn from(text: String) -> Self {
+        Self::info(text)
+    }
+}
+
+impl From<&str> for AppStatus {
+    fn from(text: &str) -> Self {
+        Self::info(text)
+    }
+}
+
 impl Refresher {
     /// Spawn the refresher thread. `initial_delay` sets how long to wait
     /// before the first auto refresh. Existing archives pass zero so startup
@@ -706,7 +750,7 @@ pub struct App {
     background_alerts: Vec<BackgroundUsageAlert>,
     live_source: Option<Ingested>,
     sample_forced: bool,
-    pub status: Option<String>,
+    pub status: Option<AppStatus>,
     should_quit: bool,
 }
 
@@ -754,7 +798,7 @@ impl Default for App {
 }
 
 impl App {
-    pub fn with_source(source: DataSource, status: Option<String>) -> Self {
+    pub fn with_source(source: DataSource, status: Option<AppStatus>) -> Self {
         let live_source = cached_live_source(&source);
         let background_alert_baseline = live_source.as_ref().map(UsageTotals::from_ingested);
         Self {
@@ -768,7 +812,7 @@ impl App {
 
     pub fn with_runtime(
         source: DataSource,
-        status: Option<String>,
+        status: Option<AppStatus>,
         settings: UserConfig,
         paths: ConfigPaths,
         currency_table: CurrencyTable,
@@ -836,30 +880,18 @@ impl App {
     }
 
     pub fn status_tone(&self) -> StatusTone {
-        let Some(status) = self.status.as_deref() else {
-            return StatusTone::Info;
-        };
+        self.status
+            .as_ref()
+            .map(|status| status.tone)
+            .unwrap_or(StatusTone::Info)
+    }
 
-        if status.starts_with("data cleared")
-            || status.starts_with("rates refreshed")
-            || status.starts_with("LiteLLM prices refreshed")
-            || status.starts_with("currency set")
-            || status.starts_with("exported")
-            || status.starts_with("reloaded")
-        {
-            StatusTone::Success
-        } else if status.contains("failed") {
-            StatusTone::Error
-        } else if status.contains("unavailable")
-            || status.contains("prior data kept")
-            || status.contains("no local sessions")
-        {
-            StatusTone::Warning
-        } else if status.starts_with("clearing") || status.starts_with("reloading") {
-            StatusTone::Busy
-        } else {
-            StatusTone::Info
-        }
+    pub fn status_text(&self) -> Option<&str> {
+        self.status.as_ref().map(|status| status.text.as_str())
+    }
+
+    fn set_status(&mut self, text: impl Into<String>, tone: StatusTone) {
+        self.status = Some(AppStatus::new(text, tone));
     }
 
     pub fn clear_data_spinner_frame(&self) -> usize {
@@ -874,7 +906,7 @@ impl App {
             return;
         };
         if refresher.signal_tx.send(()).is_ok() {
-            self.status = Some("reloading…".into());
+            self.set_status(copy().status.reloading.clone(), StatusTone::Busy);
         }
     }
 
@@ -887,16 +919,19 @@ impl App {
             DataSource::Live(ingested) => {
                 self.live_source = Some(ingested);
                 self.sample_forced = true;
-                self.status = Some("sample data".into());
+                self.set_status(copy().status.sample_data.clone(), StatusTone::Info);
             }
             DataSource::Sample => {
                 self.sample_forced = false;
                 if let Some(ingested) = self.live_source.take() {
                     self.source = DataSource::Live(ingested);
-                    self.status = Some("live data".into());
+                    self.set_status(copy().status.live_data.clone(), StatusTone::Info);
                 } else {
                     self.source = DataSource::Sample;
-                    self.status = Some("no local sessions found · sample data".into());
+                    self.set_status(
+                        copy().status.no_local_sessions_sample_data.clone(),
+                        StatusTone::Warning,
+                    );
                 }
             }
         }
@@ -918,7 +953,10 @@ impl App {
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {
                     self.refresher = None;
-                    self.status = Some("refresher stopped · prior data kept".into());
+                    self.set_status(
+                        copy().status.refresher_stopped_prior_data_kept.clone(),
+                        StatusTone::Warning,
+                    );
                     return;
                 }
             }
@@ -938,25 +976,37 @@ impl App {
                     self.source = DataSource::Live(ingested);
                     self.live_source = None;
                 }
-                self.status = Some(if manual {
-                    format!("reloaded · {n} calls")
+                let template = if manual {
+                    &copy().status.reloaded_calls
                 } else {
-                    format!("auto-refreshed · {n} calls")
-                });
+                    &copy().status.auto_refreshed_calls
+                };
+                self.set_status(
+                    copy::template(template, &[("calls", n.to_string())]),
+                    StatusTone::Success,
+                );
             }
             Ok(_) => {
-                self.status = Some(if manual {
-                    "reload · no sessions found · prior data kept".into()
+                let text = if manual {
+                    copy().status.reload_no_sessions_prior_data_kept.clone()
                 } else {
-                    "auto-refresh · no sessions found · prior data kept".into()
-                });
+                    copy()
+                        .status
+                        .auto_refresh_no_sessions_prior_data_kept
+                        .clone()
+                };
+                self.set_status(text, StatusTone::Warning);
             }
             Err(e) => {
-                self.status = Some(if manual {
-                    format!("reload failed · prior data kept ({e})")
+                let template = if manual {
+                    &copy().status.reload_failed_prior_data_kept
                 } else {
-                    format!("auto-refresh failed · prior data kept ({e})")
-                });
+                    &copy().status.auto_refresh_failed_prior_data_kept
+                };
+                self.set_status(
+                    copy::template(template, &[("error", e.to_string())]),
+                    StatusTone::Error,
+                );
             }
         }
 
@@ -1067,7 +1117,10 @@ impl App {
     fn open_session_modal(&mut self) {
         let options = self.session_options();
         if options.is_empty() {
-            self.status = Some("no sessions to drill into".into());
+            self.set_status(
+                copy().status.no_sessions_to_drill_into.clone(),
+                StatusTone::Warning,
+            );
             return;
         }
         let filtered: Vec<usize> = (0..options.len()).collect();
@@ -1089,7 +1142,13 @@ impl App {
                 self.page = Page::Session;
             }
             None => {
-                self.status = Some(format!("session not found · {key}"));
+                self.set_status(
+                    copy::template(
+                        &copy().status.session_not_found,
+                        &[("key", key.to_string())],
+                    ),
+                    StatusTone::Warning,
+                );
             }
         }
     }
@@ -1193,25 +1252,44 @@ impl App {
             };
             crate::export::write_to_dir(&self.export_dir, format, &context)?
         };
-        self.status = Some(format!("exported {} · {}", format.label(), path.display()));
+        self.set_status(
+            copy::template(
+                &copy().status.exported,
+                &[
+                    ("format", format.label().to_string()),
+                    ("path", path.display().to_string()),
+                ],
+            ),
+            StatusTone::Success,
+        );
         Ok(path)
     }
 
     fn run_export(&mut self, format: ExportFormat) {
         if let Err(e) = self.export_current(format) {
-            self.status = Some(format!("export failed · {e}"));
+            self.set_status(
+                copy::template(&copy().status.export_failed, &[("error", e.to_string())]),
+                StatusTone::Error,
+            );
         }
     }
 
     pub fn set_export_dir(&mut self, dir: PathBuf) {
         self.export_dir = dir;
-        self.status = Some(format!("export folder · {}", self.export_dir.display()));
+        self.set_status(
+            copy::template(
+                &copy().status.export_folder,
+                &[("path", self.export_dir.display().to_string())],
+            ),
+            StatusTone::Info,
+        );
     }
 
     pub fn config_rows(&self) -> Vec<ConfigRowView> {
+        let copy = copy();
         let currency = self.currency();
         let currency_value = if currency.is_usd() {
-            "USD (default)".into()
+            copy.metrics.usd_default.clone()
         } else {
             format!(
                 "{} · 1 USD = {:.6}",
@@ -1228,36 +1306,40 @@ impl App {
         );
 
         let pricing_value = if self.paths.pricing_snapshot_file.exists() {
-            "local snapshot".into()
+            copy.config.values.local_snapshot.clone()
         } else {
-            "embedded snapshot".into()
+            copy.config.values.embedded_snapshot.clone()
         };
         let clear_value = if self.paths.archive_db_file.exists() {
-            "delete archive.db, then rebuild".into()
+            copy.config.values.delete_archive_then_rebuild.clone()
         } else {
-            "build archive.db from local history".into()
+            copy.config.values.build_archive_from_history.clone()
         };
 
         vec![
             ConfigRowView {
-                name: "currency override",
+                id: "currency_override",
+                name: copy.config.rows.currency_override.name.as_str(),
                 value: currency_value,
-                action: "pick",
+                action: copy.config.rows.currency_override.action.as_str(),
             },
             ConfigRowView {
-                name: "rates.json",
+                id: "rates_json",
+                name: copy.config.rows.rates_json.name.as_str(),
                 value: rates_value,
-                action: "download",
+                action: copy.config.rows.rates_json.action.as_str(),
             },
             ConfigRowView {
-                name: "LiteLLM prices",
+                id: "litellm_prices",
+                name: copy.config.rows.litellm_prices.name.as_str(),
                 value: pricing_value,
-                action: "download",
+                action: copy.config.rows.litellm_prices.action.as_str(),
             },
             ConfigRowView {
-                name: "clear data",
+                id: "clear_data",
+                name: copy.config.rows.clear_data.name.as_str(),
                 value: clear_value,
-                action: "clear",
+                action: copy.config.rows.clear_data.action.as_str(),
             },
         ]
     }
@@ -1479,7 +1561,13 @@ impl App {
         if let Some(dir) = picked {
             self.export_dir = dir;
             self.export_dir_picker = None;
-            self.status = Some(format!("export folder · {}", self.export_dir.display()));
+            self.set_status(
+                copy::template(
+                    &copy().status.export_folder,
+                    &[("path", self.export_dir.display().to_string())],
+                ),
+                StatusTone::Info,
+            );
         }
     }
 
@@ -1723,7 +1811,13 @@ impl App {
                 {
                     self.project_filter = ProjectFilter::from_option(&option);
                 } else {
-                    self.status = Some(format!("project not found · {identity}"));
+                    self.set_status(
+                        copy::template(
+                            &copy().status.project_not_found,
+                            &[("identity", identity.to_string())],
+                        ),
+                        StatusTone::Warning,
+                    );
                 }
             }
         }
@@ -1796,10 +1890,22 @@ impl App {
         self.settings.set_currency(code);
         match self.settings.save(&self.paths) {
             Ok(()) => {
-                self.status = Some(format!("currency set to {}", self.currency().code()));
+                self.set_status(
+                    copy::template(
+                        &copy().status.currency_set,
+                        &[("code", self.currency().code().to_string())],
+                    ),
+                    StatusTone::Success,
+                );
             }
             Err(e) => {
-                self.status = Some(format!("config save failed · {e}"));
+                self.set_status(
+                    copy::template(
+                        &copy().status.config_save_failed,
+                        &[("error", e.to_string())],
+                    ),
+                    StatusTone::Error,
+                );
             }
         }
     }
@@ -1822,7 +1928,10 @@ impl App {
         self.refresher = None;
         self.clear_data_modal = Some(ClearDataModal::Running);
         self.clear_data_tick = 0;
-        self.status = Some("clearing data · reimporting local history".into());
+        self.set_status(
+            copy().status.clearing_data_reimporting.clone(),
+            StatusTone::Busy,
+        );
         let paths = self.paths.clone();
         let (result_tx, result_rx) = mpsc::channel::<ClearDataResult>();
         std::thread::spawn(move || {
@@ -1850,13 +1959,21 @@ impl App {
                     self.source = DataSource::Sample;
                     self.live_source = None;
                     self.background_alert_baseline = None;
-                    self.status =
-                        Some("data cleared · no local sessions found · sample data".into());
+                    self.set_status(
+                        copy().status.data_cleared_no_sessions_sample_data.clone(),
+                        StatusTone::Warning,
+                    );
                 } else {
                     self.background_alert_baseline = Some(UsageTotals::from_ingested(&ingested));
                     self.source = DataSource::Live(ingested);
                     self.live_source = None;
-                    self.status = Some(format!("data cleared · {calls} calls · {limits} limits"));
+                    self.set_status(
+                        copy::template(
+                            &copy().status.data_cleared_counts,
+                            &[("calls", calls.to_string()), ("limits", limits.to_string())],
+                        ),
+                        StatusTone::Success,
+                    );
                 }
 
                 self.refresher = Some(Refresher::spawn(
@@ -1865,7 +1982,10 @@ impl App {
                 ));
             }
             Err(e) => {
-                self.status = Some(format!("clear data failed · {e}"));
+                self.set_status(
+                    copy::template(&copy().status.clear_data_failed, &[("error", e)]),
+                    StatusTone::Error,
+                );
                 self.refresher = Some(Refresher::spawn(
                     archive::SYNC_INTERVAL,
                     RefreshSource::Archive(self.paths.clone()),
@@ -1882,34 +2002,61 @@ impl App {
         {
             Ok(table) => {
                 self.currency_table = table;
-                self.status = Some(format!("rates refreshed · {}", self.currency_table.date()));
+                self.set_status(
+                    copy::template(
+                        &copy().status.rates_refreshed,
+                        &[("date", self.currency_table.date().to_string())],
+                    ),
+                    StatusTone::Success,
+                );
             }
             Err(e) => {
-                self.status = Some(format!("rates refresh failed · {e}"));
+                self.set_status(
+                    copy::template(
+                        &copy().status.rates_refresh_failed,
+                        &[("error", e.to_string())],
+                    ),
+                    StatusTone::Error,
+                );
             }
         }
     }
 
     #[cfg(not(feature = "refresh-currency"))]
     pub fn refresh_currency_rates(&mut self) {
-        self.status = Some("rates download unavailable in this build".into());
+        self.set_status(
+            copy().status.rates_download_unavailable.clone(),
+            StatusTone::Warning,
+        );
     }
 
     #[cfg(feature = "refresh-prices")]
     pub fn refresh_pricing_snapshot(&mut self) {
         match crate::pricing::refresh::run(&self.paths.pricing_snapshot_file) {
             Ok(()) => {
-                self.status = Some("LiteLLM prices refreshed · restart to apply".into());
+                self.set_status(
+                    copy().status.litellm_prices_refreshed_restart.clone(),
+                    StatusTone::Success,
+                );
             }
             Err(e) => {
-                self.status = Some(format!("LiteLLM refresh failed · {e}"));
+                self.set_status(
+                    copy::template(
+                        &copy().status.litellm_refresh_failed,
+                        &[("error", e.to_string())],
+                    ),
+                    StatusTone::Error,
+                );
             }
         }
     }
 
     #[cfg(not(feature = "refresh-prices"))]
     pub fn refresh_pricing_snapshot(&mut self) {
-        self.status = Some("LiteLLM download unavailable in this build".into());
+        self.set_status(
+            copy().status.litellm_download_unavailable.clone(),
+            StatusTone::Warning,
+        );
     }
 }
 
@@ -2143,12 +2290,12 @@ mod tests {
         app.handle_key(shift_key(KeyCode::Char('D')));
         assert!(matches!(app.source, DataSource::Sample));
         assert!(app.sample_forced);
-        assert_eq!(app.status.as_deref(), Some("sample data"));
+        assert_eq!(app.status_text(), Some(copy().status.sample_data.as_str()));
 
         app.handle_key(shift_key(KeyCode::Char('D')));
         assert!(matches!(app.source, DataSource::Live(_)));
         assert!(!app.sample_forced);
-        assert_eq!(app.status.as_deref(), Some("live data"));
+        assert_eq!(app.status_text(), Some(copy().status.live_data.as_str()));
     }
 
     #[test]
@@ -2160,8 +2307,8 @@ mod tests {
         assert!(matches!(app.source, DataSource::Sample));
         assert!(!app.sample_forced);
         assert_eq!(
-            app.status.as_deref(),
-            Some("no local sessions found · sample data")
+            app.status_text(),
+            Some(copy().status.no_local_sessions_sample_data.as_str())
         );
     }
 
@@ -2305,12 +2452,15 @@ mod tests {
         let app = App::default();
         let rows = app.config_rows();
 
-        assert_eq!(rows[1].name, "rates.json");
-        assert_eq!(rows[1].action, "download");
-        assert_eq!(rows[2].name, "LiteLLM prices");
-        assert_eq!(rows[2].action, "download");
-        assert_eq!(rows[3].name, "clear data");
-        assert_eq!(rows[3].action, "clear");
+        assert_eq!(rows[1].id, "rates_json");
+        assert_eq!(rows[1].name, copy().config.rows.rates_json.name);
+        assert_eq!(rows[1].action, copy().config.rows.rates_json.action);
+        assert_eq!(rows[2].id, "litellm_prices");
+        assert_eq!(rows[2].name, copy().config.rows.litellm_prices.name);
+        assert_eq!(rows[2].action, copy().config.rows.litellm_prices.action);
+        assert_eq!(rows[3].id, "clear_data");
+        assert_eq!(rows[3].name, copy().config.rows.clear_data.name);
+        assert_eq!(rows[3].action, copy().config.rows.clear_data.action);
     }
 
     #[test]
@@ -2370,15 +2520,30 @@ mod tests {
     #[test]
     fn clear_data_statuses_have_distinct_tones() {
         let mut app = App {
-            status: Some("clearing data · reimporting local history".into()),
+            status: Some(AppStatus::new(
+                copy().status.clearing_data_reimporting.clone(),
+                StatusTone::Busy,
+            )),
             ..Default::default()
         };
         assert_eq!(app.status_tone(), StatusTone::Busy);
 
-        app.status = Some("data cleared · 10 calls · 2 limits".into());
+        app.status = Some(AppStatus::new(
+            copy::template(
+                &copy().status.data_cleared_counts,
+                &[("calls", "10".into()), ("limits", "2".into())],
+            ),
+            StatusTone::Success,
+        ));
         assert_eq!(app.status_tone(), StatusTone::Success);
 
-        app.status = Some("clear data failed · locked".into());
+        app.status = Some(AppStatus::new(
+            copy::template(
+                &copy().status.clear_data_failed,
+                &[("error", "locked".into())],
+            ),
+            StatusTone::Error,
+        ));
         assert_eq!(app.status_tone(), StatusTone::Error);
     }
 
@@ -2394,8 +2559,8 @@ mod tests {
 
         assert_eq!(app.download_confirm, None);
         assert_eq!(
-            app.status.as_deref(),
-            Some("rates download unavailable in this build")
+            app.status_text(),
+            Some(copy().status.rates_download_unavailable.as_str())
         );
     }
 
@@ -2405,7 +2570,10 @@ mod tests {
 
         app.handle_key(key(KeyCode::Char('p')));
         assert!(app.project_modal.is_some());
-        assert_eq!(app.project_modal.as_ref().unwrap().options[0].label, "All");
+        assert_eq!(
+            app.project_modal.as_ref().unwrap().options[0].label,
+            copy().tools.all
+        );
 
         app.handle_key(key(KeyCode::Down));
         app.handle_key(key(KeyCode::Enter));
@@ -2519,8 +2687,7 @@ mod tests {
             .is_some_and(|ext| ext == "json"));
         assert!(app.export_modal.is_none());
         assert!(app
-            .status
-            .as_deref()
+            .status_text()
             .is_some_and(|status| status.contains("exported JSON")));
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -2575,13 +2742,13 @@ mod tests {
         // App::default() doesn't spawn a refresher (only with_runtime does),
         // so reload + poll_reload should leave state untouched.
         let mut app = App {
-            status: Some("untouched".into()),
+            status: Some(AppStatus::info("untouched")),
             ..App::default()
         };
         app.reload();
-        assert_eq!(app.status.as_deref(), Some("untouched"));
+        assert_eq!(app.status_text(), Some("untouched"));
         app.poll_reload();
-        assert_eq!(app.status.as_deref(), Some("untouched"));
+        assert_eq!(app.status_text(), Some("untouched"));
     }
 
     #[test]
@@ -2611,8 +2778,8 @@ mod tests {
         app.poll_reload();
 
         assert_eq!(
-            app.status.as_deref(),
-            Some("reload · no sessions found · prior data kept")
+            app.status_text(),
+            Some(copy().status.reload_no_sessions_prior_data_kept.as_str())
         );
     }
 
@@ -2642,8 +2809,13 @@ mod tests {
         app.poll_reload();
 
         assert_eq!(
-            app.status.as_deref(),
-            Some("auto-refresh · no sessions found · prior data kept")
+            app.status_text(),
+            Some(
+                copy()
+                    .status
+                    .auto_refresh_no_sessions_prior_data_kept
+                    .as_str()
+            )
         );
     }
 

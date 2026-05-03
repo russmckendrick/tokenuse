@@ -1,13 +1,14 @@
 <script lang="ts">
   import Panel from '../Panel.svelte';
   import { staggeredReveal } from '../motion';
-  import type { RecentModelMetric, ToolLimitSection } from '../types';
+  import type { CopyDeck, RecentModelMetric, ToolLimitSection } from '../types';
   import GaugeBar from './GaugeBar.svelte';
   import RankBar from './RankBar.svelte';
   import UsageActivityChart from './UsageActivityChart.svelte';
 
   export let section: ToolLimitSection;
   export let tone = 'cyan';
+  export let copy: CopyDeck;
 
   $: buckets = section.usage.buckets;
   $: hasUsage = section.usage.calls > 0 || buckets.some((bucket) => bucket > 0);
@@ -18,40 +19,40 @@
   }
 
   function modelLabel(model: RecentModelMetric) {
-    return `${model.name}: ${count(model.calls)} calls`;
+    return `${model.name}: ${count(model.calls)} ${copy.metrics.calls}`;
   }
 </script>
 
-<Panel title={`${section.tool} Console · 24h + models`} {tone}>
+<Panel title={copy.usage.console_title.replace('{tool}', section.tool)} {tone}>
   <div class="usage-console" use:staggeredReveal={{ selector: '.console-pulse, .console-stats div, .console-row', y: 3, stagger: 0.012 }}>
     <div class="console-head">
       <div class="console-pulse">
-        <UsageActivityChart {buckets} active={hasUsage} {tone} ariaLabel={`${section.tool} 24 hour activity`} />
+        <UsageActivityChart {buckets} active={hasUsage} {tone} ariaLabel={`${section.tool} ${copy.tray.hours_24} ${copy.timeline.pulse}`} />
       </div>
 
       <div class="console-stats">
-        <div><span>cost</span><strong class="money">{section.usage.cost}</strong></div>
-        <div><span>calls</span><strong>{count(section.usage.calls)}</strong></div>
-        <div><span>tokens</span><strong>{section.usage.tokens}</strong></div>
-        <div><span>seen</span><strong>{section.usage.last_seen}</strong></div>
+        <div><span>{copy.metrics.cost}</span><strong class="money">{section.usage.cost}</strong></div>
+        <div><span>{copy.metrics.calls}</span><strong>{count(section.usage.calls)}</strong></div>
+        <div><span>{copy.metrics.tokens}</span><strong>{section.usage.tokens}</strong></div>
+        <div><span>{copy.usage.seen}</span><strong>{section.usage.last_seen}</strong></div>
       </div>
     </div>
 
     <div class="console-table">
       <div class="console-row console-labels">
-        <span>kind</span>
-        <span>scope / model</span>
-        <span>used</span>
-        <span>left / calls</span>
-        <span>reset / tokens</span>
-        <span>cost / plan</span>
+        <span>{copy.tables.kind}</span>
+        <span>{copy.tables.scope_model_spaced}</span>
+        <span>{copy.tables.used}</span>
+        <span>{copy.tables.left_calls_spaced}</span>
+        <span>{copy.tables.reset_tokens_spaced}</span>
+        <span>{copy.tables.cost_plan_spaced}</span>
       </div>
 
       {#each section.limits as limit}
         <div class="console-row limit-row">
-          <strong>limit</strong>
+          <strong>{copy.usage.limit}</strong>
           <span>{limit.scope} {limit.window}</span>
-          <GaugeBar used={limit.used} ariaLabel={`${limit.scope} ${limit.window}`} />
+          <GaugeBar used={limit.used} ariaLabel={`${limit.scope} ${limit.window}`} usedSuffix={copy.usage.used_suffix} />
           <span>{limit.left}</span>
           <span>{limit.reset}</span>
           <span>{limit.plan}</span>
@@ -60,7 +61,7 @@
 
       {#each modelRows as model}
         <div class="console-row">
-          <strong>model</strong>
+          <strong>{copy.usage.model}</strong>
           <span>{model.name}</span>
           <RankBar value={model.value} ariaLabel={modelLabel(model)} compact />
           <span>{count(model.calls)}</span>
@@ -70,7 +71,7 @@
       {/each}
 
       {#if !section.limits.length && !modelRows.length}
-        <div class="console-empty">idle · no limits or model activity reported</div>
+        <div class="console-empty">{copy.usage.idle}</div>
       {/if}
     </div>
   </div>

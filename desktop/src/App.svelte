@@ -32,13 +32,6 @@
 
   type ModalKind = 'project' | 'session' | 'currency' | 'export' | null;
 
-  const tabs: Array<{ value: PageId; label: string }> = [
-    { value: 'overview', label: 'Overview' },
-    { value: 'deep-dive', label: 'Deep Dive' },
-    { value: 'usage', label: 'Usage' },
-    { value: 'config', label: 'Config' }
-  ];
-
   function currentWindowLabel() {
     try {
       return getCurrentWindow().label;
@@ -276,6 +269,20 @@
     return snapshot.sorts.find((sort) => sort.value === snapshot?.sort)?.label ?? '';
   }
 
+  function tabsFor(state: DesktopSnapshot): Array<{ value: PageId; label: string }> {
+    return [
+      { value: 'overview', label: state.copy.nav.overview },
+      { value: 'deep-dive', label: state.copy.nav.deep_dive },
+      { value: 'usage', label: state.copy.nav.usage },
+      { value: 'config', label: state.copy.nav.config }
+    ];
+  }
+
+  function modalTitle(kind: Exclude<ModalKind, null>) {
+    if (!snapshot) return kind;
+    return snapshot.copy.modals[kind] ?? kind;
+  }
+
   function usageTone(tool: string, index: number) {
     const normalized = tool.toLowerCase();
     if (normalized.includes('codex')) return 'orange';
@@ -291,29 +298,26 @@
   }
 
   async function runConfigAction(row: ConfigRow) {
-    if (row.name === 'currency override') {
-      openModal('currency');
-    } else if (row.name === 'rates.json') {
-      const confirmed = await confirmDownload(
-        'Download rates.json?',
-        'This will download the latest published tokenuse currency snapshot into your local config directory.'
-      );
-      if (confirmed) {
-        await commit(() => api.refreshCurrencyRates());
-      }
-    } else if (row.name === 'LiteLLM prices') {
-      const confirmed = await confirmDownload(
-        'Download LiteLLM prices?',
-        'This will download the latest LiteLLM model price table into your local config directory.'
-      );
-      if (confirmed) {
-        await commit(() => api.refreshPricingSnapshot());
-      }
-    } else if (row.name === 'clear data') {
-      const confirmed = await confirmClearData();
-      if (confirmed) {
-        await runClearData();
-      }
+    if (!snapshot) return;
+    switch (row.id) {
+      case 'currency_override':
+        openModal('currency');
+        break;
+      case 'rates_json':
+        if (await confirmDownload(snapshot.copy.modals.download_rates_title, snapshot.copy.modals.download_latest_rates_message)) {
+          await commit(() => api.refreshCurrencyRates());
+        }
+        break;
+      case 'litellm_prices':
+        if (await confirmDownload(snapshot.copy.modals.download_prices_title, snapshot.copy.modals.download_latest_prices_message)) {
+          await commit(() => api.refreshPricingSnapshot());
+        }
+        break;
+      case 'clear_data':
+        if (await confirmClearData()) {
+          await runClearData();
+        }
+        break;
     }
   }
 
@@ -322,8 +326,8 @@
       return await confirm(message, {
         title,
         kind: 'warning',
-        okLabel: 'Download',
-        cancelLabel: 'Cancel'
+        okLabel: snapshot?.copy.actions.download ?? '',
+        cancelLabel: snapshot?.copy.actions.cancel ?? ''
       });
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
@@ -332,16 +336,14 @@
   }
 
   async function confirmClearData() {
+    if (!snapshot) return false;
     try {
-      return await confirm(
-        'Token Use will delete archive.db, rebuild it from local tool history, and keep config, rates, pricing, and exports. Rows whose source files are gone will not return.',
-        {
-          title: 'Clear data?',
-          kind: 'warning',
-          okLabel: 'Clear Data',
-          cancelLabel: 'Cancel'
-        }
-      );
+      return await confirm(snapshot.copy.modals.clear_data_message, {
+        title: snapshot.copy.modals.clear_data_question,
+        kind: 'warning',
+        okLabel: snapshot.copy.actions.clear_data,
+        cancelLabel: snapshot.copy.actions.cancel
+      });
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
       return false;
@@ -364,7 +366,7 @@
 
   function statusMessage() {
     if (error) return error;
-    if (clearingData) return 'Clearing data · rebuilding local archive';
+    if (clearingData) return snapshot?.copy.status.clearing_data_reimporting ?? null;
     return snapshot?.status ?? null;
   }
 
@@ -394,11 +396,11 @@
           <rect x="240" y="0" width="80" height="560" rx="16" fill="url(#brand-bar-gradient)" />
           <rect x="360" y="120" width="80" height="440" rx="16" fill="url(#brand-bar-gradient)" />
         </svg>
-        <span class="brand-title">Token Use</span>
+        <span class="brand-title">{snapshot.copy.brand.name}</span>
       </div>
 
-      <nav class="tabs" aria-label="Sections">
-        {#each tabs as tab}
+      <nav class="tabs" aria-label={snapshot.copy.desktop.sections_aria}>
+        {#each tabsFor(snapshot) as tab}
           <button
             class:active={activePage() === tab.value}
             type="button"
@@ -410,17 +412,17 @@
       </nav>
 
       <div class="actions">
-        <button class="icon-button" type="button" title="Refresh archive" onclick={() => commit(() => api.refreshArchive())}>
+        <button class="icon-button" type="button" title={snapshot.copy.actions.refresh_archive} onclick={() => commit(() => api.refreshArchive())}>
           <RefreshCw size={16} />
         </button>
-        <button class="icon-button" type="button" title="Export current view" onclick={() => openModal('export')}>
+        <button class="icon-button" type="button" title={snapshot.copy.actions.export_current_view} onclick={() => openModal('export')}>
           <Download size={16} />
         </button>
       </div>
     </header>
 
     <section class="filter-strip">
-      <div class="segmented" aria-label="Period">
+      <div class="segmented" aria-label={snapshot.copy.desktop.period_aria}>
         {#each snapshot.periods as period}
           <button
             type="button"
@@ -433,26 +435,26 @@
       </div>
 
       <div class="filter-controls">
-        <div class="segmented tool-strip" aria-label="Tool">
-          <span>tool</span>
-          <select aria-label="Tool" onchange={setToolFromEvent}>
+        <div class="segmented tool-strip" aria-label={snapshot.copy.desktop.tool_aria}>
+          <span>{snapshot.copy.filters.tool}</span>
+          <select aria-label={snapshot.copy.desktop.tool_aria} onchange={setToolFromEvent}>
             {#each snapshot.tools as tool}
               <option value={tool.value} selected={snapshot.tool === tool.value}>{tool.label}</option>
             {/each}
           </select>
         </div>
 
-        <div class="segmented tool-strip sort-strip" aria-label="Sort">
-          <span>sort</span>
-          <select aria-label="Sort" onchange={setSortFromEvent}>
+        <div class="segmented tool-strip sort-strip" aria-label={snapshot.copy.desktop.sort_aria}>
+          <span>{snapshot.copy.filters.sort}</span>
+          <select aria-label={snapshot.copy.desktop.sort_aria} onchange={setSortFromEvent}>
             {#each snapshot.sorts as sort}
               <option value={sort.value} selected={snapshot.sort === sort.value}>{sort.label}</option>
             {/each}
           </select>
         </div>
 
-        <button class="segmented tool-strip project-strip" type="button" aria-label="Project" onclick={() => openModal('project')}>
-          <span>project</span>
+        <button class="segmented tool-strip project-strip" type="button" aria-label={snapshot.copy.desktop.project_aria} onclick={() => openModal('project')}>
+          <span>{snapshot.copy.filters.project}</span>
           <strong>{snapshot.project.label}</strong>
         </button>
       </div>
@@ -474,23 +476,23 @@
       {#if activePage() === 'overview'}
         <section class="page overview-page" use:staggeredReveal={{ selector: ':scope > *', y: 5, stagger: 0.035 }}>
           {@render Kpis(snapshot.dashboard.summary, snapshot.currency)}
-          <Panel title="Activity Pulse" tone="cyan">
-            <ActivityPulse points={snapshot.dashboard.activity_timeline} />
+          <Panel title={snapshot.copy.panels.activity_pulse} tone="cyan">
+            <ActivityPulse points={snapshot.dashboard.activity_timeline} copy={snapshot.copy} />
           </Panel>
           <section class="grid overview-grid">
             <div class="overview-primary">
-              <Panel title="Project Spend by Tool" tone="yellow">
+              <Panel title={snapshot.copy.panels.project_spend_by_tool} tone="yellow">
                 {@render ProjectToolTable(snapshot.dashboard.project_tools)}
               </Panel>
             </div>
             <div class="overview-side-stack">
-              <Panel title="By Model" tone="magenta">
+              <Panel title={snapshot.copy.panels.by_model} tone="magenta">
                 {@render ModelTable(snapshot.dashboard.models)}
               </Panel>
-              <Panel title="Shell Commands" tone="orange">
+              <Panel title={snapshot.copy.panels.shell_commands} tone="orange">
                 {@render CountTable(snapshot.dashboard.commands)}
               </Panel>
-              <Panel title="MCP Servers" tone="magenta">
+              <Panel title={snapshot.copy.panels.mcp_servers} tone="magenta">
                 {@render CountTable(snapshot.dashboard.mcp_servers)}
               </Panel>
             </div>
@@ -500,41 +502,41 @@
         <section class="page deep-page" use:reveal={{ y: 5 }}>
           <section class="grid deep-grid">
             <div class="deep-trend">
-              <Panel title="Activity Trend" tone="blue">
-                <ActivityPulse points={snapshot.dashboard.activity_timeline} />
+              <Panel title={snapshot.copy.panels.activity_trend} tone="blue">
+                <ActivityPulse points={snapshot.dashboard.activity_timeline} copy={snapshot.copy} />
               </Panel>
             </div>
             <div class="deep-projects">
-              <Panel title="By Project" tone="green">
+              <Panel title={snapshot.copy.panels.by_project} tone="green">
                 {@render ProjectTable(snapshot.dashboard.projects)}
               </Panel>
             </div>
             <div class="deep-span">
-              <Panel title="Top Sessions" tone="red">
-                <button class="panel-command" type="button" onclick={() => openModal('session')}>Open Session Picker</button>
+              <Panel title={snapshot.copy.panels.top_sessions} tone="red">
+                <button class="panel-command" type="button" onclick={() => openModal('session')}>{snapshot.copy.actions.open_session_picker}</button>
                 {@render SessionTable(snapshot.dashboard.sessions)}
               </Panel>
             </div>
             <div class="deep-project-tools">
-              <Panel title="Project Spend by Tool" tone="yellow">
+              <Panel title={snapshot.copy.panels.project_spend_by_tool} tone="yellow">
                 {@render ProjectToolTable(snapshot.dashboard.project_tools)}
               </Panel>
             </div>
             <div class="deep-side-stack">
-              <Panel title="Model Efficiency" tone="magenta">
+              <Panel title={snapshot.copy.panels.model_efficiency} tone="magenta">
                 {@render ModelTable(snapshot.dashboard.models)}
               </Panel>
-              <Panel title="Core Tools" tone="cyan">
+              <Panel title={snapshot.copy.panels.core_tools} tone="cyan">
                 {@render CountTable(snapshot.dashboard.tools)}
               </Panel>
             </div>
             <div class="deep-shell">
-              <Panel title="Shell Commands" tone="orange">
+              <Panel title={snapshot.copy.panels.shell_commands} tone="orange">
                 {@render CountTable(snapshot.dashboard.commands)}
               </Panel>
             </div>
             <div class="deep-mcp">
-              <Panel title="MCP Servers" tone="magenta">
+              <Panel title={snapshot.copy.panels.mcp_servers} tone="magenta">
                 {@render CountTable(snapshot.dashboard.mcp_servers)}
               </Panel>
             </div>
@@ -544,17 +546,17 @@
         <section class="page usage-page" use:reveal={{ y: 5 }}>
           <section class="usage-grid">
             {#each snapshot.usage.sections as section, index}
-              <UsageConsole {section} tone={usageTone(section.tool, index)} />
+              <UsageConsole {section} tone={usageTone(section.tool, index)} copy={snapshot.copy} />
             {/each}
           </section>
         </section>
       {:else if activePage() === 'config'}
         <section class="page config-page" use:reveal={{ y: 5 }}>
           <section class="config-grid">
-            <Panel title="Configuration" tone="cyan">
+            <Panel title={snapshot.copy.nav.configuration} tone="cyan">
               <table>
                 <thead>
-                  <tr><th>setting</th><th>value</th><th></th></tr>
+                  <tr><th>{snapshot.copy.tables.setting}</th><th>{snapshot.copy.tables.value}</th><th></th></tr>
                 </thead>
                 <tbody>
                   {#each snapshot.config_rows as row}
@@ -572,12 +574,12 @@
                 </tbody>
               </table>
             </Panel>
-            <Panel title="Desktop" tone="orange">
+            <Panel title={snapshot.copy.panels.desktop} tone="orange">
               <div class="toggle-list">
                 <label class="toggle-row">
                   <span>
-                    <strong>Open at login</strong>
-                    <small>{snapshot.desktop_settings.open_at_login ? 'enabled' : 'disabled'}</small>
+                    <strong>{snapshot.copy.desktop.open_at_login}</strong>
+                    <small>{snapshot.desktop_settings.open_at_login ? snapshot.copy.desktop.enabled : snapshot.copy.desktop.disabled}</small>
                   </span>
                   <input
                     type="checkbox"
@@ -589,8 +591,8 @@
                 </label>
                 <label class="toggle-row">
                   <span>
-                    <strong>Dock/taskbar icon</strong>
-                    <small>{snapshot.desktop_settings.show_dock_or_taskbar_icon ? 'shown' : 'hidden'}</small>
+                    <strong>{snapshot.copy.desktop.dock_taskbar_icon}</strong>
+                    <small>{snapshot.desktop_settings.show_dock_or_taskbar_icon ? snapshot.copy.desktop.shown : snapshot.copy.desktop.hidden}</small>
                   </span>
                   <input
                     type="checkbox"
@@ -602,15 +604,15 @@
                 </label>
               </div>
             </Panel>
-            <Panel title="Local Data" tone="green">
+            <Panel title={snapshot.copy.panels.local_data} tone="green">
               <div class="config-facts">
-                <div><span>archive</span><strong>{snapshot.source}</strong></div>
-                <div><span>currency</span><strong>{snapshot.currency}</strong></div>
-                <div><span>exports</span><strong>{snapshot.export_dir}</strong></div>
+                <div><span>{snapshot.copy.tables.archive}</span><strong>{snapshot.source}</strong></div>
+                <div><span>{snapshot.copy.tables.currency}</span><strong>{snapshot.currency}</strong></div>
+                <div><span>{snapshot.copy.tables.exports}</span><strong>{snapshot.export_dir}</strong></div>
               </div>
               <div class="button-row">
-                <button type="button" onclick={() => commit(() => api.refreshArchive())}><Database size={15} /> Refresh</button>
-                <button type="button" onclick={chooseExportDir}><FolderOpen size={15} /> Folder</button>
+                <button type="button" onclick={() => commit(() => api.refreshArchive())}><Database size={15} /> {snapshot.copy.actions.refresh}</button>
+                <button type="button" onclick={chooseExportDir}><FolderOpen size={15} /> {snapshot.copy.actions.folder}</button>
               </div>
             </Panel>
           </section>
@@ -622,25 +624,25 @@
 
     <footer>
       {#each snapshot.shortcut_footer as hint}
-        <span><b>{hint.keys}</b> {hint.action === 'cycle_sort' ? `sort ${activeSortLabel()}` : hint.label}</span>
+        <span><b>{hint.keys}</b> {hint.action === 'cycle_sort' ? `${snapshot.copy.filters.sort} ${activeSortLabel()}` : hint.label}</span>
       {/each}
     </footer>
   </div>
 
   {#if modal}
     <div class="scrim" role="presentation" use:fadeIn>
-      <button class="backdrop" type="button" aria-label="Close dialog" onclick={closeModal}></button>
+      <button class="backdrop" type="button" aria-label={snapshot.copy.actions.close_dialog} onclick={closeModal}></button>
       <section class="modal" role="dialog" aria-modal="true" tabindex="-1" use:reveal={{ y: 8 }}>
         <div class="modal-head">
           <div class="modal-title">
             {#if modal !== 'export'}<Search size={16} />{/if}
-            {modal}
+            {modalTitle(modal)}
           </div>
-          <button class="icon-button" type="button" title="Close" onclick={closeModal}><X size={16} /></button>
+          <button class="icon-button" type="button" title={snapshot.copy.actions.close} onclick={closeModal}><X size={16} /></button>
         </div>
 
         {#if modal === 'project'}
-          <input bind:value={query} placeholder="Filter projects" />
+          <input bind:value={query} placeholder={snapshot.copy.desktop.filter_projects} />
           <div class="picker-list">
             {#each filteredProjects() as project}
               <button
@@ -649,22 +651,22 @@
                 onclick={() => commit(() => api.setProject(project.identity)).then(closeModal)}
               >
                 <span>{project.label}</span>
-                <small>{project.cost} · {count(project.calls)} calls</small>
+                <small>{project.cost} · {count(project.calls)} {snapshot.copy.metrics.calls}</small>
               </button>
             {/each}
           </div>
         {:else if modal === 'session'}
-          <input bind:value={query} placeholder="Filter sessions" />
+          <input bind:value={query} placeholder={snapshot.copy.desktop.filter_sessions} />
           <div class="picker-list">
             {#each filteredSessions() as session}
               <button type="button" onclick={() => commit(() => api.openSession(session.key)).then(closeModal)}>
                 <span>{session.project}</span>
-                <small>{session.date} · {session.tool} · {session.cost} · {count(session.calls)} calls</small>
+                <small>{session.date} · {session.tool} · {session.cost} · {count(session.calls)} {snapshot.copy.metrics.calls}</small>
               </button>
             {/each}
           </div>
         {:else if modal === 'currency'}
-          <input bind:value={query} placeholder="Filter currencies" />
+          <input bind:value={query} placeholder={snapshot.copy.desktop.filter_currencies} />
           <div class="currency-grid">
             {#each filteredCurrencies() as currency}
               <button
@@ -679,7 +681,7 @@
         {:else if modal === 'export'}
           <div class="export-box">
             <div class="export-path">{snapshot.export_dir}</div>
-            <button type="button" onclick={chooseExportDir}><FolderOpen size={15} /> Folder</button>
+            <button type="button" onclick={chooseExportDir}><FolderOpen size={15} /> {snapshot.copy.actions.folder}</button>
           </div>
           <div class="format-grid">
             {#each snapshot.export_formats as format}
@@ -692,7 +694,7 @@
               </button>
             {/each}
           </div>
-          <button class="primary-command" type="button" onclick={runExport}><Download size={16} /> Export</button>
+          <button class="primary-command" type="button" onclick={runExport}><Download size={16} /> {snapshot.copy.actions.export}</button>
         {/if}
       </section>
     </div>
@@ -700,61 +702,61 @@
 
   {#if callDetail}
     <div class="scrim" role="presentation" use:fadeIn>
-      <button class="backdrop" type="button" aria-label="Close call detail" onclick={closeCallDetail}></button>
+      <button class="backdrop" type="button" aria-label={snapshot.copy.actions.close_call_detail} onclick={closeCallDetail}></button>
       <section class="modal detail-modal" role="dialog" aria-modal="true" tabindex="-1" use:reveal={{ y: 8 }}>
         <div class="modal-head">
-          <div class="modal-title">call detail</div>
-          <button class="icon-button" type="button" title="Close" onclick={closeCallDetail}><X size={16} /></button>
+          <div class="modal-title">{snapshot.copy.session.call_detail}</div>
+          <button class="icon-button" type="button" title={snapshot.copy.actions.close} onclick={closeCallDetail}><X size={16} /></button>
         </div>
 
         <div class="detail-grid">
-          <div><span>time</span><strong>{callDetail.timestamp}</strong></div>
-          <div><span>model</span><strong>{callDetail.model}</strong></div>
-          <div><span>cost</span><strong class="money">{callDetail.cost}</strong></div>
-          <div><span>tools</span><strong>{callDetail.tools}</strong></div>
-          <div><span>input</span><strong>{count(callDetail.input_tokens)}</strong></div>
-          <div><span>output</span><strong>{count(callDetail.output_tokens)}</strong></div>
-          <div><span>cache read</span><strong>{count(callDetail.cache_read)}</strong></div>
-          <div><span>cache write</span><strong>{count(callDetail.cache_write)}</strong></div>
-          <div><span>reasoning</span><strong>{count(callDetail.reasoning_tokens)}</strong></div>
-          <div><span>web search</span><strong>{count(callDetail.web_search_requests)}</strong></div>
+          <div><span>{snapshot.copy.tables.time}</span><strong>{callDetail.timestamp}</strong></div>
+          <div><span>{snapshot.copy.tables.model}</span><strong>{callDetail.model}</strong></div>
+          <div><span>{snapshot.copy.tables.cost}</span><strong class="money">{callDetail.cost}</strong></div>
+          <div><span>{snapshot.copy.tables.tools}</span><strong>{callDetail.tools}</strong></div>
+          <div><span>{snapshot.copy.metrics.input}</span><strong>{count(callDetail.input_tokens)}</strong></div>
+          <div><span>{snapshot.copy.metrics.output}</span><strong>{count(callDetail.output_tokens)}</strong></div>
+          <div><span>{snapshot.copy.metrics.cache_read}</span><strong>{count(callDetail.cache_read)}</strong></div>
+          <div><span>{snapshot.copy.metrics.cache_write}</span><strong>{count(callDetail.cache_write)}</strong></div>
+          <div><span>{snapshot.copy.session.reasoning}</span><strong>{count(callDetail.reasoning_tokens)}</strong></div>
+          <div><span>{snapshot.copy.session.web_search}</span><strong>{count(callDetail.web_search_requests)}</strong></div>
         </div>
 
         {#if callDetail.bash_commands.length}
           <section class="detail-block">
-            <h3>bash</h3>
+            <h3>{snapshot.copy.session.bash}</h3>
             <pre>{callDetail.bash_commands.join('\n')}</pre>
           </section>
         {/if}
 
         <section class="detail-block">
-          <h3>prompt</h3>
+          <h3>{snapshot.copy.tables.prompt}</h3>
           <pre>{callDetail.prompt_full || callDetail.prompt || '-'}</pre>
         </section>
       </section>
     </div>
   {/if}
 {:else}
-  <div class="loading" use:reveal>Token Use</div>
+  <div class="loading" aria-busy="true" use:reveal></div>
 {/if}
 
 {#snippet Kpis(summary: Summary, currency: string)}
   <section class="kpis" use:staggeredReveal={{ selector: ':scope > div', y: 4, stagger: 0.025 }}>
-    <div><span>cost</span><strong>{summary.cost}</strong><small>{currency}</small></div>
-    <div><span>calls</span><strong>{summary.calls}</strong><small>{summary.input} in</small></div>
-    <div><span>sessions</span><strong>{summary.sessions}</strong><small>active set</small></div>
-    <div><span>cache hit</span><strong>{summary.cache_hit}</strong><small>{summary.cached} cached</small></div>
-    <div><span>in / out</span><strong>{summary.input}</strong><small>{summary.output} out</small></div>
+    <div><span>{snapshot?.copy.metrics.cost}</span><strong>{summary.cost}</strong><small>{currency}</small></div>
+    <div><span>{snapshot?.copy.metrics.calls}</span><strong>{summary.calls}</strong><small>{summary.input} {snapshot?.copy.metrics.in}</small></div>
+    <div><span>{snapshot?.copy.metrics.sessions}</span><strong>{summary.sessions}</strong><small>{snapshot?.copy.metrics.active_set}</small></div>
+    <div><span>{snapshot?.copy.metrics.cache_hit}</span><strong>{summary.cache_hit}</strong><small>{summary.cached} {snapshot?.copy.metrics.cached}</small></div>
+    <div><span>{snapshot?.copy.metrics.in} / {snapshot?.copy.metrics.out}</span><strong>{summary.input}</strong><small>{summary.output} {snapshot?.copy.metrics.out}</small></div>
   </section>
 {/snippet}
 
 {#snippet ProjectTable(rows: ProjectMetric[])}
   <table class="data-table project-table">
-    <thead><tr><th></th><th>project</th><th>cost</th><th>avg/s</th><th>sess</th><th>tools</th></tr></thead>
+    <thead><tr><th></th><th>{snapshot?.copy.tables.project}</th><th>{snapshot?.copy.tables.cost}</th><th>{snapshot?.copy.tables.avg_per_session}</th><th>{snapshot?.copy.tables.sess}</th><th>{snapshot?.copy.tables.tools}</th></tr></thead>
     <tbody>
       {#each rows as row}
         <tr>
-          <td><RankBar value={row.value} ariaLabel={`${row.name} rank`} /></td>
+          <td><RankBar value={row.value} ariaLabel={`${row.name} ${snapshot?.copy.desktop.rank}`} /></td>
           <td>{row.name}</td>
           <td class="money">{row.cost}</td>
           <td class="money">{row.avg_per_session}</td>
@@ -762,7 +764,7 @@
           <td class="muted-cell">{row.tool_mix}</td>
         </tr>
       {:else}
-        <tr><td colspan="6" class="empty-cell">no project rows</td></tr>
+        <tr><td colspan="6" class="empty-cell">{snapshot?.copy.empty.no_project_rows}</td></tr>
       {/each}
     </tbody>
   </table>
@@ -770,11 +772,11 @@
 
 {#snippet ProjectToolTable(rows: ProjectToolMetric[])}
   <table class="data-table project-tool-table">
-    <thead><tr><th></th><th>project</th><th>tool</th><th>cost</th><th>calls</th><th>sess</th><th>avg/s</th></tr></thead>
+    <thead><tr><th></th><th>{snapshot?.copy.tables.project}</th><th>{snapshot?.copy.tables.tool}</th><th>{snapshot?.copy.tables.cost}</th><th>{snapshot?.copy.tables.calls}</th><th>{snapshot?.copy.tables.sess}</th><th>{snapshot?.copy.tables.avg_per_session}</th></tr></thead>
     <tbody>
       {#each rows as row}
         <tr>
-          <td><RankBar value={row.value} ariaLabel={`${row.project} ${row.tool} rank`} /></td>
+          <td><RankBar value={row.value} ariaLabel={`${row.project} ${row.tool} ${snapshot?.copy.desktop.rank}`} /></td>
           <td>{row.project}</td>
           <td>{row.tool}</td>
           <td class="money">{row.cost}</td>
@@ -783,7 +785,7 @@
           <td class="money">{row.avg_per_session}</td>
         </tr>
       {:else}
-        <tr><td colspan="7" class="empty-cell">no project/tool rows</td></tr>
+        <tr><td colspan="7" class="empty-cell">{snapshot?.copy.empty.no_project_tool_rows}</td></tr>
       {/each}
     </tbody>
   </table>
@@ -791,18 +793,18 @@
 
 {#snippet SessionTable(rows: SessionMetric[])}
   <table class="data-table session-table">
-    <thead><tr><th></th><th>date</th><th>project</th><th>cost</th><th>calls</th></tr></thead>
+    <thead><tr><th></th><th>{snapshot?.copy.tables.date}</th><th>{snapshot?.copy.tables.project}</th><th>{snapshot?.copy.tables.cost}</th><th>{snapshot?.copy.tables.calls}</th></tr></thead>
     <tbody>
       {#each rows as row}
         <tr>
-          <td><RankBar value={row.value} ariaLabel={`${row.project} session rank`} /></td>
+          <td><RankBar value={row.value} ariaLabel={`${row.project} ${snapshot?.copy.desktop.session_rank}`} /></td>
           <td>{row.date}</td>
           <td>{row.project}</td>
           <td class="money">{row.cost}</td>
           <td>{count(row.calls)}</td>
         </tr>
       {:else}
-        <tr><td colspan="5" class="empty-cell">no sessions</td></tr>
+        <tr><td colspan="5" class="empty-cell">{snapshot?.copy.empty.no_sessions}</td></tr>
       {/each}
     </tbody>
   </table>
@@ -810,18 +812,18 @@
 
 {#snippet ModelTable(rows: ModelMetric[])}
   <table class="data-table model-table">
-    <thead><tr><th></th><th>model</th><th>cost</th><th>cache</th><th>calls</th></tr></thead>
+    <thead><tr><th></th><th>{snapshot?.copy.tables.model}</th><th>{snapshot?.copy.tables.cost}</th><th>{snapshot?.copy.tables.cache}</th><th>{snapshot?.copy.tables.calls}</th></tr></thead>
     <tbody>
       {#each rows as row}
         <tr>
-          <td><RankBar value={row.value} ariaLabel={`${row.name} rank`} /></td>
+          <td><RankBar value={row.value} ariaLabel={`${row.name} ${snapshot?.copy.desktop.rank}`} /></td>
           <td>{row.name}</td>
           <td class="money">{row.cost}</td>
           <td>{row.cache}</td>
           <td>{count(row.calls)}</td>
         </tr>
       {:else}
-        <tr><td colspan="5" class="empty-cell">no models</td></tr>
+        <tr><td colspan="5" class="empty-cell">{snapshot?.copy.empty.no_models}</td></tr>
       {/each}
     </tbody>
   </table>
@@ -829,16 +831,16 @@
 
 {#snippet CountTable(rows: CountMetric[])}
   <table class="data-table count-table">
-    <thead><tr><th></th><th>name</th><th>calls</th></tr></thead>
+    <thead><tr><th></th><th>{snapshot?.copy.tables.name}</th><th>{snapshot?.copy.tables.calls}</th></tr></thead>
     <tbody>
       {#each rows as row}
         <tr>
-          <td><RankBar value={row.value} ariaLabel={`${row.name} rank`} /></td>
+          <td><RankBar value={row.value} ariaLabel={`${row.name} ${snapshot?.copy.desktop.rank}`} /></td>
           <td>{row.name}</td>
           <td>{count(row.calls)}</td>
         </tr>
       {:else}
-        <tr><td colspan="3" class="empty-cell">no rows</td></tr>
+        <tr><td colspan="3" class="empty-cell">{snapshot?.copy.empty.no_rows}</td></tr>
       {/each}
     </tbody>
   </table>
@@ -847,7 +849,7 @@
 {#snippet SessionDetailPanel(session: SessionDetailView | null)}
   <section class="session-page" use:reveal={{ y: 5 }}>
     <div class="session-head">
-      <button type="button" onclick={() => commit(() => api.closeSession())}><ArrowLeft size={15} /> Deep Dive</button>
+      <button type="button" onclick={() => commit(() => api.closeSession())}><ArrowLeft size={15} /> {snapshot?.copy.nav.deep_dive}</button>
       {#if session}
         <div>
           <strong>{session.project}</strong>
@@ -857,16 +859,16 @@
     </div>
     {#if session}
       <section class="kpis session-kpis">
-        <div><span>cost</span><strong>{session.total_cost}</strong><small>{session.total_calls} calls</small></div>
-        <div><span>input</span><strong>{session.total_input}</strong><small>tokens</small></div>
-        <div><span>output</span><strong>{session.total_output}</strong><small>tokens</small></div>
-        <div><span>cache read</span><strong>{session.total_cache_read}</strong><small>tokens</small></div>
+        <div><span>{snapshot?.copy.metrics.cost}</span><strong>{session.total_cost}</strong><small>{session.total_calls} {snapshot?.copy.metrics.calls}</small></div>
+        <div><span>{snapshot?.copy.metrics.input}</span><strong>{session.total_input}</strong><small>{snapshot?.copy.metrics.tokens}</small></div>
+        <div><span>{snapshot?.copy.metrics.output}</span><strong>{session.total_output}</strong><small>{snapshot?.copy.metrics.tokens}</small></div>
+        <div><span>{snapshot?.copy.metrics.cache_read}</span><strong>{session.total_cache_read}</strong><small>{snapshot?.copy.metrics.tokens}</small></div>
       </section>
       <div class="session-panel-area">
         {#if session.note}<div class="status-line">{session.note}</div>{/if}
-        <Panel title="Calls" tone="red">
+        <Panel title={snapshot?.copy.panels.calls ?? ''} tone="red">
           <table>
-            <thead><tr><th>time</th><th>model</th><th>cost</th><th>in</th><th>out</th><th>cache</th><th>tools</th><th>prompt</th></tr></thead>
+            <thead><tr><th>{snapshot?.copy.tables.time}</th><th>{snapshot?.copy.tables.model}</th><th>{snapshot?.copy.tables.cost}</th><th>{snapshot?.copy.tables.in}</th><th>{snapshot?.copy.tables.out}</th><th>{snapshot?.copy.tables.cache}</th><th>{snapshot?.copy.tables.tools}</th><th>{snapshot?.copy.tables.prompt}</th></tr></thead>
             <tbody>
               {#each session.calls as call}
                 <tr
@@ -891,7 +893,7 @@
       </div>
     {:else}
       <div class="session-panel-area">
-        <div class="empty-state">no session selected</div>
+        <div class="empty-state">{snapshot?.copy.session.no_session_selected}</div>
       </div>
     {/if}
   </section>
