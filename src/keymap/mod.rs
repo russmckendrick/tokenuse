@@ -20,6 +20,8 @@ pub const CONTEXT_BUSY_MODAL: &str = "busy_modal";
 pub const CONTEXT_EXPORT_PICKER: &str = "export_picker";
 pub const CONTEXT_EXPORT_FOLDER_PICKER: &str = "export_folder_picker";
 pub const CONTEXT_DESKTOP: &str = "desktop";
+pub const CONTEXT_DESKTOP_USAGE_PAGE: &str = "desktop_usage_page";
+pub const CONTEXT_DESKTOP_CONFIG_PAGE: &str = "desktop_config_page";
 pub const CONTEXT_DESKTOP_SESSION_PAGE: &str = "desktop_session_page";
 pub const CONTEXT_DESKTOP_MODAL: &str = "desktop_modal";
 pub const CONTEXT_DESKTOP_CALL_DETAIL: &str = "desktop_call_detail";
@@ -467,6 +469,48 @@ mod tests {
 
         assert_eq!(shifted, Some(ACTION_TOGGLE_DATA_SOURCE));
         assert_eq!(plain, Some(ACTION_PAGE_DEEP_DIVE));
+    }
+
+    #[test]
+    fn desktop_page_contexts_omit_disabled_filter_shortcuts() {
+        let keymap = keymap();
+
+        let input = |key: &str| KeyInput {
+            key: key.into(),
+            ctrl: false,
+            alt: false,
+            shift: false,
+            meta: false,
+        };
+
+        assert_eq!(
+            keymap.resolve_input(CONTEXT_DESKTOP_USAGE_PAGE, &input("2")),
+            None
+        );
+        assert_eq!(
+            keymap.resolve_input(CONTEXT_DESKTOP_USAGE_PAGE, &input("p")),
+            None
+        );
+        assert_eq!(
+            keymap.resolve_input(CONTEXT_DESKTOP_USAGE_PAGE, &input("t")),
+            None
+        );
+        assert_eq!(
+            keymap.resolve_input(CONTEXT_DESKTOP_USAGE_PAGE, &input("g")),
+            None
+        );
+        assert_eq!(
+            keymap.resolve_input(CONTEXT_DESKTOP_CONFIG_PAGE, &input("1")),
+            None
+        );
+        assert_eq!(
+            keymap.resolve_input(CONTEXT_DESKTOP_CONFIG_PAGE, &input("t")),
+            None
+        );
+        assert_eq!(
+            keymap.resolve_input(CONTEXT_DESKTOP_CONFIG_PAGE, &input("e")),
+            Some(ACTION_OPEN_EXPORT_PICKER)
+        );
     }
 
     #[test]

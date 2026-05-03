@@ -12,8 +12,7 @@ use tauri::{
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tokenuse::{
     app::{App, AppStatus, StatusTone},
-    copy,
-    runtime,
+    copy, runtime,
 };
 
 mod commands;
@@ -25,15 +24,12 @@ mod state;
 
 use menu::desktop_menu;
 use notifications::send_background_alert;
-use state::{
-    is_quitting, mark_quitting, CommandError, CommandResult, DesktopState, SharedState,
-};
+use state::{is_quitting, mark_quitting, CommandError, CommandResult, DesktopState, SharedState};
 
 const MAIN_WINDOW_LABEL: &str = "main";
 const TRAY_POPOVER_LABEL: &str = "tray-popover";
 const TRAY_POPOVER_WIDTH: f64 = 340.0;
 const TRAY_POPOVER_HEIGHT: f64 = 520.0;
-
 
 pub(crate) fn restore_main_window<R: Runtime>(app_handle: &AppHandle<R>) {
     if let Some(window) = app_handle.get_webview_window(MAIN_WINDOW_LABEL) {
@@ -405,7 +401,7 @@ mod tests {
     use crate::ids::{export_format_id, parse_export_format, parse_tool, tool_id};
     use crate::snapshot::{snapshot, tray_snapshot};
     use tokenuse::{
-        app::{Period, ProjectFilter, SortMode, Tool},
+        app::{Page, Period, ProjectFilter, SortMode, Tool},
         export::ExportFormat,
     };
 
@@ -441,6 +437,46 @@ mod tests {
             snapshot.shortcut_footer[0].label,
             copy::copy().footer("desktop")[0].label
         );
+    }
+
+    #[test]
+    fn desktop_snapshot_uses_page_specific_filter_footers() {
+        let mut app = App::default();
+
+        app.set_page(Page::Usage);
+        let usage = snapshot(&app);
+        assert_eq!(
+            usage.shortcut_footer[0].label,
+            copy::copy().footer("desktop_usage")[0].label
+        );
+
+        app.set_page(Page::Config);
+        let config = snapshot(&app);
+        assert_eq!(
+            config.shortcut_footer[0].label,
+            copy::copy().footer("desktop_config")[0].label
+        );
+    }
+
+    #[test]
+    fn desktop_usage_snapshot_displays_fixed_disabled_filters() {
+        let mut app = App::default();
+        app.tool = Tool::Codex;
+        app.sort = SortMode::Tokens;
+        app.project_filter = ProjectFilter::Selected {
+            identity: "project-id".into(),
+            label: "Project".into(),
+        };
+
+        app.set_page(Page::Usage);
+        let usage = snapshot(&app);
+
+        assert_eq!(usage.tool, "all");
+        assert_eq!(usage.sort, "spend");
+        assert_eq!(usage.project.identity, None);
+        assert_eq!(usage.project.label, copy::copy().tools.all.as_str());
+        assert!(matches!(app.tool, Tool::Codex));
+        assert!(matches!(app.sort, SortMode::Tokens));
     }
 
     #[test]

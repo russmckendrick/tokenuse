@@ -996,6 +996,125 @@
       "action": "cycle_tool"
     },
     {
+      "context": "desktop_usage_page",
+      "keys": [
+        "Shift+D"
+      ],
+      "action": "toggle_data_source"
+    },
+    {
+      "context": "desktop_usage_page",
+      "keys": [
+        "1"
+      ],
+      "action": "period_today"
+    },
+    {
+      "context": "desktop_usage_page",
+      "keys": [
+        "o"
+      ],
+      "action": "page_overview"
+    },
+    {
+      "context": "desktop_usage_page",
+      "keys": [
+        "d"
+      ],
+      "action": "page_deep_dive"
+    },
+    {
+      "context": "desktop_usage_page",
+      "keys": [
+        "u"
+      ],
+      "action": "page_usage"
+    },
+    {
+      "context": "desktop_usage_page",
+      "keys": [
+        "c"
+      ],
+      "action": "page_config"
+    },
+    {
+      "context": "desktop_usage_page",
+      "keys": [
+        "s"
+      ],
+      "action": "open_session_picker"
+    },
+    {
+      "context": "desktop_usage_page",
+      "keys": [
+        "e"
+      ],
+      "action": "open_export_picker"
+    },
+    {
+      "context": "desktop_usage_page",
+      "keys": [
+        "r"
+      ],
+      "action": "reload"
+    },
+    {
+      "context": "desktop_config_page",
+      "keys": [
+        "Shift+D"
+      ],
+      "action": "toggle_data_source"
+    },
+    {
+      "context": "desktop_config_page",
+      "keys": [
+        "o"
+      ],
+      "action": "page_overview"
+    },
+    {
+      "context": "desktop_config_page",
+      "keys": [
+        "d"
+      ],
+      "action": "page_deep_dive"
+    },
+    {
+      "context": "desktop_config_page",
+      "keys": [
+        "u"
+      ],
+      "action": "page_usage"
+    },
+    {
+      "context": "desktop_config_page",
+      "keys": [
+        "c"
+      ],
+      "action": "page_config"
+    },
+    {
+      "context": "desktop_config_page",
+      "keys": [
+        "s"
+      ],
+      "action": "open_session_picker"
+    },
+    {
+      "context": "desktop_config_page",
+      "keys": [
+        "e"
+      ],
+      "action": "open_export_picker"
+    },
+    {
+      "context": "desktop_config_page",
+      "keys": [
+        "r"
+      ],
+      "action": "reload"
+    },
+    {
       "context": "desktop_session_page",
       "keys": [
         "Esc"

@@ -155,6 +155,41 @@ footer,
   border-color: #ff8f40;
 }
 
+.filter-strip button:disabled,
+.filter-strip select:disabled,
+.filter-strip .segmented button.active:disabled {
+  opacity: 1;
+  color: #4f5570;
+  background: #1d2031;
+  border-color: #30354c;
+}
+
+.filter-strip button:disabled:hover,
+.filter-strip select:disabled:focus,
+.filter-strip .segmented button.active:disabled:hover {
+  color: #4f5570;
+  background: #1d2031;
+  border-color: #30354c;
+}
+
+.tool-strip.is-disabled span,
+.project-strip:disabled span {
+  color: #555b75;
+}
+
+.tool-strip.is-disabled::after,
+.project-strip:disabled::after,
+.project-strip:disabled:hover::after {
+  border-color: #4f5570;
+}
+
+.tool-strip.is-disabled select,
+.tool-strip.is-disabled select:focus {
+  color: #555b75;
+  background: #1d2031;
+  border-color: #30354c;
+}
+
 .project-strip {
   width: 100%;
   min-width: 0;
@@ -195,8 +230,25 @@ footer,
   border-color: #62a6ff;
 }
 
+.project-strip:disabled,
+.project-strip:disabled:hover {
+  opacity: 1;
+  color: #4f5570;
+}
+
+.project-strip:disabled strong,
+.project-strip:disabled:hover strong {
+  color: #555b75;
+  background: #1d2031;
+  border-color: #30354c;
+}
+
 .project-strip:hover::after {
   border-color: #62a6ff;
+}
+
+.project-strip:disabled:hover::after {
+  border-color: #4f5570;
 }
 
 .muted-cell,
@@ -381,4 +433,3 @@ main {
 .deep-span {
   grid-column: 1 / -1;
 }
-

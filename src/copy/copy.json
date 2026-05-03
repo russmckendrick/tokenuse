@@ -167,7 +167,7 @@
     "rows": {
       "currency_override": {
         "name": "Currency Override",
-        "action": "pick"
+        "action": "Pick"
       },
       "rates_json": {
         "name": "Rates JSON",
@@ -175,7 +175,7 @@
       },
       "litellm_prices": {
         "name": "LiteLLM prices",
-        "action": "download"
+        "action": "Download"
       },
       "clear_data": {
         "name": "Clear Data",
@@ -534,6 +534,17 @@
         { "keys": "t", "label": "tool", "action": "cycle_tool" },
         { "keys": "g", "label": "sort", "action": "cycle_sort" },
         { "keys": "p", "label": "project", "action": "open_project_picker" },
+        { "keys": "s", "label": "session", "action": "open_session_picker" },
+        { "keys": "e", "label": "export", "action": "open_export_picker" },
+        { "keys": "r", "label": "refresh", "action": "reload" }
+      ],
+      "desktop_usage": [
+        { "keys": "1", "label": "24h", "action": "period_today" },
+        { "keys": "s", "label": "session", "action": "open_session_picker" },
+        { "keys": "e", "label": "export", "action": "open_export_picker" },
+        { "keys": "r", "label": "refresh", "action": "reload" }
+      ],
+      "desktop_config": [
         { "keys": "s", "label": "session", "action": "open_session_picker" },
         { "keys": "e", "label": "export", "action": "open_export_picker" },
         { "keys": "r", "label": "refresh", "action": "reload" }

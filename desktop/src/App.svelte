@@ -17,6 +17,7 @@
     DesktopSnapshot,
     ExportFormatId,
     PageId,
+    PeriodId,
     ProjectOption,
     ShortcutInput,
     SortId,
@@ -144,6 +145,8 @@
     if (callDetail) return 'desktop_call_detail';
     if (modal) return 'desktop_modal';
     if (snapshot?.page === 'session' && event.key === 'Escape') return 'desktop_session_page';
+    if (snapshot?.page === 'usage') return 'desktop_usage_page';
+    if (snapshot?.page === 'config') return 'desktop_config_page';
     return 'desktop';
   }
 
@@ -258,6 +261,30 @@
   function activeSortLabel() {
     if (!snapshot) return '';
     return snapshot.sorts.find((sort) => sort.value === snapshot?.sort)?.label ?? '';
+  }
+
+  function isUsagePage() {
+    return activePage() === 'usage';
+  }
+
+  function isConfigPage() {
+    return activePage() === 'config';
+  }
+
+  function isPeriodDisabled(period: PeriodId) {
+    return isConfigPage() || (isUsagePage() && period !== 'today');
+  }
+
+  function isToolDisabled() {
+    return isConfigPage() || isUsagePage();
+  }
+
+  function isSortDisabled() {
+    return isConfigPage() || isUsagePage();
+  }
+
+  function isProjectDisabled() {
+    return isConfigPage() || isUsagePage();
   }
 
   function tabsFor(state: DesktopSnapshot): Array<{ value: PageId; label: string }> {
@@ -418,6 +445,7 @@
           <button
             type="button"
             class:active={snapshot.period === period.value}
+            disabled={isPeriodDisabled(period.value)}
             onclick={() => commit(() => api.setPeriod(period.value))}
           >
             {period.label}
@@ -426,25 +454,25 @@
       </div>
 
       <div class="filter-controls">
-        <div class="segmented tool-strip" aria-label={snapshot.copy.desktop.tool_aria}>
+        <div class="segmented tool-strip" class:is-disabled={isToolDisabled()} aria-label={snapshot.copy.desktop.tool_aria}>
           <span>{snapshot.copy.filters.tool}</span>
-          <select aria-label={snapshot.copy.desktop.tool_aria} onchange={setToolFromEvent}>
+          <select aria-label={snapshot.copy.desktop.tool_aria} disabled={isToolDisabled()} onchange={setToolFromEvent}>
             {#each snapshot.tools as tool}
               <option value={tool.value} selected={snapshot.tool === tool.value}>{tool.label}</option>
             {/each}
           </select>
         </div>
 
-        <div class="segmented tool-strip sort-strip" aria-label={snapshot.copy.desktop.sort_aria}>
+        <div class="segmented tool-strip sort-strip" class:is-disabled={isSortDisabled()} aria-label={snapshot.copy.desktop.sort_aria}>
           <span>{snapshot.copy.filters.sort}</span>
-          <select aria-label={snapshot.copy.desktop.sort_aria} onchange={setSortFromEvent}>
+          <select aria-label={snapshot.copy.desktop.sort_aria} disabled={isSortDisabled()} onchange={setSortFromEvent}>
             {#each snapshot.sorts as sort}
               <option value={sort.value} selected={snapshot.sort === sort.value}>{sort.label}</option>
             {/each}
           </select>
         </div>
 
-        <button class="segmented tool-strip project-strip" type="button" aria-label={snapshot.copy.desktop.project_aria} onclick={() => openModal('project')}>
+        <button class="segmented tool-strip project-strip" type="button" aria-label={snapshot.copy.desktop.project_aria} disabled={isProjectDisabled()} onclick={() => openModal('project')}>
           <span>{snapshot.copy.filters.project}</span>
           <strong>{snapshot.project.label}</strong>
         </button>

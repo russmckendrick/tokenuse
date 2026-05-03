@@ -1,6 +1,6 @@
 use serde::Serialize;
 use tokenuse::{
-    app::{App, ConfigRowView, DataSource, Period, ProjectFilter, SortMode, Tool},
+    app::{App, ConfigRowView, DataSource, Page, Period, ProjectFilter, SortMode, Tool},
     copy::{self, CopyDeck, CopyKeyHint},
     data::{DashboardData, LimitsData, ProjectOption, SessionDetailView, SessionOption},
     export::ExportFormat,
@@ -79,6 +79,18 @@ pub(crate) struct ShortcutResponse {
 }
 
 pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
+    let uses_fixed_usage_filters = app.page == Page::Usage;
+    let tool = if uses_fixed_usage_filters {
+        Tool::All
+    } else {
+        app.tool
+    };
+    let sort = if uses_fixed_usage_filters {
+        SortMode::Spend
+    } else {
+        app.sort
+    };
+
     DesktopSnapshot {
         version: env!("CARGO_PKG_VERSION"),
         copy: copy::copy(),
@@ -97,7 +109,7 @@ pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
                 label: period.label(),
             })
             .collect(),
-        tool: tool_id(app.tool),
+        tool: tool_id(tool),
         tools: [
             Tool::All,
             Tool::ClaudeCode,
@@ -112,7 +124,7 @@ pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
             label: tool.label(),
         })
         .collect(),
-        sort: sort_id(app.sort),
+        sort: sort_id(sort),
         sorts: SortMode::ALL
             .into_iter()
             .map(|sort| OptionItem {
@@ -120,18 +132,25 @@ pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
                 label: sort.label(),
             })
             .collect(),
-        project: match &app.project_filter {
-            ProjectFilter::All => ProjectState {
+        project: if uses_fixed_usage_filters {
+            ProjectState {
                 identity: None,
                 label: copy::copy().tools.all.clone(),
-            },
-            ProjectFilter::Selected { identity, label } => ProjectState {
-                identity: Some(identity.clone()),
-                label: label.clone(),
-            },
+            }
+        } else {
+            match &app.project_filter {
+                ProjectFilter::All => ProjectState {
+                    identity: None,
+                    label: copy::copy().tools.all.clone(),
+                },
+                ProjectFilter::Selected { identity, label } => ProjectState {
+                    identity: Some(identity.clone()),
+                    label: label.clone(),
+                },
+            }
         },
         dashboard: app.dashboard(),
-        usage: app.usage(),
+        usage: app.usage_for(tool, sort),
         projects: app.project_options(),
         sessions: app.session_options(),
         session: app.session_view.clone(),
@@ -147,7 +166,15 @@ pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
                 label: format.label(),
             })
             .collect(),
-        shortcut_footer: copy::copy().footer("desktop").to_vec(),
+        shortcut_footer: copy::copy().footer(desktop_footer_name(app)).to_vec(),
+    }
+}
+
+fn desktop_footer_name(app: &App) -> &'static str {
+    match app.page {
+        Page::Usage => "desktop_usage",
+        Page::Config => "desktop_config",
+        _ => "desktop",
     }
 }
 

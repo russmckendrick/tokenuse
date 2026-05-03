@@ -11,7 +11,9 @@ use crate::{
     apply_dock_or_taskbar_icon, hide_tray_popover_window,
     ids::{parse_export_format, parse_page, parse_period, parse_sort, parse_tool},
     restore_main_window,
-    snapshot::{snapshot, tray_snapshot, DesktopSnapshot, ExportResponse, ShortcutResponse, TraySnapshot},
+    snapshot::{
+        snapshot, tray_snapshot, DesktopSnapshot, ExportResponse, ShortcutResponse, TraySnapshot,
+    },
     state::{save_user_settings, with_app, CommandError, CommandResult, SharedState},
     sync_open_at_login,
 };
@@ -22,7 +24,9 @@ pub(crate) async fn get_snapshot(state: State<'_, SharedState>) -> CommandResult
 }
 
 #[tauri::command]
-pub(crate) async fn get_tray_snapshot(state: State<'_, SharedState>) -> CommandResult<TraySnapshot> {
+pub(crate) async fn get_tray_snapshot(
+    state: State<'_, SharedState>,
+) -> CommandResult<TraySnapshot> {
     with_app(state, |app| Ok(tray_snapshot(app))).await
 }
 
@@ -39,7 +43,10 @@ pub(crate) fn hide_tray_popover(app_handle: AppHandle) -> CommandResult<()> {
 }
 
 #[tauri::command]
-pub(crate) async fn set_page(page: String, state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
+pub(crate) async fn set_page(
+    page: String,
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
     with_app(state, move |app| {
         let page = parse_page(&page)?;
         if page != Page::Session {
@@ -65,7 +72,10 @@ pub(crate) async fn set_period(
 }
 
 #[tauri::command]
-pub(crate) async fn set_tool(tool: String, state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
+pub(crate) async fn set_tool(
+    tool: String,
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
     with_app(state, move |app| {
         app.set_tool(parse_tool(&tool)?);
         Ok(snapshot(app))
@@ -74,7 +84,10 @@ pub(crate) async fn set_tool(tool: String, state: State<'_, SharedState>) -> Com
 }
 
 #[tauri::command]
-pub(crate) async fn set_sort(sort: String, state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
+pub(crate) async fn set_sort(
+    sort: String,
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
     with_app(state, move |app| {
         app.set_sort(parse_sort(&sort)?);
         Ok(snapshot(app))
@@ -182,7 +195,9 @@ pub(crate) async fn set_show_dock_or_taskbar_icon(
 }
 
 #[tauri::command]
-pub(crate) async fn refresh_archive(state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
+pub(crate) async fn refresh_archive(
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
     with_app(state, |app| {
         app.reload();
         Ok(snapshot(app))
@@ -200,7 +215,9 @@ pub(crate) async fn clear_data(state: State<'_, SharedState>) -> CommandResult<D
 }
 
 #[tauri::command]
-pub(crate) async fn refresh_currency_rates(state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
+pub(crate) async fn refresh_currency_rates(
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
     with_app(state, |app| {
         app.refresh_currency_rates();
         Ok(snapshot(app))
@@ -209,7 +226,9 @@ pub(crate) async fn refresh_currency_rates(state: State<'_, SharedState>) -> Com
 }
 
 #[tauri::command]
-pub(crate) async fn refresh_pricing_snapshot(state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
+pub(crate) async fn refresh_pricing_snapshot(
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
     with_app(state, |app| {
         app.refresh_pricing_snapshot();
         Ok(snapshot(app))
