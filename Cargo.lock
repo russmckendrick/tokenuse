@@ -3569,7 +3569,7 @@ dependencies = [
 
 [[package]]
 name = "tokenuse"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "chrono",
  "color-eyre",
