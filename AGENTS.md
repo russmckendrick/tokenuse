@@ -14,8 +14,8 @@
 
 - Consult `DESIGN.md` before any UI/theme change - the color tokens, density rules, and "no rounded card styling" guidance are enforced.
 - Ingest results are cached at `~/.cache/tokenuse/ingest-cache.json` (TTL 15 min). On startup a fresh cache is reused so the dashboard opens fast; a stale or missing cache falls through to a synchronous ingest. A background refresher then re-runs ingest every 15 min and on the 'r' key, writing back to the cache. There is no live file watching - the timer is the only auto-refresh signal. Subcommands like `--list-projects` always run a fresh ingest and bypass the cache.
-- `DashboardData` fields are `&'static str`. Sample data uses string literals; ingested data is leaked via the `leak()` helper in `src/ingest.rs`. Do not change these to `String` without auditing every renderer.
-- All shipped user-facing wording belongs in `src/copy.json` and is exposed through `src/copy.rs` / Tauri snapshots. Rust and Svelte should reference copy keys, not inline display strings, except for protocol IDs, parser fixtures, CSS classes, file names, and data-derived values.
+- `DashboardData` fields are `&'static str`. Sample data uses string literals; ingested data is leaked via the `leak()` helper in `src/ingest/pipeline.rs`. Do not change these to `String` without auditing every renderer.
+- All shipped user-facing wording belongs in `src/copy/copy.json` and is exposed through `src/copy/mod.rs` / Tauri snapshots. Rust and Svelte should reference copy keys, not inline display strings, except for protocol IDs, parser fixtures, CSS classes, file names, and data-derived values.
 - The dashboard reads usage files directly - no API keys, no proxy, no telemetry. Don't add network calls outside explicit Config-page downloads or maintainer refresh feature paths.
 
 ## Documentation

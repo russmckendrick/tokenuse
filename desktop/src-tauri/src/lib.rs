@@ -1,776 +1,41 @@
 use std::{
-    path::PathBuf,
     sync::{Arc, Mutex},
     time::Duration,
 };
 
-use serde::Serialize;
 use tauri::{
-    menu::{
-        AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID,
-        WINDOW_SUBMENU_ID,
-    },
+    menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, Monitor, PhysicalPosition, Rect, RunEvent, Runtime, State, Theme,
-    WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
+    AppHandle, Manager, Monitor, PhysicalPosition, Rect, RunEvent, Runtime, Theme, WebviewUrl,
+    WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
-use tauri_plugin_notification::NotificationExt;
-use thiserror::Error;
 use tokenuse::{
-    app::{
-        App, AppStatus, BackgroundUsageAlert, ConfigRowView, DataSource, Page, Period,
-        ProjectFilter, SortMode, StatusTone, Tool,
-    },
-    copy::{self, CopyDeck, CopyKeyHint},
-    data::{DashboardData, LimitsData, ProjectOption, SessionDetailView, SessionOption},
-    export::ExportFormat,
-    keymap::{self, KeyInput},
+    app::{App, AppStatus, StatusTone},
+    copy,
     runtime,
 };
 
-type SharedState = Arc<Mutex<DesktopState>>;
-type CommandResult<T> = Result<T, CommandError>;
+mod commands;
+mod ids;
+mod menu;
+mod notifications;
+mod snapshot;
+mod state;
 
-const AUTHOR: &str = "Russ McKendrick";
-const HOMEPAGE_URL: &str = "https://www.tokenuse.app";
+use menu::desktop_menu;
+use notifications::send_background_alert;
+use state::{
+    is_quitting, mark_quitting, CommandError, CommandResult, DesktopState, SharedState,
+};
+
 const MAIN_WINDOW_LABEL: &str = "main";
 const TRAY_POPOVER_LABEL: &str = "tray-popover";
 const TRAY_POPOVER_WIDTH: f64 = 340.0;
 const TRAY_POPOVER_HEIGHT: f64 = 520.0;
 
-struct DesktopState {
-    app: App,
-    quitting: bool,
-}
 
-#[derive(Debug, Error)]
-enum CommandError {
-    #[error("desktop state is unavailable")]
-    StatePoisoned,
-    #[error("background task failed: {0}")]
-    Join(String),
-    #[error("unknown {kind}: {value}")]
-    Unknown { kind: &'static str, value: String },
-    #[error("{0}")]
-    Tokenuse(String),
-}
-
-impl Serialize for CommandError {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        serializer.serialize_str(&self.to_string())
-    }
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct OptionItem {
-    value: &'static str,
-    label: &'static str,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct ProjectState {
-    identity: Option<String>,
-    label: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct DesktopSnapshot {
-    version: &'static str,
-    copy: &'static CopyDeck,
-    source: &'static str,
-    status: Option<String>,
-    status_tone: &'static str,
-    page: &'static str,
-    period: &'static str,
-    periods: Vec<OptionItem>,
-    tool: &'static str,
-    tools: Vec<OptionItem>,
-    sort: &'static str,
-    sorts: Vec<OptionItem>,
-    project: ProjectState,
-    dashboard: DashboardData,
-    usage: LimitsData,
-    projects: Vec<ProjectOption>,
-    sessions: Vec<SessionOption>,
-    session: Option<SessionDetailView>,
-    config_rows: Vec<ConfigRowView>,
-    currencies: Vec<String>,
-    currency: String,
-    desktop_settings: DesktopSettingsState,
-    export_dir: String,
-    export_formats: Vec<OptionItem>,
-    shortcut_footer: Vec<CopyKeyHint>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct DesktopSettingsState {
-    open_at_login: bool,
-    show_dock_or_taskbar_icon: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct TraySnapshot {
-    version: &'static str,
-    copy: &'static CopyDeck,
-    status: Option<String>,
-    currency: String,
-    dashboard: DashboardData,
-    usage: LimitsData,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct ExportResponse {
-    path: String,
-    snapshot: DesktopSnapshot,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct ShortcutResponse {
-    handled: bool,
-    effect: Option<&'static str>,
-    snapshot: DesktopSnapshot,
-}
-
-#[tauri::command]
-async fn get_snapshot(state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
-    with_app(state, |app| Ok(snapshot(app))).await
-}
-
-#[tauri::command]
-async fn get_tray_snapshot(state: State<'_, SharedState>) -> CommandResult<TraySnapshot> {
-    with_app(state, |app| Ok(tray_snapshot(app))).await
-}
-
-#[tauri::command]
-fn open_main_window(app_handle: AppHandle) -> CommandResult<()> {
-    hide_tray_popover_window(&app_handle)?;
-    restore_main_window(&app_handle);
-    Ok(())
-}
-
-#[tauri::command]
-fn hide_tray_popover(app_handle: AppHandle) -> CommandResult<()> {
-    hide_tray_popover_window(&app_handle)
-}
-
-#[tauri::command]
-async fn set_page(page: String, state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
-    with_app(state, move |app| {
-        let page = parse_page(&page)?;
-        if page != Page::Session {
-            app.session_view = None;
-            app.session_scroll = 0;
-        }
-        app.set_page(page);
-        Ok(snapshot(app))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn set_period(
-    period: String,
-    state: State<'_, SharedState>,
-) -> CommandResult<DesktopSnapshot> {
-    with_app(state, move |app| {
-        app.set_period(parse_period(&period)?);
-        Ok(snapshot(app))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn set_tool(tool: String, state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
-    with_app(state, move |app| {
-        app.set_tool(parse_tool(&tool)?);
-        Ok(snapshot(app))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn set_sort(sort: String, state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
-    with_app(state, move |app| {
-        app.set_sort(parse_sort(&sort)?);
-        Ok(snapshot(app))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn set_project(
-    identity: Option<String>,
-    state: State<'_, SharedState>,
-) -> CommandResult<DesktopSnapshot> {
-    with_app(state, move |app| {
-        app.set_project_by_identity(identity.as_deref());
-        Ok(snapshot(app))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn open_session(
-    key: String,
-    state: State<'_, SharedState>,
-) -> CommandResult<DesktopSnapshot> {
-    with_app(state, move |app| {
-        app.enter_session(&key);
-        Ok(snapshot(app))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn close_session(state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
-    with_app(state, |app| {
-        app.leave_session();
-        Ok(snapshot(app))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn set_currency(
-    code: String,
-    state: State<'_, SharedState>,
-) -> CommandResult<DesktopSnapshot> {
-    with_app(state, move |app| {
-        app.set_currency(&code);
-        Ok(snapshot(app))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn set_open_at_login(
-    enabled: bool,
-    app_handle: AppHandle,
-    state: State<'_, SharedState>,
-) -> CommandResult<DesktopSnapshot> {
-    sync_open_at_login(&app_handle, enabled)?;
-    with_app(state, move |app| {
-        app.settings.desktop.open_at_login = enabled;
-        save_user_settings(app)?;
-        let state = if enabled {
-            copy::copy().desktop.enabled.as_str()
-        } else {
-            copy::copy().desktop.disabled.as_str()
-        };
-        app.status = Some(AppStatus::new(
-            copy::template(
-                &copy::copy().status.open_at_login_state,
-                &[("state", state.to_string())],
-            ),
-            StatusTone::Success,
-        ));
-        Ok(snapshot(app))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn set_show_dock_or_taskbar_icon(
-    enabled: bool,
-    app_handle: AppHandle,
-    state: State<'_, SharedState>,
-) -> CommandResult<DesktopSnapshot> {
-    apply_dock_or_taskbar_icon(&app_handle, enabled)?;
-    with_app(state, move |app| {
-        app.settings.desktop.show_dock_or_taskbar_icon = enabled;
-        save_user_settings(app)?;
-        let state = if enabled {
-            copy::copy().desktop.shown.as_str()
-        } else {
-            copy::copy().desktop.hidden.as_str()
-        };
-        app.status = Some(AppStatus::new(
-            copy::template(
-                &copy::copy().status.dock_taskbar_icon_state,
-                &[("state", state.to_string())],
-            ),
-            StatusTone::Success,
-        ));
-        Ok(snapshot(app))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn refresh_archive(state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
-    with_app(state, |app| {
-        app.reload();
-        Ok(snapshot(app))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn clear_data(state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
-    with_app(state, |app| {
-        app.clear_data();
-        Ok(snapshot(app))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn refresh_currency_rates(state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
-    with_app(state, |app| {
-        app.refresh_currency_rates();
-        Ok(snapshot(app))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn refresh_pricing_snapshot(state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
-    with_app(state, |app| {
-        app.refresh_pricing_snapshot();
-        Ok(snapshot(app))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn set_export_dir(
-    path: String,
-    state: State<'_, SharedState>,
-) -> CommandResult<DesktopSnapshot> {
-    with_app(state, move |app| {
-        if path.trim().is_empty() {
-            return Err(CommandError::Tokenuse(
-                copy::copy().status.export_folder_path_empty.clone(),
-            ));
-        }
-        app.set_export_dir(PathBuf::from(path));
-        Ok(snapshot(app))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn export_current(
-    format: String,
-    state: State<'_, SharedState>,
-) -> CommandResult<ExportResponse> {
-    with_app(state, move |app| {
-        let format = parse_export_format(&format)?;
-        let path = app
-            .export_current(format)
-            .map_err(|e| CommandError::Tokenuse(e.to_string()))?;
-        Ok(ExportResponse {
-            path: path.display().to_string(),
-            snapshot: snapshot(app),
-        })
-    })
-    .await
-}
-
-#[tauri::command]
-async fn handle_shortcut(
-    context: String,
-    input: KeyInput,
-    state: State<'_, SharedState>,
-) -> CommandResult<ShortcutResponse> {
-    let action = keymap::keymap()
-        .resolve_input(&context, &input)
-        .map(str::to_string);
-    with_app(state, move |app| {
-        let mut effect = None;
-        let handled = match action.as_deref() {
-            Some(keymap::ACTION_OPEN_PROJECT_PICKER) => {
-                effect = Some("open_project_picker");
-                true
-            }
-            Some(keymap::ACTION_OPEN_SESSION_PICKER) => {
-                effect = Some("open_session_picker");
-                true
-            }
-            Some(keymap::ACTION_OPEN_EXPORT_PICKER) => {
-                effect = Some("open_export_picker");
-                true
-            }
-            Some(keymap::ACTION_CLOSE_MODAL) => {
-                effect = Some("close_modal");
-                true
-            }
-            Some(keymap::ACTION_CLOSE_CALL_DETAIL) => {
-                effect = Some("close_call_detail");
-                true
-            }
-            Some(action) => app.apply_shortcut_action(action),
-            None => false,
-        };
-        Ok(ShortcutResponse {
-            handled,
-            effect,
-            snapshot: snapshot(app),
-        })
-    })
-    .await
-}
-
-async fn with_app<T, F>(state: State<'_, SharedState>, f: F) -> CommandResult<T>
-where
-    T: Send + 'static,
-    F: FnOnce(&mut App) -> CommandResult<T> + Send + 'static,
-{
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let mut state = state.lock().map_err(|_| CommandError::StatePoisoned)?;
-        state.app.poll_reload();
-        f(&mut state.app)
-    })
-    .await
-    .map_err(|e| CommandError::Join(e.to_string()))?
-}
-
-fn save_user_settings(app: &App) -> CommandResult<()> {
-    app.settings
-        .save(&app.paths)
-        .map_err(|e| CommandError::Tokenuse(e.to_string()))
-}
-
-fn snapshot(app: &App) -> DesktopSnapshot {
-    DesktopSnapshot {
-        version: env!("CARGO_PKG_VERSION"),
-        copy: copy::copy(),
-        source: match app.source {
-            DataSource::Live(_) => "live",
-            DataSource::Sample => "sample",
-        },
-        status: app.status_text().map(str::to_string),
-        status_tone: status_tone_id(app.status_tone()),
-        page: page_id(app.page),
-        period: period_id(app.period),
-        periods: Period::ALL
-            .into_iter()
-            .map(|period| OptionItem {
-                value: period_id(period),
-                label: period.label(),
-            })
-            .collect(),
-        tool: tool_id(app.tool),
-        tools: [
-            Tool::All,
-            Tool::ClaudeCode,
-            Tool::Cursor,
-            Tool::Codex,
-            Tool::Copilot,
-            Tool::Gemini,
-        ]
-        .into_iter()
-        .map(|tool| OptionItem {
-            value: tool_id(tool),
-            label: tool.label(),
-        })
-        .collect(),
-        sort: sort_id(app.sort),
-        sorts: SortMode::ALL
-            .into_iter()
-            .map(|sort| OptionItem {
-                value: sort_id(sort),
-                label: sort.label(),
-            })
-            .collect(),
-        project: match &app.project_filter {
-            ProjectFilter::All => ProjectState {
-                identity: None,
-                label: copy::copy().tools.all.clone(),
-            },
-            ProjectFilter::Selected { identity, label } => ProjectState {
-                identity: Some(identity.clone()),
-                label: label.clone(),
-            },
-        },
-        dashboard: app.dashboard(),
-        usage: app.usage(),
-        projects: app.project_options(),
-        sessions: app.session_options(),
-        session: app.session_view.clone(),
-        config_rows: app.config_rows(),
-        currencies: app.currency_table.codes(),
-        currency: app.currency().code().to_string(),
-        desktop_settings: desktop_settings(app),
-        export_dir: app.export_dir.display().to_string(),
-        export_formats: ExportFormat::ALL
-            .into_iter()
-            .map(|format| OptionItem {
-                value: export_format_id(format),
-                label: format.label(),
-            })
-            .collect(),
-        shortcut_footer: copy::copy().footer("desktop").to_vec(),
-    }
-}
-
-fn desktop_settings(app: &App) -> DesktopSettingsState {
-    DesktopSettingsState {
-        open_at_login: app.settings.desktop.open_at_login,
-        show_dock_or_taskbar_icon: app.settings.desktop.show_dock_or_taskbar_icon,
-    }
-}
-
-fn tray_snapshot(app: &App) -> TraySnapshot {
-    TraySnapshot {
-        version: env!("CARGO_PKG_VERSION"),
-        copy: copy::copy(),
-        status: app.status_text().map(str::to_string),
-        currency: app.currency().code().to_string(),
-        dashboard: app.dashboard_for(
-            Period::Today,
-            Tool::All,
-            &ProjectFilter::All,
-            SortMode::Spend,
-        ),
-        usage: app.usage_for(Tool::All, SortMode::Spend),
-    }
-}
-
-fn status_tone_id(tone: StatusTone) -> &'static str {
-    match tone {
-        StatusTone::Info => "info",
-        StatusTone::Busy => "busy",
-        StatusTone::Success => "success",
-        StatusTone::Warning => "warning",
-        StatusTone::Error => "error",
-    }
-}
-
-fn parse_page(value: &str) -> CommandResult<Page> {
-    match value {
-        "overview" => Ok(Page::Overview),
-        "deep-dive" => Ok(Page::DeepDive),
-        "usage" => Ok(Page::Usage),
-        "config" => Ok(Page::Config),
-        "session" => Ok(Page::Session),
-        _ => Err(unknown("page", value)),
-    }
-}
-
-fn page_id(page: Page) -> &'static str {
-    match page {
-        Page::Overview => "overview",
-        Page::DeepDive => "deep-dive",
-        Page::Config => "config",
-        Page::Usage => "usage",
-        Page::Session => "session",
-    }
-}
-
-fn parse_period(value: &str) -> CommandResult<Period> {
-    match value {
-        "today" => Ok(Period::Today),
-        "week" => Ok(Period::Week),
-        "thirty-days" => Ok(Period::ThirtyDays),
-        "month" => Ok(Period::Month),
-        "all-time" => Ok(Period::AllTime),
-        _ => Err(unknown("period", value)),
-    }
-}
-
-fn period_id(period: Period) -> &'static str {
-    match period {
-        Period::Today => "today",
-        Period::Week => "week",
-        Period::ThirtyDays => "thirty-days",
-        Period::Month => "month",
-        Period::AllTime => "all-time",
-    }
-}
-
-fn parse_tool(value: &str) -> CommandResult<Tool> {
-    match value {
-        "all" => Ok(Tool::All),
-        "claude-code" => Ok(Tool::ClaudeCode),
-        "cursor" => Ok(Tool::Cursor),
-        "codex" => Ok(Tool::Codex),
-        "copilot" => Ok(Tool::Copilot),
-        "gemini" => Ok(Tool::Gemini),
-        _ => Err(unknown("tool", value)),
-    }
-}
-
-fn tool_id(tool: Tool) -> &'static str {
-    match tool {
-        Tool::All => "all",
-        Tool::ClaudeCode => "claude-code",
-        Tool::Cursor => "cursor",
-        Tool::Codex => "codex",
-        Tool::Copilot => "copilot",
-        Tool::Gemini => "gemini",
-    }
-}
-
-fn parse_sort(value: &str) -> CommandResult<SortMode> {
-    match value {
-        "spend" => Ok(SortMode::Spend),
-        "date" => Ok(SortMode::Date),
-        "tokens" => Ok(SortMode::Tokens),
-        _ => Err(unknown("sort", value)),
-    }
-}
-
-fn sort_id(sort: SortMode) -> &'static str {
-    match sort {
-        SortMode::Spend => "spend",
-        SortMode::Date => "date",
-        SortMode::Tokens => "tokens",
-    }
-}
-
-fn parse_export_format(value: &str) -> CommandResult<ExportFormat> {
-    match value {
-        "json" => Ok(ExportFormat::Json),
-        "csv" => Ok(ExportFormat::Csv),
-        "svg" => Ok(ExportFormat::Svg),
-        "png" => Ok(ExportFormat::Png),
-        "html" => Ok(ExportFormat::Html),
-        "pdf" => Ok(ExportFormat::Pdf),
-        _ => Err(unknown("export format", value)),
-    }
-}
-
-fn export_format_id(format: ExportFormat) -> &'static str {
-    match format {
-        ExportFormat::Json => "json",
-        ExportFormat::Csv => "csv",
-        ExportFormat::Svg => "svg",
-        ExportFormat::Png => "png",
-        ExportFormat::Html => "html",
-        ExportFormat::Pdf => "pdf",
-    }
-}
-
-fn unknown(kind: &'static str, value: &str) -> CommandError {
-    CommandError::Unknown {
-        kind,
-        value: value.into(),
-    }
-}
-
-fn app_version_label() -> String {
-    format!("v{}", env!("CARGO_PKG_VERSION"))
-}
-
-fn about_metadata() -> AboutMetadata<'static> {
-    let version = app_version_label();
-
-    AboutMetadata {
-        name: Some(copy::copy().brand.name.clone()),
-        version: Some(version),
-        #[cfg(target_os = "macos")]
-        short_version: Some(String::new()),
-        authors: Some(vec![AUTHOR.into()]),
-        comments: Some(copy::copy().brand.comments.clone()),
-        copyright: Some(format!("Author: {AUTHOR}")),
-        website: Some(HOMEPAGE_URL.into()),
-        website_label: Some(copy::copy().brand.website_label.clone()),
-        ..Default::default()
-    }
-}
-
-fn desktop_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
-    let about_metadata = about_metadata();
-
-    let window_menu = Submenu::with_id_and_items(
-        app_handle,
-        WINDOW_SUBMENU_ID,
-        "Window",
-        true,
-        &[
-            &PredefinedMenuItem::minimize(app_handle, None)?,
-            &PredefinedMenuItem::maximize(app_handle, None)?,
-            #[cfg(target_os = "macos")]
-            &PredefinedMenuItem::separator(app_handle)?,
-            &PredefinedMenuItem::close_window(app_handle, None)?,
-        ],
-    )?;
-
-    let help_menu = Submenu::with_id_and_items(
-        app_handle,
-        HELP_SUBMENU_ID,
-        "Help",
-        true,
-        &[
-            #[cfg(not(target_os = "macos"))]
-            &PredefinedMenuItem::about(app_handle, None, Some(about_metadata.clone()))?,
-        ],
-    )?;
-
-    Menu::with_items(
-        app_handle,
-        &[
-            #[cfg(target_os = "macos")]
-            &Submenu::with_items(
-                app_handle,
-                copy::copy().brand.name.as_str(),
-                true,
-                &[
-                    &PredefinedMenuItem::about(
-                        app_handle,
-                        Some(copy::copy().brand.about_title.as_str()),
-                        Some(about_metadata),
-                    )?,
-                    &PredefinedMenuItem::separator(app_handle)?,
-                    &PredefinedMenuItem::services(app_handle, None)?,
-                    &PredefinedMenuItem::separator(app_handle)?,
-                    &PredefinedMenuItem::hide(app_handle, None)?,
-                    &PredefinedMenuItem::hide_others(app_handle, None)?,
-                    &PredefinedMenuItem::separator(app_handle)?,
-                    &PredefinedMenuItem::quit(app_handle, None)?,
-                ],
-            )?,
-            #[cfg(not(any(
-                target_os = "linux",
-                target_os = "dragonfly",
-                target_os = "freebsd",
-                target_os = "netbsd",
-                target_os = "openbsd"
-            )))]
-            &Submenu::with_items(
-                app_handle,
-                "File",
-                true,
-                &[
-                    &PredefinedMenuItem::close_window(app_handle, None)?,
-                    #[cfg(not(target_os = "macos"))]
-                    &PredefinedMenuItem::quit(app_handle, None)?,
-                ],
-            )?,
-            &Submenu::with_items(
-                app_handle,
-                "Edit",
-                true,
-                &[
-                    &PredefinedMenuItem::undo(app_handle, None)?,
-                    &PredefinedMenuItem::redo(app_handle, None)?,
-                    &PredefinedMenuItem::separator(app_handle)?,
-                    &PredefinedMenuItem::cut(app_handle, None)?,
-                    &PredefinedMenuItem::copy(app_handle, None)?,
-                    &PredefinedMenuItem::paste(app_handle, None)?,
-                    &PredefinedMenuItem::select_all(app_handle, None)?,
-                ],
-            )?,
-            #[cfg(target_os = "macos")]
-            &Submenu::with_items(
-                app_handle,
-                "View",
-                true,
-                &[&PredefinedMenuItem::fullscreen(app_handle, None)?],
-            )?,
-            &window_menu,
-            &help_menu,
-        ],
-    )
-}
-
-fn restore_main_window<R: Runtime>(app_handle: &AppHandle<R>) {
+pub(crate) fn restore_main_window<R: Runtime>(app_handle: &AppHandle<R>) {
     if let Some(window) = app_handle.get_webview_window(MAIN_WINDOW_LABEL) {
         let _ = window.unminimize();
         let _ = window.show();
@@ -778,7 +43,7 @@ fn restore_main_window<R: Runtime>(app_handle: &AppHandle<R>) {
     }
 }
 
-fn hide_tray_popover_window<R: Runtime>(app_handle: &AppHandle<R>) -> CommandResult<()> {
+pub(crate) fn hide_tray_popover_window<R: Runtime>(app_handle: &AppHandle<R>) -> CommandResult<()> {
     if let Some(window) = app_handle.get_webview_window(TRAY_POPOVER_LABEL) {
         window
             .hide()
@@ -795,22 +60,6 @@ fn handle_run_event<R: Runtime>(app_handle: &AppHandle<R>, event: RunEvent) {
 
     #[cfg(not(target_os = "macos"))]
     let _ = (app_handle, event);
-}
-
-fn mark_quitting<R: Runtime>(app_handle: &AppHandle<R>) {
-    let state = app_handle.state::<SharedState>();
-    if let Ok(mut state) = state.inner().lock() {
-        state.quitting = true;
-    }
-}
-
-fn is_quitting<R: Runtime>(app_handle: &AppHandle<R>) -> bool {
-    let state = app_handle.state::<SharedState>();
-    state
-        .inner()
-        .lock()
-        .map(|state| state.quitting)
-        .unwrap_or(true)
 }
 
 fn setup_desktop_runtime<R: Runtime>(
@@ -1074,7 +323,10 @@ fn apply_saved_desktop_settings<R: Runtime>(app_handle: &AppHandle<R>, state: &S
     }
 }
 
-fn sync_open_at_login<R: Runtime>(app_handle: &AppHandle<R>, enabled: bool) -> CommandResult<()> {
+pub(crate) fn sync_open_at_login<R: Runtime>(
+    app_handle: &AppHandle<R>,
+    enabled: bool,
+) -> CommandResult<()> {
     let autostart = app_handle.autolaunch();
     let result = if enabled {
         autostart.enable()
@@ -1089,32 +341,28 @@ fn sync_open_at_login<R: Runtime>(app_handle: &AppHandle<R>, enabled: bool) -> C
     })
 }
 
-fn apply_dock_or_taskbar_icon<R: Runtime>(
+pub(crate) fn apply_dock_or_taskbar_icon<R: Runtime>(
     app_handle: &AppHandle<R>,
     visible: bool,
 ) -> CommandResult<()> {
     #[cfg(target_os = "macos")]
     {
-        app_handle
-            .set_dock_visibility(visible)
-            .map_err(|e| {
-                CommandError::Tokenuse(copy::template(
-                    &copy::copy().status.dock_visibility_failed,
-                    &[("error", e.to_string())],
-                ))
-            })?;
+        app_handle.set_dock_visibility(visible).map_err(|e| {
+            CommandError::Tokenuse(copy::template(
+                &copy::copy().status.dock_visibility_failed,
+                &[("error", e.to_string())],
+            ))
+        })?;
     }
 
     #[cfg(not(target_os = "macos"))]
     if let Some(window) = app_handle.get_webview_window(MAIN_WINDOW_LABEL) {
-        window
-            .set_skip_taskbar(!visible)
-            .map_err(|e| {
-                CommandError::Tokenuse(copy::template(
-                    &copy::copy().status.taskbar_visibility_failed,
-                    &[("error", e.to_string())],
-                ))
-            })?;
+        window.set_skip_taskbar(!visible).map_err(|e| {
+            CommandError::Tokenuse(copy::template(
+                &copy::copy().status.taskbar_visibility_failed,
+                &[("error", e.to_string())],
+            ))
+        })?;
     }
 
     Ok(())
@@ -1151,78 +399,15 @@ fn spawn_background_monitor<R: Runtime>(app_handle: AppHandle<R>, state: SharedS
     });
 }
 
-fn send_background_alert<R: Runtime>(app_handle: &AppHandle<R>, alert: BackgroundUsageAlert) {
-    let _ = app_handle
-        .notification()
-        .builder()
-        .title(copy::copy().brand.usage_alert_title.as_str())
-        .body(background_alert_body(alert))
-        .show();
-}
-
-fn background_alert_body(alert: BackgroundUsageAlert) -> String {
-    let mut parts = Vec::new();
-    if alert.cost_usd > 0.0 {
-        parts.push(format!("${:.2}", alert.cost_usd));
-    }
-    if alert.tokens > 0 {
-        parts.push(format!("{} tokens", format_compact_count(alert.tokens)));
-    }
-    if alert.calls > 0 {
-        parts.push(format!(
-            "{} {}",
-            format_int(alert.calls),
-            plural(alert.calls, "call", "calls")
-        ));
-    }
-
-    let summary = if parts.is_empty() {
-        copy::copy().status.background_usage_changed.clone()
-    } else {
-        parts.join(", ")
-    };
-    copy::template(
-        &copy::copy().status.background_usage_body,
-        &[("summary", summary)],
-    )
-}
-
-fn format_compact_count(n: u64) -> String {
-    if n >= 1_000_000_000 {
-        format!("{:.1}B", n as f64 / 1_000_000_000.0)
-    } else if n >= 1_000_000 {
-        format!("{:.1}M", n as f64 / 1_000_000.0)
-    } else if n >= 1_000 {
-        format!("{:.1}K", n as f64 / 1_000.0)
-    } else {
-        format_int(n)
-    }
-}
-
-fn format_int(n: u64) -> String {
-    let s = n.to_string();
-    let bytes = s.as_bytes();
-    let mut out = String::with_capacity(s.len() + s.len() / 3);
-    for (i, b) in bytes.iter().enumerate() {
-        if i > 0 && (bytes.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(*b as char);
-    }
-    out
-}
-
-fn plural<'a>(count: u64, singular: &'a str, plural: &'a str) -> &'a str {
-    if count == 1 {
-        singular
-    } else {
-        plural
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ids::{export_format_id, parse_export_format, parse_tool, tool_id};
+    use crate::snapshot::{snapshot, tray_snapshot};
+    use tokenuse::{
+        app::{Period, ProjectFilter, SortMode, Tool},
+        export::ExportFormat,
+    };
 
     #[test]
     fn export_format_helpers_roundtrip_html_and_pdf() {
@@ -1288,34 +473,6 @@ mod tests {
         assert_eq!(app.sort, sort);
         assert_eq!(app.project_filter, project_filter);
     }
-
-    #[test]
-    fn background_alert_body_formats_usage_delta() {
-        let body = background_alert_body(BackgroundUsageAlert {
-            calls: 25,
-            tokens: 120_000,
-            cost_usd: 1.25,
-        });
-
-        assert_eq!(
-            body,
-            "Usage jumped by $1.25, 120.0K tokens, 25 calls since the last alert baseline."
-        );
-    }
-
-    #[test]
-    fn background_alert_body_skips_zero_delta_parts() {
-        let body = background_alert_body(BackgroundUsageAlert {
-            calls: 1,
-            tokens: 0,
-            cost_usd: 0.0,
-        });
-
-        assert_eq!(
-            body,
-            "Usage jumped by 1 call since the last alert baseline."
-        );
-    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1380,27 +537,27 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            get_snapshot,
-            get_tray_snapshot,
-            open_main_window,
-            hide_tray_popover,
-            set_page,
-            set_period,
-            set_tool,
-            set_sort,
-            set_project,
-            open_session,
-            close_session,
-            set_currency,
-            set_open_at_login,
-            set_show_dock_or_taskbar_icon,
-            refresh_archive,
-            clear_data,
-            refresh_currency_rates,
-            refresh_pricing_snapshot,
-            set_export_dir,
-            export_current,
-            handle_shortcut,
+            commands::get_snapshot,
+            commands::get_tray_snapshot,
+            commands::open_main_window,
+            commands::hide_tray_popover,
+            commands::set_page,
+            commands::set_period,
+            commands::set_tool,
+            commands::set_sort,
+            commands::set_project,
+            commands::open_session,
+            commands::close_session,
+            commands::set_currency,
+            commands::set_open_at_login,
+            commands::set_show_dock_or_taskbar_icon,
+            commands::refresh_archive,
+            commands::clear_data,
+            commands::refresh_currency_rates,
+            commands::refresh_pricing_snapshot,
+            commands::set_export_dir,
+            commands::export_current,
+            commands::handle_shortcut,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tokenuse desktop application")

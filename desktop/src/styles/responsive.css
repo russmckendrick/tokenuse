@@ -1,0 +1,87 @@
+@media (max-width: 1120px) {
+  .topbar,
+  .filter-strip,
+  .overview-grid,
+  .deep-grid,
+  .usage-grid,
+  .config-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .filter-controls {
+    justify-self: stretch;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .overview-grid,
+  .deep-grid,
+  .usage-grid,
+  .config-grid {
+    overflow: auto;
+  }
+
+  .overview-grid {
+    grid-template-rows: none;
+    grid-auto-rows: minmax(240px, auto);
+    align-content: start;
+  }
+
+  .deep-grid {
+    grid-template-rows: none;
+    grid-auto-rows: minmax(240px, auto);
+  }
+
+  .deep-span {
+    grid-column: auto;
+  }
+
+  .overview-side-stack,
+  .deep-side-stack {
+    grid-template-rows: none;
+    grid-auto-rows: minmax(220px, auto);
+  }
+
+  .usage-grid {
+    grid-template-rows: none;
+    grid-auto-rows: minmax(260px, auto);
+    align-content: start;
+  }
+
+  .config-grid {
+    height: auto;
+    align-content: start;
+  }
+
+  .config-grid > .panel {
+    max-height: min(420px, calc(100vh - 190px));
+  }
+
+  .tabs,
+  .actions {
+    justify-content: flex-start;
+  }
+
+  .kpis,
+  .session-kpis,
+  .detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  button,
+  .panel,
+  .kpis > div,
+  .modal {
+    will-change: auto;
+  }
+}

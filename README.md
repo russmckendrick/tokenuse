@@ -66,7 +66,7 @@ Project names are normalized across tools. Absolute paths are folded to the near
 
 ## Keyboard
 
-The TUI and desktop app share the same checked-in shortcut definitions from `src/keymap.json`.
+The TUI and desktop app share the same checked-in shortcut definitions from `src/keymap/keymap.json`.
 
 - `q`: quit · `Esc`: close modal / back from sub-page
 - `1`–`5`: period (24 hours, 7 days, 30 days, this month, all time)
@@ -120,4 +120,4 @@ cargo fmt --check
 cargo test
 ```
 
-Sample dashboard data lives in `src/data.rs`. Live usage is loaded from the local archive in `src/archive.rs`, which syncs source files through the adapters in `src/tools/`.
+Sample dashboard data lives in `src/data/mod.rs`. Live usage is loaded from the local archive in `src/archive.rs`, which syncs source files through the adapters in `src/tools/`.

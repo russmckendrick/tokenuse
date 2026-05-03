@@ -2,31 +2,26 @@
   import { onMount } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { confirm, open as openDialog } from '@tauri-apps/plugin-dialog';
-  import { ArrowLeft, Database, Download, FolderOpen, RefreshCw, Search, Trash2, X } from 'lucide-svelte';
+  import { Download, FolderOpen, RefreshCw, Search, X } from 'lucide-svelte';
   import { api } from './api';
-  import ActivityPulse from './components/ActivityPulse.svelte';
-  import RankBar from './components/RankBar.svelte';
-  import UsageConsole from './components/UsageConsole.svelte';
-  import { fadeIn, reveal, staggeredReveal } from './motion';
-  import Panel from './Panel.svelte';
+  import { count } from './format';
+  import { fadeIn, reveal } from './motion';
   import TrayPopover from './TrayPopover.svelte';
+  import ConfigView from './views/ConfigView.svelte';
+  import DeepDiveView from './views/DeepDiveView.svelte';
+  import OverviewView from './views/OverviewView.svelte';
+  import SessionView from './views/SessionView.svelte';
+  import UsageView from './views/UsageView.svelte';
   import type {
     ConfigRow,
-    CountMetric,
     DesktopSnapshot,
     ExportFormatId,
-    ModelMetric,
     PageId,
-    ProjectMetric,
     ProjectOption,
-    ProjectToolMetric,
     ShortcutInput,
     SortId,
     SessionDetail,
-    SessionDetailView,
-    SessionMetric,
     SessionOption,
-    Summary,
     ToolId
   } from './types';
 
@@ -256,10 +251,6 @@
     }
   }
 
-  function count(value: number) {
-    return value.toLocaleString();
-  }
-
   function activePage() {
     return snapshot?.page ?? 'overview';
   }
@@ -474,151 +465,28 @@
 
     <main>
       {#if activePage() === 'overview'}
-        <section class="page overview-page" use:staggeredReveal={{ selector: ':scope > *', y: 5, stagger: 0.035 }}>
-          {@render Kpis(snapshot.dashboard.summary, snapshot.currency)}
-          <Panel title={snapshot.copy.panels.activity_pulse} tone="cyan">
-            <ActivityPulse points={snapshot.dashboard.activity_timeline} copy={snapshot.copy} />
-          </Panel>
-          <section class="grid overview-grid">
-            <div class="overview-primary">
-              <Panel title={snapshot.copy.panels.project_spend_by_tool} tone="yellow">
-                {@render ProjectToolTable(snapshot.dashboard.project_tools)}
-              </Panel>
-            </div>
-            <div class="overview-side-stack">
-              <Panel title={snapshot.copy.panels.by_model} tone="magenta">
-                {@render ModelTable(snapshot.dashboard.models)}
-              </Panel>
-              <Panel title={snapshot.copy.panels.shell_commands} tone="orange">
-                {@render CountTable(snapshot.dashboard.commands)}
-              </Panel>
-              <Panel title={snapshot.copy.panels.mcp_servers} tone="magenta">
-                {@render CountTable(snapshot.dashboard.mcp_servers)}
-              </Panel>
-            </div>
-          </section>
-        </section>
+        <OverviewView {snapshot} />
       {:else if activePage() === 'deep-dive'}
-        <section class="page deep-page" use:reveal={{ y: 5 }}>
-          <section class="grid deep-grid">
-            <div class="deep-trend">
-              <Panel title={snapshot.copy.panels.activity_trend} tone="blue">
-                <ActivityPulse points={snapshot.dashboard.activity_timeline} copy={snapshot.copy} />
-              </Panel>
-            </div>
-            <div class="deep-projects">
-              <Panel title={snapshot.copy.panels.by_project} tone="green">
-                {@render ProjectTable(snapshot.dashboard.projects)}
-              </Panel>
-            </div>
-            <div class="deep-span">
-              <Panel title={snapshot.copy.panels.top_sessions} tone="red">
-                <button class="panel-command" type="button" onclick={() => openModal('session')}>{snapshot.copy.actions.open_session_picker}</button>
-                {@render SessionTable(snapshot.dashboard.sessions)}
-              </Panel>
-            </div>
-            <div class="deep-project-tools">
-              <Panel title={snapshot.copy.panels.project_spend_by_tool} tone="yellow">
-                {@render ProjectToolTable(snapshot.dashboard.project_tools)}
-              </Panel>
-            </div>
-            <div class="deep-side-stack">
-              <Panel title={snapshot.copy.panels.model_efficiency} tone="magenta">
-                {@render ModelTable(snapshot.dashboard.models)}
-              </Panel>
-              <Panel title={snapshot.copy.panels.core_tools} tone="cyan">
-                {@render CountTable(snapshot.dashboard.tools)}
-              </Panel>
-            </div>
-            <div class="deep-shell">
-              <Panel title={snapshot.copy.panels.shell_commands} tone="orange">
-                {@render CountTable(snapshot.dashboard.commands)}
-              </Panel>
-            </div>
-            <div class="deep-mcp">
-              <Panel title={snapshot.copy.panels.mcp_servers} tone="magenta">
-                {@render CountTable(snapshot.dashboard.mcp_servers)}
-              </Panel>
-            </div>
-          </section>
-        </section>
+        <DeepDiveView {snapshot} openSessionPicker={() => openModal('session')} />
       {:else if activePage() === 'usage'}
-        <section class="page usage-page" use:reveal={{ y: 5 }}>
-          <section class="usage-grid">
-            {#each snapshot.usage.sections as section, index}
-              <UsageConsole {section} tone={usageTone(section.tool, index)} copy={snapshot.copy} />
-            {/each}
-          </section>
-        </section>
+        <UsageView {snapshot} {usageTone} />
       {:else if activePage() === 'config'}
-        <section class="page config-page" use:reveal={{ y: 5 }}>
-          <section class="config-grid">
-            <Panel title={snapshot.copy.nav.configuration} tone="cyan">
-              <table>
-                <thead>
-                  <tr><th>{snapshot.copy.tables.setting}</th><th>{snapshot.copy.tables.value}</th><th></th></tr>
-                </thead>
-                <tbody>
-                  {#each snapshot.config_rows as row}
-                    <tr>
-                      <td>{row.name}</td>
-                      <td class="muted-cell">{row.value}</td>
-                      <td class="tight">
-                        <button class="row-action" class:danger={row.action === 'clear'} type="button" onclick={() => configAction(row)}>
-                          {#if row.action === 'clear'}<Trash2 size={14} />{/if}
-                          {row.action}
-                        </button>
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </Panel>
-            <Panel title={snapshot.copy.panels.desktop} tone="orange">
-              <div class="toggle-list">
-                <label class="toggle-row">
-                  <span>
-                    <strong>{snapshot.copy.desktop.open_at_login}</strong>
-                    <small>{snapshot.desktop_settings.open_at_login ? snapshot.copy.desktop.enabled : snapshot.copy.desktop.disabled}</small>
-                  </span>
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    checked={snapshot.desktop_settings.open_at_login}
-                    onchange={setOpenAtLoginFromEvent}
-                  />
-                  <i aria-hidden="true"></i>
-                </label>
-                <label class="toggle-row">
-                  <span>
-                    <strong>{snapshot.copy.desktop.dock_taskbar_icon}</strong>
-                    <small>{snapshot.desktop_settings.show_dock_or_taskbar_icon ? snapshot.copy.desktop.shown : snapshot.copy.desktop.hidden}</small>
-                  </span>
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    checked={snapshot.desktop_settings.show_dock_or_taskbar_icon}
-                    onchange={setShowDockOrTaskbarIconFromEvent}
-                  />
-                  <i aria-hidden="true"></i>
-                </label>
-              </div>
-            </Panel>
-            <Panel title={snapshot.copy.panels.local_data} tone="green">
-              <div class="config-facts">
-                <div><span>{snapshot.copy.tables.archive}</span><strong>{snapshot.source}</strong></div>
-                <div><span>{snapshot.copy.tables.currency}</span><strong>{snapshot.currency}</strong></div>
-                <div><span>{snapshot.copy.tables.exports}</span><strong>{snapshot.export_dir}</strong></div>
-              </div>
-              <div class="button-row">
-                <button type="button" onclick={() => commit(() => api.refreshArchive())}><Database size={15} /> {snapshot.copy.actions.refresh}</button>
-                <button type="button" onclick={chooseExportDir}><FolderOpen size={15} /> {snapshot.copy.actions.folder}</button>
-              </div>
-            </Panel>
-          </section>
-        </section>
+        <ConfigView
+          {snapshot}
+          {configAction}
+          {chooseExportDir}
+          refreshArchive={() => commit(() => api.refreshArchive())}
+          {setOpenAtLoginFromEvent}
+          {setShowDockOrTaskbarIconFromEvent}
+        />
       {:else if activePage() === 'session'}
-        {@render SessionDetailPanel(snapshot.session)}
+        <SessionView
+          {snapshot}
+          session={snapshot.session}
+          closeSession={() => commit(() => api.closeSession())}
+          {openCallDetail}
+          {handleCallRowKey}
+        />
       {/if}
     </main>
 
@@ -739,162 +607,3 @@
 {:else}
   <div class="loading" aria-busy="true" use:reveal></div>
 {/if}
-
-{#snippet Kpis(summary: Summary, currency: string)}
-  <section class="kpis" use:staggeredReveal={{ selector: ':scope > div', y: 4, stagger: 0.025 }}>
-    <div><span>{snapshot?.copy.metrics.cost}</span><strong>{summary.cost}</strong><small>{currency}</small></div>
-    <div><span>{snapshot?.copy.metrics.calls}</span><strong>{summary.calls}</strong><small>{summary.input} {snapshot?.copy.metrics.in}</small></div>
-    <div><span>{snapshot?.copy.metrics.sessions}</span><strong>{summary.sessions}</strong><small>{snapshot?.copy.metrics.active_set}</small></div>
-    <div><span>{snapshot?.copy.metrics.cache_hit}</span><strong>{summary.cache_hit}</strong><small>{summary.cached} {snapshot?.copy.metrics.cached}</small></div>
-    <div><span>{snapshot?.copy.metrics.in} / {snapshot?.copy.metrics.out}</span><strong>{summary.input}</strong><small>{summary.output} {snapshot?.copy.metrics.out}</small></div>
-  </section>
-{/snippet}
-
-{#snippet ProjectTable(rows: ProjectMetric[])}
-  <table class="data-table project-table">
-    <thead><tr><th></th><th>{snapshot?.copy.tables.project}</th><th>{snapshot?.copy.tables.cost}</th><th>{snapshot?.copy.tables.avg_per_session}</th><th>{snapshot?.copy.tables.sess}</th><th>{snapshot?.copy.tables.tools}</th></tr></thead>
-    <tbody>
-      {#each rows as row}
-        <tr>
-          <td><RankBar value={row.value} ariaLabel={`${row.name} ${snapshot?.copy.desktop.rank}`} /></td>
-          <td>{row.name}</td>
-          <td class="money">{row.cost}</td>
-          <td class="money">{row.avg_per_session}</td>
-          <td>{count(row.sessions)}</td>
-          <td class="muted-cell">{row.tool_mix}</td>
-        </tr>
-      {:else}
-        <tr><td colspan="6" class="empty-cell">{snapshot?.copy.empty.no_project_rows}</td></tr>
-      {/each}
-    </tbody>
-  </table>
-{/snippet}
-
-{#snippet ProjectToolTable(rows: ProjectToolMetric[])}
-  <table class="data-table project-tool-table">
-    <thead><tr><th></th><th>{snapshot?.copy.tables.project}</th><th>{snapshot?.copy.tables.tool}</th><th>{snapshot?.copy.tables.cost}</th><th>{snapshot?.copy.tables.calls}</th><th>{snapshot?.copy.tables.sess}</th><th>{snapshot?.copy.tables.avg_per_session}</th></tr></thead>
-    <tbody>
-      {#each rows as row}
-        <tr>
-          <td><RankBar value={row.value} ariaLabel={`${row.project} ${row.tool} ${snapshot?.copy.desktop.rank}`} /></td>
-          <td>{row.project}</td>
-          <td>{row.tool}</td>
-          <td class="money">{row.cost}</td>
-          <td>{count(row.calls)}</td>
-          <td>{count(row.sessions)}</td>
-          <td class="money">{row.avg_per_session}</td>
-        </tr>
-      {:else}
-        <tr><td colspan="7" class="empty-cell">{snapshot?.copy.empty.no_project_tool_rows}</td></tr>
-      {/each}
-    </tbody>
-  </table>
-{/snippet}
-
-{#snippet SessionTable(rows: SessionMetric[])}
-  <table class="data-table session-table">
-    <thead><tr><th></th><th>{snapshot?.copy.tables.date}</th><th>{snapshot?.copy.tables.project}</th><th>{snapshot?.copy.tables.cost}</th><th>{snapshot?.copy.tables.calls}</th></tr></thead>
-    <tbody>
-      {#each rows as row}
-        <tr>
-          <td><RankBar value={row.value} ariaLabel={`${row.project} ${snapshot?.copy.desktop.session_rank}`} /></td>
-          <td>{row.date}</td>
-          <td>{row.project}</td>
-          <td class="money">{row.cost}</td>
-          <td>{count(row.calls)}</td>
-        </tr>
-      {:else}
-        <tr><td colspan="5" class="empty-cell">{snapshot?.copy.empty.no_sessions}</td></tr>
-      {/each}
-    </tbody>
-  </table>
-{/snippet}
-
-{#snippet ModelTable(rows: ModelMetric[])}
-  <table class="data-table model-table">
-    <thead><tr><th></th><th>{snapshot?.copy.tables.model}</th><th>{snapshot?.copy.tables.cost}</th><th>{snapshot?.copy.tables.cache}</th><th>{snapshot?.copy.tables.calls}</th></tr></thead>
-    <tbody>
-      {#each rows as row}
-        <tr>
-          <td><RankBar value={row.value} ariaLabel={`${row.name} ${snapshot?.copy.desktop.rank}`} /></td>
-          <td>{row.name}</td>
-          <td class="money">{row.cost}</td>
-          <td>{row.cache}</td>
-          <td>{count(row.calls)}</td>
-        </tr>
-      {:else}
-        <tr><td colspan="5" class="empty-cell">{snapshot?.copy.empty.no_models}</td></tr>
-      {/each}
-    </tbody>
-  </table>
-{/snippet}
-
-{#snippet CountTable(rows: CountMetric[])}
-  <table class="data-table count-table">
-    <thead><tr><th></th><th>{snapshot?.copy.tables.name}</th><th>{snapshot?.copy.tables.calls}</th></tr></thead>
-    <tbody>
-      {#each rows as row}
-        <tr>
-          <td><RankBar value={row.value} ariaLabel={`${row.name} ${snapshot?.copy.desktop.rank}`} /></td>
-          <td>{row.name}</td>
-          <td>{count(row.calls)}</td>
-        </tr>
-      {:else}
-        <tr><td colspan="3" class="empty-cell">{snapshot?.copy.empty.no_rows}</td></tr>
-      {/each}
-    </tbody>
-  </table>
-{/snippet}
-
-{#snippet SessionDetailPanel(session: SessionDetailView | null)}
-  <section class="session-page" use:reveal={{ y: 5 }}>
-    <div class="session-head">
-      <button type="button" onclick={() => commit(() => api.closeSession())}><ArrowLeft size={15} /> {snapshot?.copy.nav.deep_dive}</button>
-      {#if session}
-        <div>
-          <strong>{session.project}</strong>
-          <span>{session.tool} · {session.date_range}</span>
-        </div>
-      {/if}
-    </div>
-    {#if session}
-      <section class="kpis session-kpis">
-        <div><span>{snapshot?.copy.metrics.cost}</span><strong>{session.total_cost}</strong><small>{session.total_calls} {snapshot?.copy.metrics.calls}</small></div>
-        <div><span>{snapshot?.copy.metrics.input}</span><strong>{session.total_input}</strong><small>{snapshot?.copy.metrics.tokens}</small></div>
-        <div><span>{snapshot?.copy.metrics.output}</span><strong>{session.total_output}</strong><small>{snapshot?.copy.metrics.tokens}</small></div>
-        <div><span>{snapshot?.copy.metrics.cache_read}</span><strong>{session.total_cache_read}</strong><small>{snapshot?.copy.metrics.tokens}</small></div>
-      </section>
-      <div class="session-panel-area">
-        {#if session.note}<div class="status-line">{session.note}</div>{/if}
-        <Panel title={snapshot?.copy.panels.calls ?? ''} tone="red">
-          <table>
-            <thead><tr><th>{snapshot?.copy.tables.time}</th><th>{snapshot?.copy.tables.model}</th><th>{snapshot?.copy.tables.cost}</th><th>{snapshot?.copy.tables.in}</th><th>{snapshot?.copy.tables.out}</th><th>{snapshot?.copy.tables.cache}</th><th>{snapshot?.copy.tables.tools}</th><th>{snapshot?.copy.tables.prompt}</th></tr></thead>
-            <tbody>
-              {#each session.calls as call}
-                <tr
-                  class="click-row"
-                  tabindex="0"
-                  onclick={() => openCallDetail(call)}
-                  onkeydown={(event) => handleCallRowKey(event, call)}
-                >
-                  <td>{call.timestamp}</td>
-                  <td>{call.model}</td>
-                  <td class="money">{call.cost}</td>
-                  <td>{count(call.input_tokens)}</td>
-                  <td>{count(call.output_tokens)}</td>
-                  <td>{count(call.cache_read + call.cache_write)}</td>
-                  <td>{call.tools}</td>
-                  <td class="prompt-cell">{call.prompt}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </Panel>
-      </div>
-    {:else}
-      <div class="session-panel-area">
-        <div class="empty-state">{snapshot?.copy.session.no_session_selected}</div>
-      </div>
-    {/if}
-  </section>
-{/snippet}

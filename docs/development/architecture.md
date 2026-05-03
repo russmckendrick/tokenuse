@@ -36,7 +36,7 @@ New sessions written while the dashboard is open are visible after archive sync 
 
 Desktop background alerts use the unfiltered live archive totals as their baseline: cost in USD, activity tokens, and call count across all tools/projects. Automatic refresh deltas accumulate until one configured threshold crosses, then an alert is queued, the baseline resets to the new totals, and the cooldown starts. Manual refreshes reset the baseline without alerting. The thresholds live under `background_alerts` in `config.json`; sample-only startup data does not trigger alerts. Desktop-only startup preferences live under `desktop` in `config.json` and currently control open-at-login plus Dock/taskbar visibility.
 
-Individual adapter discovery or parse errors are skipped so one malformed source does not stop the whole dashboard. If the archive has no calls or limits after sync, the UI shows sample data and a status message. Bundled sample data lives in `src/sample_data.json` and is embedded at build time.
+Individual adapter discovery or parse errors are skipped so one malformed source does not stop the whole dashboard. If the archive has no calls or limits after sync, the UI shows sample data and a status message. Bundled sample data lives in `src/data/sample_data.json` and is embedded at build time.
 
 ## Normalized Record
 
@@ -90,7 +90,7 @@ The dashboard panels are built from the filtered call set:
 
 ## Pages And Modals
 
-The TUI is a small state machine over five pages (Overview, Deep Dive, Usage, Config, Session) plus picker, confirmation, detail, and help modals. The first three pages are reachable through the tab strip via `Tab` / `Shift-Tab` or their direct keys; Config and Session are sub-pages opened from any tab. `g` cycles the global sort mode, and `Shift-D` toggles the visible data source between live and sample data when live data is available. Shortcut definitions, help groups, and footer hints live in `src/keymap.json`; `src/keymap.rs` validates the embedded JSON and resolves keys to action IDs. `src/app.rs` applies those actions to state, while rendering is dispatched from `src/ui.rs`.
+The TUI is a small state machine over five pages (Overview, Deep Dive, Usage, Config, Session) plus picker, confirmation, detail, and help modals. The first three pages are reachable through the tab strip via `Tab` / `Shift-Tab` or their direct keys; Config and Session are sub-pages opened from any tab. `g` cycles the global sort mode, and `Shift-D` toggles the visible data source between live and sample data when live data is available. Shortcut definitions, help groups, and footer hints live in `src/keymap/keymap.json`; `src/keymap/mod.rs` validates the embedded JSON and resolves keys to action IDs. `src/app.rs` applies those actions to state, while rendering is dispatched from `src/ui/mod.rs`.
 
 ```mermaid
 flowchart LR
@@ -227,7 +227,7 @@ JSON, CSV, SVG, and PNG exports reflect the **current filtered dashboard view** 
 | HTML | one `.html` file | Self-contained print-friendly workbook with inline CSS, inline bars mark, dashboard panels, and selected Session full prompts/shell commands when a session is open. |
 | PDF | one `.pdf` file | Fulgur-rendered version of the same self-contained HTML workbook, including inline CSS, the bars mark, dashboard panels, and selected Session full prompts/shell commands when a session is open. |
 
-Both image formats are produced by the same `render_dashboard_chart` function in `src/export.rs`, so they always look identical. The palette is loaded from constants that mirror `src/theme.rs` and `DESIGN.md`. Tests serialize chart rendering through a process-wide `Mutex` because plotters' macOS font lookup is not thread-safe.
+Both image formats are produced by the same `render_dashboard_chart` function in `src/export/chart.rs`, so they always look identical. The palette is loaded from constants that mirror `src/theme.rs` and `DESIGN.md`. Tests serialize chart rendering through a process-wide `Mutex` because plotters' macOS font lookup is not thread-safe.
 
 The export pipeline depends on `plotters` (with the `svg_backend`, `bitmap_backend`, `bitmap_encoder`, `line_series`, and `ttf` features), `fulgur` for browserless HTML/CSS-to-PDF rendering, and the existing `serde_json`. HTML generation is hand-written, escaped at render time, and uses no external scripts or network dependency. PDF generation reuses that exact workbook HTML and renders it locally through Fulgur instead of shelling out to Chromium, WebKit, wkhtmltopdf, or another browser process.
 

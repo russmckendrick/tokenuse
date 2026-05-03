@@ -1,0 +1,97 @@
+:root {
+  font-family: "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  color: #cbd4f2;
+  background: #202438;
+  font-size: 14px;
+  line-height: 1.35;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  scrollbar-color: #414866 #202438;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #414866;
+}
+
+*::-webkit-scrollbar-track {
+  background: #202438;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  min-width: 100%;
+  min-height: 100%;
+  margin: 0;
+  color-scheme: dark;
+}
+
+body {
+  overflow: hidden;
+  background: #202438;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  color: #cbd4f2;
+  background: #25293d;
+  border: 1px solid #414866;
+  border-radius: 3px;
+  min-height: 30px;
+  padding: 5px 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: default;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+button:hover {
+  border-color: #62a6ff;
+  color: #ffffff;
+}
+
+button:disabled {
+  opacity: 0.55;
+}
+
+input,
+select {
+  width: 100%;
+  color: #cbd4f2;
+  background: #202438;
+  border: 1px solid #414866;
+  border-radius: 3px;
+  padding: 9px 10px;
+  outline: none;
+}
+
+select {
+  min-height: 34px;
+  appearance: none;
+  padding: 7px 28px 7px 9px;
+}
+
+input:focus,
+select:focus {
+  border-color: #ff8f40;
+}
+

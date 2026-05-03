@@ -2688,7 +2688,7 @@ mod tests {
         assert!(app.export_modal.is_none());
         assert!(app
             .status_text()
-            .is_some_and(|status| status.contains("exported JSON")));
+            .is_some_and(|status| status.contains("Exported JSON")));
         let _ = std::fs::remove_dir_all(dir);
     }
 

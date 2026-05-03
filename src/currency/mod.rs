@@ -9,10 +9,9 @@ use serde::Deserialize;
 use crate::config::{self, ConfigPaths};
 
 #[cfg(feature = "refresh-currency")]
-#[path = "../currency/refresh.rs"]
 pub mod refresh;
 
-const EMBEDDED_RATES: &str = include_str!("../currency/rates.json");
+const EMBEDDED_RATES: &str = include_str!("../../currency/rates.json");
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CurrencySnapshot {

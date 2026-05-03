@@ -9,7 +9,7 @@ This section is for maintainers and contributors working on `tokenuse` itself.
 | `src/` | Rust TUI, ingestion, archive, pricing, currency, export, and shared runtime |
 | `src/tools/` | Tool adapter registry plus parser implementations |
 | `desktop/` | Tauri v2 desktop frontend and desktop Rust commands |
-| `currency/` | Embedded currency snapshot generation |
+| `currency/` | Generated embedded currency snapshot data |
 | `docs/` | Source docs consumed by the website |
 | `.github/workflows/` | CI, release, currency refresh, and Homebrew tap automation |
 

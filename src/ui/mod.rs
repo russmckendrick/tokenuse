@@ -579,7 +579,7 @@ mod tests {
         assert!(rendered.contains("weekly"));
         assert!(rendered.contains("% left"));
         assert!(rendered.contains("24h"));
-        assert!(rendered.contains(&copy.usage.models));
+        assert!(rendered.contains(&copy.usage.model));
         assert!(rendered.contains(&copy.tools.claude_code));
         assert!(rendered.contains(&copy.tools.cursor));
         assert!(rendered.contains(&copy.tools.copilot));
@@ -587,7 +587,10 @@ mod tests {
         assert!(rendered.contains("Console"));
         assert!(rendered.contains(&copy.usage.pulse));
         assert!(rendered.contains(&copy.metrics.tokens));
-        assert!(rendered.contains("sorted by 24h spend"));
+        assert!(rendered.contains(&crate::copy::template(
+            &copy.filters.sorted_by_24h,
+            &[("sort", app.sort.label().to_lowercase())],
+        )));
         assert!(rendered.contains("c config"));
     }
 

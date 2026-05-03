@@ -692,7 +692,7 @@ mod tests {
 
     #[test]
     fn keymap_json_is_behavior_only() {
-        let raw = include_str!("keymap.json");
+        let raw = include_str!("../keymap/keymap.json");
 
         for forbidden in ["\"label\"", "\"footers\"", "\"title\"", "\"items\""] {
             assert!(
@@ -704,30 +704,78 @@ mod tests {
 
     #[test]
     fn surface_files_do_not_reintroduce_known_copy_literals() {
-        let export_source = include_str!("export.rs")
+        let export_source = include_str!("../export/workbook.rs")
             .split("\n#[cfg(test)]")
             .next()
             .expect("export source has a non-test section");
         let files = [
-            ("src/ui.rs", include_str!("ui.rs")),
-            ("src/ui/sections.rs", include_str!("ui/sections.rs")),
-            ("src/main.rs", include_str!("main.rs")),
-            ("src/export.rs", export_source),
+            ("src/ui/mod.rs", include_str!("../ui/mod.rs")),
+            ("src/ui/sections.rs", include_str!("../ui/sections.rs")),
+            ("src/main.rs", include_str!("../main.rs")),
+            ("src/export/workbook.rs", export_source),
+            ("src/export/chart.rs", include_str!("../export/chart.rs")),
+            ("src/export/csv.rs", include_str!("../export/csv.rs")),
+            ("src/export/labels.rs", include_str!("../export/labels.rs")),
+            ("src/export/report.rs", include_str!("../export/report.rs")),
             (
                 "desktop/src/App.svelte",
-                include_str!("../desktop/src/App.svelte"),
+                include_str!("../../desktop/src/App.svelte"),
+            ),
+            (
+                "desktop/src/views/ConfigView.svelte",
+                include_str!("../../desktop/src/views/ConfigView.svelte"),
+            ),
+            (
+                "desktop/src/views/DeepDiveView.svelte",
+                include_str!("../../desktop/src/views/DeepDiveView.svelte"),
+            ),
+            (
+                "desktop/src/views/OverviewView.svelte",
+                include_str!("../../desktop/src/views/OverviewView.svelte"),
+            ),
+            (
+                "desktop/src/views/SessionView.svelte",
+                include_str!("../../desktop/src/views/SessionView.svelte"),
+            ),
+            (
+                "desktop/src/views/UsageView.svelte",
+                include_str!("../../desktop/src/views/UsageView.svelte"),
+            ),
+            (
+                "desktop/src/components/tables/CountTable.svelte",
+                include_str!("../../desktop/src/components/tables/CountTable.svelte"),
+            ),
+            (
+                "desktop/src/components/tables/KpiStrip.svelte",
+                include_str!("../../desktop/src/components/tables/KpiStrip.svelte"),
+            ),
+            (
+                "desktop/src/components/tables/ModelTable.svelte",
+                include_str!("../../desktop/src/components/tables/ModelTable.svelte"),
+            ),
+            (
+                "desktop/src/components/tables/ProjectTable.svelte",
+                include_str!("../../desktop/src/components/tables/ProjectTable.svelte"),
+            ),
+            (
+                "desktop/src/components/tables/ProjectToolTable.svelte",
+                include_str!("../../desktop/src/components/tables/ProjectToolTable.svelte"),
+            ),
+            (
+                "desktop/src/components/tables/SessionTable.svelte",
+                include_str!("../../desktop/src/components/tables/SessionTable.svelte"),
             ),
             (
                 "desktop/src/TrayPopover.svelte",
-                include_str!("../desktop/src/TrayPopover.svelte"),
+                include_str!("../../desktop/src/TrayPopover.svelte"),
             ),
             (
                 "desktop/src/components/ActivityPulse.svelte",
-                include_str!("../desktop/src/components/ActivityPulse.svelte"),
+                include_str!("../../desktop/src/components/ActivityPulse.svelte"),
             ),
             (
                 "desktop/src/components/UsageConsole.svelte",
-                include_str!("../desktop/src/components/UsageConsole.svelte"),
+                include_str!("../../desktop/src/components/UsageConsole.svelte"),
             ),
         ];
         let forbidden = [
@@ -746,7 +794,7 @@ mod tests {
             for literal in forbidden {
                 assert!(
                     !source.contains(literal),
-                    "{file} should reference src/copy.json instead of {literal:?}"
+                    "{file} should reference src/copy/copy.json instead of {literal:?}"
                 );
             }
         }
