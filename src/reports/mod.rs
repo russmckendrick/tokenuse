@@ -107,6 +107,25 @@ pub struct ReportRequest {
 }
 
 #[derive(Debug, Clone)]
+pub struct ReportBatchRequest {
+    pub formats: Vec<ReportFormat>,
+    pub period: Period,
+    pub scope: ReportScope,
+    pub redacted: bool,
+}
+
+impl ReportBatchRequest {
+    fn dataset_request(&self) -> ReportRequest {
+        ReportRequest {
+            format: self.formats.first().copied().unwrap_or(ReportFormat::Html),
+            period: self.period,
+            scope: self.scope.clone(),
+            redacted: self.redacted,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct ReportResponse {
     pub path: PathBuf,
     pub format: ReportFormat,
@@ -323,6 +342,54 @@ pub fn write_sample_to_dir(
     let stamp = Local::now().format("%Y%m%dT%H%M%S").to_string();
     let dataset = build_sample_dataset(request, dashboard, currency, source_label, &stamp);
     write_dataset_to_dir(reports_root, request.format, &dataset, &stamp)
+}
+
+pub fn write_ingested_batch_to_dir(
+    reports_root: &Path,
+    request: &ReportBatchRequest,
+    ingested: &Ingested,
+    currency: &CurrencyFormatter,
+    source_label: &str,
+) -> Result<Vec<ReportResponse>> {
+    let stamp = Local::now().format("%Y%m%dT%H%M%S").to_string();
+    let dataset = build_ingested_dataset(
+        &request.dataset_request(),
+        ingested,
+        currency,
+        source_label,
+        &stamp,
+    );
+    write_dataset_formats_to_dir(reports_root, &request.formats, &dataset, &stamp)
+}
+
+pub fn write_sample_batch_to_dir(
+    reports_root: &Path,
+    request: &ReportBatchRequest,
+    dashboard: &DashboardData,
+    currency: &CurrencyFormatter,
+    source_label: &str,
+) -> Result<Vec<ReportResponse>> {
+    let stamp = Local::now().format("%Y%m%dT%H%M%S").to_string();
+    let dataset = build_sample_dataset(
+        &request.dataset_request(),
+        dashboard,
+        currency,
+        source_label,
+        &stamp,
+    );
+    write_dataset_formats_to_dir(reports_root, &request.formats, &dataset, &stamp)
+}
+
+fn write_dataset_formats_to_dir(
+    reports_root: &Path,
+    formats: &[ReportFormat],
+    dataset: &ReportDataset,
+    stamp: &str,
+) -> Result<Vec<ReportResponse>> {
+    formats
+        .iter()
+        .map(|format| write_dataset_to_dir(reports_root, *format, dataset, stamp))
+        .collect()
 }
 
 fn write_dataset_to_dir(
@@ -3845,6 +3912,52 @@ mod tests {
         ] {
             assert!(response.path.join(name).exists(), "missing {name}");
         }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn batch_report_writes_multiple_formats_with_one_report_id() {
+        let dir = std::env::temp_dir().join(format!(
+            "tokenuse-report-batch-{}",
+            Utc::now().timestamp_nanos_opt().unwrap()
+        ));
+        let ingested = Ingested {
+            calls: vec![call("/tmp/a", "s1", "k1", 0)],
+            limits: Vec::new(),
+        };
+        let request = ReportBatchRequest {
+            formats: vec![ReportFormat::Json, ReportFormat::Html],
+            period: Period::ThirtyDays,
+            scope: ReportScope::AllProjects,
+            redacted: false,
+        };
+
+        let responses = write_ingested_batch_to_dir(
+            &dir,
+            &request,
+            &ingested,
+            &CurrencyFormatter::usd(),
+            "live",
+        )
+        .unwrap();
+
+        assert_eq!(responses.len(), 2);
+        assert_eq!(responses[0].format, ReportFormat::Json);
+        assert_eq!(responses[1].format, ReportFormat::Html);
+        let json = fs::read_to_string(&responses[0].path).unwrap();
+        let html = fs::read_to_string(&responses[1].path).unwrap();
+        assert!(json.contains("\"period\": \"30 Days\""));
+        assert!(html.contains("30 Days"));
+        assert_eq!(
+            responses[0]
+                .path
+                .file_stem()
+                .and_then(|value| value.to_str()),
+            responses[1]
+                .path
+                .file_stem()
+                .and_then(|value| value.to_str())
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 

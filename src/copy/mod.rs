@@ -26,6 +26,7 @@ pub struct CopyDeck {
     pub empty: EmptyCopy,
     pub export: ExportCopy,
     pub reports: ReportCopy,
+    pub report_cli: ReportCliCopy,
     pub cli: CliCopy,
     pub keymap: KeymapCopy,
     pub status: StatusCopy,
@@ -471,6 +472,32 @@ pub struct ReportCopy {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ReportCliCopy {
+    pub title: String,
+    pub loading: String,
+    pub select_period: String,
+    pub select_project: String,
+    pub select_reports: String,
+    pub select_folder: String,
+    pub select_redaction: String,
+    pub confirm: String,
+    pub generated: String,
+    pub cancelled: String,
+    pub all: String,
+    pub yes: String,
+    pub no: String,
+    pub on: String,
+    pub off: String,
+    pub summary: String,
+    pub prompt: String,
+    pub invalid_number: String,
+    pub invalid_multi: String,
+    pub invalid_yes_no: String,
+    pub invalid_folder: String,
+    pub wrote: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CsvFilesCopy {
     pub summary_file: String,
     pub daily_file: String,
@@ -486,7 +513,9 @@ pub struct CsvFilesCopy {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CliCopy {
     pub usage: String,
+    pub commands: String,
     pub flags: String,
+    pub report_command: String,
     pub help_flag: String,
     pub version_flag: String,
     pub list_projects_flag: String,
@@ -621,6 +650,9 @@ impl CopyDeck {
         ensure_template(&self.status.report_folder, &["path"])?;
         ensure_template(&self.status.clear_data_failed, &["error"])?;
         ensure_template(&self.status.background_usage_body, &["summary"])?;
+        ensure_template(&self.report_cli.prompt, &["label", "default"])?;
+        ensure_template(&self.report_cli.invalid_number, &["max"])?;
+        ensure_template(&self.report_cli.wrote, &["format", "path"])?;
         ensure_template(&self.updates.current_version, &["version"])?;
         ensure_template(&self.updates.available, &["version"])?;
         ensure_template(&self.updates.download_progress, &["downloaded", "total"])?;

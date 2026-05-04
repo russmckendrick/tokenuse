@@ -19,6 +19,8 @@ use tokenuse::{
     ingest, runtime, ui,
 };
 
+mod report_cli;
+
 fn main() -> Result<()> {
     color_eyre::install()?;
 
@@ -74,32 +76,79 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, mut app: App) -> Resul
 fn handle_subcommand() -> Result<bool> {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
-    if args.iter().any(|arg| arg == "--version" || arg == "-V") {
-        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-        return Ok(true);
+    match cli_action(&args) {
+        CliAction::Dashboard => Ok(false),
+        CliAction::Version => {
+            println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+            Ok(true)
+        }
+        CliAction::Help => {
+            print_help();
+            Ok(true)
+        }
+        CliAction::ListProjects => {
+            print_project_inventory()?;
+            Ok(true)
+        }
+        CliAction::RefreshPrices => {
+            refresh_prices()?;
+            Ok(true)
+        }
+        CliAction::GenerateCurrencyJson => {
+            refresh_currency()?;
+            Ok(true)
+        }
+        CliAction::Report => {
+            report_cli::run()?;
+            Ok(true)
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CliAction {
+    Dashboard,
+    Help,
+    Version,
+    ListProjects,
+    RefreshPrices,
+    GenerateCurrencyJson,
+    Report,
+}
+
+fn cli_action(args: &[String]) -> CliAction {
+    if args.first().is_some_and(|arg| arg == "report") {
+        if args.iter().skip(1).any(|arg| is_help_arg(arg)) {
+            return CliAction::Help;
+        }
+        return CliAction::Report;
     }
 
-    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
-        print_help();
-        return Ok(true);
+    if args.iter().any(|arg| arg == "--version" || arg == "-V") {
+        return CliAction::Version;
+    }
+
+    if args.iter().any(|arg| is_help_arg(arg)) {
+        return CliAction::Help;
     }
 
     if args.iter().any(|arg| arg == "--list-projects") {
-        print_project_inventory()?;
-        return Ok(true);
+        return CliAction::ListProjects;
     }
 
     if args.iter().any(|arg| arg == "--refresh-prices") {
-        refresh_prices()?;
-        return Ok(true);
+        return CliAction::RefreshPrices;
     }
 
     if args.iter().any(|arg| arg == "--generate-currency-json") {
-        refresh_currency()?;
-        return Ok(true);
+        return CliAction::GenerateCurrencyJson;
     }
 
-    Ok(false)
+    CliAction::Dashboard
+}
+
+fn is_help_arg(arg: &str) -> bool {
+    arg == "--help" || arg == "-h"
 }
 
 fn print_help() {
@@ -110,6 +159,10 @@ fn print_help() {
 
 {usage}
     {name} [FLAGS]
+    {name} report
+
+{commands}
+    report                         {report_command}
 
 {flags}
     -h, --help                     {help_flag}
@@ -123,7 +176,9 @@ fn print_help() {
         version = env!("CARGO_PKG_VERSION"),
         description = env!("CARGO_PKG_DESCRIPTION"),
         usage = copy.cli.usage,
+        commands = copy.cli.commands,
         flags = copy.cli.flags,
+        report_command = copy.cli.report_command,
         help_flag = copy.cli.help_flag,
         version_flag = copy.cli.version_flag,
         list_projects_flag = copy.cli.list_projects_flag,
@@ -306,5 +361,44 @@ impl Drop for TerminalSession {
             LeaveAlternateScreen
         );
         let _ = self.terminal.show_cursor();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| value.to_string()).collect()
+    }
+
+    #[test]
+    fn report_command_routes_to_guided_wizard() {
+        assert_eq!(cli_action(&args(&["report"])), CliAction::Report);
+    }
+
+    #[test]
+    fn report_help_uses_normal_help_output() {
+        assert_eq!(cli_action(&args(&["report", "--help"])), CliAction::Help);
+        assert_eq!(cli_action(&args(&["report", "-h"])), CliAction::Help);
+    }
+
+    #[test]
+    fn existing_flags_still_route_to_their_handlers() {
+        assert_eq!(cli_action(&args(&["--help"])), CliAction::Help);
+        assert_eq!(cli_action(&args(&["-V"])), CliAction::Version);
+        assert_eq!(
+            cli_action(&args(&["--list-projects"])),
+            CliAction::ListProjects
+        );
+        assert_eq!(
+            cli_action(&args(&["--refresh-prices"])),
+            CliAction::RefreshPrices
+        );
+        assert_eq!(
+            cli_action(&args(&["--generate-currency-json"])),
+            CliAction::GenerateCurrencyJson
+        );
+        assert_eq!(cli_action(&[]), CliAction::Dashboard);
     }
 }

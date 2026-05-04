@@ -97,6 +97,8 @@ The Config page's clear-data action asks for confirmation, deletes `archive.db`,
 
 Press `e` on Overview, Deep Dive, Usage, or Session to generate a report. The report modal chooses format, period, project scope, and redaction. Reports always include all tools for the chosen period and project or all-projects scope. Output defaults to the user's Downloads folder, falling back to `~/Downloads` and then `<config dir>/tokenuse/reports/`.
 
+Run `tokenuse report` to generate reports without opening the dashboard. The guided command asks for time range, project scope, one or more report formats, output folder, redaction, and final confirmation. It writes live local-session reports only; if no local sessions are found, it exits without generating sample reports.
+
 Reports are timestamped and slugged with the chosen period and project scope, so prior runs are not overwritten. HTML/PDF are client-ready executive report decks, SVG/PNG are one-page executive visual summaries, JSON serializes the full report dataset, Excel writes a multi-sheet workbook, and CSV writes one file per report area.
 
 | Format | Output |
