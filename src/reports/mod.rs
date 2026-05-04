@@ -1791,7 +1791,7 @@ h3 { color: var(--ink); font-size: 17px; line-height: 1.2; }
   min-height: 0;
   padding: 0;
   overflow: hidden;
-  border-top: 0;
+  border: 0;
 }
 .kpi-card:nth-child(2) { border-top-color: var(--blue); }
 .kpi-card:nth-child(3) { border-top-color: var(--teal); }
@@ -2071,7 +2071,7 @@ h3 { color: var(--ink); font-size: 17px; line-height: 1.2; }
   .kpi-ribbon { gap: 7px; margin-top: 12px; }
   .kpi-card { min-height: 58px; padding: 7px; border-top-width: 3px; }
   .overview-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; min-height: 235px; margin-top: 0; }
-  .overview-kpis .kpi-card { min-height: 0; padding: 0; grid-template-rows: 31px minmax(0, 1fr); border-top: 0; }
+  .overview-kpis .kpi-card { min-height: 0; padding: 0; grid-template-rows: 31px minmax(0, 1fr); border: 0; }
   .kpi-label { font-size: 9px; }
   .overview-kpis .kpi-label { min-height: 31px; padding: 0 10px; font-size: 9px; }
   .kpi-value { margin-top: 5px; font-size: 13px; }
