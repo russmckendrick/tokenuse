@@ -30,6 +30,7 @@ pub(crate) enum DesktopUpdateError {
     #[cfg(any(windows, target_os = "linux"))]
     #[error("there is no pending desktop update")]
     NoPendingUpdate,
+    #[cfg(not(any(windows, target_os = "linux")))]
     #[error("desktop updates are available on Windows and Linux only")]
     Unsupported,
 }
