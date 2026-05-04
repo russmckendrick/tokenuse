@@ -63,8 +63,11 @@ jobs:
         run: cargo test
 
   desktop-check:
-    name: "🖥️ Desktop Check"
-    runs-on: macos-latest
+    name: "🖥️ Desktop Check (${{ matrix.os }})"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, macos-latest, windows-latest]
 
     steps:
       - name: "📥 Check out repository"
@@ -72,6 +75,19 @@ jobs:
 
       - name: "🦀 Install Rust toolchain"
         uses: dtolnay/rust-toolchain@stable
+
+      - name: "🐧 Install Linux desktop build dependencies"
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libayatana-appindicator3-dev \
+            libfontconfig1-dev \
+            libgtk-3-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            librsvg2-dev
 
       - name: "⚡ Restore Rust cache"
         uses: Swatinem/rust-cache@v2

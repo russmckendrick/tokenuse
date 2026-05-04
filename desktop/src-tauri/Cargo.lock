@@ -6631,6 +6631,7 @@ version = "0.0.8"
 dependencies = [
  "color-eyre",
  "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-autostart",

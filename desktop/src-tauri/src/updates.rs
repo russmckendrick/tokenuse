@@ -49,7 +49,6 @@ pub(crate) type DesktopUpdateResult<T> = Result<T, DesktopUpdateError>;
 mod supported {
     use std::sync::Mutex;
 
-    use tauri::{ipc::Channel, AppHandle, State};
     use tauri_plugin_updater::{Update, UpdaterExt};
 
     use super::{
@@ -60,10 +59,9 @@ mod supported {
     #[derive(Default)]
     pub(crate) struct PendingDesktopUpdate(pub(crate) Mutex<Option<Update>>);
 
-    #[tauri::command]
     pub(crate) async fn check_desktop_update(
-        app: AppHandle,
-        pending_update: State<'_, PendingDesktopUpdate>,
+        app: tauri::AppHandle,
+        pending_update: tauri::State<'_, PendingDesktopUpdate>,
     ) -> DesktopUpdateResult<Option<DesktopUpdateMetadata>> {
         let update = app.updater()?.check().await?;
         let metadata = update.as_ref().map(|update| DesktopUpdateMetadata {
@@ -79,11 +77,10 @@ mod supported {
         Ok(metadata)
     }
 
-    #[tauri::command]
     pub(crate) async fn install_desktop_update(
-        app: AppHandle,
-        pending_update: State<'_, PendingDesktopUpdate>,
-        on_event: Channel<DesktopUpdateDownloadEvent>,
+        app: tauri::AppHandle,
+        pending_update: tauri::State<'_, PendingDesktopUpdate>,
+        on_event: tauri::ipc::Channel<DesktopUpdateDownloadEvent>,
     ) -> DesktopUpdateResult<()> {
         let update = {
             let mut pending_update = pending_update
@@ -119,9 +116,26 @@ mod supported {
 }
 
 #[cfg(any(windows, target_os = "linux"))]
-pub(crate) use supported::{
-    check_desktop_update, install_desktop_update, PendingDesktopUpdate,
-};
+pub(crate) use supported::PendingDesktopUpdate;
+
+#[cfg(any(windows, target_os = "linux"))]
+#[tauri::command]
+pub(crate) async fn check_desktop_update(
+    app: tauri::AppHandle,
+    pending_update: tauri::State<'_, PendingDesktopUpdate>,
+) -> DesktopUpdateResult<Option<DesktopUpdateMetadata>> {
+    supported::check_desktop_update(app, pending_update).await
+}
+
+#[cfg(any(windows, target_os = "linux"))]
+#[tauri::command]
+pub(crate) async fn install_desktop_update(
+    app: tauri::AppHandle,
+    pending_update: tauri::State<'_, PendingDesktopUpdate>,
+    on_event: tauri::ipc::Channel<DesktopUpdateDownloadEvent>,
+) -> DesktopUpdateResult<()> {
+    supported::install_desktop_update(app, pending_update, on_event).await
+}
 
 #[cfg(not(any(windows, target_os = "linux")))]
 #[tauri::command]
