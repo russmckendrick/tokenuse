@@ -1764,11 +1764,20 @@ h3 { color: var(--ink); font-size: 17px; line-height: 1.2; }
   gap: 10px;
   margin-top: 22px;
 }
+.overview-kpis {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 0;
+}
 .kpi-card {
   min-height: 78px;
   padding: 12px;
   background: var(--soft);
   border-top: 4px solid var(--accent);
+}
+.overview-kpis .kpi-card {
+  min-height: 104px;
+  padding: 16px;
 }
 .kpi-card:nth-child(2) { border-top-color: var(--blue); }
 .kpi-card:nth-child(3) { border-top-color: var(--teal); }
@@ -1992,6 +2001,7 @@ h3 { color: var(--ink); font-size: 17px; line-height: 1.2; }
   .report-page { width: calc(100% - 24px); min-height: 0; padding: 24px; }
   .cover-grid, .activity-layout, .breakdown-grid, .insight-grid { grid-template-columns: 1fr; }
   .kpi-ribbon { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .overview-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media print {
   body { background: #fff; }
@@ -2021,8 +2031,11 @@ h3 { color: var(--ink); font-size: 17px; line-height: 1.2; }
   .meta-value { margin-top: 2px; font-size: 11px; }
   .kpi-ribbon { gap: 7px; margin-top: 12px; }
   .kpi-card { min-height: 58px; padding: 7px; border-top-width: 3px; }
+  .overview-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 0; }
+  .overview-kpis .kpi-card { min-height: 76px; padding: 9px; }
   .kpi-label { font-size: 9px; }
   .kpi-value { margin-top: 5px; font-size: 13px; }
+  .overview-kpis .kpi-value { font-size: 16px; }
   .insight-grid { gap: 9px; margin-top: 14px; }
   .insight-card { padding: 12px; }
   .insight-value { margin-top: 6px; font-size: 20px; }
@@ -2100,11 +2113,8 @@ fn push_deck_header(out: &mut String, dataset: &ReportDataset, page: &str) {
 fn push_overview_page(out: &mut String, dataset: &ReportDataset, insights: &ReportInsights) {
     out.push_str("<section class=\"report-page\" data-report-page=\"overview\">");
     push_deck_header(out, dataset, "Overview");
-    out.push_str(
-        "<div class=\"cover-grid\"><div><p class=\"deck-kicker\">Executive usage report</p><h1>",
-    );
-    out.push_str(&escape_html(&report_title(dataset)));
-    out.push_str("</h1><p class=\"deck-subtitle\">A client-ready summary of AI tool usage, spend, session volume, and activity concentration for the selected scope.</p>");
+    out.push_str("<div class=\"cover-grid\"><div class=\"overview-kpi-area\">");
+    push_kpi_ribbon_html(out, dataset, " overview-kpis");
     if let Some(note) = &dataset.metadata.sample_note {
         out.push_str("<p class=\"sample-note\">");
         out.push_str(&escape_html(note));
@@ -2135,7 +2145,6 @@ fn push_overview_page(out: &mut String, dataset: &ReportDataset, insights: &Repo
         );
     }
     out.push_str("</aside></div>");
-    push_kpi_ribbon_html(out, dataset);
     out.push_str("<section class=\"insight-grid\" aria-label=\"Executive snapshot\">");
     push_insight_card(
         out,
@@ -2168,8 +2177,12 @@ fn push_overview_page(out: &mut String, dataset: &ReportDataset, insights: &Repo
     out.push_str("</section></section>");
 }
 
-fn push_kpi_ribbon_html(out: &mut String, dataset: &ReportDataset) {
-    out.push_str("<section class=\"kpi-ribbon\" aria-label=\"Key metrics\">");
+fn push_kpi_ribbon_html(out: &mut String, dataset: &ReportDataset, extra_class: &str) {
+    let _ = write!(
+        out,
+        "<section class=\"kpi-ribbon{}\" aria-label=\"Key metrics\">",
+        escape_html(extra_class)
+    );
     for (label, value) in [
         ("Cost", dataset.summary.cost.clone()),
         ("Calls", format_int(dataset.summary.calls)),
@@ -3813,11 +3826,25 @@ mod tests {
         assert!(html.contains("data-report-page=\"activity\""));
         assert!(html.contains("data-report-page=\"breakdown\""));
         assert!(html.contains("@page { size: A4 landscape"));
+        assert!(html.contains("class=\"kpi-ribbon overview-kpis\""));
+        for label in [
+            "Cost",
+            "Calls",
+            "Sessions",
+            "Total tokens",
+            "Cache hit",
+            "Web search",
+        ] {
+            assert!(html.contains(label));
+        }
         assert!(html.contains("Executive snapshot"));
         assert!(html.contains("Calendar heatmap"));
         assert!(html.contains("Daily call trend"));
         assert!(html.contains("Top Projects"));
         assert!(html.contains("Raw data:"));
+        assert!(!html.contains("Executive usage report"));
+        assert!(!html.contains("A client-ready summary of AI tool usage"));
+        assert!(!html.contains("<h1>"));
         assert!(!html.contains("Prompt Appendix"));
         assert!(!html.contains("Raw Calls"));
         assert!(!html.contains("Limits Raw"));
