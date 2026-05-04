@@ -1730,8 +1730,14 @@ h3 { color: var(--ink); font-size: 17px; line-height: 1.2; }
 .cover-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.28fr) minmax(340px, .72fr);
+  align-items: stretch;
   gap: 18px;
   margin-top: 18px;
+}
+.overview-kpi-area {
+  display: flex;
+  flex-direction: column;
+  min-height: 300px;
 }
 .meta-panel,
 .kpi-card,
@@ -1746,6 +1752,7 @@ h3 { color: var(--ink); font-size: 17px; line-height: 1.2; }
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px 14px;
+  height: 100%;
   padding: 15px;
   background: linear-gradient(180deg, #fff, var(--soft));
 }
@@ -1766,7 +1773,10 @@ h3 { color: var(--ink); font-size: 17px; line-height: 1.2; }
 }
 .overview-kpis {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  flex: 1;
+  min-height: 300px;
   margin-top: 0;
 }
 .kpi-card {
@@ -1776,13 +1786,29 @@ h3 { color: var(--ink); font-size: 17px; line-height: 1.2; }
   border-top: 4px solid var(--accent);
 }
 .overview-kpis .kpi-card {
-  min-height: 104px;
-  padding: 16px;
+  display: grid;
+  grid-template-rows: 44px minmax(0, 1fr);
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border-top: 0;
 }
 .kpi-card:nth-child(2) { border-top-color: var(--blue); }
 .kpi-card:nth-child(3) { border-top-color: var(--teal); }
 .kpi-card:nth-child(4) { border-top-color: var(--gold); }
 .kpi-card:nth-child(5) { border-top-color: var(--coral); }
+.overview-kpis .kpi-label {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 18px;
+  background: var(--accent);
+  color: #fff;
+}
+.overview-kpis .kpi-card:nth-child(2) .kpi-label { background: var(--blue); }
+.overview-kpis .kpi-card:nth-child(3) .kpi-label { background: var(--teal); }
+.overview-kpis .kpi-card:nth-child(4) .kpi-label { background: var(--gold); }
+.overview-kpis .kpi-card:nth-child(5) .kpi-label { background: var(--coral); }
 .kpi-value {
   display: block;
   margin-top: 8px;
@@ -1790,6 +1816,15 @@ h3 { color: var(--ink); font-size: 17px; line-height: 1.2; }
   font: 750 19px/1.05 "SFMono-Regular", "Cascadia Mono", "JetBrains Mono", monospace;
   letter-spacing: -.03em;
   overflow-wrap: anywhere;
+}
+.overview-kpis .kpi-value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 18px;
+  text-align: center;
+  font-size: 32px;
 }
 .insight-grid {
   display: grid;
@@ -2001,7 +2036,10 @@ h3 { color: var(--ink); font-size: 17px; line-height: 1.2; }
   .report-page { width: calc(100% - 24px); min-height: 0; padding: 24px; }
   .cover-grid, .activity-layout, .breakdown-grid, .insight-grid { grid-template-columns: 1fr; }
   .kpi-ribbon { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .overview-kpi-area,
+  .overview-kpis { min-height: 0; }
   .overview-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .overview-kpis .kpi-card { min-height: 120px; }
 }
 @media print {
   body { background: #fff; }
@@ -2025,17 +2063,19 @@ h3 { color: var(--ink); font-size: 17px; line-height: 1.2; }
   .deck-header { padding-bottom: 10px; }
   .deck-subtitle { max-width: 560px; font-size: 13px; margin-top: 7px; }
   .cover-grid { grid-template-columns: minmax(0, 1.25fr) minmax(330px, .75fr); margin-top: 12px; gap: 14px; }
+  .overview-kpi-area { min-height: 235px; }
   .meta-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; padding: 10px; }
   .meta-item + .meta-item { margin-top: 0; padding-top: 0; border-top: 0; }
   .meta-label { font-size: 9px; }
   .meta-value { margin-top: 2px; font-size: 11px; }
   .kpi-ribbon { gap: 7px; margin-top: 12px; }
   .kpi-card { min-height: 58px; padding: 7px; border-top-width: 3px; }
-  .overview-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 0; }
-  .overview-kpis .kpi-card { min-height: 76px; padding: 9px; }
+  .overview-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; min-height: 235px; margin-top: 0; }
+  .overview-kpis .kpi-card { min-height: 0; padding: 0; grid-template-rows: 31px minmax(0, 1fr); border-top: 0; }
   .kpi-label { font-size: 9px; }
+  .overview-kpis .kpi-label { min-height: 31px; padding: 0 10px; font-size: 9px; }
   .kpi-value { margin-top: 5px; font-size: 13px; }
-  .overview-kpis .kpi-value { font-size: 16px; }
+  .overview-kpis .kpi-value { margin: 0; padding: 8px; font-size: 22px; }
   .insight-grid { gap: 9px; margin-top: 14px; }
   .insight-card { padding: 12px; }
   .insight-value { margin-top: 6px; font-size: 20px; }
@@ -3827,6 +3867,8 @@ mod tests {
         assert!(html.contains("data-report-page=\"breakdown\""));
         assert!(html.contains("@page { size: A4 landscape"));
         assert!(html.contains("class=\"kpi-ribbon overview-kpis\""));
+        assert!(html.contains(".overview-kpis .kpi-label"));
+        assert!(html.contains("color: #fff"));
         for label in [
             "Cost",
             "Calls",
