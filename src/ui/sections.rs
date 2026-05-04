@@ -1149,15 +1149,15 @@ pub(super) fn render_export_modal(frame: &mut Frame<'_>, area: Rect, app: &App) 
     };
 
     let width = 84.min(area.width.saturating_sub(4)).max(56);
-    let height = (modal.options.len() as u16 + 6)
+    let height = (modal.options.len() as u16 + 9)
         .min(area.height.saturating_sub(4))
-        .max(10);
+        .max(13);
     let modal_area = centered_rect(width, height, area);
     Clear.render(modal_area, frame.buffer_mut());
 
     let copy = copy();
     let title = selection_title(
-        copy.modals.export.as_str(),
+        copy.reports.modal_title.as_str(),
         modal.selected,
         modal.options.len(),
     );
@@ -1169,6 +1169,7 @@ pub(super) fn render_export_modal(frame: &mut Frame<'_>, area: Rect, app: &App) 
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(2),
+            Constraint::Length(3),
             Constraint::Min(1),
             Constraint::Length(1),
         ])
@@ -1176,19 +1177,44 @@ pub(super) fn render_export_modal(frame: &mut Frame<'_>, area: Rect, app: &App) 
 
     Paragraph::new(Text::from(vec![
         Line::from(vec![
-            Span::styled(format!("{} ", copy.modals.format), theme::key()),
+            Span::styled(format!("{} ", copy.reports.format), theme::key()),
             Span::styled(
                 copy.modals.current_period_filters_apply.as_str(),
                 theme::dim(),
             ),
         ]),
         Line::from(vec![
-            Span::styled(format!("{} ", copy.modals.folder), theme::key()),
+            Span::styled(format!("{} ", copy.reports.folder), theme::key()),
             Span::styled(app.export_dir.display().to_string(), theme::muted()),
         ]),
     ]))
     .style(theme::base())
     .render(layout[0], frame.buffer_mut());
+
+    Paragraph::new(Text::from(vec![
+        Line::from(vec![
+            Span::styled(format!("{} ", copy.reports.period), theme::key()),
+            Span::styled(modal.period.label(), theme::base()),
+            Span::styled("  < >", theme::dim()),
+        ]),
+        Line::from(vec![
+            Span::styled(format!("{} ", copy.reports.project), theme::key()),
+            Span::styled(modal.current_project_label(), theme::base()),
+            Span::styled("  p", theme::dim()),
+            Span::styled(format!("  {} ", copy.reports.redaction), theme::key()),
+            Span::styled(
+                if modal.redacted {
+                    copy.reports.redaction_on.as_str()
+                } else {
+                    copy.reports.redaction_off.as_str()
+                },
+                theme::base(),
+            ),
+            Span::styled("  x", theme::dim()),
+        ]),
+    ]))
+    .style(theme::base())
+    .render(layout[1], frame.buffer_mut());
 
     let rows = modal.options.iter().enumerate().map(|(idx, option)| {
         let is_selected = idx == modal.selected;
@@ -1210,7 +1236,7 @@ pub(super) fn render_export_modal(frame: &mut Frame<'_>, area: Rect, app: &App) 
 
     let table = Table::new(rows, [Constraint::Length(2), Constraint::Min(20)]).column_spacing(1);
 
-    frame.render_widget(table, layout[1]);
+    frame.render_widget(table, layout[2]);
 
     Paragraph::new(Line::from(vec![
         Span::styled("Enter", theme::key()),
@@ -1224,7 +1250,7 @@ pub(super) fn render_export_modal(frame: &mut Frame<'_>, area: Rect, app: &App) 
         Span::styled(format!(" {}", copy.actions.close_lower), theme::muted()),
     ]))
     .style(theme::base())
-    .render(layout[2], frame.buffer_mut());
+    .render(layout[3], frame.buffer_mut());
 }
 
 pub(super) fn render_download_confirm_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {

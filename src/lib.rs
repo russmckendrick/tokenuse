@@ -9,6 +9,7 @@ pub mod ingest;
 pub mod ingest_cache;
 pub mod keymap;
 pub mod pricing;
+pub mod reports;
 pub mod runtime;
 pub mod theme;
 pub mod tools;

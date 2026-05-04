@@ -1,6 +1,6 @@
 use tokenuse::{
     app::{Page, Period, SortMode, StatusTone, Tool},
-    export::ExportFormat,
+    reports::ReportFormat,
 };
 
 use crate::state::{unknown, CommandResult};
@@ -97,25 +97,27 @@ pub(crate) fn sort_id(sort: SortMode) -> &'static str {
     }
 }
 
-pub(crate) fn parse_export_format(value: &str) -> CommandResult<ExportFormat> {
+pub(crate) fn parse_report_format(value: &str) -> CommandResult<ReportFormat> {
     match value {
-        "json" => Ok(ExportFormat::Json),
-        "csv" => Ok(ExportFormat::Csv),
-        "svg" => Ok(ExportFormat::Svg),
-        "png" => Ok(ExportFormat::Png),
-        "html" => Ok(ExportFormat::Html),
-        "pdf" => Ok(ExportFormat::Pdf),
-        _ => Err(unknown("export format", value)),
+        "json" => Ok(ReportFormat::Json),
+        "csv" => Ok(ReportFormat::Csv),
+        "svg" => Ok(ReportFormat::Svg),
+        "png" => Ok(ReportFormat::Png),
+        "html" => Ok(ReportFormat::Html),
+        "pdf" => Ok(ReportFormat::Pdf),
+        "xlsx" => Ok(ReportFormat::Xlsx),
+        _ => Err(unknown("report format", value)),
     }
 }
 
-pub(crate) fn export_format_id(format: ExportFormat) -> &'static str {
+pub(crate) fn report_format_id(format: ReportFormat) -> &'static str {
     match format {
-        ExportFormat::Json => "json",
-        ExportFormat::Csv => "csv",
-        ExportFormat::Svg => "svg",
-        ExportFormat::Png => "png",
-        ExportFormat::Html => "html",
-        ExportFormat::Pdf => "pdf",
+        ReportFormat::Json => "json",
+        ReportFormat::Csv => "csv",
+        ReportFormat::Svg => "svg",
+        ReportFormat::Png => "png",
+        ReportFormat::Html => "html",
+        ReportFormat::Pdf => "pdf",
+        ReportFormat::Xlsx => "xlsx",
     }
 }

@@ -399,25 +399,30 @@ fn spawn_background_monitor<R: Runtime>(app_handle: AppHandle<R>, state: SharedS
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::{export_format_id, parse_export_format, parse_tool, tool_id};
+    use crate::ids::{parse_report_format, parse_tool, report_format_id, tool_id};
     use crate::snapshot::{snapshot, tray_snapshot};
     use tokenuse::{
         app::{Page, Period, ProjectFilter, SortMode, Tool},
-        export::ExportFormat,
+        reports::ReportFormat,
     };
 
     #[test]
-    fn export_format_helpers_roundtrip_html_and_pdf() {
+    fn report_format_helpers_roundtrip_html_pdf_and_xlsx() {
         assert!(matches!(
-            parse_export_format("html").unwrap(),
-            ExportFormat::Html
+            parse_report_format("html").unwrap(),
+            ReportFormat::Html
         ));
-        assert_eq!(export_format_id(ExportFormat::Html), "html");
+        assert_eq!(report_format_id(ReportFormat::Html), "html");
         assert!(matches!(
-            parse_export_format("pdf").unwrap(),
-            ExportFormat::Pdf
+            parse_report_format("pdf").unwrap(),
+            ReportFormat::Pdf
         ));
-        assert_eq!(export_format_id(ExportFormat::Pdf), "pdf");
+        assert_eq!(report_format_id(ReportFormat::Pdf), "pdf");
+        assert!(matches!(
+            parse_report_format("xlsx").unwrap(),
+            ReportFormat::Xlsx
+        ));
+        assert_eq!(report_format_id(ReportFormat::Xlsx), "xlsx");
     }
 
     #[test]
@@ -598,8 +603,9 @@ pub fn run() {
             commands::clear_data,
             commands::refresh_currency_rates,
             commands::refresh_pricing_snapshot,
-            commands::set_export_dir,
-            commands::export_current,
+            commands::set_report_dir,
+            commands::report_projects,
+            commands::generate_report,
             commands::handle_shortcut,
             updates::check_desktop_update,
             updates::install_desktop_update,

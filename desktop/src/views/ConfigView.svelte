@@ -105,7 +105,7 @@
       <div class="config-facts">
         <div><span>{snapshot.copy.tables.archive}</span><strong>{snapshot.source}</strong></div>
         <div><span>{snapshot.copy.tables.currency}</span><strong>{snapshot.currency}</strong></div>
-        <div><span>{snapshot.copy.tables.exports}</span><strong>{snapshot.export_dir}</strong></div>
+        <div><span>{snapshot.copy.tables.exports}</span><strong>{snapshot.report_dir}</strong></div>
       </div>
       <div class="button-row">
         <button type="button" onclick={refreshArchive}><Database size={15} /> {snapshot.copy.actions.refresh}</button>

@@ -2,7 +2,7 @@ export type PageId = 'overview' | 'deep-dive' | 'usage' | 'config' | 'session';
 export type PeriodId = 'today' | 'week' | 'thirty-days' | 'month' | 'all-time';
 export type ToolId = 'all' | 'claude-code' | 'cursor' | 'codex' | 'copilot' | 'gemini';
 export type SortId = 'spend' | 'date' | 'tokens';
-export type ExportFormatId = 'json' | 'csv' | 'svg' | 'png' | 'html' | 'pdf';
+export type ReportFormatId = 'json' | 'csv' | 'svg' | 'png' | 'html' | 'pdf' | 'xlsx';
 
 export type OptionItem<T extends string = string> = {
   value: T;
@@ -240,6 +240,7 @@ export type CopyDeck = {
   tray: Record<string, string>;
   empty: Record<string, string>;
   export: Record<string, unknown>;
+  reports: Record<string, string>;
   cli: Record<string, string>;
   keymap: {
     actions: Record<string, string>;
@@ -274,6 +275,7 @@ export type DesktopSnapshot = {
   dashboard: DashboardData;
   usage: LimitsData;
   projects: ProjectOption[];
+  report_projects: ProjectOption[];
   sessions: SessionOption[];
   session: SessionDetailView | null;
   config_rows: ConfigRow[];
@@ -281,8 +283,8 @@ export type DesktopSnapshot = {
   currency: string;
   desktop_settings: DesktopSettingsState;
   desktop_updates: DesktopUpdateState;
-  export_dir: string;
-  export_formats: OptionItem<ExportFormatId>[];
+  report_dir: string;
+  report_formats: OptionItem<ReportFormatId>[];
   shortcut_footer: ShortcutHint[];
 };
 
@@ -295,7 +297,7 @@ export type TraySnapshot = {
   usage: LimitsData;
 };
 
-export type ExportResponse = {
+export type ReportResponse = {
   path: string;
   snapshot: DesktopSnapshot;
 };

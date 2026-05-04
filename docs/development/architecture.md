@@ -28,9 +28,9 @@ flowchart TD
 
 The durable archive lives at `<config dir>/tokenuse/archive.db`. If it already has rows, startup loads it immediately and queues an incremental background sync so the dashboard opens without reparsing every source. If the archive is empty, startup imports the legacy `~/.cache/tokenuse/ingest-cache.json` snapshot when present, performs one synchronous source sync, then renders from the archive. If the archive cannot be opened or migrated, the app falls back to raw `ingest::load()` for that run.
 
-Both Config pages can also clear local usage data after confirmation. That path deletes `archive.db`, recreates the schema, and immediately syncs local tool sources so per-source fingerprints are rebuilt from scratch. Config files, rates, pricing snapshots, and exports are kept; archive-only history is lost if the original source files are no longer present.
+Both Config pages can also clear local usage data after confirmation. That path deletes `archive.db`, recreates the schema, and immediately syncs local tool sources so per-source fingerprints are rebuilt from scratch. Config files, rates, pricing snapshots, and generated reports are kept; archive-only history is lost if the original source files are no longer present.
 
-The startup loader lives in `src/runtime.rs` so both frontends use the same config, currency, archive, fallback, and background refresh setup. The desktop app stores an `App` instance behind Tauri managed state and exposes narrow commands for filters, session drill-down, config actions, shortcuts, refresh, export, desktop settings, and the tray popover. It also runs a small backend monitor that continues calling `App::poll_reload()` while the webview is hidden, drains queued background usage alerts, and sends native notifications from Rust. See [Desktop app usage](../guides/desktop-usage.md).
+The startup loader lives in `src/runtime.rs` so both frontends use the same config, currency, archive, fallback, and background refresh setup. The desktop app stores an `App` instance behind Tauri managed state and exposes narrow commands for filters, session drill-down, config actions, shortcuts, refresh, reports, desktop settings, and the tray popover. It also runs a small backend monitor that continues calling `App::poll_reload()` while the webview is hidden, drains queued background usage alerts, and sends native notifications from Rust. See [Desktop app usage](../guides/desktop-usage.md).
 
 New sessions written while the dashboard is open are visible after archive sync — press `r` (Dashboard, Usage, or Session pages) to sync on a background thread. The dashboard stays responsive: the status bar shows `reloading…` while it runs, the next tick of the main loop drains completed results via `App::poll_reload`, and the status flips to `reloaded · N calls`. The refresher runs one sync at a time; if several results complete between UI ticks, the latest result wins. Failures or empty sync results keep the prior data unchanged.
 
@@ -86,7 +86,7 @@ The dashboard panels are built from the filtered call set:
 - Shell Commands: first word of split Bash commands.
 - MCP Servers: tool names shaped like `mcp__server__tool`, grouped by server.
 
-`App::sort` is a runtime-only `SortMode` (`Spend`, `Date`, `Tokens`) and defaults to spend on launch. Aggregators carry cost, activity tokens (`input + output + cache_creation + cache_read`), and latest timestamp until rows are ordered; count-style tables split a call's cost/tokens evenly across the row occurrences they emit while keeping occurrence counts unchanged. Exports serialize the already-sorted `DashboardData`.
+`App::sort` is a runtime-only `SortMode` (`Spend`, `Date`, `Tokens`) and defaults to spend on launch. Aggregators carry cost, activity tokens (`input + output + cache_creation + cache_read`), and latest timestamp until rows are ordered; count-style tables split a call's cost/tokens evenly across the row occurrences they emit while keeping occurrence counts unchanged. Dashboard views serialize as `DashboardData`, while Reports build a separate `ReportDataset` from raw `Ingested` calls and limits.
 
 ## Pages And Modals
 
@@ -112,9 +112,9 @@ flowchart LR
     Sess -- Esc/d --> DD
     O -- p --> Pick[Project picker]
     DD -- p --> Pick
-    O -- e --> Exp[Export picker]
+    O -- e --> Exp[Report picker]
     DD -- e --> Exp
-    Exp -- f/b --> FPick[Export folder picker]
+    Exp -- f/b --> FPick[Report folder picker]
     Cfg -- Enter on currency --> Curr[Currency picker]
     Cfg -- Enter on rates/prices --> DL[Download confirmation]
     Cfg -- Enter on clear data --> Clear[Clear-data confirmation]
@@ -131,11 +131,11 @@ flowchart LR
 - **Session** (`Page::Session`): drill-down for one `tool:session_id`. Rendered from `SessionDetailView`, computed by filtering `Ingested.calls` by `session_key(call) == key` and sorting calls with the active sort mode. Live data shows per-call timestamp, model, cost, in/out tokens, cache, tools used, and a 120-char single-line prompt snippet; selecting a call opens a modal with the full stored prompt plus reasoning/web-search counts and bash commands. Sample mode shows a privacy note since per-call records are not bundled.
 - **Config** (`Page::Config`): currency override, local data refresh actions (rates, LiteLLM pricing), and clear-data archive rebuild. The desktop frontend adds native-only controls for open-at-login and Dock/taskbar visibility on its Config page without changing the TUI state machine.
 - **Project picker, Currency picker, Session picker** (`*Modal` structs): each holds `options`, a typeable `query`, and a `filtered: Vec<usize>` mapping; all three share the same case-insensitive substring filter pattern. The project picker pins `All` regardless of query.
-- **Export picker** (`ExportModal`): six-row chooser (`JSON`, `CSV`, `SVG`, `PNG`, `HTML`, `PDF`) showing the active session export folder. `Enter` writes to that folder; `f` or `b` opens the folder picker.
-- **Export folder picker** (`FolderPickerModal`): directory-only picker rooted at the current export folder. `Use this folder` updates `App::export_dir` for the running session; `Esc` cancels without saving to `config.json`.
+- **Report picker** (`ExportModal`): report chooser for format, period, project/all-projects scope, and redaction. It defaults to the current period and project, always includes all tools, and writes HTML, PDF, SVG, PNG, JSON, Excel, or a CSV folder.
+- **Report folder picker** (`FolderPickerModal`): directory-only picker rooted at the current report folder. `Use this folder` updates `App::export_dir` for the running session; `Esc` cancels without saving to `config.json`.
 - **Help** (`help_open: bool`): full keybinding reference rendered from the shared keymap, openable from any page with `h` or `?`. Closes with `h`, `?`, or `Esc`.
 
-The modal state is checked in priority order in `App::handle_key`: help, call detail, currency, clear-data confirmation, download confirmation, project, session, export folder picker, then export. The active context is passed to the keymap resolver before `App` applies the returned action. The folder picker is the only nested modal and sits on top of the export picker. The desktop app uses the same resolver through the `handle_shortcut` Tauri command, returning frontend effects for Svelte-owned modals and call-detail state.
+The modal state is checked in priority order in `App::handle_key`: help, call detail, currency, clear-data confirmation, download confirmation, project, session, report folder picker, then report. The active context is passed to the keymap resolver before `App` applies the returned action. The folder picker is the only nested modal and sits on top of the report picker. The desktop app uses the same resolver through the `handle_shortcut` Tauri command, returning frontend effects for Svelte-owned modals and call-detail state.
 
 Terminal graph primitives live in `src/ui/graphs.rs`. They provide relative block sparklines, ranked bars, and compact gauges for TUI panels without adding another charting dependency. The desktop frontend keeps the same visual language, but renders webview activity charts, tray sparklines, and rank heat strips with D3-backed Svelte SVG components and applies Motion JS actions for panel, modal, gauge, and tray transitions. `DashboardData.activity_timeline` is the chronological graph source for Overview and Deep Dive in both frontends: 24 Hours and 7 Days use hourly buckets, This Month uses hourly buckets until day 15 of the month and daily buckets after that, and 30 Days/All Time use daily buckets. `Period::Today` is a rolling last-24-hours filter based on the current time, not a local calendar-day filter. The desktop tray popover requests a dedicated 24-hour snapshot so opening it does not mutate the main window's selected period, tool, project, or sort. `DashboardData.daily` remains the sort-aware table source.
 
@@ -212,24 +212,23 @@ cargo run -- --refresh-prices
 
 The TUI and desktop configuration pages can also download the LiteLLM-derived snapshot into the local config directory after confirmation. Because the archive stores `cost_usd` at import time, refreshed pricing applies to newly imported calls; existing historical rows keep their original USD cost. Builds made with `--no-default-features` compile without these download actions.
 
-## Export
+## Reports
 
-Press `e` on Dashboard, Usage, or Session pages to open the export picker. Output defaults to the user's Downloads folder, falling back to `~/Downloads` and then `<config dir>/tokenuse/exports/` if the platform does not expose a Downloads directory. Press `f` or `b` inside the export picker to choose another folder for the current TUI session. Export files never overwrite prior runs -- every filename is timestamped with `YYYYMMDDTHHMMSS` and slugged with the active period, tool, and project filter (for example `tokenuse-20260429T160054-week-claude-allprojects.json`).
+Press `e` on Dashboard, Usage, or Session pages to open the report picker. Output defaults to the user's Downloads folder, falling back to `~/Downloads` and then `<config dir>/tokenuse/reports/` if the platform does not expose a Downloads directory. Press `f` or `b` inside the report picker to choose another folder for the current TUI session. Report files never overwrite prior runs: every filename is timestamped with `YYYYMMDDTHHMMSS` and slugged with the chosen period and project scope.
 
-JSON, CSV, SVG, and PNG exports reflect the **current filtered dashboard view** (period + tool + project). HTML and PDF use an `ExportContext` around the same dashboard data plus selected Session detail, source, currency, and sort metadata.
+Reports are built from raw `Ingested` calls and limits through `ReportDataset`, not from the visible dashboard snapshot. Scope is period plus project or all projects; tools are always included together. Redaction is off by default and, when enabled, replaces prompts, shell commands, raw paths, session IDs, and dedup keys with report-local placeholders while preserving totals and costs.
 
 | Format | Output | Notes |
 | --- | --- | --- |
-| JSON | one `.json` file | Pretty-printed `DashboardData` (summary, daily, activity_timeline, projects, project_tools, sessions, models, tools, commands, mcp_servers). All `&'static str` panel cells serialize as strings. |
-| CSV | a directory of `.csv` files | One file per panel: `summary.csv`, `daily.csv`, `projects.csv`, `project_tools.csv`, `sessions.csv`, `models.csv`, `tools.csv`, `commands.csv`, `mcp_servers.csv`. Hand-written RFC 4180 escaping (commas, quotes, newlines). |
-| SVG | one `.svg` file | Multi-panel render of the dashboard at 1800×1500. |
-| PNG | one `.png` file | Same render as SVG, rasterized via `plotters`' bitmap backend. |
-| HTML | one `.html` file | Self-contained print-friendly workbook with inline CSS, inline bars mark, dashboard panels, and selected Session full prompts/shell commands when a session is open. |
-| PDF | one `.pdf` file | Fulgur-rendered version of the same self-contained HTML workbook, including inline CSS, the bars mark, dashboard panels, and selected Session full prompts/shell commands when a session is open. |
+| HTML | one `.html` file | Client-ready executive report deck with cover metadata, KPI ribbon, insight tiles, activity page, and breakdown page. |
+| PDF | one `.pdf` file | Fulgur-rendered A4 landscape version of the same executive report deck. |
+| SVG | one `.svg` file | One-page 16:9 executive visual summary with KPI strip, readable activity heatmap/trend, and top project/model/session highlights. |
+| PNG | one `.png` file | Same one-page executive summary rendered through `plotters`' bitmap backend. |
+| JSON | one `.json` file | Pretty-printed full `ReportDataset`. |
+| Excel | one `.xlsx` file | Multi-sheet workbook: Summary, Activity, Projects, Project Tools, Sessions, Calls, Models, Tools, Commands, MCP Servers, Limits Latest, Limits Raw, and Metadata. |
+| CSV | a directory of `.csv` files | One file per Excel/report area with hand-written RFC 4180 escaping. |
 
-Both image formats are produced by the same `render_dashboard_chart` function in `src/export/chart.rs`, so they always look identical. The palette is loaded from constants that mirror `src/theme.rs` and `DESIGN.md`. Tests serialize chart rendering through a process-wide `Mutex` because plotters' macOS font lookup is not thread-safe.
-
-The export pipeline depends on `plotters` (with the `svg_backend`, `bitmap_backend`, `bitmap_encoder`, `line_series`, and `ttf` features), `fulgur` for browserless HTML/CSS-to-PDF rendering, and the existing `serde_json`. HTML generation is hand-written, escaped at render time, and uses no external scripts or network dependency. PDF generation reuses that exact workbook HTML and renders it locally through Fulgur instead of shelling out to Chromium, WebKit, wkhtmltopdf, or another browser process.
+The report pipeline depends on `plotters` for SVG/PNG summaries, `fulgur` for browserless HTML/CSS-to-PDF rendering, `rust_xlsxwriter` for Excel, and `serde_json` for JSON. HTML generation is hand-written, escaped at render time, and uses no external scripts or network dependency. Full raw data lives in JSON, Excel, and CSV outputs rather than the visual deck/summary reports.
 
 ## Configuration And Currency
 
@@ -241,11 +240,11 @@ Runtime settings live in the platform config directory under `tokenuse`:
 | `archive.db` | Durable local usage archive loaded by the dashboard |
 | `rates.json` | Locally downloaded copy of the published currency snapshot |
 | `pricing-snapshot.json` | Locally downloaded LiteLLM-derived pricing snapshot |
-| `exports/` | Fallback output directory when no Downloads folder can be resolved |
+| `reports/` | Fallback output directory when no Downloads folder can be resolved |
 
 USD is the default display currency. The dashboard still stores calculated spend as `cost_usd`; aggregation sums USD and formats the final display values through the active currency table.
 
-The clear-data Config action deletes and recreates `archive.db`, then reimports local tool history immediately. Rebuilt rows are priced with the current configured pricing table. It intentionally does not delete `config.json`, local `rates.json`, local `pricing-snapshot.json`, or exported files.
+The clear-data Config action deletes and recreates `archive.db`, then reimports local tool history immediately. Rebuilt rows are priced with the current configured pricing table. It intentionally does not delete `config.json`, local `rates.json`, local `pricing-snapshot.json`, or generated reports.
 
 `currency/rates.json` is the embedded fallback snapshot. The TUI and desktop configuration pages can download the latest published copy after confirmation from:
 

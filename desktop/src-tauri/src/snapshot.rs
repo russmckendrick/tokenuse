@@ -3,10 +3,10 @@ use tokenuse::{
     app::{App, ConfigRowView, DataSource, Page, Period, ProjectFilter, SortMode, Tool},
     copy::{self, CopyDeck, CopyKeyHint},
     data::{DashboardData, LimitsData, ProjectOption, SessionDetailView, SessionOption},
-    export::ExportFormat,
+    reports::ReportFormat,
 };
 
-use crate::ids::{export_format_id, page_id, period_id, sort_id, status_tone_id, tool_id};
+use crate::ids::{page_id, period_id, report_format_id, sort_id, status_tone_id, tool_id};
 
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct OptionItem {
@@ -38,6 +38,7 @@ pub(crate) struct DesktopSnapshot {
     pub(crate) dashboard: DashboardData,
     pub(crate) usage: LimitsData,
     pub(crate) projects: Vec<ProjectOption>,
+    pub(crate) report_projects: Vec<ProjectOption>,
     pub(crate) sessions: Vec<SessionOption>,
     pub(crate) session: Option<SessionDetailView>,
     pub(crate) config_rows: Vec<ConfigRowView>,
@@ -45,8 +46,8 @@ pub(crate) struct DesktopSnapshot {
     pub(crate) currency: String,
     pub(crate) desktop_settings: DesktopSettingsState,
     pub(crate) desktop_updates: DesktopUpdateState,
-    pub(crate) export_dir: String,
-    pub(crate) export_formats: Vec<OptionItem>,
+    pub(crate) report_dir: String,
+    pub(crate) report_formats: Vec<OptionItem>,
     pub(crate) shortcut_footer: Vec<CopyKeyHint>,
 }
 
@@ -72,7 +73,7 @@ pub(crate) struct TraySnapshot {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub(crate) struct ExportResponse {
+pub(crate) struct ReportResponse {
     pub(crate) path: String,
     pub(crate) snapshot: DesktopSnapshot,
 }
@@ -158,6 +159,7 @@ pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
         dashboard: app.dashboard(),
         usage: app.usage_for(tool, sort),
         projects: app.project_options(),
+        report_projects: app.report_project_options(app.period),
         sessions: app.session_options(),
         session: app.session_view.clone(),
         config_rows: app.config_rows(),
@@ -165,11 +167,11 @@ pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
         currency: app.currency().code().to_string(),
         desktop_settings: desktop_settings(app),
         desktop_updates: desktop_updates(),
-        export_dir: app.export_dir.display().to_string(),
-        export_formats: ExportFormat::ALL
+        report_dir: app.export_dir.display().to_string(),
+        report_formats: ReportFormat::ALL
             .into_iter()
             .map(|format| OptionItem {
-                value: export_format_id(format),
+                value: report_format_id(format),
                 label: format.label(),
             })
             .collect(),

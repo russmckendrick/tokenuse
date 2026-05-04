@@ -18,10 +18,10 @@
     DesktopSnapshot,
     DesktopUpdateDownloadEvent,
     DesktopUpdateMetadata,
-    ExportFormatId,
     PageId,
     PeriodId,
     ProjectOption,
+    ReportFormatId,
     ShortcutInput,
     SortId,
     SessionDetail,
@@ -29,7 +29,7 @@
     ToolId
   } from './types';
 
-  type ModalKind = 'project' | 'session' | 'currency' | 'export' | null;
+  type ModalKind = 'project' | 'session' | 'currency' | 'report' | null;
   type DesktopUpdateUiState = {
     checking: boolean;
     installing: boolean;
@@ -56,7 +56,11 @@
   let modal: ModalKind = null;
   let callDetail: SessionDetail | null = null;
   let query = '';
-  let exportFormat: ExportFormatId = 'json';
+  let reportFormat: ReportFormatId = 'html';
+  let reportPeriod: PeriodId = 'week';
+  let reportProjectIdentity = '';
+  let reportProjects: ProjectOption[] = [];
+  let reportRedacted = false;
   let clearingData = false;
   let pollTimer: number | undefined;
   let desktopUpdate: DesktopUpdateUiState = resetDesktopUpdate();
@@ -115,7 +119,16 @@
   function openModal(kind: Exclude<ModalKind, null>) {
     modal = kind;
     query = '';
-    exportFormat = snapshot?.export_formats[0]?.value ?? 'json';
+    if (kind === 'report') {
+      reportFormat = snapshot?.report_formats[0]?.value ?? 'html';
+      reportPeriod = snapshot?.period ?? 'week';
+      reportProjects = snapshot?.report_projects ?? [];
+      const currentProject = snapshot?.project.identity ?? '';
+      reportProjectIdentity = reportProjects.some((project) => project.identity === currentProject)
+        ? currentProject
+        : '';
+      reportRedacted = false;
+    }
   }
 
   function closeModal() {
@@ -194,7 +207,7 @@
         openModal('session');
         break;
       case 'open_export_picker':
-        openModal('export');
+        openModal('report');
         break;
       case 'close_modal':
         closeModal();
@@ -253,29 +266,41 @@
     return snapshot.currencies.filter((currency) => !needle || currency.toLowerCase().includes(needle));
   }
 
-  async function chooseExportDir() {
+  async function chooseReportDir() {
     if (!snapshot) return;
     const selected = await openDialog({
       directory: true,
       multiple: false,
-      defaultPath: snapshot.export_dir
+      defaultPath: snapshot.report_dir
     });
     if (typeof selected === 'string') {
-      await commit(() => api.setExportDir(selected));
+      await commit(() => api.setReportDir(selected));
     }
   }
 
-  async function runExport() {
+  async function runReport() {
     busy = true;
     error = null;
     try {
-      const result = await api.exportCurrent(exportFormat);
+      const result = await api.generateReport(reportFormat, reportPeriod, reportProjectIdentity || null, reportRedacted);
       snapshot = result.snapshot;
       closeModal();
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
       busy = false;
+    }
+  }
+
+  async function selectReportPeriod(period: PeriodId) {
+    reportPeriod = period;
+    try {
+      reportProjects = await api.reportProjects(period);
+      if (!reportProjects.some((project) => project.identity === reportProjectIdentity)) {
+        reportProjectIdentity = '';
+      }
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
     }
   }
 
@@ -323,6 +348,7 @@
 
   function modalTitle(kind: Exclude<ModalKind, null>) {
     if (!snapshot) return kind;
+    if (kind === 'report') return snapshot.copy.reports.modal_title;
     return snapshot.copy.modals[kind] ?? kind;
   }
 
@@ -585,7 +611,7 @@
         <button class="icon-button" type="button" title={snapshot.copy.actions.refresh_archive} onclick={() => commit(() => api.refreshArchive())}>
           <RefreshCw size={16} />
         </button>
-        <button class="icon-button" type="button" title={snapshot.copy.actions.export_current_view} onclick={() => openModal('export')}>
+        <button class="icon-button" type="button" title={snapshot.copy.actions.export_current_view} onclick={() => openModal('report')}>
           <Download size={16} />
         </button>
       </div>
@@ -654,7 +680,7 @@
         <ConfigView
           {snapshot}
           {configAction}
-          {chooseExportDir}
+          chooseExportDir={chooseReportDir}
           refreshArchive={() => commit(() => api.refreshArchive())}
           {desktopUpdate}
           checkDesktopUpdate={() => void checkDesktopUpdate()}
@@ -686,7 +712,7 @@
       <section class="modal" role="dialog" aria-modal="true" tabindex="-1" use:reveal={{ y: 8 }}>
         <div class="modal-head">
           <div class="modal-title">
-            {#if modal !== 'export'}<Search size={16} />{/if}
+            {#if modal !== 'report'}<Search size={16} />{/if}
             {modalTitle(modal)}
           </div>
           <button class="icon-button" type="button" title={snapshot.copy.actions.close} onclick={closeModal}><X size={16} /></button>
@@ -729,23 +755,42 @@
               </button>
             {/each}
           </div>
-        {:else if modal === 'export'}
+        {:else if modal === 'report'}
           <div class="export-box">
-            <div class="export-path">{snapshot.export_dir}</div>
-            <button type="button" onclick={chooseExportDir}><FolderOpen size={15} /> {snapshot.copy.actions.folder}</button>
+            <div class="export-path">{snapshot.report_dir}</div>
+            <button type="button" onclick={chooseReportDir}><FolderOpen size={15} /> {snapshot.copy.actions.folder}</button>
           </div>
           <div class="format-grid">
-            {#each snapshot.export_formats as format}
+            {#each snapshot.periods as period}
               <button
                 type="button"
-                class:selected={format.value === exportFormat}
-                onclick={() => (exportFormat = format.value)}
+                class:selected={period.value === reportPeriod}
+                onclick={() => void selectReportPeriod(period.value)}
+              >
+                {period.label}
+              </button>
+            {/each}
+          </div>
+          <div class="export-box">
+            <select bind:value={reportProjectIdentity} aria-label={snapshot.copy.reports.project}>
+              {#each reportProjects as project}
+                <option value={project.identity ?? ''}>{project.label}</option>
+              {/each}
+            </select>
+            <label><input type="checkbox" bind:checked={reportRedacted} /> {snapshot.copy.reports.redaction}</label>
+          </div>
+          <div class="format-grid">
+            {#each snapshot.report_formats as format}
+              <button
+                type="button"
+                class:selected={format.value === reportFormat}
+                onclick={() => (reportFormat = format.value)}
               >
                 {format.label}
               </button>
             {/each}
           </div>
-          <button class="primary-command" type="button" onclick={runExport}><Download size={16} /> {snapshot.copy.actions.export}</button>
+          <button class="primary-command" type="button" onclick={runReport}><Download size={16} /> {snapshot.copy.actions.export}</button>
         {/if}
       </section>
     </div>

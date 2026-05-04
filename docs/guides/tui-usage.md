@@ -59,8 +59,8 @@ The keyboard reference, footer hints, and shortcut behavior come from the shared
 | `u` | Open Usage / rate limits |
 | `c` | Open Configuration |
 | `s` | Open session picker and drill into a single session |
-| `e` | Export the current view as JSON, CSV, SVG, or PNG |
-| `f` / `b` in export modal | Choose another export folder for this session |
+| `e` | Generate a project or all-projects report |
+| `f` / `b` in report modal | Choose another report folder for this session |
 | `r` | Sync the local archive in place |
 | `h` or `?` | Open the keybinding reference |
 
@@ -87,23 +87,24 @@ Runtime settings live in the platform config directory under `tokenuse`:
 | `archive.db` | Durable local usage archive |
 | `rates.json` | Optional local currency snapshot |
 | `pricing-snapshot.json` | Optional local LiteLLM-derived pricing snapshot |
-| `exports/` | Fallback export directory |
+| `reports/` | Fallback report directory |
 
 USD remains the default display currency. Costs are calculated and stored internally as import-time USD, then converted for display using the configured currency.
 
-The Config page's clear-data action asks for confirmation, deletes `archive.db`, and immediately reimports from local tool history. Config, rates, pricing snapshots, and exports are kept. Archive-only rows disappear if the original source files are gone, and rebuilt rows use the current configured pricing.
+The Config page's clear-data action asks for confirmation, deletes `archive.db`, and immediately reimports from local tool history. Config, rates, pricing snapshots, and reports are kept. Archive-only rows disappear if the original source files are gone, and rebuilt rows use the current configured pricing.
 
-## Export
+## Reports
 
-Press `e` on Overview, Deep Dive, Usage, or Session to export. JSON, CSV, SVG, and PNG export the current filtered dashboard view; HTML and PDF export self-contained workbook reports. Output defaults to the user's Downloads folder, falling back to `~/Downloads` and then `<config dir>/tokenuse/exports/`.
+Press `e` on Overview, Deep Dive, Usage, or Session to generate a report. The report modal chooses format, period, project scope, and redaction. Reports always include all tools for the chosen period and project or all-projects scope. Output defaults to the user's Downloads folder, falling back to `~/Downloads` and then `<config dir>/tokenuse/reports/`.
 
-Exports are timestamped and slugged with the active period, tool, and project filter, so prior runs are not overwritten.
+Reports are timestamped and slugged with the chosen period and project scope, so prior runs are not overwritten. HTML/PDF are client-ready executive report decks, SVG/PNG are one-page executive visual summaries, JSON serializes the full report dataset, Excel writes a multi-sheet workbook, and CSV writes one file per report area.
 
 | Format | Output |
 | --- | --- |
-| JSON | One pretty-printed dashboard data file |
-| CSV | One directory with one CSV per dashboard panel |
-| SVG | One multi-panel dashboard render |
-| PNG | Same dashboard render as SVG, rasterized |
-| HTML | One self-contained print-friendly workbook with dashboard panels and the selected Session's full call detail when a session is open |
-| PDF | One browserless PDF render of the same branded HTML workbook, including selected Session detail |
+| HTML | One self-contained executive report deck |
+| PDF | One browserless A4 landscape render of the same executive deck |
+| SVG | One 16:9 visual summary with KPI strip, heatmap/trend, and top highlights |
+| PNG | Same one-page visual summary as SVG, rasterized |
+| JSON | One pretty-printed full report dataset |
+| Excel | One multi-sheet workbook with summary and raw data sheets |
+| CSV | One directory with one CSV per report area |

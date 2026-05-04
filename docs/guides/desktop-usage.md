@@ -1,6 +1,6 @@
 # Desktop App Usage
 
-The desktop app is a Tauri v2 + Svelte frontend over the same Rust core as the TUI. It shares the local archive, config, currency, pricing, refresh, session drill-down, and export logic.
+The desktop app is a Tauri v2 + Svelte frontend over the same Rust core as the TUI. It shares the local archive, config, currency, pricing, refresh, session drill-down, and report logic.
 
 ## Install And Open
 
@@ -29,7 +29,7 @@ Dashboard sections render the full sorted row set. Sections with more rows than 
 
 The **Activity Pulse** and **Activity Trend** panels use D3-backed SVG charts. Orange/red bars show relative spend by bucket, cyan/blue line and area marks show call-volume cadence, and hovering a bucket shows the period label, cost, and call count without changing filters. D3-backed heat strips in ranking tables use stepped blue/yellow/red cells for relative magnitude. The footer summarizes the visible range, peak bucket, latest bucket, and total calls. 24 Hours and 7 Days use hourly buckets so short views do not collapse into one or two bars. This Month stays hourly during the first 14 days of the month, then switches to daily buckets from the 15th onward; 30 Days and All Time use daily buckets. The 24 Hours period is rolling from the current time, not a calendar-day midnight cutoff.
 
-Ranked table bars use the same stepped color ramp as the TUI: blue is lower relative volume, yellow/orange is hotter, and red marks the current high end of the table. These bars are relative to the visible table, not exported pixel charts.
+Ranked table bars use the same stepped color ramp as the TUI: blue is lower relative volume, yellow/orange is hotter, and red marks the current high end of the table. These bars are relative to the visible table, not generated report images.
 
 Usage consoles switch the visible period to 24 Hours when opened and ignore the project filter because they are rolling 24-hour tool monitors. Empty tools stay visible with compact idle rows so you can still confirm that Codex, Claude Code, Cursor, Copilot, and Gemini were checked.
 
@@ -70,18 +70,18 @@ On Windows and Linux, the Config tab also includes an explicit update check agai
 
 Use the refresh button or keyboard shortcut `r` to sync the archive. Refreshes use the same background archive refresher as the TUI and keep the previous data visible if a sync fails.
 
-The Config tab's clear-data action shows a native warning, deletes `archive.db`, and immediately reimports from local tool history. Config, rates, pricing snapshots, and exports are kept. Archive-only rows disappear if the original source files are gone, and rebuilt rows use the current configured pricing.
+The Config tab's clear-data action shows a native warning, deletes `archive.db`, and immediately reimports from local tool history. Config, rates, pricing snapshots, and reports are kept. Archive-only rows disappear if the original source files are gone, and rebuilt rows use the current configured pricing.
 
 If sample data is selected manually with `Shift-D`, refreshes update the cached live data without switching the visible dashboard back until `Shift-D` is pressed again.
 
-## Project, Session, Currency, And Export Pickers
+## Project, Session, Currency, And Report Pickers
 
 The desktop app uses native dialogs where that makes sense:
 
 - Project and session pickers include search.
 - Session call rows open a detail modal with `Enter`, `Space`, or a mouse click.
 - Currency selection writes the same `config.json` setting used by the TUI.
-- Export format selection writes JSON, CSV, SVG, PNG, or a self-contained HTML/PDF workbook report from the current filtered view. Workbook exports include inline SVG activity and rank-bar charts, and also include the selected Session's full call detail when a session is open.
+- Report generation writes executive HTML/PDF report decks, one-page SVG/PNG visual summaries, plus raw JSON, Excel, or CSV-folder reports, from a dedicated period and project/all-projects scope. Reports always include all tools; redaction is off by default and can be toggled on before generation.
 - Folder selection uses the Tauri dialog plugin and is runtime-only, matching TUI behavior.
 
 ## Shared Local Data
@@ -94,6 +94,6 @@ The desktop app and TUI share the platform config directory under `tokenuse`:
 | `archive.db` | Durable local usage archive |
 | `rates.json` | Optional local currency snapshot |
 | `pricing-snapshot.json` | Optional local LiteLLM-derived pricing snapshot |
-| `exports/` | Fallback export directory |
+| `reports/` | Fallback report directory |
 
 Changing currency, refreshing or clearing the archive, or downloading local rates/pricing from the desktop app affects the same data the TUI reads.

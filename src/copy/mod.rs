@@ -25,6 +25,7 @@ pub struct CopyDeck {
     pub tray: TrayCopy,
     pub empty: EmptyCopy,
     pub export: ExportCopy,
+    pub reports: ReportCopy,
     pub cli: CliCopy,
     pub keymap: KeymapCopy,
     pub status: StatusCopy,
@@ -447,6 +448,29 @@ pub struct ExportCopy {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ReportCopy {
+    pub json: String,
+    pub csv: String,
+    pub svg: String,
+    pub png: String,
+    pub html: String,
+    pub pdf: String,
+    pub xlsx: String,
+    pub report: String,
+    pub modal_title: String,
+    pub report_title: String,
+    pub all_projects: String,
+    pub format: String,
+    pub folder: String,
+    pub period: String,
+    pub project: String,
+    pub redaction: String,
+    pub redaction_on: String,
+    pub redaction_off: String,
+    pub sample_no_raw_archive: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CsvFilesCopy {
     pub summary_file: String,
     pub daily_file: String,
@@ -515,6 +539,9 @@ pub struct StatusCopy {
     pub exported: String,
     pub export_failed: String,
     pub export_folder: String,
+    pub report_generated: String,
+    pub report_failed: String,
+    pub report_folder: String,
     pub project_not_found: String,
     pub currency_set: String,
     pub config_save_failed: String,
@@ -589,6 +616,9 @@ impl CopyDeck {
         ensure_unique_footer_labels(self)?;
         ensure_template(&self.status.reloaded_calls, &["calls"])?;
         ensure_template(&self.status.exported, &["format", "path"])?;
+        ensure_template(&self.status.report_generated, &["format", "path"])?;
+        ensure_template(&self.status.report_failed, &["error"])?;
+        ensure_template(&self.status.report_folder, &["path"])?;
         ensure_template(&self.status.clear_data_failed, &["error"])?;
         ensure_template(&self.status.background_usage_body, &["summary"])?;
         ensure_template(&self.updates.current_version, &["version"])?;
@@ -601,6 +631,7 @@ impl CopyDeck {
             &self.modals.filtered_selection_title,
             &["name", "index", "count", "total"],
         )?;
+        ensure_template(&self.reports.report_title, &["period", "project"])?;
         ensure_template(&self.timeline.activity_aria, &["first", "last"])?;
         ensure_template(&self.timeline.relative_rank, &["value"])?;
         ensure_template(&self.usage.console_title, &["tool"])?;

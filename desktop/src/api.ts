@@ -3,10 +3,11 @@ import type {
   DesktopSnapshot,
   DesktopUpdateDownloadEvent,
   DesktopUpdateMetadata,
-  ExportFormatId,
-  ExportResponse,
   PageId,
   PeriodId,
+  ProjectOption,
+  ReportFormatId,
+  ReportResponse,
   ShortcutInput,
   ShortcutResponse,
   SortId,
@@ -38,9 +39,20 @@ export const api = {
   checkDesktopUpdate: () => invoke<DesktopUpdateMetadata | null>('check_desktop_update'),
   installDesktopUpdate: (onEvent: Channel<DesktopUpdateDownloadEvent>) =>
     invoke<void>('install_desktop_update', { onEvent }),
-  setExportDir: (path: string) => invoke<DesktopSnapshot>('set_export_dir', { path }),
-  exportCurrent: (format: ExportFormatId) =>
-    invoke<ExportResponse>('export_current', { format }),
+  setReportDir: (path: string) => invoke<DesktopSnapshot>('set_report_dir', { path }),
+  reportProjects: (period: PeriodId) => invoke<ProjectOption[]>('report_projects', { period }),
+  generateReport: (
+    format: ReportFormatId,
+    period: PeriodId,
+    projectIdentity: string | null,
+    redacted: boolean
+  ) =>
+    invoke<ReportResponse>('generate_report', {
+      format,
+      period,
+      projectIdentity,
+      redacted
+    }),
   handleShortcut: (context: string, input: ShortcutInput) =>
     invoke<ShortcutResponse>('handle_shortcut', { context, input })
 };

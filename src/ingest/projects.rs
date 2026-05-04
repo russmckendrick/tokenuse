@@ -5,12 +5,12 @@ use std::{
 
 use crate::currency::CurrencyFormatter;
 
-pub(super) fn project_identity(raw: &str) -> String {
+pub(crate) fn project_identity(raw: &str) -> String {
     let normalized = normalized_project_path(raw);
     nearest_git_root(&normalized).unwrap_or(normalized)
 }
 
-pub(super) fn raw_project_display(raw: &str) -> String {
+pub(crate) fn raw_project_display(raw: &str) -> String {
     normalized_project_path(raw)
 }
 
@@ -45,7 +45,7 @@ pub(super) fn path_to_project_string(path: &Path) -> String {
     }
 }
 
-pub(super) fn project_label_lookup<I, S>(raw_projects: I) -> HashMap<String, String>
+pub(crate) fn project_label_lookup<I, S>(raw_projects: I) -> HashMap<String, String>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
@@ -66,7 +66,7 @@ where
         .collect()
 }
 
-pub(super) fn project_label(labels: &HashMap<String, String>, identity: &str) -> String {
+pub(crate) fn project_label(labels: &HashMap<String, String>, identity: &str) -> String {
     labels.get(identity).cloned().unwrap_or_else(|| {
         shortest_unique_project_label(identity, &BTreeSet::from([identity.to_string()]))
     })
@@ -141,7 +141,7 @@ pub(super) fn format_tool_mix(
         .join("  ")
 }
 
-pub(super) fn tool_short_label(tool: &str) -> &'static str {
+pub(crate) fn tool_short_label(tool: &str) -> &'static str {
     match tool {
         "claude-code" => "Claude",
         "cursor" => "Cursor",

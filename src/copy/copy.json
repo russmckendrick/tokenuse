@@ -136,7 +136,7 @@
     "agent": "Agent",
     "archive": "Archive",
     "currency": "Currency",
-    "exports": "Exports"
+    "exports": "Reports"
   },
   "timeline": {
     "spend": "Spend",
@@ -218,8 +218,8 @@
     "project": "Project",
     "currency": "Currency",
     "session": "Session",
-    "export": "Export",
-    "export_folder": "Export Folder",
+    "export": "Report",
+    "export_folder": "Report Folder",
     "selection_title": "{name} {index}/{total}",
     "filtered_selection_title": "{name} {index}/{count} (of {total})",
     "of": "of",
@@ -236,7 +236,7 @@
     "note": "Note",
     "archive_db": "archive.db",
     "from_local_history": "From local tool history",
-    "config_rates_pricing_exports": "Config, rates, pricing, exports",
+    "config_rates_pricing_exports": "Config, rates, pricing, reports",
     "missing_source_files": "Missing source files will not return",
     "clearing_data": "Clearing data",
     "clear_data_question": "Clear data?",
@@ -254,8 +254,8 @@
     "prices_effect": "new prices apply to newly imported calls",
     "download_latest_rates_message": "This will download the latest published Token Use currency snapshot into your local config directory.",
     "download_latest_prices_message": "This will download the latest LiteLLM model price table into your local config directory.",
-    "clear_data_message": "Token Use will delete archive.db, rebuild it from local tool history, and keep config, rates, pricing, and exports. Rows whose source files are gone will not return.",
-    "current_period_filters_apply": "current period & filters apply",
+    "clear_data_message": "Token Use will delete archive.db, rebuild it from local tool history, and keep config, rates, pricing, and reports. Rows whose source files are gone will not return.",
+    "current_period_filters_apply": "report period & project scope apply",
     "hidden_folders": "hidden folders are not shown",
     "use_this_folder": "Use this folder",
     "use": "use",
@@ -273,8 +273,8 @@
     "clear_data_lower": "clear data",
     "refresh": "Refresh",
     "folder": "Folder",
-    "export": "Export",
-    "export_lower": "export",
+    "export": "Generate Report",
+    "export_lower": "generate report",
     "open": "Open",
     "open_lower": "open",
     "open_session_picker": "Open Session Picker",
@@ -285,7 +285,7 @@
     "select": "Select",
     "browse_folder": "Browse folder",
     "refresh_archive": "Refresh archive",
-    "export_current_view": "Export current view",
+    "export_current_view": "Generate report",
     "close_dialog": "Close dialog",
     "close_call_detail": "Close call detail",
     "show_app": "Show Token Use",
@@ -352,14 +352,14 @@
   "export": {
     "json": "JSON",
     "csv": "CSV (one file per panel)",
-    "svg": "SVG (full dashboard)",
-    "png": "PNG (full dashboard)",
-    "html": "HTML (full workbook report)",
-    "pdf": "PDF (full workbook report)",
+    "svg": "SVG report",
+    "png": "PNG report",
+    "html": "HTML report",
+    "pdf": "PDF report",
     "report_title": "Token Use report - {period} - {tool}",
-    "full_workbook_report": "Full workbook report",
+    "full_workbook_report": "Dashboard report",
     "summary_metrics_aria": "Summary metrics",
-    "dashboard_workbook_aria": "Dashboard workbook",
+    "dashboard_workbook_aria": "Dashboard report",
     "generated": "Generated",
     "export_id": "Export ID",
     "source": "Source",
@@ -381,6 +381,27 @@
       "commands_file": "commands.csv",
       "mcp_servers_file": "mcp_servers.csv"
     }
+  },
+  "reports": {
+    "json": "JSON",
+    "csv": "CSV (folder)",
+    "svg": "SVG summary",
+    "png": "PNG summary",
+    "html": "HTML deck",
+    "pdf": "PDF deck",
+    "xlsx": "Excel (.xlsx)",
+    "report": "Report",
+    "modal_title": "Report",
+    "report_title": "Token Use report - {period} - {project}",
+    "all_projects": "All projects",
+    "format": "Format",
+    "folder": "Folder",
+    "period": "Period",
+    "project": "Project",
+    "redaction": "Redaction",
+    "redaction_on": "On",
+    "redaction_off": "Off",
+    "sample_no_raw_archive": "Sample mode has no raw call archive, so raw call and limit sections are empty."
   },
   "cli": {
     "usage": "USAGE:",
@@ -419,8 +440,8 @@
       "toggle_data_source": "toggle live/sample data",
       "open_project_picker": "project picker",
       "open_session_picker": "session picker",
-      "open_export_picker": "export current view",
-      "open_export_folder_picker": "browse export folder",
+      "open_export_picker": "open report generator",
+      "open_export_folder_picker": "browse report folder",
       "page_overview": "Overview",
       "page_deep_dive": "Deep Dive",
       "page_usage": "Usage",
@@ -483,8 +504,8 @@
       {
         "title": "Actions",
         "items": [
-          { "keys": "e", "label": "export current view", "action": "open_export_picker" },
-          { "keys": "f/b in export", "label": "browse export folder", "action": "open_export_folder_picker" },
+          { "keys": "e", "label": "report generator", "action": "open_export_picker" },
+          { "keys": "f/b in report", "label": "browse report folder", "action": "open_export_folder_picker" },
           { "keys": "Shift-D", "label": "toggle live/sample data", "action": "toggle_data_source" },
           { "keys": "r", "label": "reload (re-run ingest)", "action": "reload" }
         ]
@@ -534,7 +555,7 @@
         { "keys": "Up/Down", "label": "move", "action": "move_up" },
         { "keys": "Enter", "label": "detail", "action": "confirm" },
         { "keys": "s", "label": "pick", "action": "open_session_picker" },
-        { "keys": "e", "label": "export", "action": "open_export_picker" },
+        { "keys": "e", "label": "report", "action": "open_export_picker" },
         { "keys": "g", "label": "sort", "action": "cycle_sort" },
         { "keys": "h", "label": "help", "action": "open_help" }
       ],
@@ -543,7 +564,7 @@
         { "keys": "Tab", "label": "tabs", "action": "next_tab" },
         { "keys": "o/d", "label": "overview/deep", "action": "page_overview" },
         { "keys": "c", "label": "config", "action": "page_config" },
-        { "keys": "e", "label": "export", "action": "open_export_picker" },
+        { "keys": "e", "label": "report", "action": "open_export_picker" },
         { "keys": "g", "label": "sort", "action": "cycle_sort" },
         { "keys": "h", "label": "help", "action": "open_help" }
       ],
@@ -553,18 +574,18 @@
         { "keys": "g", "label": "sort", "action": "cycle_sort" },
         { "keys": "p", "label": "project", "action": "open_project_picker" },
         { "keys": "s", "label": "session", "action": "open_session_picker" },
-        { "keys": "e", "label": "export", "action": "open_export_picker" },
+        { "keys": "e", "label": "report", "action": "open_export_picker" },
         { "keys": "r", "label": "refresh", "action": "reload" }
       ],
       "desktop_usage": [
         { "keys": "1", "label": "24h", "action": "period_today" },
         { "keys": "s", "label": "session", "action": "open_session_picker" },
-        { "keys": "e", "label": "export", "action": "open_export_picker" },
+        { "keys": "e", "label": "report", "action": "open_export_picker" },
         { "keys": "r", "label": "refresh", "action": "reload" }
       ],
       "desktop_config": [
         { "keys": "s", "label": "session", "action": "open_session_picker" },
-        { "keys": "e", "label": "export", "action": "open_export_picker" },
+        { "keys": "e", "label": "report", "action": "open_export_picker" },
         { "keys": "r", "label": "refresh", "action": "reload" }
       ]
     }
@@ -583,9 +604,12 @@
     "auto_refresh_failed_prior_data_kept": "Auto-refresh failed · prior data kept ({error})",
     "no_sessions_to_drill_into": "No sessions to drill into",
     "session_not_found": "Session not found · {key}",
-    "exported": "Exported {format} · {path}",
-    "export_failed": "Export failed · {error}",
-    "export_folder": "Export folder · {path}",
+    "exported": "Report generated ({format}) · {path}",
+    "export_failed": "Report failed · {error}",
+    "export_folder": "Report folder · {path}",
+    "report_generated": "Report generated ({format}) · {path}",
+    "report_failed": "Report failed · {error}",
+    "report_folder": "Report folder · {path}",
     "project_not_found": "Project not found · {identity}",
     "currency_set": "Currency set to {code}",
     "config_save_failed": "Config save failed · {error}",
@@ -611,7 +635,7 @@
     "open_at_login_failed": "Open at login failed · {error}",
     "dock_visibility_failed": "Dock visibility failed · {error}",
     "taskbar_visibility_failed": "Taskbar visibility failed · {error}",
-    "export_folder_path_empty": "Export folder path is empty",
+    "export_folder_path_empty": "Report folder path is empty",
     "background_usage_changed": "Usage changed",
     "background_usage_body": "Usage jumped by {summary} since the last alert baseline."
   }

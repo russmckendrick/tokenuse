@@ -4,15 +4,17 @@ use tauri::{AppHandle, State};
 use tokenuse::{
     app::{AppStatus, Page, StatusTone},
     copy,
+    data::ProjectOption,
     keymap::{self, KeyInput},
+    reports::{ReportRequest, ReportScope},
 };
 
 use crate::{
     apply_dock_or_taskbar_icon, hide_tray_popover_window,
-    ids::{parse_export_format, parse_page, parse_period, parse_sort, parse_tool},
+    ids::{parse_page, parse_period, parse_report_format, parse_sort, parse_tool},
     restore_main_window,
     snapshot::{
-        snapshot, tray_snapshot, DesktopSnapshot, ExportResponse, ShortcutResponse, TraySnapshot,
+        snapshot, tray_snapshot, DesktopSnapshot, ReportResponse, ShortcutResponse, TraySnapshot,
     },
     state::{save_user_settings, with_app, CommandError, CommandResult, SharedState},
     sync_open_at_login,
@@ -237,7 +239,7 @@ pub(crate) async fn refresh_pricing_snapshot(
 }
 
 #[tauri::command]
-pub(crate) async fn set_export_dir(
+pub(crate) async fn set_report_dir(
     path: String,
     state: State<'_, SharedState>,
 ) -> CommandResult<DesktopSnapshot> {
@@ -254,16 +256,54 @@ pub(crate) async fn set_export_dir(
 }
 
 #[tauri::command]
-pub(crate) async fn export_current(
-    format: String,
+pub(crate) async fn report_projects(
+    period: String,
     state: State<'_, SharedState>,
-) -> CommandResult<ExportResponse> {
+) -> CommandResult<Vec<ProjectOption>> {
     with_app(state, move |app| {
-        let format = parse_export_format(&format)?;
+        let period = parse_period(&period)?;
+        Ok(app.report_project_options(period))
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn generate_report(
+    format: String,
+    period: String,
+    project_identity: Option<String>,
+    redacted: bool,
+    state: State<'_, SharedState>,
+) -> CommandResult<ReportResponse> {
+    with_app(state, move |app| {
+        let format = parse_report_format(&format)?;
+        let period = parse_period(&period)?;
+        let scope = match project_identity {
+            Some(identity) => app
+                .report_project_options(period)
+                .into_iter()
+                .find(|option| option.identity.as_deref() == Some(identity.as_str()))
+                .map(|option| ReportScope::Project {
+                    identity: identity.clone(),
+                    label: option.label,
+                })
+                .ok_or_else(|| {
+                    CommandError::Tokenuse(copy::template(
+                        &copy::copy().status.project_not_found,
+                        &[("identity", identity.clone())],
+                    ))
+                })?,
+            None => ReportScope::AllProjects,
+        };
         let path = app
-            .export_current(format)
+            .generate_report(ReportRequest {
+                format,
+                period,
+                scope,
+                redacted,
+            })
             .map_err(|e| CommandError::Tokenuse(e.to_string()))?;
-        Ok(ExportResponse {
+        Ok(ReportResponse {
             path: path.display().to_string(),
             snapshot: snapshot(app),
         })

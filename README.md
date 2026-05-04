@@ -30,7 +30,7 @@ Linux, Windows, and manual desktop downloads are published on GitHub Releases. S
 
 ## Desktop App
 
-The TUI remains the default app, and a Tauri v2 desktop shell lives under `desktop/` for macOS, Windows, and Linux local builds. It shares the same archive, config, currency, pricing, and export logic as the TUI.
+The TUI remains the default app, and a Tauri v2 desktop shell lives under `desktop/` for macOS, Windows, and Linux local builds. It shares the same archive, config, currency, pricing, and report logic as the TUI.
 
 ```bash
 cd desktop
@@ -75,7 +75,7 @@ The TUI and desktop app share the same checked-in shortcut definitions from `src
 - `Tab` / `Shift-Tab`: cycle main tabs (Overview ↔ Deep Dive ↔ Usage)
 - `o`: Overview · `d`: Deep Dive · `u`: Usage / rate limits
 - `c`: open configuration · `s`: open session picker (drill into a single session's calls)
-- `e`: export current view (JSON, CSV, SVG, PNG, HTML, PDF) to Downloads; press `f`/`b` in the export modal to choose another folder for this session
+- `e`: generate a report (HTML, PDF, SVG, PNG, JSON, Excel, or CSV folder) to Downloads; press `f`/`b` in the report modal to choose another folder for this session
 - `r`: reload (sync archive in place; keeps prior data on failure)
 - `h` or `?`: open the keybinding reference (full list of shortcuts)
 - In the session page: `Up`/`Down`, `PgUp`/`PgDn`, `Home`/`End`, `Esc`/`d` back to Deep Dive

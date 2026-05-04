@@ -20,6 +20,10 @@ ureq = { version = "2", features = ["json"], optional = true }
 # Plotters/font-kit in the same mode so fontconfig bindings compile there.
 plotters = { version = "0.3", default-features = false, features = ["svg_backend", "bitmap_backend", "bitmap_encoder", "line_series", "ttf", "fontconfig-dlopen"] }
 fulgur = "0.11"
+rust_xlsxwriter = "0.79"
+
+[dev-dependencies]
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [features]
 default = ["refresh-prices", "refresh-currency"]

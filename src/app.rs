@@ -17,9 +17,9 @@ use crate::currency::{CurrencyFormatter, CurrencyTable};
 use crate::data::{
     DashboardData, LimitsData, ProjectOption, SessionDetail, SessionDetailView, SessionOption,
 };
-use crate::export::{ExportContext, ExportFormat};
 use crate::ingest::Ingested;
 use crate::keymap;
+use crate::reports::{ReportFormat, ReportRequest, ReportScope};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Period {
@@ -295,22 +295,85 @@ impl CurrencyModal {
 
 #[derive(Debug, Clone)]
 pub struct ExportModal {
-    pub options: Vec<ExportFormat>,
+    pub options: Vec<ReportFormat>,
     pub selected: usize,
+    pub period: Period,
+    pub project_options: Vec<ProjectOption>,
+    pub project_selected: usize,
+    pub redacted: bool,
 }
 
 impl Default for ExportModal {
     fn default() -> Self {
-        Self::new()
+        Self::new(
+            Period::Week,
+            vec![ProjectOption::all("$0.00".into(), 0)],
+            &ProjectFilter::All,
+        )
     }
 }
 
 impl ExportModal {
-    pub fn new() -> Self {
+    pub fn new(
+        period: Period,
+        project_options: Vec<ProjectOption>,
+        project_filter: &ProjectFilter,
+    ) -> Self {
+        let project_selected = project_filter
+            .identity()
+            .and_then(|identity| {
+                project_options
+                    .iter()
+                    .position(|option| option.identity.as_deref() == Some(identity))
+            })
+            .unwrap_or(0);
         Self {
-            options: ExportFormat::ALL.to_vec(),
+            options: ReportFormat::ALL.to_vec(),
             selected: 0,
+            period,
+            project_options,
+            project_selected,
+            redacted: false,
         }
+    }
+
+    pub fn scope(&self) -> ReportScope {
+        self.project_options
+            .get(self.project_selected)
+            .map(|option| match &option.identity {
+                Some(identity) => ReportScope::Project {
+                    identity: identity.clone(),
+                    label: option.label.clone(),
+                },
+                None => ReportScope::AllProjects,
+            })
+            .unwrap_or(ReportScope::AllProjects)
+    }
+
+    pub fn current_project_label(&self) -> &str {
+        self.project_options
+            .get(self.project_selected)
+            .map(|option| option.label.as_str())
+            .unwrap_or_else(|| copy().reports.all_projects.as_str())
+    }
+
+    fn cycle_period(&mut self, delta: isize) {
+        let periods = Period::ALL;
+        let idx = periods
+            .iter()
+            .position(|period| *period == self.period)
+            .unwrap_or(0);
+        let next = if delta.is_negative() {
+            (idx + periods.len() - 1) % periods.len()
+        } else {
+            (idx + 1) % periods.len()
+        };
+        self.period = periods[next];
+    }
+
+    fn cycle_project(&mut self) {
+        let len = self.project_options.len().max(1);
+        self.project_selected = (self.project_selected + 1) % len;
     }
 }
 
@@ -757,7 +820,7 @@ pub struct App {
 impl Default for App {
     fn default() -> Self {
         let paths = ConfigPaths::default();
-        let export_dir = crate::export::default_export_dir(&paths);
+        let export_dir = crate::reports::default_report_dir(&paths);
         Self {
             page: Page::Overview,
             period: Period::Week,
@@ -820,7 +883,7 @@ impl App {
         refresh_source: RefreshSource,
     ) -> Self {
         let refresher = Some(Refresher::spawn(initial_refresh_delay, refresh_source));
-        let export_dir = crate::export::default_export_dir(&paths);
+        let export_dir = crate::reports::default_report_dir(&paths);
         let live_source = cached_live_source(&source);
         let background_alert_baseline = live_source.as_ref().map(UsageTotals::from_ingested);
         Self {
@@ -1222,41 +1285,65 @@ impl App {
 
     fn open_export_modal(&mut self) {
         self.export_dir_picker = None;
-        self.export_modal = Some(ExportModal::new());
+        let mut project_options = self.report_project_options(self.period);
+        if project_options.is_empty() {
+            project_options.push(ProjectOption::all("$0.00".into(), 0));
+        }
+        self.export_modal = Some(ExportModal::new(
+            self.period,
+            project_options,
+            &self.project_filter,
+        ));
     }
 
     fn open_export_dir_picker(&mut self) {
         self.export_dir_picker = Some(FolderPickerModal::new(self.export_dir.clone()));
     }
 
-    pub fn export_current(
+    pub fn generate_report(
         &mut self,
-        format: ExportFormat,
+        request: ReportRequest,
     ) -> color_eyre::Result<std::path::PathBuf> {
         let path = {
-            let dashboard = self.dashboard();
             let currency = self.currency();
             let source_label = match &self.source {
                 DataSource::Live(_) => "live",
                 DataSource::Sample => "sample",
             };
-            let context = ExportContext {
-                dashboard: &dashboard,
-                session: self.session_view.as_ref(),
-                period: self.period,
-                tool: self.tool,
-                project_filter: &self.project_filter,
-                sort: self.sort,
-                currency_code: currency.code(),
-                source_label,
-            };
-            crate::export::write_to_dir(&self.export_dir, format, &context)?
+            match &self.source {
+                DataSource::Live(ingested) => {
+                    crate::reports::write_ingested_to_dir(
+                        &self.export_dir,
+                        &request,
+                        ingested,
+                        &currency,
+                        source_label,
+                    )?
+                    .path
+                }
+                DataSource::Sample => {
+                    let dashboard = self.dashboard_for(
+                        request.period,
+                        Tool::All,
+                        &request.scope.project_filter(),
+                        SortMode::Spend,
+                    );
+                    crate::reports::write_sample_to_dir(
+                        &self.export_dir,
+                        &request,
+                        &dashboard,
+                        &currency,
+                        source_label,
+                    )?
+                    .path
+                }
+            }
         };
         self.set_status(
             copy::template(
-                &copy().status.exported,
+                &copy().status.report_generated,
                 &[
-                    ("format", format.label().to_string()),
+                    ("format", request.format.label().to_string()),
                     ("path", path.display().to_string()),
                 ],
             ),
@@ -1265,10 +1352,10 @@ impl App {
         Ok(path)
     }
 
-    fn run_export(&mut self, format: ExportFormat) {
-        if let Err(e) = self.export_current(format) {
+    fn run_report(&mut self, request: ReportRequest) {
+        if let Err(e) = self.generate_report(request) {
             self.set_status(
-                copy::template(&copy().status.export_failed, &[("error", e.to_string())]),
+                copy::template(&copy().status.report_failed, &[("error", e.to_string())]),
                 StatusTone::Error,
             );
         }
@@ -1278,7 +1365,7 @@ impl App {
         self.export_dir = dir;
         self.set_status(
             copy::template(
-                &copy().status.export_folder,
+                &copy().status.report_folder,
                 &[("path", self.export_dir.display().to_string())],
             ),
             StatusTone::Info,
@@ -1449,6 +1536,45 @@ impl App {
     }
 
     fn handle_text_input_key(&mut self, key: KeyEvent) -> bool {
+        if let Some(modal) = self.export_modal.as_mut() {
+            match key.code {
+                KeyCode::Left | KeyCode::Right => {
+                    let period = {
+                        let delta = if matches!(key.code, KeyCode::Left) {
+                            -1
+                        } else {
+                            1
+                        };
+                        modal.cycle_period(delta);
+                        modal.period
+                    };
+                    let project_options = self.report_project_options(period);
+                    if let Some(modal) = self.export_modal.as_mut() {
+                        modal.project_options = project_options;
+                        modal.project_selected = modal
+                            .project_selected
+                            .min(modal.project_options.len().saturating_sub(1));
+                    }
+                    return true;
+                }
+                KeyCode::Char('p') | KeyCode::Char('P') => {
+                    if let Some(modal) = self.export_modal.as_mut() {
+                        modal.cycle_project();
+                    }
+                    return true;
+                }
+                KeyCode::Char('x')
+                | KeyCode::Char('X')
+                | KeyCode::Char('r')
+                | KeyCode::Char('R') => {
+                    if let Some(modal) = self.export_modal.as_mut() {
+                        modal.redacted = !modal.redacted;
+                    }
+                    return true;
+                }
+                _ => {}
+            }
+        }
         match key.code {
             KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.push_active_query_char(c)
@@ -1543,13 +1669,21 @@ impl App {
     }
 
     fn confirm_export_picker(&mut self) {
-        let format = self
-            .export_modal
-            .as_ref()
-            .and_then(|modal| modal.options.get(modal.selected).copied());
+        let request = self.export_modal.as_ref().and_then(|modal| {
+            modal
+                .options
+                .get(modal.selected)
+                .copied()
+                .map(|format| ReportRequest {
+                    format,
+                    period: modal.period,
+                    scope: modal.scope(),
+                    redacted: modal.redacted,
+                })
+        });
         self.export_modal = None;
-        if let Some(format) = format {
-            self.run_export(format);
+        if let Some(request) = request {
+            self.run_report(request);
         }
     }
 
@@ -1563,7 +1697,7 @@ impl App {
             self.export_dir_picker = None;
             self.set_status(
                 copy::template(
-                    &copy().status.export_folder,
+                    &copy().status.report_folder,
                     &[("path", self.export_dir.display().to_string())],
                 ),
                 StatusTone::Info,
@@ -1768,6 +1902,18 @@ impl App {
             }
             DataSource::Sample => {
                 crate::data::project_options(self.period, self.tool, self.sort, &currency)
+            }
+        }
+    }
+
+    pub fn report_project_options(&self, period: Period) -> Vec<ProjectOption> {
+        let currency = self.currency();
+        match &self.source {
+            DataSource::Live(ingested) => {
+                ingested.project_options(period, Tool::All, SortMode::Spend, &currency)
+            }
+            DataSource::Sample => {
+                crate::data::project_options(period, Tool::All, SortMode::Spend, &currency)
             }
         }
     }
@@ -2671,7 +2817,7 @@ mod tests {
     }
 
     #[test]
-    fn export_writes_to_selected_session_destination() {
+    fn report_writes_to_selected_session_destination() {
         let mut app = App::default();
         let dir = tempdir("export-target");
         app.export_dir = dir.clone();
@@ -2684,11 +2830,11 @@ mod tests {
         assert!(exported[0]
             .path()
             .extension()
-            .is_some_and(|ext| ext == "json"));
+            .is_some_and(|ext| ext == "html"));
         assert!(app.export_modal.is_none());
         assert!(app
             .status_text()
-            .is_some_and(|status| status.contains("Exported JSON")));
+            .is_some_and(|status| status.contains("Report generated")));
         let _ = std::fs::remove_dir_all(dir);
     }
 

@@ -6,7 +6,7 @@ This section is for maintainers and contributors working on `tokenuse` itself.
 
 | Path | Purpose |
 | --- | --- |
-| `src/` | Rust TUI, ingestion, archive, pricing, currency, export, and shared runtime |
+| `src/` | Rust TUI, ingestion, archive, pricing, currency, reports, and shared runtime |
 | `src/tools/` | Tool adapter registry plus parser implementations |
 | `desktop/` | Tauri v2 desktop frontend and desktop Rust commands |
 | `currency/` | Generated embedded currency snapshot data |

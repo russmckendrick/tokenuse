@@ -368,7 +368,7 @@ mod tests {
         assert!(body.contains("calendar-grid"));
         assert!(body.contains("calendar-cell"));
         assert!(!body.contains("Usage Limits"));
-        assert!(body.contains("Full workbook report"));
+        assert!(body.contains("Dashboard report"));
         assert!(!body.contains("<script"));
         let _ = fs::remove_dir_all(&paths.dir);
     }
@@ -465,8 +465,8 @@ mod tests {
     fn export_formats_include_full_workbook_formats() {
         assert!(ExportFormat::ALL.contains(&ExportFormat::Html));
         assert!(ExportFormat::ALL.contains(&ExportFormat::Pdf));
-        assert_eq!(ExportFormat::Html.label(), "HTML (full workbook report)");
-        assert_eq!(ExportFormat::Pdf.label(), "PDF (full workbook report)");
+        assert_eq!(ExportFormat::Html.label(), "HTML report");
+        assert_eq!(ExportFormat::Pdf.label(), "PDF report");
     }
 
     #[test]
