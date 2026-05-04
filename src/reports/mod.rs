@@ -822,7 +822,7 @@ fn aggregate_report_sessions(
         entry.0.add_call(call);
     }
     let mut rows: Vec<_> = by_session.into_iter().collect();
-    rows.sort_by(|a, b| b.1 .0.last.cmp(&a.1 .0.last));
+    rows.sort_by_key(|(_, (totals, _, _, _))| std::cmp::Reverse(totals.last));
     rows.into_iter()
         .map(|(key, (totals, tool, session_id, project))| {
             let duration_minutes = match (totals.first, totals.last) {
@@ -859,7 +859,7 @@ fn report_calls(
     redactor: &mut Redactor,
 ) -> Vec<ReportCall> {
     let mut rows = calls.to_vec();
-    rows.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+    rows.sort_by_key(|call| call.timestamp);
     rows.into_iter()
         .map(|call| {
             let project = project_identity(&call.project);
@@ -1035,7 +1035,7 @@ fn latest_limits(limits: &[&LimitSnapshot]) -> Vec<ReportLimitLatest> {
 
 fn raw_limits(limits: &[&LimitSnapshot]) -> Vec<ReportLimitRaw> {
     let mut rows: Vec<_> = limits.to_vec();
-    rows.sort_by(|a, b| a.observed_at.cmp(&b.observed_at));
+    rows.sort_by_key(|limit| limit.observed_at);
     rows.into_iter()
         .map(|limit| ReportLimitRaw {
             tool: tool_short_label(limit.tool).to_string(),
