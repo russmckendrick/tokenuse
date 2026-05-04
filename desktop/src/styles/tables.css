@@ -268,6 +268,28 @@ th:first-child {
   gap: 8px;
 }
 
+.update-panel,
+.update-summary {
+  display: grid;
+  gap: 8px;
+}
+
+.update-summary strong {
+  color: #cbd4f2;
+  line-height: 1.3;
+}
+
+.update-status {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  padding: 5px 7px;
+  color: #ff8f40;
+  border: 1px solid #414866;
+  border-radius: 3px;
+  background: #25293d;
+}
+
 .toggle-row {
   position: relative;
   min-width: 0;
@@ -434,4 +456,3 @@ footer {
 footer b {
   color: #ff8f40;
 }
-

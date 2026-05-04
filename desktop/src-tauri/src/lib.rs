@@ -21,6 +21,7 @@ mod menu;
 mod notifications;
 mod snapshot;
 mod state;
+mod updates;
 
 use menu::desktop_menu;
 use notifications::send_background_alert;
@@ -542,6 +543,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
             app.set_theme(Some(Theme::Dark));
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                app.handle()
+                    .plugin(tauri_plugin_updater::Builder::new().build())?;
+                app.manage(updates::PendingDesktopUpdate::default());
+            }
             setup_desktop_runtime(app, monitor_state.clone())?;
             Ok(())
         })
@@ -594,6 +601,8 @@ pub fn run() {
             commands::set_export_dir,
             commands::export_current,
             commands::handle_shortcut,
+            updates::check_desktop_update,
+            updates::install_desktop_update,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tokenuse desktop application")

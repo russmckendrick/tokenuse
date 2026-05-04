@@ -21,6 +21,7 @@ pub struct CopyDeck {
     pub modals: ModalCopy,
     pub actions: ActionCopy,
     pub desktop: DesktopCopy,
+    pub updates: UpdateCopy,
     pub tray: TrayCopy,
     pub empty: EmptyCopy,
     pub export: ExportCopy,
@@ -377,6 +378,26 @@ pub struct DesktopCopy {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct UpdateCopy {
+    pub title: String,
+    pub description: String,
+    pub unsupported: String,
+    pub current_version: String,
+    pub check: String,
+    pub checking: String,
+    pub install: String,
+    pub installing: String,
+    pub available: String,
+    pub up_to_date: String,
+    pub download_started: String,
+    pub download_progress: String,
+    pub download_progress_unknown: String,
+    pub download_finished: String,
+    pub installed_restarting: String,
+    pub failed: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TrayCopy {
     pub summary_aria: String,
     pub hours_24: String,
@@ -570,6 +591,11 @@ impl CopyDeck {
         ensure_template(&self.status.exported, &["format", "path"])?;
         ensure_template(&self.status.clear_data_failed, &["error"])?;
         ensure_template(&self.status.background_usage_body, &["summary"])?;
+        ensure_template(&self.updates.current_version, &["version"])?;
+        ensure_template(&self.updates.available, &["version"])?;
+        ensure_template(&self.updates.download_progress, &["downloaded", "total"])?;
+        ensure_template(&self.updates.download_progress_unknown, &["downloaded"])?;
+        ensure_template(&self.updates.failed, &["error"])?;
         ensure_template(&self.modals.selection_title, &["name", "index", "total"])?;
         ensure_template(
             &self.modals.filtered_selection_title,

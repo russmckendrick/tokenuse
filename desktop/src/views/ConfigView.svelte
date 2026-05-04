@@ -1,13 +1,26 @@
 <script lang="ts">
-  import { Database, FolderOpen, Trash2 } from 'lucide-svelte';
+  import { Database, Download, FolderOpen, RefreshCw, Trash2 } from 'lucide-svelte';
   import { reveal } from '../motion';
   import Panel from '../Panel.svelte';
-  import type { ConfigRow, DesktopSnapshot } from '../types';
+  import type { ConfigRow, DesktopSnapshot, DesktopUpdateMetadata } from '../types';
+
+  type DesktopUpdateUiState = {
+    checking: boolean;
+    installing: boolean;
+    checked: boolean;
+    available: DesktopUpdateMetadata | null;
+    message: string | null;
+    downloaded: number;
+    total: number | null;
+  };
 
   export let snapshot: DesktopSnapshot;
   export let configAction: (row: ConfigRow) => void;
   export let chooseExportDir: () => void;
   export let refreshArchive: () => void;
+  export let desktopUpdate: DesktopUpdateUiState;
+  export let checkDesktopUpdate: () => void;
+  export let installDesktopUpdate: () => void;
   export let setOpenAtLoginFromEvent: (event: Event) => void;
   export let setShowDockOrTaskbarIconFromEvent: (event: Event) => void;
 </script>
@@ -65,6 +78,29 @@
         </label>
       </div>
     </Panel>
+    {#if snapshot.desktop_updates.supported}
+      <Panel title={snapshot.copy.updates.title} tone="magenta">
+        <div class="update-panel">
+          <div class="update-summary">
+            <strong>{snapshot.copy.updates.description}</strong>
+            <small>{snapshot.copy.updates.current_version.replace('{version}', snapshot.version)}</small>
+          </div>
+          {#if desktopUpdate.message}
+            <div class="update-status">{desktopUpdate.message}</div>
+          {/if}
+          <div class="button-row">
+            <button type="button" disabled={desktopUpdate.checking || desktopUpdate.installing} onclick={checkDesktopUpdate}>
+              <RefreshCw size={15} /> {desktopUpdate.checking ? snapshot.copy.updates.checking : snapshot.copy.updates.check}
+            </button>
+            {#if desktopUpdate.available}
+              <button type="button" disabled={desktopUpdate.installing} onclick={installDesktopUpdate}>
+                <Download size={15} /> {desktopUpdate.installing ? snapshot.copy.updates.installing : snapshot.copy.updates.install}
+              </button>
+            {/if}
+          </div>
+        </div>
+      </Panel>
+    {/if}
     <Panel title={snapshot.copy.panels.local_data} tone="green">
       <div class="config-facts">
         <div><span>{snapshot.copy.tables.archive}</span><strong>{snapshot.source}</strong></div>

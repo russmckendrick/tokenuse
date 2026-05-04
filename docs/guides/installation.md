@@ -60,6 +60,8 @@ chmod +x tokenuse-desktop-linux-amd64.AppImage
 
 Use the matching `arm64` asset on ARM64 Linux. Debian-based systems can install the `.deb` asset with `sudo apt install ./tokenuse-desktop-linux-amd64.deb`; RPM-based systems can install the `.rpm` asset with `sudo dnf install ./tokenuse-desktop-linux-amd64.rpm`.
 
+AppImage installs can check for later desktop releases from the Config tab. Debian and RPM installs should update manually with the matching package from GitHub Releases.
+
 ## Windows TUI
 
 Download the latest Windows AMD64 executable from PowerShell:
@@ -85,6 +87,8 @@ Start-Process .\tokenuse-desktop-windows-amd64-setup.exe
 ```
 
 Compare the hash output with the first value in `tokenuse-desktop-windows-amd64-setup.exe.sha256`. The MSI is also available as `tokenuse-desktop-windows-amd64.msi` for environments that prefer Windows Installer packages.
+
+Installed Windows desktop builds can check for later NSIS installer releases from the Config tab.
 
 ## Build From Source
 

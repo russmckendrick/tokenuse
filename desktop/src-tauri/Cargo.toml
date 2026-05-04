@@ -24,6 +24,9 @@ tauri-plugin-single-instance = "2"
 thiserror = "2"
 tokenuse = { path = "../..", default-features = false }
 
+[target.'cfg(any(windows, target_os = "linux"))'.dependencies]
+tauri-plugin-updater = "2"
+
 [features]
 default = ["refresh-currency", "refresh-prices"]
 refresh-currency = ["tokenuse/refresh-currency"]

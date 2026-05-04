@@ -1,6 +1,8 @@
-import { invoke } from '@tauri-apps/api/core';
+import { type Channel, invoke } from '@tauri-apps/api/core';
 import type {
   DesktopSnapshot,
+  DesktopUpdateDownloadEvent,
+  DesktopUpdateMetadata,
   ExportFormatId,
   ExportResponse,
   PageId,
@@ -33,6 +35,9 @@ export const api = {
   clearData: () => invoke<DesktopSnapshot>('clear_data'),
   refreshCurrencyRates: () => invoke<DesktopSnapshot>('refresh_currency_rates'),
   refreshPricingSnapshot: () => invoke<DesktopSnapshot>('refresh_pricing_snapshot'),
+  checkDesktopUpdate: () => invoke<DesktopUpdateMetadata | null>('check_desktop_update'),
+  installDesktopUpdate: (onEvent: Channel<DesktopUpdateDownloadEvent>) =>
+    invoke<void>('install_desktop_update', { onEvent }),
   setExportDir: (path: string) => invoke<DesktopSnapshot>('set_export_dir', { path }),
   exportCurrent: (format: ExportFormatId) =>
     invoke<ExportResponse>('export_current', { format }),

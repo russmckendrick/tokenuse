@@ -311,6 +311,24 @@
     "model_usage": "Model usage",
     "loading_label": "Loading Token Use"
   },
+  "updates": {
+    "title": "Updates",
+    "description": "Check GitHub Releases for Windows and Linux desktop updates.",
+    "unsupported": "Use Homebrew to update the macOS desktop app.",
+    "current_version": "Current {version}",
+    "check": "Check for updates",
+    "checking": "Checking GitHub Releases",
+    "install": "Install update",
+    "installing": "Installing update",
+    "available": "Version {version} available",
+    "up_to_date": "You're up to date",
+    "download_started": "Download started",
+    "download_progress": "Downloaded {downloaded} of {total}",
+    "download_progress_unknown": "Downloaded {downloaded}",
+    "download_finished": "Download finished",
+    "installed_restarting": "Update installed. Restarting Token Use.",
+    "failed": "Update failed · {error}"
+  },
   "tray": {
     "summary_aria": "24 hour summary",
     "hours_24": "24 Hours",

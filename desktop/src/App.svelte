@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { Channel } from '@tauri-apps/api/core';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { confirm, open as openDialog } from '@tauri-apps/plugin-dialog';
   import { Download, FolderOpen, RefreshCw, Search, X } from 'lucide-svelte';
@@ -15,6 +16,8 @@
   import type {
     ConfigRow,
     DesktopSnapshot,
+    DesktopUpdateDownloadEvent,
+    DesktopUpdateMetadata,
     ExportFormatId,
     PageId,
     PeriodId,
@@ -27,6 +30,15 @@
   } from './types';
 
   type ModalKind = 'project' | 'session' | 'currency' | 'export' | null;
+  type DesktopUpdateUiState = {
+    checking: boolean;
+    installing: boolean;
+    checked: boolean;
+    available: DesktopUpdateMetadata | null;
+    message: string | null;
+    downloaded: number;
+    total: number | null;
+  };
 
   function currentWindowLabel() {
     try {
@@ -47,6 +59,19 @@
   let exportFormat: ExportFormatId = 'json';
   let clearingData = false;
   let pollTimer: number | undefined;
+  let desktopUpdate: DesktopUpdateUiState = resetDesktopUpdate();
+
+  function resetDesktopUpdate(): DesktopUpdateUiState {
+    return {
+      checking: false,
+      installing: false,
+      checked: false,
+      available: null,
+      message: null,
+      downloaded: 0,
+      total: null
+    };
+  }
 
   onMount(() => {
     if (isTrayPopover) return;
@@ -382,6 +407,133 @@
     }
   }
 
+  async function checkDesktopUpdate() {
+    if (!snapshot) return;
+    busy = true;
+    error = null;
+    desktopUpdate = {
+      ...resetDesktopUpdate(),
+      checking: true,
+      message: snapshot.copy.updates.checking
+    };
+
+    try {
+      const update = await api.checkDesktopUpdate();
+      desktopUpdate = {
+        ...desktopUpdate,
+        checking: false,
+        checked: true,
+        available: update,
+        message: update
+          ? copyTemplate(snapshot.copy.updates.available, { version: update.version })
+          : snapshot.copy.updates.up_to_date
+      };
+    } catch (err) {
+      desktopUpdate = {
+        ...desktopUpdate,
+        checking: false,
+        checked: true,
+        available: null,
+        message: updateFailureMessage(err)
+      };
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function installDesktopUpdate() {
+    if (!snapshot || !desktopUpdate.available) return;
+    busy = true;
+    error = null;
+    desktopUpdate = {
+      ...desktopUpdate,
+      installing: true,
+      downloaded: 0,
+      total: null,
+      message: snapshot.copy.updates.installing
+    };
+
+    const onEvent = new Channel<DesktopUpdateDownloadEvent>();
+    onEvent.onmessage = (event) => handleDesktopUpdateDownloadEvent(event);
+
+    try {
+      await api.installDesktopUpdate(onEvent);
+      desktopUpdate = {
+        ...desktopUpdate,
+        installing: false,
+        message: snapshot.copy.updates.installed_restarting
+      };
+    } catch (err) {
+      desktopUpdate = {
+        ...desktopUpdate,
+        installing: false,
+        message: updateFailureMessage(err)
+      };
+    } finally {
+      busy = false;
+    }
+  }
+
+  function handleDesktopUpdateDownloadEvent(event: DesktopUpdateDownloadEvent) {
+    if (!snapshot) return;
+    switch (event.event) {
+      case 'started':
+        desktopUpdate = {
+          ...desktopUpdate,
+          total: event.data.contentLength,
+          message: snapshot.copy.updates.download_started
+        };
+        break;
+      case 'progress': {
+        const downloaded = desktopUpdate.downloaded + event.data.chunkLength;
+        desktopUpdate = {
+          ...desktopUpdate,
+          downloaded,
+          message: desktopUpdate.total === null
+            ? copyTemplate(snapshot.copy.updates.download_progress_unknown, {
+                downloaded: formatBytes(downloaded)
+              })
+            : copyTemplate(snapshot.copy.updates.download_progress, {
+                downloaded: formatBytes(downloaded),
+                total: formatBytes(desktopUpdate.total)
+              })
+        };
+        break;
+      }
+      case 'finished':
+        desktopUpdate = {
+          ...desktopUpdate,
+          message: snapshot.copy.updates.download_finished
+        };
+        break;
+    }
+  }
+
+  function updateFailureMessage(err: unknown) {
+    const detail = err instanceof Error ? err.message : String(err);
+    return snapshot
+      ? copyTemplate(snapshot.copy.updates.failed, { error: detail })
+      : detail;
+  }
+
+  function copyTemplate(template: string, values: Record<string, string>) {
+    return Object.entries(values).reduce(
+      (out, [key, value]) => out.split(`{${key}}`).join(value),
+      template
+    );
+  }
+
+  function formatBytes(value: number) {
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let amount = value;
+    let index = 0;
+    while (amount >= 1024 && index < units.length - 1) {
+      amount /= 1024;
+      index += 1;
+    }
+    return `${amount >= 10 || index === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[index]}`;
+  }
+
   function statusMessage() {
     if (error) return error;
     if (clearingData) return snapshot?.copy.status.clearing_data_reimporting ?? null;
@@ -504,6 +656,9 @@
           {configAction}
           {chooseExportDir}
           refreshArchive={() => commit(() => api.refreshArchive())}
+          {desktopUpdate}
+          checkDesktopUpdate={() => void checkDesktopUpdate()}
+          installDesktopUpdate={() => void installDesktopUpdate()}
           {setOpenAtLoginFromEvent}
           {setShowDockOrTaskbarIconFromEvent}
         />

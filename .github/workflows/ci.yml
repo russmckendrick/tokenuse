@@ -395,6 +395,8 @@ jobs:
     env:
       DESKTOP_WINDOWS_SETUP: tokenuse-desktop-windows-amd64-setup.exe
       DESKTOP_WINDOWS_MSI: tokenuse-desktop-windows-amd64.msi
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
     steps:
       - name: "📥 Check out repository"
@@ -427,6 +429,14 @@ jobs:
         working-directory: desktop
         run: pnpm install --frozen-lockfile
 
+      - name: "🔐 Validate updater signing key"
+        shell: pwsh
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+            Write-Error "TAURI_SIGNING_PRIVATE_KEY GitHub secret is required for Windows updater artifacts"
+            exit 1
+          }
+
       - name: "🏗️ Build unsigned desktop installers"
         working-directory: desktop
         run: pnpm tauri build --bundles nsis,msi --ci
@@ -440,6 +450,11 @@ jobs:
             Write-Error "No NSIS desktop installer was produced"
             exit 1
           }
+          $setupSig = "$($setup.FullName).sig"
+          if (-not (Test-Path $setupSig)) {
+            Write-Error "No NSIS updater signature was produced"
+            exit 1
+          }
 
           $msi = Get-ChildItem -Path "src-tauri\target\release\bundle\msi" -Filter "*.msi" -File | Select-Object -First 1
           if (-not $msi) {
@@ -448,6 +463,7 @@ jobs:
           }
 
           Copy-Item $setup.FullName "..\$env:DESKTOP_WINDOWS_SETUP"
+          Copy-Item $setupSig "..\$env:DESKTOP_WINDOWS_SETUP.sig"
           Copy-Item $msi.FullName "..\$env:DESKTOP_WINDOWS_MSI"
 
           Push-Location ..
@@ -464,6 +480,7 @@ jobs:
           path: |
             ${{ env.DESKTOP_WINDOWS_SETUP }}
             ${{ env.DESKTOP_WINDOWS_SETUP }}.sha256
+            ${{ env.DESKTOP_WINDOWS_SETUP }}.sig
             ${{ env.DESKTOP_WINDOWS_MSI }}
             ${{ env.DESKTOP_WINDOWS_MSI }}.sha256
 
@@ -484,6 +501,8 @@ jobs:
       DESKTOP_LINUX_APPIMAGE: tokenuse-desktop-linux-${{ matrix.arch }}.AppImage
       DESKTOP_LINUX_DEB: tokenuse-desktop-linux-${{ matrix.arch }}.deb
       DESKTOP_LINUX_RPM: tokenuse-desktop-linux-${{ matrix.arch }}.rpm
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
     steps:
       - name: "📥 Check out repository"
@@ -535,6 +554,13 @@ jobs:
         working-directory: desktop
         run: pnpm install --frozen-lockfile
 
+      - name: "🔐 Validate updater signing key"
+        run: |
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY}" ]; then
+            echo "TAURI_SIGNING_PRIVATE_KEY GitHub secret is required for Linux updater artifacts" >&2
+            exit 1
+          fi
+
       - name: "🏗️ Build unsigned desktop packages"
         working-directory: desktop
         run: pnpm tauri build --bundles appimage,deb,rpm --ci
@@ -545,6 +571,11 @@ jobs:
           APPIMAGE=$(find src-tauri/target/release/bundle/appimage -name '*.AppImage' -type f | head -n 1)
           if [ -z "${APPIMAGE}" ]; then
             echo "No AppImage desktop package was produced" >&2
+            exit 1
+          fi
+          APPIMAGE_SIG="${APPIMAGE}.sig"
+          if [ ! -f "${APPIMAGE_SIG}" ]; then
+            echo "No AppImage updater signature was produced" >&2
             exit 1
           fi
 
@@ -561,6 +592,7 @@ jobs:
           fi
 
           cp "${APPIMAGE}" "../${DESKTOP_LINUX_APPIMAGE}"
+          cp "${APPIMAGE_SIG}" "../${DESKTOP_LINUX_APPIMAGE}.sig"
           cp "${DEB}" "../${DESKTOP_LINUX_DEB}"
           cp "${RPM}" "../${DESKTOP_LINUX_RPM}"
           cd ..
@@ -575,6 +607,7 @@ jobs:
           path: |
             ${{ env.DESKTOP_LINUX_APPIMAGE }}
             ${{ env.DESKTOP_LINUX_APPIMAGE }}.sha256
+            ${{ env.DESKTOP_LINUX_APPIMAGE }}.sig
             ${{ env.DESKTOP_LINUX_DEB }}
             ${{ env.DESKTOP_LINUX_DEB }}.sha256
             ${{ env.DESKTOP_LINUX_RPM }}
@@ -587,6 +620,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: "📥 Check out repository"
+        uses: actions/checkout@v6
+
+      - name: "🧪 Test updater manifest generator"
+        run: node --test .github/scripts/generate-tauri-latest-json.test.mjs
+
       - name: "📦 Download all artifacts"
         uses: actions/download-artifact@v8
         with:
@@ -597,6 +636,14 @@ jobs:
           mkdir -p release
           find artifacts -type f -exec cp {} release/ \;
           ls -la release/
+
+      - name: "📝 Generate desktop updater manifest"
+        run: |
+          node .github/scripts/generate-tauri-latest-json.mjs \
+            --release-dir release \
+            --repo "${GITHUB_REPOSITORY}" \
+            --tag "${GITHUB_REF_NAME}" \
+            --out release/latest.json
 
       - name: "🚀 Create GitHub Release"
         uses: softprops/action-gh-release@v3

@@ -1,0 +1,13 @@
+{
+  "bundle": {
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFBNEUwMkYyNTZGMTAwRjAKUldUd0FQRlc4Z0pPcWlzSkYyL2h3YkZoSzl2R0tyc3h6K2YxVGY1OWQ4a0FpRnhSWTYrRy9YWjQK",
+      "endpoints": [
+        "https://github.com/russmckendrick/tokenuse/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

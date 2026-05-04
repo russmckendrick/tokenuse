@@ -185,6 +185,20 @@ export type DesktopSettingsState = {
   show_dock_or_taskbar_icon: boolean;
 };
 
+export type DesktopUpdateState = {
+  supported: boolean;
+};
+
+export type DesktopUpdateMetadata = {
+  version: string;
+  currentVersion: string;
+};
+
+export type DesktopUpdateDownloadEvent =
+  | { event: 'started'; data: { contentLength: number | null } }
+  | { event: 'progress'; data: { chunkLength: number } }
+  | { event: 'finished' };
+
 export type ProjectState = {
   identity: string | null;
   label: string;
@@ -222,6 +236,7 @@ export type CopyDeck = {
   modals: Record<string, string>;
   actions: Record<string, string>;
   desktop: Record<string, string>;
+  updates: Record<string, string>;
   tray: Record<string, string>;
   empty: Record<string, string>;
   export: Record<string, unknown>;
@@ -265,6 +280,7 @@ export type DesktopSnapshot = {
   currencies: string[];
   currency: string;
   desktop_settings: DesktopSettingsState;
+  desktop_updates: DesktopUpdateState;
   export_dir: string;
   export_formats: OptionItem<ExportFormatId>[];
   shortcut_footer: ShortcutHint[];

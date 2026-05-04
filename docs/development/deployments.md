@@ -23,13 +23,15 @@ Tagged releases also build desktop app bundles:
 | Platform | Assets |
 | --- | --- |
 | macOS ARM64 | `tokenuse-desktop-macos-arm64.dmg` |
-| Windows AMD64 | `tokenuse-desktop-windows-amd64-setup.exe`, `tokenuse-desktop-windows-amd64.msi` |
-| Linux AMD64 | `tokenuse-desktop-linux-amd64.AppImage`, `tokenuse-desktop-linux-amd64.deb`, `tokenuse-desktop-linux-amd64.rpm` |
-| Linux ARM64 | `tokenuse-desktop-linux-arm64.AppImage`, `tokenuse-desktop-linux-arm64.deb`, `tokenuse-desktop-linux-arm64.rpm` |
+| Windows AMD64 | `tokenuse-desktop-windows-amd64-setup.exe`, `tokenuse-desktop-windows-amd64-setup.exe.sig`, `tokenuse-desktop-windows-amd64.msi` |
+| Linux AMD64 | `tokenuse-desktop-linux-amd64.AppImage`, `tokenuse-desktop-linux-amd64.AppImage.sig`, `tokenuse-desktop-linux-amd64.deb`, `tokenuse-desktop-linux-amd64.rpm` |
+| Linux ARM64 | `tokenuse-desktop-linux-arm64.AppImage`, `tokenuse-desktop-linux-arm64.AppImage.sig`, `tokenuse-desktop-linux-arm64.deb`, `tokenuse-desktop-linux-arm64.rpm` |
 
 Each asset has a matching `.sha256` checksum file.
 
-The macOS desktop release job builds the Apple Silicon DMG, signs it with a Developer ID Application certificate, notarizes through App Store Connect, verifies the mounted DMG, and uploads the normalized artifact to the GitHub Release. Windows and Linux desktop assets are unsigned for now and should be verified with their checksum files before installing.
+The release also uploads `latest.json`, the static manifest consumed by the Windows/Linux Tauri updater. The manifest points Windows to the normalized NSIS setup installer and Linux to the normalized AppImage assets. `.deb` and `.rpm` packages remain manual GitHub Release installs.
+
+The macOS desktop release job builds the Apple Silicon DMG, signs it with a Developer ID Application certificate, notarizes through App Store Connect, verifies the mounted DMG, and uploads the normalized artifact to the GitHub Release. Windows and Linux desktop assets are not OS code-signed for now and should be verified with their checksum files before installing. Their `.sig` files are Tauri updater signatures, not Authenticode or Linux package signatures.
 
 ## Required Secrets
 
@@ -43,6 +45,8 @@ The macOS desktop release job requires:
 | `APPLE_API_ISSUER` | App Store Connect issuer ID |
 | `APPLE_API_KEY` | App Store Connect key ID |
 | `APPLE_API_PRIVATE_KEY` | App Store Connect `.p8` private key contents |
+| `TAURI_SIGNING_PRIVATE_KEY` | Tauri updater private key content for Windows/Linux update artifacts |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Optional Tauri updater private key password |
 | `HOMEBREW_TAP_TOKEN` | Token with push access to `russmckendrick/homebrew-tap` |
 
 Use a Developer ID Application certificate for direct-download DMGs. Apple Distribution is for App Store distribution, and Developer ID Installer is for `.pkg` installers.

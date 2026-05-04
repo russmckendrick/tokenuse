@@ -44,6 +44,7 @@ pub(crate) struct DesktopSnapshot {
     pub(crate) currencies: Vec<String>,
     pub(crate) currency: String,
     pub(crate) desktop_settings: DesktopSettingsState,
+    pub(crate) desktop_updates: DesktopUpdateState,
     pub(crate) export_dir: String,
     pub(crate) export_formats: Vec<OptionItem>,
     pub(crate) shortcut_footer: Vec<CopyKeyHint>,
@@ -53,6 +54,11 @@ pub(crate) struct DesktopSnapshot {
 pub(crate) struct DesktopSettingsState {
     pub(crate) open_at_login: bool,
     pub(crate) show_dock_or_taskbar_icon: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct DesktopUpdateState {
+    pub(crate) supported: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -158,6 +164,7 @@ pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
         currencies: app.currency_table.codes(),
         currency: app.currency().code().to_string(),
         desktop_settings: desktop_settings(app),
+        desktop_updates: desktop_updates(),
         export_dir: app.export_dir.display().to_string(),
         export_formats: ExportFormat::ALL
             .into_iter()
@@ -182,6 +189,12 @@ fn desktop_settings(app: &App) -> DesktopSettingsState {
     DesktopSettingsState {
         open_at_login: app.settings.desktop.open_at_login,
         show_dock_or_taskbar_icon: app.settings.desktop.show_dock_or_taskbar_icon,
+    }
+}
+
+fn desktop_updates() -> DesktopUpdateState {
+    DesktopUpdateState {
+        supported: cfg!(any(windows, target_os = "linux")),
     }
 }
 
