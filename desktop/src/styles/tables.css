@@ -171,6 +171,26 @@ th:first-child {
   border-color: #ff5f6d;
 }
 
+.row-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 9px;
+  margin-top: 4px;
+}
+
+.row-links a {
+  color: #62a6ff;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.row-links a:hover,
+.row-links a:focus {
+  color: #4df3e8;
+  text-decoration: underline;
+}
+
 .panel-command {
   margin-bottom: 6px;
   min-height: 28px;

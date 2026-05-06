@@ -181,6 +181,12 @@ export type ConfigRow = {
   name: string;
   value: string;
   action: string;
+  links: ConfigLink[];
+};
+
+export type ConfigLink = {
+  label: string;
+  url: string;
 };
 
 export type DesktopSettingsState = {

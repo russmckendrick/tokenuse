@@ -36,7 +36,16 @@
           {#each snapshot.config_rows as row}
             <tr>
               <td>{row.name}</td>
-              <td class="muted-cell">{row.value}</td>
+              <td class="muted-cell">
+                <div>{row.value}</div>
+                {#if row.links.length}
+                  <div class="row-links">
+                    {#each row.links as link}
+                      <a href={link.url} target="_blank" rel="noreferrer">{link.label}</a>
+                    {/each}
+                  </div>
+                {/if}
+              </td>
               <td class="tight">
                 <button class="row-action" class:danger={row.action === 'clear'} type="button" onclick={() => configAction(row)}>
                   {#if row.action === 'clear'}<Trash2 size={14} />{/if}
