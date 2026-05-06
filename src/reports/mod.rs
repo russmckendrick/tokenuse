@@ -953,8 +953,16 @@ fn report_calls(
                 output_tokens: call.output_tokens,
                 cache_read_tokens: call.cache_read_input_tokens,
                 cache_write_tokens: call.cache_creation_input_tokens,
-                cache_read_rate: pricing::cache_read_rate_label(&call.model),
-                cache_write_rate: pricing::cache_write_rate_label(&call.model),
+                cache_read_rate: pricing::cache_read_rate_label_for(
+                    call.tool,
+                    &call.model,
+                    call.timestamp,
+                ),
+                cache_write_rate: pricing::cache_write_rate_label_for(
+                    call.tool,
+                    &call.model,
+                    call.timestamp,
+                ),
                 cached_input_tokens: call.cached_input_tokens,
                 reasoning_tokens: call.reasoning_tokens,
                 web_search_requests: call.web_search_requests,
@@ -987,7 +995,7 @@ fn aggregate_report_models(
     });
     rows.into_iter()
         .map(|((model, tool), totals)| {
-            let cache_read_rate = pricing::cache_read_rate_label(&model);
+            let cache_read_rate = pricing::cache_read_rate_label_for(tool, &model, None);
             ReportModel {
                 model,
                 tool: tool_short_label(tool).to_string(),

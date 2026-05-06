@@ -415,6 +415,13 @@ impl ConfigDownload {
             Self::PricingSnapshot => copy.modals.prices_effect.as_str(),
         }
     }
+
+    pub fn links(self) -> Vec<ConfigLinkView> {
+        match self {
+            Self::CurrencyRates => rates_download_links(),
+            Self::PricingSnapshot => pricing_download_links(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -605,11 +612,41 @@ impl SessionModal {
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
+pub struct ConfigLinkView {
+    pub label: String,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ConfigRowView {
     pub id: &'static str,
     pub name: &'static str,
     pub value: String,
     pub action: &'static str,
+    pub links: Vec<ConfigLinkView>,
+}
+
+fn rates_download_links() -> Vec<ConfigLinkView> {
+    vec![ConfigLinkView {
+        label: copy().config.links.published_rates.clone(),
+        url: crate::config::CURRENCY_RATES_URL.to_string(),
+    }]
+}
+
+fn pricing_download_links() -> Vec<ConfigLinkView> {
+    let Ok(urls) = crate::pricing::published_book_urls() else {
+        return Vec::new();
+    };
+    vec![
+        ConfigLinkView {
+            label: copy().config.links.pricing_upstream.clone(),
+            url: urls.upstream,
+        },
+        ConfigLinkView {
+            label: copy().config.links.pricing_overrides.clone(),
+            url: urls.overrides,
+        },
+    ]
 }
 
 pub enum DataSource {
@@ -1392,10 +1429,20 @@ impl App {
             self.currency_table.date()
         );
 
-        let pricing_value = if self.paths.pricing_snapshot_file.exists() {
-            copy.config.values.local_snapshot.clone()
+        let pricing_status = crate::pricing::configured_book_status(&self.paths);
+        let pricing_source = match pricing_status.source {
+            crate::pricing::PricingBookSource::LocalBooks => &copy.config.values.local_snapshot,
+            crate::pricing::PricingBookSource::LegacySnapshot => {
+                &copy.config.values.legacy_snapshot
+            }
+            crate::pricing::PricingBookSource::EmbeddedBooks => {
+                &copy.config.values.embedded_snapshot
+            }
+        };
+        let pricing_value = if let Some(date) = pricing_status.date {
+            format!("{pricing_source} · {date}")
         } else {
-            copy.config.values.embedded_snapshot.clone()
+            pricing_source.clone()
         };
         let clear_value = if self.paths.archive_db_file.exists() {
             copy.config.values.delete_archive_then_rebuild.clone()
@@ -1409,24 +1456,28 @@ impl App {
                 name: copy.config.rows.currency_override.name.as_str(),
                 value: currency_value,
                 action: copy.config.rows.currency_override.action.as_str(),
+                links: Vec::new(),
             },
             ConfigRowView {
                 id: "rates_json",
                 name: copy.config.rows.rates_json.name.as_str(),
                 value: rates_value,
                 action: copy.config.rows.rates_json.action.as_str(),
+                links: rates_download_links(),
             },
             ConfigRowView {
                 id: "litellm_prices",
                 name: copy.config.rows.litellm_prices.name.as_str(),
                 value: pricing_value,
                 action: copy.config.rows.litellm_prices.action.as_str(),
+                links: pricing_download_links(),
             },
             ConfigRowView {
                 id: "clear_data",
                 name: copy.config.rows.clear_data.name.as_str(),
                 value: clear_value,
                 action: copy.config.rows.clear_data.action.as_str(),
+                links: Vec::new(),
             },
         ]
     }
@@ -2178,10 +2229,13 @@ impl App {
 
     #[cfg(feature = "refresh-prices")]
     pub fn refresh_pricing_snapshot(&mut self) {
-        match crate::pricing::refresh::run(&self.paths.pricing_snapshot_file) {
+        match crate::pricing::refresh::download_published_books(&self.paths)
+            .map_err(|e| e.to_string())
+            .and_then(|_| crate::pricing::PriceTable::reload_configured())
+        {
             Ok(()) => {
                 self.set_status(
-                    copy().status.litellm_prices_refreshed_restart.clone(),
+                    copy().status.litellm_prices_refreshed.clone(),
                     StatusTone::Success,
                 );
             }
@@ -2597,15 +2651,25 @@ mod tests {
 
     #[test]
     fn config_rows_label_download_actions() {
-        let app = App::default();
+        let app = App {
+            paths: ConfigPaths::new(tempdir("config-rows")),
+            ..App::default()
+        };
         let rows = app.config_rows();
 
         assert_eq!(rows[1].id, "rates_json");
         assert_eq!(rows[1].name, copy().config.rows.rates_json.name);
         assert_eq!(rows[1].action, copy().config.rows.rates_json.action);
+        assert_eq!(rows[1].links.len(), 1);
+        assert_eq!(rows[1].links[0].url, crate::config::CURRENCY_RATES_URL);
         assert_eq!(rows[2].id, "litellm_prices");
         assert_eq!(rows[2].name, copy().config.rows.litellm_prices.name);
         assert_eq!(rows[2].action, copy().config.rows.litellm_prices.action);
+        assert!(rows[2]
+            .value
+            .starts_with(&copy().config.values.embedded_snapshot));
+        assert!(rows[2].value.contains(" · "));
+        assert_eq!(rows[2].links.len(), 2);
         assert_eq!(rows[3].id, "clear_data");
         assert_eq!(rows[3].name, copy().config.rows.clear_data.name);
         assert_eq!(rows[3].action, copy().config.rows.clear_data.action);

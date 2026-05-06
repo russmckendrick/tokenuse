@@ -472,6 +472,9 @@ mod tests {
         assert!(rendered.contains(&copy.config.rows.litellm_prices.name));
         assert!(rendered.contains(&copy.config.rows.clear_data.name));
         assert!(rendered.contains(&copy.panels.local_files));
+        assert!(rendered.contains(crate::config::CURRENCY_RATES_URL));
+        assert!(rendered.contains("pricing-upstream.json"));
+        assert!(rendered.contains("pricing-overrides.json"));
         assert!(rendered.contains("Esc dashboard"));
     }
 
@@ -498,6 +501,7 @@ mod tests {
         let copy = copy();
         assert!(rendered.contains(&copy.modals.download_rates_title));
         assert!(rendered.contains(&copy.modals.rates_source));
+        assert!(rendered.contains(crate::config::CURRENCY_RATES_URL));
         assert!(rendered.contains("Enter/y"));
         assert!(rendered.contains("Esc/n"));
     }

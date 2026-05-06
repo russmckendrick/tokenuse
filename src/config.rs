@@ -10,8 +10,6 @@ pub const DEFAULT_CURRENCY: &str = "USD";
 pub const CURRENCY_RATES_URL: &str =
     "https://raw.githubusercontent.com/russmckendrick/tokenuse/refs/heads/main/currency/rates.json";
 pub const FRANKFURTER_RATES_URL: &str = "https://api.frankfurter.dev/v2/rates?base=USD";
-pub const LITELLM_PRICING_URL: &str =
-    "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
 
 pub const DEFAULT_BACKGROUND_ALERT_MIN_COST_USD: f64 = 1.0;
 pub const DEFAULT_BACKGROUND_ALERT_MIN_TOKENS: i64 = 100_000;
@@ -20,7 +18,9 @@ pub const DEFAULT_BACKGROUND_ALERT_COOLDOWN_MINUTES: i64 = 30;
 
 const CONFIG_FILE_NAME: &str = "config.json";
 const LOCAL_RATES_FILE_NAME: &str = "rates.json";
-const LOCAL_PRICING_FILE_NAME: &str = "pricing-snapshot.json";
+const LOCAL_PRICING_UPSTREAM_FILE_NAME: &str = "pricing-upstream.json";
+const LOCAL_PRICING_OVERRIDES_FILE_NAME: &str = "pricing-overrides.json";
+const LEGACY_LOCAL_PRICING_FILE_NAME: &str = "pricing-snapshot.json";
 const ARCHIVE_DB_FILE_NAME: &str = "archive.db";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,6 +28,8 @@ pub struct ConfigPaths {
     pub dir: PathBuf,
     pub config_file: PathBuf,
     pub currency_rates_file: PathBuf,
+    pub pricing_upstream_file: PathBuf,
+    pub pricing_overrides_file: PathBuf,
     pub pricing_snapshot_file: PathBuf,
     pub archive_db_file: PathBuf,
 }
@@ -37,7 +39,9 @@ impl ConfigPaths {
         Self {
             config_file: dir.join(CONFIG_FILE_NAME),
             currency_rates_file: dir.join(LOCAL_RATES_FILE_NAME),
-            pricing_snapshot_file: dir.join(LOCAL_PRICING_FILE_NAME),
+            pricing_upstream_file: dir.join(LOCAL_PRICING_UPSTREAM_FILE_NAME),
+            pricing_overrides_file: dir.join(LOCAL_PRICING_OVERRIDES_FILE_NAME),
+            pricing_snapshot_file: dir.join(LEGACY_LOCAL_PRICING_FILE_NAME),
             archive_db_file: dir.join(ARCHIVE_DB_FILE_NAME),
             dir,
         }

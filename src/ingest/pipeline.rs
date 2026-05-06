@@ -1279,8 +1279,12 @@ fn build_session_detail(
                 timestamp,
                 model,
                 cost: currency.format_money(c.cost_usd),
-                cache_read_rate: pricing::cache_read_rate_label(&c.model),
-                cache_write_rate: pricing::cache_write_rate_label(&c.model),
+                cache_read_rate: pricing::cache_read_rate_label_for(c.tool, &c.model, c.timestamp),
+                cache_write_rate: pricing::cache_write_rate_label_for(
+                    c.tool,
+                    &c.model,
+                    c.timestamp,
+                ),
                 input_tokens: c.input_tokens.saturating_add(c.cached_input_tokens),
                 output_tokens: c.output_tokens,
                 cache_read: c.cache_read_input_tokens,
@@ -1394,9 +1398,11 @@ fn aggregate_models(
         entry.calls += 1;
         entry.cache_read += c.cache_read_input_tokens;
         entry.input += c.input_tokens + c.cache_read_input_tokens + c.cache_creation_input_tokens;
-        entry
-            .cache_rates
-            .insert(pricing::cache_read_rate_label(&c.model));
+        entry.cache_rates.insert(pricing::cache_read_rate_label_for(
+            c.tool,
+            &c.model,
+            c.timestamp,
+        ));
         entry.stats.add_call(c);
     }
 

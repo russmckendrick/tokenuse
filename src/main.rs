@@ -294,13 +294,20 @@ fn print_project_inventory() -> Result<()> {
 
 #[cfg(feature = "refresh-prices")]
 fn refresh_prices() -> Result<()> {
-    let target = std::path::PathBuf::from("src/pricing/snapshot.json");
-    tokenuse::pricing::refresh::run(&target)?;
+    let target = std::path::PathBuf::from("src/pricing/books");
+    let output = tokenuse::pricing::refresh::run(&target)?;
     println!(
         "{}",
         template(
             &copy().cli.wrote_path,
-            &[("path", target.display().to_string())]
+            &[(
+                "path",
+                format!(
+                    "{}, {}",
+                    output.upstream.display(),
+                    output.overrides.display()
+                )
+            )]
         )
     );
     Ok(())

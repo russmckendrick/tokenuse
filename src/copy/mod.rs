@@ -227,6 +227,7 @@ pub struct ConfigCopy {
     pub rows: ConfigRowsCopy,
     pub values: ConfigValuesCopy,
     pub paths: ConfigPathsCopy,
+    pub links: ConfigLinksCopy,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -246,6 +247,7 @@ pub struct ConfigRowCopy {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ConfigValuesCopy {
     pub local_snapshot: String,
+    pub legacy_snapshot: String,
     pub embedded_snapshot: String,
     pub delete_archive_then_rebuild: String,
     pub build_archive_from_history: String,
@@ -259,6 +261,13 @@ pub struct ConfigPathsCopy {
     pub rates_data: String,
     pub pricing_data: String,
     pub rates_source: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ConfigLinksCopy {
+    pub published_rates: String,
+    pub pricing_upstream: String,
+    pub pricing_overrides: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -295,6 +304,7 @@ pub struct ModalCopy {
     pub folder: String,
     pub file: String,
     pub source: String,
+    pub url: String,
     pub write: String,
     pub after: String,
     pub delete: String,
@@ -585,7 +595,7 @@ pub struct StatusCopy {
     pub rates_refreshed: String,
     pub rates_refresh_failed: String,
     pub rates_download_unavailable: String,
-    pub litellm_prices_refreshed_restart: String,
+    pub litellm_prices_refreshed: String,
     pub litellm_refresh_failed: String,
     pub litellm_download_unavailable: String,
     pub config_failed_defaults: String,

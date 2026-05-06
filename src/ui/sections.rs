@@ -692,7 +692,7 @@ pub(super) fn render_config(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
             Constraint::Length(1),
             Constraint::Length(8),
             Constraint::Length(1),
-            Constraint::Length(9),
+            Constraint::Length(12),
             Constraint::Min(1),
             Constraint::Length(3),
         ])
@@ -796,13 +796,22 @@ fn render_config_paths(frame: &mut Frame<'_>, area: Rect, app: &App) {
         ),
         path_line(
             copy.config.paths.pricing_data.as_str(),
-            app.paths.pricing_snapshot_file.display().to_string(),
+            format!(
+                "{}, {}",
+                app.paths.pricing_upstream_file.display(),
+                app.paths.pricing_overrides_file.display()
+            ),
         ),
     ]);
     lines.push(Line::from(vec![
         Span::styled(format!("{} ", copy.config.paths.rates_source), theme::key()),
         Span::styled(app.currency_table.source().label(), theme::muted()),
     ]));
+    for row in app.config_rows() {
+        for link in row.links {
+            lines.push(path_line(link.label.as_str(), link.url));
+        }
+    }
 
     Paragraph::new(Text::from(lines))
         .block(theme::panel_block(
@@ -813,9 +822,9 @@ fn render_config_paths(frame: &mut Frame<'_>, area: Rect, app: &App) {
         .render(area, frame.buffer_mut());
 }
 
-fn path_line(label: &'static str, value: String) -> Line<'static> {
+fn path_line(label: &str, value: String) -> Line<'static> {
     Line::from(vec![
-        Span::styled(format!("{label:<12}"), theme::key()),
+        Span::styled(format!("{label:<18}"), theme::key()),
         Span::styled(value, theme::muted()),
     ])
 }
@@ -1269,7 +1278,9 @@ pub(super) fn render_download_confirm_modal(frame: &mut Frame<'_>, area: Rect, a
     };
 
     let width = 88.min(area.width.saturating_sub(4)).max(58);
-    let height = 11.min(area.height.saturating_sub(4)).max(9);
+    let links = target.links();
+    let desired_height = 10 + links.len() as u16;
+    let height = desired_height.min(area.height.saturating_sub(4)).max(9);
     let modal_area = centered_rect(width, height, area);
     Clear.render(modal_area, frame.buffer_mut());
 
@@ -1279,11 +1290,15 @@ pub(super) fn render_download_confirm_modal(frame: &mut Frame<'_>, area: Rect, a
     block.render(modal_area, frame.buffer_mut());
 
     let output = match target {
-        ConfigDownload::CurrencyRates => &app.paths.currency_rates_file,
-        ConfigDownload::PricingSnapshot => &app.paths.pricing_snapshot_file,
+        ConfigDownload::CurrencyRates => app.paths.currency_rates_file.display().to_string(),
+        ConfigDownload::PricingSnapshot => format!(
+            "{}, {}",
+            app.paths.pricing_upstream_file.display(),
+            app.paths.pricing_overrides_file.display()
+        ),
     };
 
-    let lines = vec![
+    let mut lines = vec![
         Line::from(vec![
             Span::styled(format!("{:<7}", copy.modals.file), theme::key()),
             Span::styled(target.file_name(), theme::base()),
@@ -1292,9 +1307,17 @@ pub(super) fn render_download_confirm_modal(frame: &mut Frame<'_>, area: Rect, a
             Span::styled(format!("{:<7}", copy.modals.source), theme::key()),
             Span::styled(target.source(), theme::muted()),
         ]),
+    ];
+    for link in links {
+        lines.push(Line::from(vec![
+            Span::styled(format!("{:<7}", copy.modals.url), theme::key()),
+            Span::styled(format!("{} · {}", link.label, link.url), theme::muted()),
+        ]));
+    }
+    lines.extend([
         Line::from(vec![
             Span::styled(format!("{:<7}", copy.modals.write), theme::key()),
-            Span::styled(output.display().to_string(), theme::muted()),
+            Span::styled(output, theme::muted()),
         ]),
         Line::from(vec![
             Span::styled(format!("{:<7}", copy.modals.after), theme::key()),
@@ -1310,7 +1333,7 @@ pub(super) fn render_download_confirm_modal(frame: &mut Frame<'_>, area: Rect, a
             Span::styled("Esc/n", theme::key()),
             Span::styled(format!(" {}", copy.actions.cancel_lower), theme::muted()),
         ]),
-    ];
+    ]);
 
     Paragraph::new(Text::from(lines))
         .style(theme::base())

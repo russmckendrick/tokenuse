@@ -1,0 +1,51 @@
+name: "💵 Generate pricing books"
+
+on:
+  schedule:
+    - cron: "43 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    name: "💾 Generate and commit pricing books"
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: "📥 Check out repository"
+        uses: actions/checkout@v6
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfontconfig1-dev
+
+      - name: "🦀 Install Rust toolchain"
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: "⚡ Restore Rust cache"
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: pricing-books
+
+      - name: "💵 Generate pricing books"
+        run: cargo run --features refresh-prices -- --refresh-prices
+
+      - name: "🧪 Validate pricing refresh"
+        run: cargo test pricing::
+
+      - name: "🚀 Commit updated pricing books"
+        run: |
+          if git diff --quiet -- src/pricing/books/pricing-upstream.json src/pricing/books/pricing-overrides.json; then
+            echo "pricing books unchanged"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pricing/books/pricing-upstream.json src/pricing/books/pricing-overrides.json
+          git commit -m "Update pricing books"
+          git push

@@ -1,0 +1,184 @@
+{
+  "_metadata": {
+    "schema": "tokenuse pricing-sources.v1",
+    "description": "Config-driven pricing refresh sources. Rust owns generic fetch/extract/merge logic; URLs, filters, field mappings, and published book locations live here."
+  },
+  "published_books": {
+    "upstream_url": "https://raw.githubusercontent.com/russmckendrick/tokenuse/refs/heads/main/src/pricing/books/pricing-upstream.json",
+    "overrides_url": "https://raw.githubusercontent.com/russmckendrick/tokenuse/refs/heads/main/src/pricing/books/pricing-overrides.json"
+  },
+  "sources": [
+    {
+      "id": "litellm",
+      "name": "LiteLLM model prices",
+      "url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
+      "kind": "json-map",
+      "output": "upstream",
+      "include": {
+        "key_contains": [
+          "claude-opus-",
+          "claude-sonnet-",
+          "claude-haiku-",
+          "claude-3-",
+          "gpt-5",
+          "gpt-4o",
+          "o1",
+          "o3",
+          "gemini-"
+        ],
+        "canonical_exact": [
+          "codex-mini-latest"
+        ]
+      },
+      "fields": {
+        "input": "input_cost_per_token",
+        "output": "output_cost_per_token",
+        "cache_write": "cache_creation_input_token_cost",
+        "cache_read": "cache_read_input_token_cost"
+      },
+      "defaults": {
+        "web_search": 0.01
+      }
+    },
+    {
+      "id": "anthropic-pricing",
+      "name": "Claude pricing markdown",
+      "url": "https://platform.claude.com/docs/en/about-claude/pricing.md",
+      "kind": "markdown-table",
+      "output": "overrides",
+      "table_heading": "Model pricing",
+      "extract": {
+        "mode": "model-rows",
+        "scope": "global",
+        "columns": {
+          "model": "Model",
+          "input": "Base Input Tokens",
+          "cache_write": "5m Cache Writes",
+          "cache_read": "Cache Hits & Refreshes",
+          "output": "Output Tokens"
+        },
+        "defaults": {
+          "web_search": 0.01
+        },
+        "rows": [
+          { "match": "Claude Opus 4.7", "model": "claude-opus-4-7" },
+          {
+            "match": "Claude Opus 4.6",
+            "model": "claude-opus-4-6",
+            "set": { "fast_multiplier": 6 },
+            "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.6 fast mode at $30 input and $150 output per MTok."
+          },
+          {
+            "match": "Claude Opus 4.6",
+            "model": "claude-opus-4-6-20260205",
+            "set": { "fast_multiplier": 6 },
+            "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.6 fast mode at $30 input and $150 output per MTok."
+          },
+          {
+            "match": "Claude Opus 4.6",
+            "model": "claude-opus-4.6",
+            "set": { "fast_multiplier": 6 },
+            "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.6 fast mode at $30 input and $150 output per MTok."
+          },
+          { "match": "Claude Sonnet 4.6", "model": "claude-sonnet-4-6" },
+          { "match": "Claude Sonnet 4.5", "model": "claude-sonnet-4-5" },
+          { "match": "Claude Sonnet 4", "model": "claude-sonnet-4" },
+          { "match": "Claude Haiku 4.5", "model": "claude-haiku-4-5" }
+        ]
+      }
+    },
+    {
+      "id": "anthropic-fast-mode",
+      "name": "Claude Code fast mode markdown",
+      "url": "https://code.claude.com/docs/en/fast-mode.md",
+      "kind": "markdown-table",
+      "output": "reference",
+      "table_heading": "Understand the cost tradeoff"
+    },
+    {
+      "id": "openai-pricing",
+      "name": "OpenAI API pricing",
+      "url": "https://openai.com/api/pricing/",
+      "kind": "html-table",
+      "output": "reference"
+    },
+    {
+      "id": "gemini-pricing",
+      "name": "Gemini API pricing",
+      "url": "https://ai.google.dev/gemini-api/docs/pricing",
+      "kind": "html-table",
+      "output": "reference"
+    },
+    {
+      "id": "cursor-pricing",
+      "name": "Cursor pricing",
+      "url": "https://cursor.com/docs/models-and-pricing.md",
+      "kind": "markdown-table",
+      "output": "overrides",
+      "table_heading": "Auto pricing",
+      "extract": {
+        "mode": "label-rows",
+        "scope": "global",
+        "model": "cursor-auto",
+        "columns": {
+          "label": "Token type",
+          "price": "Price per 1M tokens"
+        },
+        "labels": {
+          "input": "Input + Cache Write",
+          "cache_write": "Input + Cache Write",
+          "output": "Output",
+          "cache_read": "Cache Read"
+        },
+        "defaults": {
+          "web_search": 0.01
+        },
+        "note": "Cursor Auto lists input plus cache write at $1.25/MTok, output at $6/MTok, and cache read at $0.25/MTok."
+      }
+    },
+    {
+      "id": "github-copilot-pricing",
+      "name": "GitHub Copilot models and pricing",
+      "url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md",
+      "kind": "markdown-table",
+      "output": "overrides",
+      "effective_from": "2026-06-01",
+      "extract": {
+        "mode": "model-rows",
+        "scope": "tool",
+        "tool": "copilot",
+        "columns": {
+          "model": "Model",
+          "input": "Input",
+          "cache_read": "Cached input",
+          "cache_write": "Cache write",
+          "output": "Output"
+        },
+        "rows": [
+          { "match": "GPT-4.1", "model": "gpt-4.1" },
+          { "match": "GPT-5 mini", "model": "gpt-5-mini" },
+          { "match": "GPT-5.2", "model": "gpt-5.2" },
+          { "match": "GPT-5.2-Codex", "model": "gpt-5.2-codex" },
+          { "match": "GPT-5.3-Codex", "model": "gpt-5.3-codex" },
+          { "match": "GPT-5.4", "model": "gpt-5.4" },
+          { "match": "GPT-5.4 mini", "model": "gpt-5.4-mini" },
+          { "match": "GPT-5.4 nano", "model": "gpt-5.4-nano" },
+          { "match": "GPT-5.5", "model": "gpt-5.5" },
+          { "match": "Claude Haiku 4.5", "model": "claude-haiku-4-5" },
+          { "match": "Claude Sonnet 4", "model": "claude-sonnet-4" },
+          { "match": "Claude Sonnet 4.5", "model": "claude-sonnet-4-5" },
+          { "match": "Claude Sonnet 4.6", "model": "claude-sonnet-4-6" },
+          { "match": "Claude Opus 4.5", "model": "claude-opus-4-5" },
+          { "match": "Claude Opus 4.6", "model": "claude-opus-4-6" },
+          { "match": "Claude Opus 4.7", "model": "claude-opus-4-7" },
+          { "match": "Gemini 2.5 Pro", "model": "gemini-2.5-pro" },
+          { "match": "Gemini 3 Flash", "model": "gemini-3-flash" },
+          { "match": "Gemini 3.1 Pro", "model": "gemini-3.1-pro" },
+          { "match": "Grok Code Fast 1", "model": "grok-code-fast-1" },
+          { "match": "Raptor mini", "model": "raptor-mini" },
+          { "match": "Goldeneye", "model": "goldeneye" }
+        ]
+      }
+    }
+  ]
+}

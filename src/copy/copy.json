@@ -178,7 +178,7 @@
         "action": "Download"
       },
       "litellm_prices": {
-        "name": "LiteLLM prices",
+        "name": "Pricing books",
         "action": "Download"
       },
       "clear_data": {
@@ -187,8 +187,9 @@
       }
     },
     "values": {
-      "local_snapshot": "Local snapshot",
-      "embedded_snapshot": "Embedded snapshot",
+      "local_snapshot": "Local price books",
+      "legacy_snapshot": "Legacy snapshot",
+      "embedded_snapshot": "Embedded price books",
       "delete_archive_then_rebuild": "Delete archive.db, then rebuild",
       "build_archive_from_history": "Build archive.db from local history"
     },
@@ -199,6 +200,11 @@
       "rates_data": "Rates data",
       "pricing_data": "Pricing data",
       "rates_source": "Rates source"
+    },
+    "links": {
+      "published_rates": "Published rates",
+      "pricing_upstream": "Pricing upstream",
+      "pricing_overrides": "Pricing overrides"
     }
   },
   "session": {
@@ -232,6 +238,7 @@
     "folder": "Folder",
     "file": "File",
     "source": "Source",
+    "url": "URL",
     "write": "Write",
     "after": "After",
     "delete": "Delete",
@@ -249,15 +256,15 @@
     "reset": "Reset",
     "reimporting": "Reimporting",
     "download_rates_title": "Download rates.json?",
-    "download_prices_title": "Download LiteLLM prices?",
+    "download_prices_title": "Download pricing books?",
     "rates_file": "rates.json",
-    "pricing_file": "pricing-snapshot.json",
+    "pricing_file": "pricing-upstream.json + pricing-overrides.json",
     "rates_source": "Published Token Use currency snapshot",
-    "prices_source": "LiteLLM model price table",
+    "prices_source": "Published Token Use pricing books",
     "rates_effect": "display rates update immediately",
     "prices_effect": "new prices apply to newly imported calls",
     "download_latest_rates_message": "This will download the latest published Token Use currency snapshot into your local config directory.",
-    "download_latest_prices_message": "This will download the latest LiteLLM model price table into your local config directory.",
+    "download_latest_prices_message": "This will download the latest pricing books into your local config directory.",
     "clear_data_message": "Token Use will delete archive.db, rebuild it from local tool history, and keep config, rates, pricing, and reports. Rows whose source files are gone will not return.",
     "current_period_filters_apply": "report period & project scope apply",
     "hidden_folders": "hidden folders are not shown",
@@ -439,7 +446,7 @@
     "help_flag": "Print this help message",
     "version_flag": "Print version information",
     "list_projects_flag": "Print the ingested project inventory and exit",
-    "refresh_prices_flag": "Refresh embedded pricing snapshot (requires refresh-prices feature)",
+    "refresh_prices_flag": "Refresh embedded pricing books (requires refresh-prices feature)",
     "generate_currency_flag": "Regenerate embedded currency rates (requires refresh-currency feature)",
     "launch_dashboard": "Run with no flags to launch the interactive dashboard.",
     "archive_failed_raw_ingest": "Archive failed · raw ingest ({error})",
@@ -650,9 +657,9 @@
     "rates_refreshed": "Rates refreshed · {date}",
     "rates_refresh_failed": "Rates refresh failed · {error}",
     "rates_download_unavailable": "Rates download unavailable in this build",
-    "litellm_prices_refreshed_restart": "LiteLLM prices refreshed · restart to apply",
-    "litellm_refresh_failed": "LiteLLM refresh failed · {error}",
-    "litellm_download_unavailable": "LiteLLM download unavailable in this build",
+    "litellm_prices_refreshed": "Pricing books refreshed",
+    "litellm_refresh_failed": "Pricing refresh failed · {error}",
+    "litellm_download_unavailable": "Pricing download unavailable in this build",
     "config_failed_defaults": "Config failed · defaults ({error})",
     "currency_rates_failed_embedded": "Currency rates failed · embedded ({error})",
     "legacy_cache_imported_records": "Legacy cache imported · {records} records",

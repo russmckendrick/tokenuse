@@ -1,0 +1,576 @@
+{
+  "_metadata": {
+    "checked_at": "2026-05-06",
+    "fields": {
+      "cache_read": "USD per cache read token",
+      "cache_write": "USD per cache write token",
+      "input": "USD per input token",
+      "output": "USD per output token",
+      "web_search": "USD per web search request"
+    },
+    "schema": "tokenuse pricing-overrides.v1",
+    "source": "Curated official-source corrections and tool-specific pricing layered over pricing-upstream.json"
+  },
+  "aliases": {
+    "anthropic-auto": "claude-sonnet-4-6",
+    "auto": "cursor-auto",
+    "claude-haiku": "claude-haiku-4-5",
+    "claude-opus": "claude-opus-4-7",
+    "claude-sonnet": "claude-sonnet-4-6",
+    "default": "cursor-auto",
+    "openai-auto": "gpt-5"
+  },
+  "fallback": "claude-sonnet-4-6",
+  "models": {
+    "claude-haiku-4-5": {
+      "cache_read": 1.0000000000000001e-7,
+      "cache_write": 1.25e-6,
+      "input": 1e-6,
+      "output": 5e-6,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "source_name": "Claude pricing markdown",
+        "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
+      },
+      "web_search": 0.01
+    },
+    "claude-opus-4-6": {
+      "cache_read": 5e-7,
+      "cache_write": 6.25e-6,
+      "fast_multiplier": 6.0,
+      "input": 5e-6,
+      "output": 0.000025,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.6 fast mode at $30 input and $150 output per MTok.",
+        "source_name": "Claude pricing markdown",
+        "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
+      },
+      "web_search": 0.01
+    },
+    "claude-opus-4-6-20260205": {
+      "cache_read": 5e-7,
+      "cache_write": 6.25e-6,
+      "fast_multiplier": 6.0,
+      "input": 5e-6,
+      "output": 0.000025,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.6 fast mode at $30 input and $150 output per MTok.",
+        "source_name": "Claude pricing markdown",
+        "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
+      },
+      "web_search": 0.01
+    },
+    "claude-opus-4-7": {
+      "cache_read": 5e-7,
+      "cache_write": 6.25e-6,
+      "input": 5e-6,
+      "output": 0.000025,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "source_name": "Claude pricing markdown",
+        "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
+      },
+      "web_search": 0.01
+    },
+    "claude-opus-4.6": {
+      "cache_read": 5e-7,
+      "cache_write": 6.25e-6,
+      "fast_multiplier": 6.0,
+      "input": 5e-6,
+      "output": 0.000025,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.6 fast mode at $30 input and $150 output per MTok.",
+        "source_name": "Claude pricing markdown",
+        "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
+      },
+      "web_search": 0.01
+    },
+    "claude-sonnet-4": {
+      "cache_read": 3e-7,
+      "cache_write": 3.75e-6,
+      "input": 3e-6,
+      "output": 0.000015,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "source_name": "Claude pricing markdown",
+        "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
+      },
+      "web_search": 0.01
+    },
+    "claude-sonnet-4-5": {
+      "cache_read": 3e-7,
+      "cache_write": 3.75e-6,
+      "input": 3e-6,
+      "output": 0.000015,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "source_name": "Claude pricing markdown",
+        "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
+      },
+      "web_search": 0.01
+    },
+    "claude-sonnet-4-6": {
+      "cache_read": 3e-7,
+      "cache_write": 3.75e-6,
+      "input": 3e-6,
+      "output": 0.000015,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "source_name": "Claude pricing markdown",
+        "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
+      },
+      "web_search": 0.01
+    },
+    "cursor-auto": {
+      "cache_read": 2.5e-7,
+      "cache_write": 1.25e-6,
+      "input": 1.25e-6,
+      "output": 6e-6,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "note": "Cursor Auto lists input plus cache write at $1.25/MTok, output at $6/MTok, and cache read at $0.25/MTok.",
+        "source_name": "Cursor pricing",
+        "source_url": "https://cursor.com/docs/models-and-pricing.md"
+      },
+      "web_search": 0.01
+    },
+    "gemini-2.5-flash": {
+      "cache_read": 3e-8,
+      "cache_write": 0,
+      "input": 3e-7,
+      "output": 2.5e-6,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "source_name": "Gemini API pricing",
+        "source_url": "https://ai.google.dev/gemini-api/docs/pricing"
+      },
+      "web_search": 0.01
+    },
+    "gemini-2.5-flash-lite": {
+      "cache_read": 1e-8,
+      "cache_write": 0,
+      "input": 1e-7,
+      "output": 4e-7,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "source_name": "Gemini API pricing",
+        "source_url": "https://ai.google.dev/gemini-api/docs/pricing"
+      },
+      "web_search": 0.01
+    },
+    "gemini-2.5-pro": {
+      "cache_read": 1.25e-7,
+      "cache_write": 0,
+      "input": 1.25e-6,
+      "output": 0.00001,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "source_name": "Gemini API pricing",
+        "source_url": "https://ai.google.dev/gemini-api/docs/pricing"
+      },
+      "web_search": 0.01
+    },
+    "gpt-5": {
+      "cache_read": 1.25e-7,
+      "cache_write": 0,
+      "input": 1.25e-6,
+      "output": 0.00001,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "source_name": "OpenAI API pricing",
+        "source_url": "https://openai.com/api/pricing/"
+      },
+      "web_search": 0.01
+    },
+    "gpt-5-chat": {
+      "cache_read": 1.25e-7,
+      "cache_write": 0,
+      "input": 1.25e-6,
+      "output": 0.00001,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "source_name": "OpenAI API pricing",
+        "source_url": "https://openai.com/api/pricing/"
+      },
+      "web_search": 0.01
+    },
+    "gpt-5-chat-latest": {
+      "cache_read": 1.25e-7,
+      "cache_write": 0,
+      "input": 1.25e-6,
+      "output": 0.00001,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "source_name": "OpenAI API pricing",
+        "source_url": "https://openai.com/api/pricing/"
+      },
+      "web_search": 0.01
+    },
+    "gpt-5-mini": {
+      "cache_read": 2.5e-8,
+      "cache_write": 0,
+      "input": 2.5e-7,
+      "output": 2e-6,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "source_name": "OpenAI API pricing",
+        "source_url": "https://openai.com/api/pricing/"
+      },
+      "web_search": 0.01
+    },
+    "gpt-5-mini-2025-08-07": {
+      "cache_read": 2.5e-8,
+      "cache_write": 0,
+      "input": 2.5e-7,
+      "output": 2e-6,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "source_name": "OpenAI API pricing",
+        "source_url": "https://openai.com/api/pricing/"
+      },
+      "web_search": 0.01
+    },
+    "gpt-5-nano": {
+      "cache_read": 5e-9,
+      "cache_write": 0,
+      "input": 5e-8,
+      "output": 4e-7,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "source_name": "OpenAI API pricing",
+        "source_url": "https://openai.com/api/pricing/"
+      },
+      "web_search": 0.01
+    },
+    "gpt-5-nano-2025-08-07": {
+      "cache_read": 5e-9,
+      "cache_write": 0,
+      "input": 5e-8,
+      "output": 4e-7,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "source_name": "OpenAI API pricing",
+        "source_url": "https://openai.com/api/pricing/"
+      },
+      "web_search": 0.01
+    },
+    "gpt-5.1": {
+      "cache_read": 1.25e-7,
+      "cache_write": 0,
+      "input": 1.25e-6,
+      "output": 0.00001,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "source_name": "OpenAI API pricing",
+        "source_url": "https://openai.com/api/pricing/"
+      },
+      "web_search": 0.01
+    },
+    "gpt-5.1-chat": {
+      "cache_read": 1.25e-7,
+      "cache_write": 0,
+      "input": 1.25e-6,
+      "output": 0.00001,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "source_name": "OpenAI API pricing",
+        "source_url": "https://openai.com/api/pricing/"
+      },
+      "web_search": 0.01
+    },
+    "gpt-5.1-chat-latest": {
+      "cache_read": 1.25e-7,
+      "cache_write": 0,
+      "input": 1.25e-6,
+      "output": 0.00001,
+      "provenance": {
+        "checked_at": "2026-05-06",
+        "source_name": "OpenAI API pricing",
+        "source_url": "https://openai.com/api/pricing/"
+      },
+      "web_search": 0.01
+    }
+  },
+  "tool_aliases": {
+    "copilot": {
+      "Claude Haiku 4.5": "claude-haiku-4-5",
+      "Claude Opus 4.5": "claude-opus-4-5",
+      "Claude Opus 4.6": "claude-opus-4-6",
+      "Claude Opus 4.7": "claude-opus-4-7",
+      "Claude Sonnet 4": "claude-sonnet-4",
+      "Claude Sonnet 4.5": "claude-sonnet-4-5",
+      "Claude Sonnet 4.6": "claude-sonnet-4-6",
+      "GPT-4.1": "gpt-4.1",
+      "GPT-5 mini": "gpt-5-mini",
+      "GPT-5.2": "gpt-5.2",
+      "GPT-5.2-Codex": "gpt-5.2-codex",
+      "GPT-5.3-Codex": "gpt-5.3-codex",
+      "GPT-5.4": "gpt-5.4",
+      "GPT-5.4 mini": "gpt-5.4-mini",
+      "GPT-5.4 nano": "gpt-5.4-nano",
+      "GPT-5.5": "gpt-5.5",
+      "Gemini 2.5 Pro": "gemini-2.5-pro",
+      "Gemini 3 Flash": "gemini-3-flash",
+      "Gemini 3.1 Pro": "gemini-3.1-pro",
+      "Goldeneye": "goldeneye",
+      "Grok Code Fast 1": "grok-code-fast-1",
+      "Raptor mini": "raptor-mini"
+    }
+  },
+  "tool_models": {
+    "copilot": {
+      "claude-haiku-4-5": {
+        "cache_read": 1.0000000000000001e-7,
+        "cache_write": 1.25e-6,
+        "effective_from": "2026-06-01",
+        "input": 1e-6,
+        "output": 5e-6,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "claude-opus-4-5": {
+        "cache_read": 5e-7,
+        "cache_write": 6.25e-6,
+        "effective_from": "2026-06-01",
+        "input": 5e-6,
+        "output": 0.000025,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "claude-opus-4-6": {
+        "cache_read": 5e-7,
+        "cache_write": 6.25e-6,
+        "effective_from": "2026-06-01",
+        "input": 5e-6,
+        "output": 0.000025,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "claude-opus-4-7": {
+        "cache_read": 5e-7,
+        "cache_write": 6.25e-6,
+        "effective_from": "2026-06-01",
+        "input": 5e-6,
+        "output": 0.000025,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "claude-sonnet-4": {
+        "cache_read": 3e-7,
+        "cache_write": 3.75e-6,
+        "effective_from": "2026-06-01",
+        "input": 3e-6,
+        "output": 0.000015,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "claude-sonnet-4-5": {
+        "cache_read": 3e-7,
+        "cache_write": 3.75e-6,
+        "effective_from": "2026-06-01",
+        "input": 3e-6,
+        "output": 0.000015,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "claude-sonnet-4-6": {
+        "cache_read": 3e-7,
+        "cache_write": 3.75e-6,
+        "effective_from": "2026-06-01",
+        "input": 3e-6,
+        "output": 0.000015,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "gemini-2.5-pro": {
+        "cache_read": 1.25e-7,
+        "effective_from": "2026-06-01",
+        "input": 1.25e-6,
+        "output": 0.00001,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "gemini-3-flash": {
+        "cache_read": 5.0000000000000004e-8,
+        "effective_from": "2026-06-01",
+        "input": 5e-7,
+        "output": 3e-6,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "gemini-3.1-pro": {
+        "cache_read": 2.0000000000000002e-7,
+        "effective_from": "2026-06-01",
+        "input": 2e-6,
+        "output": 0.000012,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "goldeneye": {
+        "cache_read": 1.25e-7,
+        "effective_from": "2026-06-01",
+        "input": 1.25e-6,
+        "output": 0.00001,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "gpt-4.1": {
+        "cache_read": 5e-7,
+        "effective_from": "2026-06-01",
+        "input": 2e-6,
+        "output": 8e-6,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "gpt-5-mini": {
+        "cache_read": 2.5000000000000002e-8,
+        "effective_from": "2026-06-01",
+        "input": 2.5e-7,
+        "output": 2e-6,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "gpt-5.2": {
+        "cache_read": 1.75e-7,
+        "effective_from": "2026-06-01",
+        "input": 1.75e-6,
+        "output": 0.000014,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "gpt-5.2-codex": {
+        "cache_read": 1.75e-7,
+        "effective_from": "2026-06-01",
+        "input": 1.75e-6,
+        "output": 0.000014,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "gpt-5.3-codex": {
+        "cache_read": 1.75e-7,
+        "effective_from": "2026-06-01",
+        "input": 1.75e-6,
+        "output": 0.000014,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "gpt-5.4": {
+        "cache_read": 2.5e-7,
+        "effective_from": "2026-06-01",
+        "input": 2.5e-6,
+        "output": 0.000015,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "gpt-5.4-mini": {
+        "cache_read": 7.5e-8,
+        "effective_from": "2026-06-01",
+        "input": 7.5e-7,
+        "output": 4.5e-6,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "gpt-5.4-nano": {
+        "cache_read": 2e-8,
+        "effective_from": "2026-06-01",
+        "input": 2.0000000000000002e-7,
+        "output": 1.25e-6,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "gpt-5.5": {
+        "cache_read": 5e-7,
+        "effective_from": "2026-06-01",
+        "input": 5e-6,
+        "output": 0.00003,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "grok-code-fast-1": {
+        "cache_read": 2e-8,
+        "effective_from": "2026-06-01",
+        "input": 2.0000000000000002e-7,
+        "output": 1.5e-6,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "raptor-mini": {
+        "cache_read": 2.5000000000000002e-8,
+        "effective_from": "2026-06-01",
+        "input": 2.5e-7,
+        "output": 2e-6,
+        "provenance": {
+          "checked_at": "2026-05-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      }
+    }
+  }
+}
