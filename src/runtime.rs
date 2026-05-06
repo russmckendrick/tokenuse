@@ -90,7 +90,7 @@ pub fn load_startup() -> Result<RuntimeState> {
                     source,
                     parts_to_status(parts, StatusTone::Info),
                     delay,
-                    RefreshSource::Archive(paths.clone()),
+                    RefreshSource::Archive(Box::new(paths.clone())),
                 )
             }
             Err(archive_err) => match ingest::load() {

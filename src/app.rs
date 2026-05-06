@@ -673,7 +673,7 @@ pub struct Refresher {
 
 #[derive(Clone)]
 pub enum RefreshSource {
-    Archive(ConfigPaths),
+    Archive(Box<ConfigPaths>),
     RawIngest,
 }
 
@@ -801,7 +801,7 @@ impl Refresher {
                     Err(mpsc::RecvTimeoutError::Disconnected) => return,
                 };
                 let result = match &source {
-                    RefreshSource::Archive(paths) => crate::archive::sync_and_load(paths),
+                    RefreshSource::Archive(paths) => crate::archive::sync_and_load(paths.as_ref()),
                     RefreshSource::RawIngest => crate::ingest::load(),
                 };
                 if result_tx.send(RefreshOutcome { kind, result }).is_err() {
@@ -2175,7 +2175,7 @@ impl App {
 
                 self.refresher = Some(Refresher::spawn(
                     archive::SYNC_INTERVAL,
-                    RefreshSource::Archive(self.paths.clone()),
+                    RefreshSource::Archive(Box::new(self.paths.clone())),
                 ));
             }
             Err(e) => {
@@ -2185,7 +2185,7 @@ impl App {
                 );
                 self.refresher = Some(Refresher::spawn(
                     archive::SYNC_INTERVAL,
-                    RefreshSource::Archive(self.paths.clone()),
+                    RefreshSource::Archive(Box::new(self.paths.clone())),
                 ));
             }
         }
