@@ -35,7 +35,7 @@ jobs:
         run: cargo run --features refresh-prices -- --refresh-prices
 
       - name: "🧪 Validate pricing refresh"
-        run: cargo test pricing::
+        run: "cargo test pricing::"
 
       - name: "🚀 Commit updated pricing books"
         run: |
