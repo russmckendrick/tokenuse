@@ -49,7 +49,7 @@ cargo check
 
 ## Generated Pricing And Currency Data
 
-Refresh the embedded LiteLLM-derived pricing snapshot:
+Refresh the embedded pricing books:
 
 ```bash
 cargo run -- --refresh-prices
@@ -61,8 +61,10 @@ Refresh the checked-in Frankfurter-derived currency snapshot:
 cargo run -- --generate-currency-json
 ```
 
-Do not hand-edit `src/pricing/snapshot.json` or `currency/rates.json`; use the refresh commands so generated data stays consistent.
+Do not hand-edit `src/pricing/books/pricing-upstream.json`, `src/pricing/snapshot.json`, or `currency/rates.json`; use the refresh commands so generated data stays consistent. Curated pricing overrides and source extraction rules live in `src/pricing/books/pricing-overrides.json` and `src/pricing/books/pricing-sources.json`.
+
+The pricing books are also refreshed by `.github/workflows/refresh-pricing.yml` weekly and on manual dispatch. The currency snapshot uses `.github/workflows/refresh-currency.yml` weekly and on manual dispatch.
 
 ## No-Download Builds
 
-Default TUI and desktop builds include confirmed Config-page downloads for `rates.json` and `pricing-snapshot.json`. Build with `--no-default-features` when you need a no-download binary; those builds keep ingestion local-only and report Config-page downloads as unavailable.
+Default TUI and desktop builds include confirmed Config-page downloads for `rates.json`, `pricing-upstream.json`, and `pricing-overrides.json`. Build with `--no-default-features` when you need a no-download binary; those builds keep ingestion local-only and report Config-page downloads as unavailable.

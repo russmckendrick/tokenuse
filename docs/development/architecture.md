@@ -8,7 +8,7 @@
 flowchart TD
     A[cargo run] --> B[handle CLI flags]
     B -->|--list-projects| C[sync archive and print inventory]
-    B -->|--refresh-prices| D[refresh embedded pricing snapshot]
+    B -->|--refresh-prices| D[refresh embedded pricing books]
     B -->|--generate-currency-json| L[generate embedded currency snapshot]
     B -->|no flag| M[load config.json and rates.json]
     M --> N[open archive.db]
@@ -28,7 +28,7 @@ flowchart TD
 
 The durable archive lives at `<config dir>/tokenuse/archive.db`. If it already has rows, startup loads it immediately and queues an incremental background sync so the dashboard opens without reparsing every source. If the archive is empty, startup imports the legacy `~/.cache/tokenuse/ingest-cache.json` snapshot when present, performs one synchronous source sync, then renders from the archive. If the archive cannot be opened or migrated, the app falls back to raw `ingest::load()` for that run.
 
-Both Config pages can also clear local usage data after confirmation. That path deletes `archive.db`, recreates the schema, and immediately syncs local tool sources so per-source fingerprints are rebuilt from scratch. Config files, rates, pricing snapshots, and generated reports are kept; archive-only history is lost if the original source files are no longer present.
+Both Config pages can also clear local usage data after confirmation. That path deletes `archive.db`, recreates the schema, and immediately syncs local tool sources so per-source fingerprints are rebuilt from scratch. Config files, rates, pricing books, legacy pricing snapshots, and generated reports are kept; archive-only history is lost if the original source files are no longer present.
 
 The startup loader lives in `src/runtime.rs` so both frontends use the same config, currency, archive, fallback, and background refresh setup. The desktop app stores an `App` instance behind Tauri managed state and exposes narrow commands for filters, session drill-down, config actions, shortcuts, refresh, reports, desktop settings, and the tray popover. It also runs a small backend monitor that continues calling `App::poll_reload()` while the webview is hidden, drains queued background usage alerts, and sends native notifications from Rust. See [Desktop app usage](../guides/desktop-usage.md).
 
@@ -51,7 +51,7 @@ Every adapter emits `ParsedCall` from `src/tools/types.rs`. The important fields
 | `cached_input_tokens` | Cached input reported inside `input_tokens`, currently used for OpenAI-style records |
 | `reasoning_tokens` | Reasoning bucket when exposed or estimated |
 | `web_search_requests` | Server-side web search request count when exposed |
-| `cost_usd` | Calculated from the configured pricing snapshot at import time |
+| `cost_usd` | Calculated from the configured pricing table at import time |
 | `tools`, `bash_commands` | Tool call names and split shell commands |
 | `timestamp`, `session_id`, `project` | Aggregation and filtering keys |
 | `dedup_key` | Per-call key used by the shared run-level dedup set |
@@ -129,7 +129,7 @@ flowchart LR
 - **Deep Dive** (`Page::DeepDive`): analysis workbench with every panel listed under [Aggregation](#aggregation), including a larger chronological activity trend, top sessions, model efficiency, and core tool counts that are not on Overview.
 - **Usage** (`Page::Usage`): per-tool 24-hour console with an activity pulse, optional plan-side rate limit gauges, and top-3 models per tool. Built from `Ingested::limits` over the same `ParsedCall` set plus `LimitSnapshot` records. Entering Usage normalizes the visible period to `Period::Today`, the rolling 24-hour window; project filters are deliberately ignored, while sort mode controls section/model order. See [TUI usage](../guides/tui-usage.md#usage-page).
 - **Session** (`Page::Session`): drill-down for one `tool:session_id`. Rendered from `SessionDetailView`, computed by filtering `Ingested.calls` by `session_key(call) == key` and sorting calls with the active sort mode. Live data shows per-call timestamp, model, cost, in/out tokens, cache, tools used, and a 120-char single-line prompt snippet; selecting a call opens a modal with the full stored prompt plus reasoning/web-search counts and bash commands. Sample mode shows a privacy note since per-call records are not bundled.
-- **Config** (`Page::Config`): currency override, local data refresh actions (rates, LiteLLM pricing), and clear-data archive rebuild. The desktop frontend adds native-only controls for open-at-login and Dock/taskbar visibility on its Config page without changing the TUI state machine.
+- **Config** (`Page::Config`): currency override, local data refresh actions (rates, pricing books), and clear-data archive rebuild. The desktop frontend adds native-only controls for open-at-login and Dock/taskbar visibility on its Config page without changing the TUI state machine.
 - **Project picker, Currency picker, Session picker** (`*Modal` structs): each holds `options`, a typeable `query`, and a `filtered: Vec<usize>` mapping; all three share the same case-insensitive substring filter pattern. The project picker pins `All` regardless of query.
 - **Report picker** (`ExportModal`): report chooser for format, period, project/all-projects scope, and redaction. It defaults to the current period and project, always includes all tools, and writes HTML, PDF, SVG, PNG, JSON, Excel, or a CSV folder.
 - **Report folder picker** (`FolderPickerModal`): directory-only picker rooted at the current report folder. `Use this folder` updates `App::export_dir` for the running session; `Esc` cancels without saving to `config.json`.
@@ -174,23 +174,27 @@ Session counts are tool-qualified, so `claude-code:s1` and `codex:s1` remain sep
 
 ## Pricing
 
-`src/pricing/snapshot.json` is embedded at compile time. At runtime, `PriceTable::configured()` first looks for a local `pricing-snapshot.json` in the tokenuse config directory, then falls back to the embedded snapshot.
+Pricing is embedded as two compile-time books under `src/pricing/books/`. At runtime, `PriceTable::configured()` first looks for local `pricing-upstream.json` and `pricing-overrides.json` in the tokenuse config directory, then falls back to the embedded books. A legacy local `pricing-snapshot.json` is still accepted for older installs.
 
 ```mermaid
 flowchart LR
-    A[raw model name] --> B[canonicalize]
-    B --> C{exact model?}
-    C -->|yes| D[price row]
-    C -->|no| E{alias?}
-    E -->|yes| D
-    E -->|no| F{prefix match?}
-    F -->|yes| D
-    F -->|no| G[fallback model]
-    D --> H[cost_usd]
-    G --> H
+    A[tool + raw model + timestamp] --> B[canonicalize]
+    B --> C{tool alias?}
+    C -->|yes| D[tool target]
+    C -->|no| E[model target]
+    D --> F{tool-scoped effective row?}
+    E --> F
+    F -->|yes| G[price row]
+    F -->|no| H{global alias or row?}
+    H -->|yes| G
+    H -->|no| I{prefix match?}
+    I -->|yes| G
+    I -->|no| J[fallback model]
+    G --> K[cost_usd]
+    J --> K
 ```
 
-Canonicalization lowercases model names, drops a vendor prefix such as `anthropic/`, strips an `@pin` suffix, and removes trailing `-YYYYMMDD` date stamps. Aliases such as `anthropic-auto` and `openai-auto` resolve through the snapshot; `cursor-auto` is a direct Cursor Auto pricing row.
+Canonicalization lowercases model names, drops a vendor prefix such as `anthropic/`, strips an `@pin` suffix, and removes trailing `-YYYYMMDD` date stamps. Aliases such as `anthropic-auto` and `openai-auto` resolve through the overrides book; `cursor-auto` is a direct Cursor Auto pricing row. Tool aliases are scoped, so Copilot display names do not affect Codex/OpenAI/Claude/Gemini calls.
 
 The pricing formula is:
 
@@ -204,13 +208,13 @@ cost = multiplier * (
 )
 ```
 
-Claude Opus fast mode uses the model row's `fast_multiplier` when present. Cache-rate labels in the UI are derived from `cache_read_rate / input_rate`, not from observed cache-hit percentage. The maintainer CLI refresh command fetches LiteLLM pricing, filters to relevant model families, adds local aliases and official cache-rate overrides, and rewrites the embedded snapshot:
+Claude Opus fast mode uses the model row's `fast_multiplier` when present. Cache-rate labels in the UI are derived from `cache_read_rate / input_rate`, not from observed cache-hit percentage. The maintainer CLI refresh command reads `pricing-sources.json`, fetches configured upstream feeds and official-source tables, then rewrites both checked-in books:
 
 ```bash
 cargo run -- --refresh-prices
 ```
 
-The TUI and desktop configuration pages can also download the LiteLLM-derived snapshot into the local config directory after confirmation. Because the archive stores `cost_usd` at import time, refreshed pricing applies to newly imported calls; existing historical rows keep their original USD cost. Builds made with `--no-default-features` compile without these download actions.
+The TUI and desktop configuration pages can also download the published pricing books into the local config directory after confirmation and reload pricing in-process. Because the archive stores `cost_usd` at import time, refreshed pricing applies to newly imported calls; existing historical rows keep their original USD cost. Builds made with `--no-default-features` compile without these download actions.
 
 See [Pricing and cache rates](pricing.md) for provider source quotes, current cache-read multipliers, and parser caveats.
 
@@ -241,12 +245,14 @@ Runtime settings live in the platform config directory under `tokenuse`:
 | `config.json` | User overrides, currently the display currency |
 | `archive.db` | Durable local usage archive loaded by the dashboard |
 | `rates.json` | Locally downloaded copy of the published currency snapshot |
-| `pricing-snapshot.json` | Locally downloaded LiteLLM-derived pricing snapshot |
+| `pricing-upstream.json` | Locally downloaded broad pricing book |
+| `pricing-overrides.json` | Locally downloaded official overrides and aliases |
+| `pricing-snapshot.json` | Legacy local pricing snapshot, accepted for older installs |
 | `reports/` | Fallback output directory when no Downloads folder can be resolved |
 
 USD is the default display currency. The dashboard still stores calculated spend as `cost_usd`; aggregation sums USD and formats the final display values through the active currency table.
 
-The clear-data Config action deletes and recreates `archive.db`, then reimports local tool history immediately. Rebuilt rows are priced with the current configured pricing table. It intentionally does not delete `config.json`, local `rates.json`, local `pricing-snapshot.json`, or generated reports.
+The clear-data Config action deletes and recreates `archive.db`, then reimports local tool history immediately. Rebuilt rows are priced with the current configured pricing table. It intentionally does not delete `config.json`, local `rates.json`, local pricing books, legacy `pricing-snapshot.json`, or generated reports.
 
 `currency/rates.json` is the embedded fallback snapshot. The TUI and desktop configuration pages can download the latest published copy after confirmation from:
 
@@ -256,7 +262,7 @@ https://raw.githubusercontent.com/russmckendrick/tokenuse/refs/heads/main/curren
 
 That local rates download writes `<config dir>/tokenuse/rates.json` and reloads the currency table immediately. Builds made with `--no-default-features` compile without this download action.
 
-The snapshot is generated from Frankfurter's USD-based v2 rates endpoint, filtered to fiat display currencies, and refreshed by a nightly GitHub Action:
+The snapshot is generated from Frankfurter's USD-based v2 rates endpoint, filtered to fiat display currencies, and refreshed by a weekly GitHub Action:
 
 ```bash
 cargo run -- --generate-currency-json

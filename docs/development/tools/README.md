@@ -56,7 +56,7 @@ pub trait ToolAdapter: Send + Sync {
 
 ## Pricing
 
-`src/pricing/snapshot.json` is an embedded LiteLLM-derived price table with local official-price overrides for known cache-rate gaps. Usage ingestion never fetches pricing; the Config page can download a local `pricing-snapshot.json` override only after confirmation. See [Pricing and cache rates](../pricing.md) for source evidence and tool-specific caveats.
+Pricing is embedded as two books: `src/pricing/books/pricing-upstream.json` for broad upstream coverage and `src/pricing/books/pricing-overrides.json` for official rows, aliases, tool-scoped rows, provenance, and effective dates. Usage ingestion never fetches pricing; the Config page can download local `pricing-upstream.json` and `pricing-overrides.json` books only after confirmation. See [Pricing and cache rates](../pricing.md) for source evidence and tool-specific caveats.
 
 ```text
 cost = multiplier * (
@@ -68,9 +68,9 @@ cost = multiplier * (
 )
 ```
 
-Model lookup canonicalizes model names, resolves aliases such as `anthropic-auto` and `openai-auto`, then falls back to a default Sonnet row if no match exists. `cursor-auto` is a direct Cursor Auto pricing row. Claude Opus fast mode applies the row's `fast_multiplier`.
+Model lookup canonicalizes model names, resolves tool-scoped aliases first, applies effective dates, then falls back through global aliases and prefix matches to a default Sonnet row. `cursor-auto` is a direct Cursor Auto pricing row. Claude Opus fast mode applies the row's `fast_multiplier`.
 
-Refresh the embedded maintainer snapshot with:
+Refresh the embedded maintainer books with:
 
 ```bash
 cargo run -- --refresh-prices

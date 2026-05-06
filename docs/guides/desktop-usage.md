@@ -20,7 +20,7 @@ The macOS desktop app also ships as a signed and notarized Apple Silicon DMG. Li
 - **Session**: per-call session drill-down with clickable rows for full stored prompt, tool, command, and token metadata.
 - **Usage**: per-tool consoles with 24-hour activity pulses, call/token/cost summaries, plan limit gauges when available, and top model bars. Opening this tab automatically selects 24 Hours so the filter row matches the console window.
 - Model tables show observed cache-hit percentage separately from cache-read price rate. Session call details show cache read/write price rates for the call model.
-- **Config**: currency selection, desktop behavior toggles, explicit Windows/Linux desktop update checks, confirmed local downloads for currency and pricing snapshots, and a confirmed clear-data action that rebuilds the archive.
+- **Config**: currency selection, desktop behavior toggles, explicit Windows/Linux desktop update checks, confirmed local downloads for currency and pricing books, and a confirmed clear-data action that rebuilds the archive.
 
 The desktop header mirrors the TUI filters: period, tool, sort mode, and project. In-window keyboard shortcuts are resolved through the same embedded keymap as the TUI; sort mode can be changed from the header or with `g`, and cycles between spend, latest date, and token use. `Shift-D` toggles between live and bundled sample data. The app polls snapshots in the background so completed refreshes appear without blocking the UI.
 
@@ -71,7 +71,7 @@ On Windows and Linux, the Config tab also includes an explicit update check agai
 
 Use the refresh button or keyboard shortcut `r` to sync the archive. Refreshes use the same background archive refresher as the TUI and keep the previous data visible if a sync fails.
 
-The Config tab's clear-data action shows a native warning, deletes `archive.db`, and immediately reimports from local tool history. Config, rates, pricing snapshots, and reports are kept. Archive-only rows disappear if the original source files are gone, and rebuilt rows use the current configured pricing.
+The Config tab's clear-data action shows a native warning, deletes `archive.db`, and immediately reimports from local tool history. Config, rates, pricing books, legacy pricing snapshots, and reports are kept. Archive-only rows disappear if the original source files are gone, and rebuilt rows use the current configured pricing.
 
 If sample data is selected manually with `Shift-D`, refreshes update the cached live data without switching the visible dashboard back until `Shift-D` is pressed again.
 
@@ -94,7 +94,11 @@ The desktop app and TUI share the platform config directory under `tokenuse`:
 | `config.json` | User overrides, display currency, background alerts, and desktop preferences |
 | `archive.db` | Durable local usage archive |
 | `rates.json` | Optional local currency snapshot |
-| `pricing-snapshot.json` | Optional local LiteLLM-derived pricing snapshot |
+| `pricing-upstream.json` | Optional local broad pricing book |
+| `pricing-overrides.json` | Optional local official overrides and aliases |
+| `pricing-snapshot.json` | Legacy local pricing snapshot |
 | `reports/` | Fallback report directory |
 
-Changing currency, refreshing or clearing the archive, or downloading local rates/pricing from the desktop app affects the same data the TUI reads.
+Changing currency, refreshing or clearing the archive, or downloading local rates/pricing books from the desktop app affects the same data the TUI reads.
+
+The Config page shows links for the published currency snapshot and both pricing books beside the download rows, so users can inspect the files before downloading them locally. The pricing row also shows the active book source and its latest checked/generated date.

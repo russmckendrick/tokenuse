@@ -6,6 +6,11 @@ Changes that should be included in the next release go here. Keep this file curr
 
 - Added cache-read price-rate visibility to model tables and session call details, keeping observed cache-hit percentages separate from pricing multipliers.
 - Updated embedded pricing generation for current Claude, OpenAI/Codex, Cursor Auto, and Gemini cache-read rates, including Cursor Auto's direct 20% cache-read row.
+- Split pricing into upstream and override books, moved official-source pricing rules into JSON config, and added GitHub Copilot usage-based pricing gated to June 1, 2026.
+- Added a scheduled/manual GitHub Actions workflow to refresh and publish generated pricing books.
+- Changed the generated currency snapshot workflow from nightly to weekly.
+- Added published rates and pricing book links to the TUI and desktop Config pages.
+- Added the active pricing book date to the TUI and desktop Config pages.
 
 ## Notes
 
