@@ -19,6 +19,7 @@ use crate::ingest::projects::{
     project_identity, project_label, project_label_lookup, raw_project_display, tool_short_label,
 };
 use crate::ingest::Ingested;
+use crate::pricing;
 use crate::tools::{LimitSnapshot, ParsedCall};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -251,6 +252,8 @@ pub struct ReportCall {
     pub output_tokens: u64,
     pub cache_read_tokens: u64,
     pub cache_write_tokens: u64,
+    pub cache_read_rate: String,
+    pub cache_write_rate: String,
     pub cached_input_tokens: u64,
     pub reasoning_tokens: u64,
     pub web_search_requests: u64,
@@ -269,6 +272,7 @@ pub struct ReportModel {
     pub calls: u64,
     pub tokens: u64,
     pub cache_read_tokens: u64,
+    pub cache_read_rate: String,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -582,6 +586,7 @@ fn build_sample_dataset(
             cost_usd: parse_display_money_value(row.cost),
             calls: row.calls,
             tokens: row.value,
+            cache_read_rate: row.cache_rate.to_string(),
             ..Default::default()
         })
         .collect();
@@ -948,6 +953,8 @@ fn report_calls(
                 output_tokens: call.output_tokens,
                 cache_read_tokens: call.cache_read_input_tokens,
                 cache_write_tokens: call.cache_creation_input_tokens,
+                cache_read_rate: pricing::cache_read_rate_label(&call.model),
+                cache_write_rate: pricing::cache_write_rate_label(&call.model),
                 cached_input_tokens: call.cached_input_tokens,
                 reasoning_tokens: call.reasoning_tokens,
                 web_search_requests: call.web_search_requests,
@@ -979,14 +986,18 @@ fn aggregate_report_models(
             .then_with(|| a.0 .0.cmp(&b.0 .0))
     });
     rows.into_iter()
-        .map(|((model, tool), totals)| ReportModel {
-            model,
-            tool: tool_short_label(tool).to_string(),
-            cost: currency.format_money(totals.cost_usd),
-            cost_usd: totals.cost_usd,
-            calls: totals.calls,
-            tokens: totals.tokens,
-            cache_read_tokens: totals.cache_read_tokens,
+        .map(|((model, tool), totals)| {
+            let cache_read_rate = pricing::cache_read_rate_label(&model);
+            ReportModel {
+                model,
+                tool: tool_short_label(tool).to_string(),
+                cost: currency.format_money(totals.cost_usd),
+                cost_usd: totals.cost_usd,
+                calls: totals.calls,
+                tokens: totals.tokens,
+                cache_read_tokens: totals.cache_read_tokens,
+                cache_read_rate,
+            }
         })
         .collect()
 }
@@ -1341,6 +1352,8 @@ fn calls_csv(rows: &[ReportCall]) -> CsvRows {
             "output_tokens",
             "cache_read_tokens",
             "cache_write_tokens",
+            "cache_read_rate",
+            "cache_write_rate",
             "cached_input_tokens",
             "reasoning_tokens",
             "web_search_requests",
@@ -1367,6 +1380,8 @@ fn calls_csv(rows: &[ReportCall]) -> CsvRows {
                     row.output_tokens.to_string(),
                     row.cache_read_tokens.to_string(),
                     row.cache_write_tokens.to_string(),
+                    row.cache_read_rate.clone(),
+                    row.cache_write_rate.clone(),
                     row.cached_input_tokens.to_string(),
                     row.reasoning_tokens.to_string(),
                     row.web_search_requests.to_string(),
@@ -1390,6 +1405,7 @@ fn models_csv(rows: &[ReportModel]) -> CsvRows {
             "calls",
             "tokens",
             "cache_read_tokens",
+            "cache_read_rate",
         ],
         rows: rows
             .iter()
@@ -1402,6 +1418,7 @@ fn models_csv(rows: &[ReportModel]) -> CsvRows {
                     row.calls.to_string(),
                     row.tokens.to_string(),
                     row.cache_read_tokens.to_string(),
+                    row.cache_read_rate.clone(),
                 ]
             })
             .collect(),

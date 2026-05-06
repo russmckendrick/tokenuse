@@ -426,6 +426,7 @@ fn render_models_panel(frame: &mut Frame<'_>, area: Rect, title: &str, rows: &[M
             Cell::from(item.name).style(theme::base()),
             Cell::from(item.cost).style(theme::money()),
             Cell::from(item.cache).style(theme::base()),
+            Cell::from(item.cache_rate).style(theme::base()),
             Cell::from(item.calls.to_string()).style(theme::base()),
         ])
     });
@@ -437,6 +438,7 @@ fn render_models_panel(frame: &mut Frame<'_>, area: Rect, title: &str, rows: &[M
             Constraint::Min(10),
             Constraint::Length(9),
             Constraint::Length(7),
+            Constraint::Length(10),
             Constraint::Length(6),
         ],
     )
@@ -445,6 +447,7 @@ fn render_models_panel(frame: &mut Frame<'_>, area: Rect, title: &str, rows: &[M
         Cell::from(copy.tables.blank.as_str()),
         Cell::from(copy.tables.cost.as_str()).style(theme::dim()),
         Cell::from(copy.tables.cache.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.cache_rate.as_str()).style(theme::dim()),
         Cell::from(copy.tables.calls.as_str()).style(theme::dim()),
     ]))
     .column_spacing(1)
@@ -1043,6 +1046,13 @@ fn call_detail_lines(call: &SessionDetail) -> Vec<Line<'static>> {
             Span::styled(format!("{} ", copy.tables.cache_w), theme::dim()),
             Span::styled(format_compact_u64(call.cache_write), theme::muted()),
             Span::raw("   "),
+            Span::styled(format!("{} ", copy.metrics.cache_read_price), theme::dim()),
+            Span::styled(call.cache_read_rate.clone(), theme::muted()),
+            Span::raw("   "),
+            Span::styled(format!("{} ", copy.metrics.cache_write_price), theme::dim()),
+            Span::styled(call.cache_write_rate.clone(), theme::muted()),
+        ]),
+        Line::from(vec![
             Span::styled(format!("{} ", copy.session.reasoning), theme::dim()),
             Span::styled(format_compact_u64(call.reasoning_tokens), theme::muted()),
             Span::raw("   "),

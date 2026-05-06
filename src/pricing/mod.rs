@@ -61,14 +61,27 @@ impl PriceTable {
                 return price;
             }
         }
-        for (key, price) in &self.models {
-            if canonical.starts_with(key) {
-                return price;
-            }
+        if let Some((_, price)) = self
+            .models
+            .iter()
+            .filter(|(key, _)| canonical.starts_with(*key))
+            .max_by_key(|(key, _)| key.len())
+        {
+            return price;
         }
         self.models
             .get(&self.fallback_key)
             .expect("fallback model present in snapshot")
+    }
+
+    pub fn cache_read_rate_label(&self, model: &str) -> String {
+        let price = self.lookup(model);
+        rate_label(price.cache_read, price.input)
+    }
+
+    pub fn cache_write_rate_label(&self, model: &str) -> String {
+        let price = self.lookup(model);
+        rate_label(price.cache_write, price.input)
     }
 
     fn local() -> Option<Self> {
@@ -88,6 +101,34 @@ impl PriceTable {
             aliases: snap.aliases,
             fallback_key: snap.fallback,
         })
+    }
+}
+
+pub fn cache_read_rate_label(model: &str) -> String {
+    #[cfg(test)]
+    let table = PriceTable::embedded();
+    #[cfg(not(test))]
+    let table = PriceTable::configured();
+    table.cache_read_rate_label(model)
+}
+
+pub fn cache_write_rate_label(model: &str) -> String {
+    #[cfg(test)]
+    let table = PriceTable::embedded();
+    #[cfg(not(test))]
+    let table = PriceTable::configured();
+    table.cache_write_rate_label(model)
+}
+
+fn rate_label(rate: f64, input: f64) -> String {
+    if rate <= 0.0 || input <= 0.0 {
+        return "-".into();
+    }
+    let pct = (rate / input) * 100.0;
+    if (pct - pct.round()).abs() < 0.05 {
+        format!("{:.0}%", pct)
+    } else {
+        format!("{pct:.1}%")
     }
 }
 
@@ -157,6 +198,51 @@ mod tests {
         let p = PriceTable::embedded().lookup("cursor-auto");
         assert!(p.input > 0.0);
         assert!(p.fast_multiplier.is_none());
+    }
+
+    #[test]
+    fn claude_cache_rates_match_prompt_cache_pricing() {
+        let table = PriceTable::embedded();
+
+        assert_eq!(table.cache_read_rate_label("claude-sonnet-4-6"), "10%");
+        assert_eq!(table.cache_write_rate_label("claude-sonnet-4-6"), "125%");
+    }
+
+    #[test]
+    fn current_gpt_codex_cache_reads_are_ten_percent() {
+        let table = PriceTable::embedded();
+
+        assert_eq!(table.cache_read_rate_label("gpt-5.3-codex"), "10%");
+        assert_eq!(table.cache_read_rate_label("gpt-5.4"), "10%");
+    }
+
+    #[test]
+    fn codex_mini_cache_read_is_twenty_five_percent() {
+        let table = PriceTable::embedded();
+
+        assert_eq!(table.cache_read_rate_label("codex-mini-latest"), "25%");
+    }
+
+    #[test]
+    fn cursor_auto_cache_read_is_twenty_percent() {
+        let table = PriceTable::embedded();
+
+        assert_eq!(table.cache_read_rate_label("cursor-auto"), "20%");
+        assert_eq!(table.cache_write_rate_label("cursor-auto"), "100%");
+    }
+
+    #[test]
+    fn gemini_pro_cache_read_is_ten_percent() {
+        let table = PriceTable::embedded();
+
+        assert_eq!(table.cache_read_rate_label("gemini-2.5-pro"), "10%");
+    }
+
+    #[test]
+    fn older_gpt_4o_cache_read_is_fifty_percent() {
+        let table = PriceTable::embedded();
+
+        assert_eq!(table.cache_read_rate_label("gpt-4o"), "50%");
     }
 
     #[test]

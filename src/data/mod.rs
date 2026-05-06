@@ -128,6 +128,7 @@ pub struct ModelMetric {
     pub name: &'static str,
     pub cost: &'static str,
     pub cache: &'static str,
+    pub cache_rate: &'static str,
     pub calls: u64,
     pub value: u64,
 }
@@ -163,6 +164,8 @@ pub struct SessionDetail {
     pub timestamp: String,
     pub model: String,
     pub cost: String,
+    pub cache_read_rate: String,
+    pub cache_write_rate: String,
     pub input_tokens: u64,
     pub output_tokens: u64,
     pub cache_read: u64,
@@ -316,6 +319,7 @@ struct WireModelMetric {
     name: String,
     cost: String,
     cache: String,
+    cache_rate: String,
     calls: u64,
     value: u64,
 }
@@ -535,6 +539,7 @@ impl From<WireModelMetric> for ModelMetric {
             name: leak(wire.name),
             cost: leak(wire.cost),
             cache: leak(wire.cache),
+            cache_rate: leak(wire.cache_rate),
             calls: wire.calls,
             value: wire.value,
         }
@@ -1045,6 +1050,7 @@ mod tests {
             assert!(!data.projects.is_empty());
             assert!(!data.project_tools.is_empty());
             assert!(!data.sessions.is_empty());
+            assert!(data.models.iter().all(|model| !model.cache_rate.is_empty()));
         }
 
         assert!(!limits_data(Tool::All, SortMode::Spend, &currency)

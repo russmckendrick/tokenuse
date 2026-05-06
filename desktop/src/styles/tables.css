@@ -210,6 +210,8 @@ th:first-child {
 .model-table td:nth-child(4),
 .model-table th:nth-child(5),
 .model-table td:nth-child(5),
+.model-table th:nth-child(6),
+.model-table td:nth-child(6),
 .session-table th:nth-child(5),
 .session-table td:nth-child(5),
 .count-table th:nth-child(3),

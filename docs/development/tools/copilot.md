@@ -135,6 +135,8 @@ When parsing VS Code transcripts, count recognized `data.toolRequests[].toolCall
 
 If no recognized prefix appears, the parser uses `copilot-auto`, which currently falls through pricing lookup to the snapshot fallback.
 
+GitHub's usage-based Copilot billing starts on June 1, 2026 and includes cached tokens, but these local transcript sources do not expose reliable cache buckets today. tokenuse therefore keeps `cache_read_input_tokens` and `cache_creation_input_tokens` at `0` for Copilot and treats local cost as an estimate. See [Pricing and cache rates](../pricing.md).
+
 ## Deduplication
 
 - Legacy: `copilot:<session_id>:<message_id>`, where `session_id` is the parent directory name and `message_id` is `data.messageId`.

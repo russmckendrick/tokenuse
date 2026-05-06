@@ -19,6 +19,7 @@ The macOS desktop app also ships as a signed and notarized Apple Silicon DMG. Li
 - **Deep Dive**: analysis workbench with a larger activity trend, project rankings, top sessions, project/tool spend, model efficiency, core tools, shell commands, and MCP servers.
 - **Session**: per-call session drill-down with clickable rows for full stored prompt, tool, command, and token metadata.
 - **Usage**: per-tool consoles with 24-hour activity pulses, call/token/cost summaries, plan limit gauges when available, and top model bars. Opening this tab automatically selects 24 Hours so the filter row matches the console window.
+- Model tables show observed cache-hit percentage separately from cache-read price rate. Session call details show cache read/write price rates for the call model.
 - **Config**: currency selection, desktop behavior toggles, explicit Windows/Linux desktop update checks, confirmed local downloads for currency and pricing snapshots, and a confirmed clear-data action that rebuilds the archive.
 
 The desktop header mirrors the TUI filters: period, tool, sort mode, and project. In-window keyboard shortcuts are resolved through the same embedded keymap as the TUI; sort mode can be changed from the header or with `g`, and cycles between spend, latest date, and token use. `Shift-D` toggles between live and bundled sample data. The app polls snapshots in the background so completed refreshes appear without blocking the UI.

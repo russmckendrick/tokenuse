@@ -97,7 +97,7 @@ Each `*.jsonl` is one JSON object per line. Two entry types matter:
 | `model` | `message.model` (preserved verbatim; pricing canonicalizes) |
 | `cost_usd` | `pricing::cost(model, &call, speed)` |
 
-Anthropic-specific quirk: cache reads are billed at ~10% of the input rate, and `cache_read_input_tokens` is **not** included in `input_tokens`. The pricing formula handles this directly — do **not** sum the buckets together before pricing.
+Anthropic-specific quirk: cache reads are billed at 10% of the input rate in current bundled rows, cache writes use the 5-minute 125% rate, and `cache_read_input_tokens` is **not** included in `input_tokens`. The pricing formula handles this directly — do **not** sum the buckets together before pricing. See [Pricing and cache rates](../pricing.md) for source evidence.
 
 ## Deduplication
 

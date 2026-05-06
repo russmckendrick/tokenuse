@@ -270,6 +270,8 @@ mod tests {
                 timestamp: "04-29 12:00".into(),
                 model: "gpt-5".into(),
                 cost: "$0.12".into(),
+                cache_read_rate: "10%".into(),
+                cache_write_rate: "-".into(),
                 input_tokens: 100,
                 output_tokens: 50,
                 cache_read: 20,

@@ -190,7 +190,7 @@ flowchart LR
     G --> H
 ```
 
-Canonicalization lowercases model names, drops a vendor prefix such as `anthropic/`, strips an `@pin` suffix, and removes trailing `-YYYYMMDD` date stamps. Aliases such as `cursor-auto`, `anthropic-auto`, and `openai-auto` resolve through the snapshot.
+Canonicalization lowercases model names, drops a vendor prefix such as `anthropic/`, strips an `@pin` suffix, and removes trailing `-YYYYMMDD` date stamps. Aliases such as `anthropic-auto` and `openai-auto` resolve through the snapshot; `cursor-auto` is a direct Cursor Auto pricing row.
 
 The pricing formula is:
 
@@ -204,13 +204,15 @@ cost = multiplier * (
 )
 ```
 
-Claude Opus fast mode uses the model row's `fast_multiplier` when present. The maintainer CLI refresh command fetches LiteLLM pricing, filters to relevant model families, adds local aliases, and rewrites the embedded snapshot:
+Claude Opus fast mode uses the model row's `fast_multiplier` when present. Cache-rate labels in the UI are derived from `cache_read_rate / input_rate`, not from observed cache-hit percentage. The maintainer CLI refresh command fetches LiteLLM pricing, filters to relevant model families, adds local aliases and official cache-rate overrides, and rewrites the embedded snapshot:
 
 ```bash
 cargo run -- --refresh-prices
 ```
 
 The TUI and desktop configuration pages can also download the LiteLLM-derived snapshot into the local config directory after confirmation. Because the archive stores `cost_usd` at import time, refreshed pricing applies to newly imported calls; existing historical rows keep their original USD cost. Builds made with `--no-default-features` compile without these download actions.
+
+See [Pricing and cache rates](pricing.md) for provider source quotes, current cache-read multipliers, and parser caveats.
 
 ## Reports
 

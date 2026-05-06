@@ -12,6 +12,7 @@
 
 - [Development overview](development/README.md): source layout and what to read before changing the project.
 - [Architecture](development/architecture.md): archive, sync, aggregation, pricing, reports, and frontend state flow.
+- [Pricing and cache rates](development/pricing.md): evidence, provider cache-read rates, parser caveats, and pricing refresh behavior.
 - [Local development](development/local-development.md): commands for Rust, TUI, desktop, pricing, currency, and generated assets.
 - [Source control](development/source-control.md): branch hygiene, generated files, version bumps, and release-prep notes.
 - [Deployments](development/deployments.md): release workflows, binary assets, desktop notarization, and Homebrew tap updates.

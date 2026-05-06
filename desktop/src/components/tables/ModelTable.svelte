@@ -8,7 +8,7 @@
 </script>
 
 <table class="data-table model-table">
-  <thead><tr><th></th><th>{copy.tables.model}</th><th>{copy.tables.cost}</th><th>{copy.tables.cache}</th><th>{copy.tables.calls}</th></tr></thead>
+  <thead><tr><th></th><th>{copy.tables.model}</th><th>{copy.tables.cost}</th><th>{copy.tables.cache}</th><th>{copy.tables.cache_rate}</th><th>{copy.tables.calls}</th></tr></thead>
   <tbody>
     {#each rows as row}
       <tr>
@@ -16,10 +16,11 @@
         <td>{row.name}</td>
         <td class="money">{row.cost}</td>
         <td>{row.cache}</td>
+        <td>{row.cache_rate}</td>
         <td>{count(row.calls)}</td>
       </tr>
     {:else}
-      <tr><td colspan="5" class="empty-cell">{copy.empty.no_models}</td></tr>
+      <tr><td colspan="6" class="empty-cell">{copy.empty.no_models}</td></tr>
     {/each}
   </tbody>
 </table>

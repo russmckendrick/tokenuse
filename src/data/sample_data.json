@@ -35,10 +35,10 @@
         { "date": "2026-04-29", "project": "brightlane/docs", "cost": "$1.93", "calls": 24, "value": 36 }
       ],
       "models": [
-        { "name": "GPT-5", "cost": "$8.24", "cache": "93.8%", "calls": 120, "value": 100 },
-        { "name": "Opus 4.7", "cost": "$6.31", "cache": "96.9%", "calls": 91, "value": 77 },
-        { "name": "Sonnet 4.5", "cost": "$2.58", "cache": "89.2%", "calls": 48, "value": 31 },
-        { "name": "anthropic-auto", "cost": "$1.31", "cache": "-", "calls": 27, "value": 16 }
+        { "name": "GPT-5", "cost": "$8.24", "cache": "93.8%", "cache_rate": "10%", "calls": 120, "value": 100 },
+        { "name": "Opus 4.7", "cost": "$6.31", "cache": "96.9%", "cache_rate": "10%", "calls": 91, "value": 77 },
+        { "name": "Sonnet 4.5", "cost": "$2.58", "cache": "89.2%", "cache_rate": "10%", "calls": 48, "value": 31 },
+        { "name": "anthropic-auto", "cost": "$1.31", "cache": "-", "cache_rate": "10%", "calls": 27, "value": 16 }
       ],
       "tools": [
         { "name": "Bash", "calls": 92, "value": 100 },
@@ -108,11 +108,11 @@
         { "date": "2026-04-26", "project": "harbor/data-tools", "cost": "$4.91", "calls": 68, "value": 56 }
       ],
       "models": [
-        { "name": "GPT-5", "cost": "$31.42", "cache": "94.1%", "calls": 402, "value": 100 },
-        { "name": "Opus 4.7", "cost": "$24.15", "cache": "96.7%", "calls": 318, "value": 77 },
-        { "name": "Sonnet 4.5", "cost": "$14.96", "cache": "91.4%", "calls": 228, "value": 48 },
-        { "name": "anthropic-auto", "cost": "$5.61", "cache": "-", "calls": 92, "value": 18 },
-        { "name": "openai-auto", "cost": "$2.21", "cache": "-", "calls": 44, "value": 7 }
+        { "name": "GPT-5", "cost": "$31.42", "cache": "94.1%", "cache_rate": "10%", "calls": 402, "value": 100 },
+        { "name": "Opus 4.7", "cost": "$24.15", "cache": "96.7%", "cache_rate": "10%", "calls": 318, "value": 77 },
+        { "name": "Sonnet 4.5", "cost": "$14.96", "cache": "91.4%", "cache_rate": "10%", "calls": 228, "value": 48 },
+        { "name": "anthropic-auto", "cost": "$5.61", "cache": "-", "cache_rate": "10%", "calls": 92, "value": 18 },
+        { "name": "openai-auto", "cost": "$2.21", "cache": "-", "cache_rate": "10%", "calls": 44, "value": 7 }
       ],
       "tools": [
         { "name": "Bash", "calls": 312, "value": 100 },
@@ -189,11 +189,11 @@
         { "date": "2026-04-27", "project": "northstar/cli", "cost": "$7.64", "calls": 126, "value": 59 }
       ],
       "models": [
-        { "name": "GPT-5", "cost": "$86.41", "cache": "93.6%", "calls": 1206, "value": 100 },
-        { "name": "Opus 4.7", "cost": "$64.08", "cache": "96.1%", "calls": 928, "value": 74 },
-        { "name": "Sonnet 4.5", "cost": "$42.56", "cache": "90.7%", "calls": 772, "value": 49 },
-        { "name": "anthropic-auto", "cost": "$14.26", "cache": "-", "calls": 330, "value": 17 },
-        { "name": "openai-auto", "cost": "$7.36", "cache": "-", "calls": 182, "value": 9 }
+        { "name": "GPT-5", "cost": "$86.41", "cache": "93.6%", "cache_rate": "10%", "calls": 1206, "value": 100 },
+        { "name": "Opus 4.7", "cost": "$64.08", "cache": "96.1%", "cache_rate": "10%", "calls": 928, "value": 74 },
+        { "name": "Sonnet 4.5", "cost": "$42.56", "cache": "90.7%", "cache_rate": "10%", "calls": 772, "value": 49 },
+        { "name": "anthropic-auto", "cost": "$14.26", "cache": "-", "cache_rate": "10%", "calls": 330, "value": 17 },
+        { "name": "openai-auto", "cost": "$7.36", "cache": "-", "cache_rate": "10%", "calls": 182, "value": 9 }
       ],
       "tools": [
         { "name": "Bash", "calls": 906, "value": 100 },
@@ -267,11 +267,11 @@
         { "date": "2026-04-27", "project": "northstar/cli", "cost": "$7.64", "calls": 126, "value": 59 }
       ],
       "models": [
-        { "name": "GPT-5", "cost": "$79.11", "cache": "93.8%", "calls": 1084, "value": 100 },
-        { "name": "Opus 4.7", "cost": "$59.66", "cache": "96.2%", "calls": 866, "value": 75 },
-        { "name": "Sonnet 4.5", "cost": "$39.84", "cache": "91.1%", "calls": 700, "value": 50 },
-        { "name": "anthropic-auto", "cost": "$12.76", "cache": "-", "calls": 286, "value": 16 },
-        { "name": "openai-auto", "cost": "$6.85", "cache": "-", "calls": 150, "value": 9 }
+        { "name": "GPT-5", "cost": "$79.11", "cache": "93.8%", "cache_rate": "10%", "calls": 1084, "value": 100 },
+        { "name": "Opus 4.7", "cost": "$59.66", "cache": "96.2%", "cache_rate": "10%", "calls": 866, "value": 75 },
+        { "name": "Sonnet 4.5", "cost": "$39.84", "cache": "91.1%", "cache_rate": "10%", "calls": 700, "value": 50 },
+        { "name": "anthropic-auto", "cost": "$12.76", "cache": "-", "cache_rate": "10%", "calls": 286, "value": 16 },
+        { "name": "openai-auto", "cost": "$6.85", "cache": "-", "cache_rate": "10%", "calls": 150, "value": 9 }
       ],
       "tools": [
         { "name": "Bash", "calls": 828, "value": 100 },
@@ -350,11 +350,11 @@
         { "date": "2026-04-29", "project": "acme/atlas-dashboard", "cost": "$8.72", "calls": 131, "value": 30 }
       ],
       "models": [
-        { "name": "GPT-5", "cost": "$262.18", "cache": "93.1%", "calls": 3846, "value": 100 },
-        { "name": "Opus 4.7", "cost": "$190.72", "cache": "95.7%", "calls": 2704, "value": 73 },
-        { "name": "Sonnet 4.5", "cost": "$128.40", "cache": "90.4%", "calls": 2408, "value": 49 },
-        { "name": "anthropic-auto", "cost": "$40.86", "cache": "-", "calls": 1198, "value": 16 },
-        { "name": "openai-auto", "cost": "$20.02", "cache": "-", "calls": 686, "value": 8 }
+        { "name": "GPT-5", "cost": "$262.18", "cache": "93.1%", "cache_rate": "10%", "calls": 3846, "value": 100 },
+        { "name": "Opus 4.7", "cost": "$190.72", "cache": "95.7%", "cache_rate": "10%", "calls": 2704, "value": 73 },
+        { "name": "Sonnet 4.5", "cost": "$128.40", "cache": "90.4%", "cache_rate": "10%", "calls": 2408, "value": 49 },
+        { "name": "anthropic-auto", "cost": "$40.86", "cache": "-", "cache_rate": "10%", "calls": 1198, "value": 16 },
+        { "name": "openai-auto", "cost": "$20.02", "cache": "-", "cache_rate": "10%", "calls": 686, "value": 8 }
       ],
       "tools": [
         { "name": "Bash", "calls": 2880, "value": 100 },

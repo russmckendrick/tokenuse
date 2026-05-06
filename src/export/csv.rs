@@ -191,6 +191,7 @@ fn write_models_csv(dir: &Path, rows: &[ModelMetric]) -> Result<()> {
                 r.name.to_string(),
                 r.cost.to_string(),
                 r.cache.to_string(),
+                r.cache_rate.to_string(),
                 r.calls.to_string(),
             ]
         })
@@ -202,6 +203,7 @@ fn write_models_csv(dir: &Path, rows: &[ModelMetric]) -> Result<()> {
             copy().tables.name.as_str(),
             copy().tables.cost.as_str(),
             copy().tables.cache.as_str(),
+            copy().tables.cache_rate.as_str(),
             copy().tables.calls.as_str(),
         ],
         &data,

@@ -65,6 +65,7 @@ export type ModelMetric = {
   name: string;
   cost: string;
   cache: string;
+  cache_rate: string;
   calls: number;
   value: number;
 };
@@ -146,6 +147,8 @@ export type SessionDetail = {
   timestamp: string;
   model: string;
   cost: string;
+  cache_read_rate: string;
+  cache_write_rate: string;
   input_tokens: number;
   output_tokens: number;
   cache_read: number;

@@ -109,6 +109,8 @@ One `ParsedCall` is emitted per `event_msg/token_count` whose usage is non-null.
 
 **Critical quirk:** OpenAI reports cached tokens **inside** `input_tokens`. The parser subtracts `cached_input_tokens` before pricing or the cache read would be double-billed.
 
+Current bundled OpenAI/Codex cache-read rates are not uniformly 50%: GPT-5.x and GPT-5.x-Codex rows use 10%, while `codex-mini-latest` uses 25% and older rows such as `gpt-4o` can still use 50%. See [Pricing and cache rates](../pricing.md).
+
 **Reasoning tokens** are folded into `output_tokens` and priced at the output rate, matching the bundled snapshot schema (which has no separate reasoning rate). They are also preserved in `reasoning_tokens` for future per-rate breakouts.
 
 ## Deduplication

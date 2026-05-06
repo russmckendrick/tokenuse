@@ -814,6 +814,8 @@
           <div><span>{snapshot.copy.metrics.output}</span><strong>{count(callDetail.output_tokens)}</strong></div>
           <div><span>{snapshot.copy.metrics.cache_read}</span><strong>{count(callDetail.cache_read)}</strong></div>
           <div><span>{snapshot.copy.metrics.cache_write}</span><strong>{count(callDetail.cache_write)}</strong></div>
+          <div><span>{snapshot.copy.metrics.cache_read_price}</span><strong>{callDetail.cache_read_rate}</strong></div>
+          <div><span>{snapshot.copy.metrics.cache_write_price}</span><strong>{callDetail.cache_write_rate}</strong></div>
           <div><span>{snapshot.copy.session.reasoning}</span><strong>{count(callDetail.reasoning_tokens)}</strong></div>
           <div><span>{snapshot.copy.session.web_search}</span><strong>{count(callDetail.web_search_requests)}</strong></div>
         </div>

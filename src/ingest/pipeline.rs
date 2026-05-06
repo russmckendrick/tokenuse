@@ -5,12 +5,14 @@ use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, TimeZone, Timelike,
 use color_eyre::Result;
 
 use crate::app::{Period, ProjectFilter, SortMode, Tool};
+use crate::copy::copy;
 use crate::currency::CurrencyFormatter;
 use crate::data::{
     ActivityMetric, CountMetric, DailyMetric, DashboardData, LimitMetric, LimitsData, ModelMetric,
     ProjectMetric, ProjectOption, ProjectToolMetric, RecentModelMetric, RecentUsageMetric,
     SessionDetail, SessionDetailView, SessionMetric, SessionOption, Summary, ToolLimitSection,
 };
+use crate::pricing;
 use crate::tools::{self, LimitSnapshot, LimitWindow, ParsedCall};
 
 #[cfg(test)]
@@ -1277,6 +1279,8 @@ fn build_session_detail(
                 timestamp,
                 model,
                 cost: currency.format_money(c.cost_usd),
+                cache_read_rate: pricing::cache_read_rate_label(&c.model),
+                cache_write_rate: pricing::cache_write_rate_label(&c.model),
                 input_tokens: c.input_tokens.saturating_add(c.cached_input_tokens),
                 output_tokens: c.output_tokens,
                 cache_read: c.cache_read_input_tokens,
@@ -1370,6 +1374,7 @@ fn aggregate_models(
         calls: u64,
         cache_read: u64,
         input: u64,
+        cache_rates: HashSet<String>,
         stats: SortStats,
     }
     let registry = tools::registry();
@@ -1389,6 +1394,9 @@ fn aggregate_models(
         entry.calls += 1;
         entry.cache_read += c.cache_read_input_tokens;
         entry.input += c.input_tokens + c.cache_read_input_tokens + c.cache_creation_input_tokens;
+        entry
+            .cache_rates
+            .insert(pricing::cache_read_rate_label(&c.model));
         entry.stats.add_call(c);
     }
 
@@ -1407,10 +1415,21 @@ fn aggregate_models(
             } else {
                 format!("{:.1}%", (acc.cache_read as f64 / acc.input as f64) * 100.0)
             }),
+            cache_rate: leak(uniform_rate_label(acc.cache_rates)),
             calls: acc.calls,
             value: sort_bar_value(&acc.stats, sort, max, idx, total),
         })
         .collect()
+}
+
+fn uniform_rate_label(rates: HashSet<String>) -> String {
+    if rates.is_empty() {
+        "-".into()
+    } else if rates.len() == 1 {
+        rates.into_iter().next().unwrap_or_else(|| "-".into())
+    } else {
+        copy().metrics.mixed.clone()
+    }
 }
 
 #[derive(Default)]
@@ -2217,6 +2236,7 @@ mod tests {
     #[test]
     fn session_detail_exposes_modal_call_fields() {
         let mut call = mk_project_call("codex", "s1", "/Users/me/Code/widgets", 1.0);
+        call.model = "gpt-5.4".into();
         call.input_tokens = 100;
         call.output_tokens = 50;
         call.cache_read_input_tokens = 20;
@@ -2237,6 +2257,8 @@ mod tests {
         let call = &detail.calls[0];
 
         assert_eq!(call.reasoning_tokens, 7);
+        assert_eq!(call.cache_read_rate, "10%");
+        assert_eq!(call.cache_write_rate, "-");
         assert_eq!(call.web_search_requests, 2);
         assert_eq!(call.bash_commands, vec!["cargo test"]);
         assert_eq!(call.prompt_full, "run the checks and show me failures");
@@ -2434,6 +2456,7 @@ mod tests {
         assert_eq!(data.sessions[0].project, "widgets");
         assert_eq!(data.models.len(), 1);
         assert_eq!(data.models[0].name, "GPT-5");
+        assert_eq!(data.models[0].cache_rate, "10%");
         assert_eq!(data.tools.len(), 1);
         assert_eq!(data.tools[0].name, "Bash");
         assert_eq!(data.commands.len(), 1);

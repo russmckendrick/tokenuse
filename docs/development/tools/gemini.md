@@ -72,7 +72,7 @@ One `ParsedCall` is emitted for each Gemini/model message with both `tokens` and
 | `model` | message `model` |
 | `timestamp` | message `timestamp`, falling back to session `startTime` |
 
-Gemini reports cached tokens inside the input total, so the parser subtracts cached input before pricing while still preserving the cache-read bucket.
+Gemini reports cached tokens inside the input total, so the parser subtracts cached input before pricing while still preserving the cache-read bucket. Current bundled Gemini 2.5 Pro pricing uses a 10% cache-read rate for prompts up to 200k tokens. See [Pricing and cache rates](../pricing.md).
 
 ## Tools / bash extraction
 

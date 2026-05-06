@@ -1445,6 +1445,12 @@ fn push_session_workbook(out: &mut String, session: &SessionDetailView) {
             &copy().metrics.cache_write,
             &format_u64(call.cache_write),
         );
+        push_meta(out, &copy().metrics.cache_read_price, &call.cache_read_rate);
+        push_meta(
+            out,
+            &copy().metrics.cache_write_price,
+            &call.cache_write_rate,
+        );
         push_meta(
             out,
             &copy().session.reasoning,
@@ -1565,6 +1571,14 @@ fn push_session_workbook_pdf(out: &mut String, session: &SessionDetailView) {
             (copy().metrics.output.as_str(), output.as_str()),
             (copy().metrics.cache_read.as_str(), cache_read.as_str()),
             (copy().metrics.cache_write.as_str(), cache_write.as_str()),
+            (
+                copy().metrics.cache_read_price.as_str(),
+                call.cache_read_rate.as_str(),
+            ),
+            (
+                copy().metrics.cache_write_price.as_str(),
+                call.cache_write_rate.as_str(),
+            ),
             (copy().session.reasoning.as_str(), reasoning.as_str()),
             (copy().session.web_search.as_str(), web_search.as_str()),
         ];
@@ -1801,11 +1815,12 @@ fn push_models_pdf(out: &mut String, rows: &[ModelMetric]) {
             copy().tables.model.as_str(),
             copy().tables.cost.as_str(),
             copy().tables.cache.as_str(),
+            copy().tables.cache_rate.as_str(),
             copy().tables.calls.as_str(),
         ],
     );
     if rows.is_empty() {
-        push_pdf_empty_row(out, 5);
+        push_pdf_empty_row(out, 6);
     } else {
         for row in rows {
             out.push_str("<tr>");
@@ -1813,6 +1828,7 @@ fn push_models_pdf(out: &mut String, rows: &[ModelMetric]) {
             push_pdf_text_cell(out, "", row.name);
             push_pdf_text_cell(out, "money num", row.cost);
             push_pdf_text_cell(out, "num", row.cache);
+            push_pdf_text_cell(out, "num", row.cache_rate);
             push_pdf_text_cell(out, "num", &format_u64(row.calls));
             out.push_str("</tr>");
         }
@@ -2226,11 +2242,12 @@ fn push_models_html(out: &mut String, rows: &[ModelMetric]) {
             copy().tables.model.as_str(),
             copy().tables.cost.as_str(),
             copy().tables.cache.as_str(),
+            copy().tables.cache_rate.as_str(),
             copy().tables.calls.as_str(),
         ],
     );
     if rows.is_empty() {
-        push_empty_row(out, 5);
+        push_empty_row(out, 6);
     } else {
         for row in rows {
             out.push_str("<tr>");
@@ -2238,6 +2255,7 @@ fn push_models_html(out: &mut String, rows: &[ModelMetric]) {
             push_text_cell(out, "", row.name);
             push_text_cell(out, "money num", row.cost);
             push_text_cell(out, "num", row.cache);
+            push_text_cell(out, "num", row.cache_rate);
             push_text_cell(out, "num", &format_u64(row.calls));
             out.push_str("</tr>\n");
         }

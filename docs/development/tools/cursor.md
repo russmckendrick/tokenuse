@@ -93,9 +93,11 @@ The parser starts a new turn on each `role == "user"` line and aggregates follow
 **Token quirk:** Cursor v3 sometimes records zero tokens. When `tokenCount.inputTokens + tokenCount.outputTokens == 0`, fall back to character-count estimation.
 
 **Model resolution:**
-- `"default"` → `claude-sonnet-4-5` (alias in pricing snapshot)
-- `"cursor-auto"` → `claude-sonnet-4-5` (alias in pricing snapshot)
+- `"default"` → `cursor-auto` (parser fallback before pricing)
+- `"cursor-auto"` → direct Cursor Auto pricing row: input/cache-write `$1.25/M`, output `$6/M`, cache-read `$0.25/M`
 - Unknown model name → fallback to Sonnet rate (`pricing::PriceTable::lookup` handles this)
+
+Cursor local files currently do not expose reliable cache-read/write buckets, so the Cursor Auto cache-read rate is visible in UI pricing labels but observed cache tokens remain `0` until Cursor writes those buckets locally. See [Pricing and cache rates](../pricing.md).
 
 ## Deduplication
 
