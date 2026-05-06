@@ -56,7 +56,7 @@ pub trait ToolAdapter: Send + Sync {
 
 ## Pricing
 
-Pricing is embedded as two books: `src/pricing/books/pricing-upstream.json` for broad upstream coverage and `src/pricing/books/pricing-overrides.json` for official rows, aliases, tool-scoped rows, provenance, and effective dates. Usage ingestion never fetches pricing; the Config page can download local `pricing-upstream.json` and `pricing-overrides.json` books only after confirmation. See [Pricing and cache rates](../pricing.md) for source evidence and tool-specific caveats.
+Pricing is embedded as two books: `costs/pricing-upstream.json` for broad upstream coverage and `costs/pricing-overrides.json` for official rows, aliases, tool-scoped rows, provenance, and effective dates. Usage ingestion never fetches pricing; the Config page can download local `pricing-upstream.json` and `pricing-overrides.json` books only after confirmation. See [Pricing and cache rates](../pricing.md) for source evidence and tool-specific caveats.
 
 ```text
 cost = multiplier * (

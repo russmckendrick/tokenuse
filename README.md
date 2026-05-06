@@ -87,10 +87,12 @@ The dashboard stores user settings and downloaded data in the platform config di
 
 - `config.json`: user overrides, currently the display currency
 - `archive.db`: durable local usage archive
-- `rates.json`: latest downloaded published currency snapshot
-- `pricing-snapshot.json`: latest downloaded LiteLLM-derived pricing snapshot
+- `exchange-rates.json`: latest downloaded published currency snapshot
+- `rates.json`: legacy local currency snapshot, still read when `exchange-rates.json` is absent
+- `pricing-upstream.json` and `pricing-overrides.json`: latest downloaded pricing books
+- `pricing-snapshot.json`: legacy local pricing snapshot
 
-USD remains the default. Costs are calculated and stored internally as import-time USD, then converted for display using the configured currency. Open the TUI configuration page with `c` to pick a currency, download the latest local data, or clear and rebuild the local archive. Downloading `rates.json` asks for confirmation and updates display rates immediately; downloading LiteLLM pricing asks for confirmation and applies to newly imported calls. Clear data also asks for confirmation, deletes `archive.db`, and immediately reimports from local tool history.
+USD remains the default. Costs are calculated and stored internally as import-time USD, then converted for display using the configured currency. Open the TUI configuration page with `c` to pick a currency, download the latest local data, or clear and rebuild the local archive. Downloading `exchange-rates.json` asks for confirmation and updates display rates immediately; downloading pricing books asks for confirmation and applies to newly imported calls. Clear data also asks for confirmation, deletes `archive.db`, and immediately reimports from local tool history.
 
 Default TUI and desktop builds include the confirmed download actions. Build with `--no-default-features` when you need a no-download binary; those builds keep ingestion local-only and report Config-page downloads as unavailable.
 
@@ -102,7 +104,7 @@ Sync the archive and list normalized project/tool rows without opening the TUI:
 tokenuse --list-projects
 ```
 
-Maintainer snapshot refresh commands are documented in [local development](docs/development/local-development.md). Do not hand-edit `src/pricing/snapshot.json` or `currency/rates.json`; use the refresh commands so generated data stays consistent.
+Maintainer snapshot refresh commands are documented in [local development](docs/development/local-development.md). Do not hand-edit generated cost books such as `costs/exchange-rates.json`, `costs/pricing-upstream.json`, or `src/pricing/snapshot.json`; use the refresh commands so generated data stays consistent.
 
 ## Documentation
 

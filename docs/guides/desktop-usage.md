@@ -93,7 +93,8 @@ The desktop app and TUI share the platform config directory under `tokenuse`:
 | --- | --- |
 | `config.json` | User overrides, display currency, background alerts, and desktop preferences |
 | `archive.db` | Durable local usage archive |
-| `rates.json` | Optional local currency snapshot |
+| `exchange-rates.json` | Optional local currency snapshot |
+| `rates.json` | Legacy local currency snapshot |
 | `pricing-upstream.json` | Optional local broad pricing book |
 | `pricing-overrides.json` | Optional local official overrides and aliases |
 | `pricing-snapshot.json` | Legacy local pricing snapshot |

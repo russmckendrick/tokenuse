@@ -4,8 +4,8 @@
     "description": "Config-driven pricing refresh sources. Rust owns generic fetch/extract/merge logic; URLs, filters, field mappings, and published book locations live here."
   },
   "published_books": {
-    "upstream_url": "https://raw.githubusercontent.com/russmckendrick/tokenuse/refs/heads/main/src/pricing/books/pricing-upstream.json",
-    "overrides_url": "https://raw.githubusercontent.com/russmckendrick/tokenuse/refs/heads/main/src/pricing/books/pricing-overrides.json"
+    "upstream_url": "https://raw.githubusercontent.com/russmckendrick/tokenuse/refs/heads/main/costs/pricing-upstream.json",
+    "overrides_url": "https://raw.githubusercontent.com/russmckendrick/tokenuse/refs/heads/main/costs/pricing-overrides.json"
   },
   "sources": [
     {

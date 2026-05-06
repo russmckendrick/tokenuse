@@ -174,7 +174,7 @@
         "action": "Pick"
       },
       "rates_json": {
-        "name": "Rates JSON",
+        "name": "Exchange rates",
         "action": "Download"
       },
       "litellm_prices": {
@@ -197,12 +197,12 @@
       "config_dir": "Config dir",
       "config_file": "Config file",
       "archive_db": "Archive db",
-      "rates_data": "Rates data",
+      "rates_data": "Exchange rates",
       "pricing_data": "Pricing data",
       "rates_source": "Rates source"
     },
     "links": {
-      "published_rates": "Published rates",
+      "published_rates": "Published exchange rates",
       "pricing_upstream": "Pricing upstream",
       "pricing_overrides": "Pricing overrides"
     }
@@ -255,9 +255,9 @@
     "local_history": "Local history",
     "reset": "Reset",
     "reimporting": "Reimporting",
-    "download_rates_title": "Download rates.json?",
+    "download_rates_title": "Download exchange-rates.json?",
     "download_prices_title": "Download pricing books?",
-    "rates_file": "rates.json",
+    "rates_file": "exchange-rates.json",
     "pricing_file": "pricing-upstream.json + pricing-overrides.json",
     "rates_source": "Published Token Use currency snapshot",
     "prices_source": "Published Token Use pricing books",

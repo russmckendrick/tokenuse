@@ -10,7 +10,7 @@ flowchart TD
     B -->|--list-projects| C[sync archive and print inventory]
     B -->|--refresh-prices| D[refresh embedded pricing books]
     B -->|--generate-currency-json| L[generate embedded currency snapshot]
-    B -->|no flag| M[load config.json and rates.json]
+    B -->|no flag| M[load config.json and exchange-rates.json]
     M --> N[open archive.db]
     N --> O{archive has rows?}
     O -->|yes| P[load archive into Ingested]
@@ -174,7 +174,7 @@ Session counts are tool-qualified, so `claude-code:s1` and `codex:s1` remain sep
 
 ## Pricing
 
-Pricing is embedded as two compile-time books under `src/pricing/books/`. At runtime, `PriceTable::configured()` first looks for local `pricing-upstream.json` and `pricing-overrides.json` in the tokenuse config directory, then falls back to the embedded books. A legacy local `pricing-snapshot.json` is still accepted for older installs.
+Pricing is embedded as two compile-time books under `costs/`. At runtime, `PriceTable::configured()` first looks for local `pricing-upstream.json` and `pricing-overrides.json` in the tokenuse config directory, then falls back to the embedded books. A legacy local `pricing-snapshot.json` is still accepted for older installs.
 
 ```mermaid
 flowchart LR
@@ -244,7 +244,8 @@ Runtime settings live in the platform config directory under `tokenuse`:
 | --- | --- |
 | `config.json` | User overrides, currently the display currency |
 | `archive.db` | Durable local usage archive loaded by the dashboard |
-| `rates.json` | Locally downloaded copy of the published currency snapshot |
+| `exchange-rates.json` | Locally downloaded copy of the published currency snapshot |
+| `rates.json` | Legacy local currency snapshot, accepted for older installs |
 | `pricing-upstream.json` | Locally downloaded broad pricing book |
 | `pricing-overrides.json` | Locally downloaded official overrides and aliases |
 | `pricing-snapshot.json` | Legacy local pricing snapshot, accepted for older installs |
@@ -252,15 +253,15 @@ Runtime settings live in the platform config directory under `tokenuse`:
 
 USD is the default display currency. The dashboard still stores calculated spend as `cost_usd`; aggregation sums USD and formats the final display values through the active currency table.
 
-The clear-data Config action deletes and recreates `archive.db`, then reimports local tool history immediately. Rebuilt rows are priced with the current configured pricing table. It intentionally does not delete `config.json`, local `rates.json`, local pricing books, legacy `pricing-snapshot.json`, or generated reports.
+The clear-data Config action deletes and recreates `archive.db`, then reimports local tool history immediately. Rebuilt rows are priced with the current configured pricing table. It intentionally does not delete `config.json`, local `exchange-rates.json`, legacy `rates.json`, local pricing books, legacy `pricing-snapshot.json`, or generated reports.
 
-`currency/rates.json` is the embedded fallback snapshot. The TUI and desktop configuration pages can download the latest published copy after confirmation from:
+`costs/exchange-rates.json` is the embedded fallback snapshot. The TUI and desktop configuration pages can download the latest published copy after confirmation from:
 
 ```text
-https://raw.githubusercontent.com/russmckendrick/tokenuse/refs/heads/main/currency/rates.json
+https://raw.githubusercontent.com/russmckendrick/tokenuse/refs/heads/main/costs/exchange-rates.json
 ```
 
-That local rates download writes `<config dir>/tokenuse/rates.json` and reloads the currency table immediately. Builds made with `--no-default-features` compile without this download action.
+That local rates download writes `<config dir>/tokenuse/exchange-rates.json` and reloads the currency table immediately. Existing local `<config dir>/tokenuse/rates.json` files are still accepted as a legacy fallback. Builds made with `--no-default-features` compile without this download action.
 
 The snapshot is generated from Frankfurter's USD-based v2 rates endpoint, filtered to fiat display currencies, and refreshed by a weekly GitHub Action:
 

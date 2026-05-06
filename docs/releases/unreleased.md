@@ -11,6 +11,7 @@ Changes that should be included in the next release go here. Keep this file curr
 - Changed the generated currency snapshot workflow from nightly to weekly.
 - Added published rates and pricing book links to the TUI and desktop Config pages.
 - Added the active pricing book date to the TUI and desktop Config pages.
+- Moved published cost JSON into `costs/` and renamed the currency snapshot download to `exchange-rates.json`.
 
 ## Notes
 

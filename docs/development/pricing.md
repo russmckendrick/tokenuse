@@ -4,10 +4,10 @@ Last checked: May 6, 2026.
 
 `tokenuse` calculates cost from local usage files. It does not call provider billing APIs during ingestion. Pricing is loaded from two books:
 
-- `src/pricing/books/pricing-upstream.json`: broad model coverage generated from LiteLLM and other machine-readable feeds.
-- `src/pricing/books/pricing-overrides.json`: official-source corrections, aliases, fallback rows, tool-scoped rows, provenance, and effective dates.
+- `costs/pricing-upstream.json`: broad model coverage generated from LiteLLM and other machine-readable feeds.
+- `costs/pricing-overrides.json`: official-source corrections, aliases, fallback rows, tool-scoped rows, provenance, and effective dates.
 
-`src/pricing/books/pricing-sources.json` owns the live source configuration: URLs, source kind, table headings, columns, row matches, scope, defaults, and published local-download URLs. Rust implements generic JSON-map, Markdown-table, and HTML-table/text extraction; provider-specific selectors stay in JSON.
+`costs/pricing-sources.json` owns the live source configuration: URLs, source kind, table headings, columns, row matches, scope, defaults, and published local-download URLs. Rust implements generic JSON-map, Markdown-table, and HTML-table/text extraction; provider-specific selectors stay in JSON.
 
 ## Source Policy
 
@@ -53,8 +53,8 @@ cargo run -- --refresh-prices
 
 The command writes both:
 
-- `src/pricing/books/pricing-upstream.json`
-- `src/pricing/books/pricing-overrides.json`
+- `costs/pricing-upstream.json`
+- `costs/pricing-overrides.json`
 
 Do not hand-edit `pricing-upstream.json`. Curated aliases, fallbacks, and rows that cannot yet be reliably extracted live in `pricing-overrides.json` and `pricing-sources.json`.
 

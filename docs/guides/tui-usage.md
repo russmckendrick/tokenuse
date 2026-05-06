@@ -85,7 +85,8 @@ Runtime settings live in the platform config directory under `tokenuse`:
 | --- | --- |
 | `config.json` | User overrides, currently display currency |
 | `archive.db` | Durable local usage archive |
-| `rates.json` | Optional local currency snapshot |
+| `exchange-rates.json` | Optional local currency snapshot |
+| `rates.json` | Legacy local currency snapshot |
 | `pricing-upstream.json` | Optional local broad pricing book |
 | `pricing-overrides.json` | Optional local official overrides and aliases |
 | `pricing-snapshot.json` | Legacy local pricing snapshot |
@@ -95,7 +96,7 @@ USD remains the default display currency. Costs are calculated and stored intern
 
 The Config page lists the published rates and pricing book URLs next to the local file paths, so users can inspect exactly what the download actions fetch before confirming. The pricing row also shows the active book source and its latest checked/generated date.
 
-The Config page's clear-data action asks for confirmation, deletes `archive.db`, and immediately reimports from local tool history. Config, rates, pricing books, legacy pricing snapshots, and reports are kept. Archive-only rows disappear if the original source files are gone, and rebuilt rows use the current configured pricing.
+The Config page's clear-data action asks for confirmation, deletes `archive.db`, and immediately reimports from local tool history. Config, exchange rates, pricing books, legacy pricing snapshots, and reports are kept. Archive-only rows disappear if the original source files are gone, and rebuilt rows use the current configured pricing.
 
 ## Reports
 

@@ -11,7 +11,7 @@ use crate::config::{self, ConfigPaths};
 #[cfg(feature = "refresh-currency")]
 pub mod refresh;
 
-const EMBEDDED_RATES: &str = include_str!("../../currency/rates.json");
+const EMBEDDED_RATES: &str = include_str!("../../costs/exchange-rates.json");
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CurrencySnapshot {
@@ -64,6 +64,15 @@ impl CurrencyTable {
                 .wrap_err_with(|| format!("read {}", paths.currency_rates_file.display()))?;
             return Self::from_json_str(&raw, RateSource::Local(paths.currency_rates_file.clone()))
                 .wrap_err_with(|| format!("parse {}", paths.currency_rates_file.display()));
+        }
+        if paths.legacy_currency_rates_file.exists() {
+            let raw = fs::read_to_string(&paths.legacy_currency_rates_file)
+                .wrap_err_with(|| format!("read {}", paths.legacy_currency_rates_file.display()))?;
+            return Self::from_json_str(
+                &raw,
+                RateSource::Local(paths.legacy_currency_rates_file.clone()),
+            )
+            .wrap_err_with(|| format!("parse {}", paths.legacy_currency_rates_file.display()));
         }
 
         Self::embedded()
@@ -350,6 +359,21 @@ fn currency_prefix(code: &str) -> Option<CurrencyPrefix> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::ConfigPaths;
+
+    fn temp_paths(name: &str) -> ConfigPaths {
+        let dir = std::env::temp_dir().join(format!(
+            "tokenuse-currency-{}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+            name
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        ConfigPaths::new(dir)
+    }
 
     #[test]
     fn keeps_usd_format_as_default() {
@@ -408,5 +432,20 @@ mod tests {
         assert_eq!(table.rate("USD"), Some(1.0));
         assert!(table.rate("GBP").unwrap() > 0.0);
         assert!(table.rate("EUR").unwrap() > 0.0);
+    }
+
+    #[test]
+    fn load_uses_legacy_local_rates_when_exchange_rates_are_missing() {
+        let paths = temp_paths("legacy-rates");
+        std::fs::write(&paths.legacy_currency_rates_file, EMBEDDED_RATES).unwrap();
+
+        let table = CurrencyTable::load(&paths).unwrap();
+
+        assert_eq!(
+            table.source(),
+            &RateSource::Local(paths.legacy_currency_rates_file.clone())
+        );
+
+        let _ = std::fs::remove_dir_all(paths.dir);
     }
 }

@@ -8,7 +8,7 @@ pub const APP_ID: &str = "tokenuse";
 pub const DEFAULT_CURRENCY: &str = "USD";
 
 pub const CURRENCY_RATES_URL: &str =
-    "https://raw.githubusercontent.com/russmckendrick/tokenuse/refs/heads/main/currency/rates.json";
+    "https://raw.githubusercontent.com/russmckendrick/tokenuse/refs/heads/main/costs/exchange-rates.json";
 pub const FRANKFURTER_RATES_URL: &str = "https://api.frankfurter.dev/v2/rates?base=USD";
 
 pub const DEFAULT_BACKGROUND_ALERT_MIN_COST_USD: f64 = 1.0;
@@ -17,7 +17,8 @@ pub const DEFAULT_BACKGROUND_ALERT_MIN_CALLS: i64 = 25;
 pub const DEFAULT_BACKGROUND_ALERT_COOLDOWN_MINUTES: i64 = 30;
 
 const CONFIG_FILE_NAME: &str = "config.json";
-const LOCAL_RATES_FILE_NAME: &str = "rates.json";
+const LOCAL_EXCHANGE_RATES_FILE_NAME: &str = "exchange-rates.json";
+const LEGACY_LOCAL_RATES_FILE_NAME: &str = "rates.json";
 const LOCAL_PRICING_UPSTREAM_FILE_NAME: &str = "pricing-upstream.json";
 const LOCAL_PRICING_OVERRIDES_FILE_NAME: &str = "pricing-overrides.json";
 const LEGACY_LOCAL_PRICING_FILE_NAME: &str = "pricing-snapshot.json";
@@ -28,6 +29,7 @@ pub struct ConfigPaths {
     pub dir: PathBuf,
     pub config_file: PathBuf,
     pub currency_rates_file: PathBuf,
+    pub legacy_currency_rates_file: PathBuf,
     pub pricing_upstream_file: PathBuf,
     pub pricing_overrides_file: PathBuf,
     pub pricing_snapshot_file: PathBuf,
@@ -38,7 +40,8 @@ impl ConfigPaths {
     pub fn new(dir: PathBuf) -> Self {
         Self {
             config_file: dir.join(CONFIG_FILE_NAME),
-            currency_rates_file: dir.join(LOCAL_RATES_FILE_NAME),
+            currency_rates_file: dir.join(LOCAL_EXCHANGE_RATES_FILE_NAME),
+            legacy_currency_rates_file: dir.join(LEGACY_LOCAL_RATES_FILE_NAME),
             pricing_upstream_file: dir.join(LOCAL_PRICING_UPSTREAM_FILE_NAME),
             pricing_overrides_file: dir.join(LOCAL_PRICING_OVERRIDES_FILE_NAME),
             pricing_snapshot_file: dir.join(LEGACY_LOCAL_PRICING_FILE_NAME),
@@ -257,6 +260,26 @@ mod tests {
             name
         ));
         ConfigPaths::new(dir)
+    }
+
+    #[test]
+    fn config_paths_use_exchange_rates_with_legacy_rates_fallback() {
+        let paths = temp_paths("cost-files");
+
+        assert_eq!(
+            paths
+                .currency_rates_file
+                .file_name()
+                .and_then(|name| name.to_str()),
+            Some("exchange-rates.json")
+        );
+        assert_eq!(
+            paths
+                .legacy_currency_rates_file
+                .file_name()
+                .and_then(|name| name.to_str()),
+            Some("rates.json")
+        );
     }
 
     #[test]

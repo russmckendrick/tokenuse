@@ -294,7 +294,7 @@ fn print_project_inventory() -> Result<()> {
 
 #[cfg(feature = "refresh-prices")]
 fn refresh_prices() -> Result<()> {
-    let target = std::path::PathBuf::from("src/pricing/books");
+    let target = std::path::PathBuf::from("costs");
     let output = tokenuse::pricing::refresh::run(&target)?;
     println!(
         "{}",
@@ -321,7 +321,7 @@ fn refresh_prices() -> Result<()> {
 
 #[cfg(feature = "refresh-currency")]
 fn refresh_currency() -> Result<()> {
-    let target = std::path::PathBuf::from("currency/rates.json");
+    let target = std::path::PathBuf::from("costs/exchange-rates.json");
     tokenuse::currency::refresh::run(&target)?;
     println!(
         "{}",

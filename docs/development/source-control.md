@@ -9,13 +9,13 @@ Keep feature branches focused on one behavior change. Parser changes should incl
 Do not hand-edit generated snapshots:
 
 - `src/pricing/snapshot.json`
-- `src/pricing/books/pricing-upstream.json`
-- `currency/rates.json`
+- `costs/exchange-rates.json`
+- `costs/pricing-upstream.json`
 - desktop icon outputs under `desktop/src-tauri/icons/`
 
 Use the maintainer commands or Tauri icon tooling that produced the file originally.
 
-`src/pricing/books/pricing-overrides.json` and `src/pricing/books/pricing-sources.json` are curated pricing config. Keep aliases, provenance, effective dates, and extraction rules there rather than in Rust.
+`costs/pricing-overrides.json` and `costs/pricing-sources.json` are curated pricing config. Keep aliases, provenance, effective dates, and extraction rules there rather than in Rust.
 
 ## Docs
 

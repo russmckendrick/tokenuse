@@ -9,7 +9,7 @@ use color_eyre::{
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
-const EMBEDDED_OVERRIDES: &str = include_str!("books/pricing-overrides.json");
+const EMBEDDED_OVERRIDES: &str = include_str!("../../costs/pricing-overrides.json");
 const UPSTREAM_FILE_NAME: &str = "pricing-upstream.json";
 const OVERRIDES_FILE_NAME: &str = "pricing-overrides.json";
 

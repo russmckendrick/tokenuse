@@ -12,9 +12,9 @@ use crate::tools::{ParsedCall, Speed};
 #[cfg(feature = "refresh-prices")]
 pub mod refresh;
 
-pub(crate) const SOURCES_CONFIG: &str = include_str!("books/pricing-sources.json");
-const EMBEDDED_UPSTREAM: &str = include_str!("books/pricing-upstream.json");
-const EMBEDDED_OVERRIDES: &str = include_str!("books/pricing-overrides.json");
+pub(crate) const SOURCES_CONFIG: &str = include_str!("../../costs/pricing-sources.json");
+const EMBEDDED_UPSTREAM: &str = include_str!("../../costs/pricing-upstream.json");
+const EMBEDDED_OVERRIDES: &str = include_str!("../../costs/pricing-overrides.json");
 const LEGACY_EMBEDDED_SNAPSHOT: &str = include_str!("snapshot.json");
 
 #[derive(Debug, Clone, PartialEq, Eq)]
