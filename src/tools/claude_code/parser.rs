@@ -283,11 +283,8 @@ mod tests {
     #[test]
     fn parses_assistant_entries_and_dedups() {
         let dir = fixture();
-        let source = SessionSource {
-            path: dir.path().to_path_buf(),
-            project: "test/project".into(),
-            tool: config::TOOL_ID,
-        };
+        let source =
+            SessionSource::session(dir.path().to_path_buf(), "test/project", config::TOOL_ID);
         let mut seen = HashSet::new();
         let calls = parse_session(&source, &mut seen).unwrap();
         assert_eq!(calls.len(), 1, "duplicate msg.id should be dropped");
@@ -314,11 +311,11 @@ mod tests {
         )
         .unwrap();
 
-        let source = SessionSource {
-            path: dir.path().to_path_buf(),
-            project: "/Users/russ/mckendrick/Code/ai/commit/dev".into(),
-            tool: config::TOOL_ID,
-        };
+        let source = SessionSource::session(
+            dir.path().to_path_buf(),
+            "/Users/russ/mckendrick/Code/ai/commit/dev",
+            config::TOOL_ID,
+        );
         let mut seen = HashSet::new();
         let calls = parse_session(&source, &mut seen).unwrap();
 

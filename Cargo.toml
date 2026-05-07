@@ -26,6 +26,7 @@ rust_xlsxwriter = "0.79"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [features]
-default = ["refresh-prices", "refresh-currency"]
+default = ["refresh-prices", "refresh-currency", "quota-sync"]
 refresh-prices = ["ureq"]
 refresh-currency = ["ureq"]
+quota-sync = ["ureq"]

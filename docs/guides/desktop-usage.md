@@ -20,7 +20,7 @@ The macOS desktop app also ships as a signed and notarized Apple Silicon DMG. Li
 - **Session**: per-call session drill-down with clickable rows for full stored prompt, tool, command, and token metadata.
 - **Usage**: per-tool consoles with 24-hour activity pulses, call/token/cost summaries, plan limit gauges when available, and top model bars. Opening this tab automatically selects 24 Hours so the filter row matches the console window.
 - Model tables show observed cache-hit percentage separately from cache-read price rate. Session call details show cache read/write price rates for the call model.
-- **Config**: currency selection, desktop behavior toggles, explicit Windows/Linux desktop update checks, confirmed local downloads for currency and pricing books, and a confirmed clear-data action that rebuilds the archive.
+- **Config**: currency selection, desktop behavior toggles, explicit Windows/Linux desktop update checks, confirmed local downloads for currency and pricing books, Claude/Copilot limit sidecar sync actions, and a confirmed clear-data action that rebuilds the archive.
 
 The desktop header mirrors the TUI filters: period, tool, sort mode, and project. In-window keyboard shortcuts are resolved through the same embedded keymap as the TUI; sort mode can be changed from the header or with `g`, and cycles between spend, latest date, and token use. `Shift-D` toggles between live and bundled sample data. The app polls snapshots in the background so completed refreshes appear without blocking the UI.
 
@@ -98,8 +98,12 @@ The desktop app and TUI share the platform config directory under `tokenuse`:
 | `pricing-upstream.json` | Optional local broad pricing book |
 | `pricing-overrides.json` | Optional local official overrides and aliases |
 | `pricing-snapshot.json` | Legacy local pricing snapshot |
+| `limits/claude-code.json` | Optional Claude Code status-line limit sidecar |
+| `limits/copilot.json` | Optional Copilot quota sidecar written by confirmed sync |
 | `reports/` | Fallback report directory |
 
-Changing currency, refreshing or clearing the archive, or downloading local rates/pricing books from the desktop app affects the same data the TUI reads.
+Changing currency, refreshing or clearing the archive, downloading local rates/pricing books, or syncing limit sidecars from the desktop app affects the same data the TUI reads.
 
-The Config page shows links for the published currency snapshot and both pricing books beside the download rows, so users can inspect the files before downloading them locally. The pricing row also shows the active book source and its latest checked/generated date.
+The Config page shows links for the published currency snapshot and both pricing books beside the download rows, so users can inspect the files before downloading them locally. The pricing row also shows the active book source and its latest checked/generated date. The Claude limits row imports an existing local sidecar and shows a setup hint until Claude Code's `statusLine` writes the OS-specific sidecar path. The Copilot limits row asks for confirmation before reading local Copilot credentials and fetching current quota state from GitHub.
+
+The **Claude statusLine** row sits directly above Claude limits and bootstraps the sidecar without touching your visible status line. **Install** writes a wrapper script under `<config>/tokenuse/statusline/claude-code.sh` (or `.ps1` on Windows), backs up `~/.claude/settings.json` to `settings.json.bak.<unix-ts>`, and rewrites `statusLine.command` to point at the wrapper. The wrapper tees Claude Code's stdin into the sidecar JSON file and forwards it through whatever command was previously configured (for example `cship`), so the visible status line is unchanged. If you'd rather edit `settings.json` yourself, the second confirmation dialog offers **Generate wrapper only**, which writes the wrapper without modifying any user config. Re-installing is idempotent; clicking the row again on an installed system offers **Uninstall**, which restores the prior command and deletes the wrapper but leaves the sidecar JSON in place.

@@ -245,24 +245,24 @@ fn build_limits_data(
     let mut rows = Vec::new();
     for limit in latest.into_values() {
         if let Some(window) = limit.primary {
-            rows.push(limit_metric(limit, window));
+            rows.push((limit.tool, limit_metric(limit, window)));
         }
         if let Some(window) = limit.secondary {
-            rows.push(limit_metric(limit, window));
+            rows.push((limit.tool, limit_metric(limit, window)));
         }
     }
 
     rows.sort_by(|a, b| {
-        a.tool
-            .cmp(b.tool)
-            .then_with(|| a.scope.cmp(b.scope))
-            .then_with(|| window_rank(a.window).cmp(&window_rank(b.window)))
-            .then_with(|| a.window.cmp(b.window))
+        a.1.tool
+            .cmp(b.1.tool)
+            .then_with(|| a.1.scope.cmp(b.1.scope))
+            .then_with(|| window_rank(a.1.window).cmp(&window_rank(b.1.window)))
+            .then_with(|| a.1.window.cmp(b.1.window))
     });
 
     let mut limits_by_tool: HashMap<&'static str, Vec<LimitMetric>> = HashMap::new();
-    for row in rows {
-        limits_by_tool.entry(row.tool).or_default().push(row);
+    for (tool, row) in rows {
+        limits_by_tool.entry(tool).or_default().push(row);
     }
 
     LimitsData {
@@ -469,9 +469,9 @@ fn build_tool_limit_sections(
 
     ordered
         .into_iter()
-        .map(|(_, _, label, acc)| ToolLimitSection {
+        .map(|(_, id, label, acc)| ToolLimitSection {
             tool: label,
-            limits: limits_by_tool.remove(label).unwrap_or_default(),
+            limits: limits_by_tool.remove(id).unwrap_or_default(),
             usage: RecentUsageMetric {
                 buckets: scale_buckets(acc.buckets),
                 calls: acc.calls,
@@ -627,6 +627,7 @@ fn format_window(minutes: u64) -> String {
     match minutes {
         300 => "5h".into(),
         10080 => "weekly".into(),
+        43200 => "monthly".into(),
         m if m >= 1440 && m % 1440 == 0 => format!("{}d", m / 1440),
         m if m >= 60 && m % 60 == 0 => format!("{}h", m / 60),
         m => format!("{m}m"),
@@ -1632,8 +1633,19 @@ mod tests {
         primary_used: f64,
         secondary_used: f64,
     ) -> LimitSnapshot {
+        mk_limit_for_tool("codex", id, name, observed_at, primary_used, secondary_used)
+    }
+
+    fn mk_limit_for_tool(
+        tool: &'static str,
+        id: &str,
+        name: Option<&str>,
+        observed_at: &str,
+        primary_used: f64,
+        secondary_used: f64,
+    ) -> LimitSnapshot {
         LimitSnapshot {
-            tool: "codex",
+            tool,
             limit_id: id.into(),
             limit_name: name.map(Into::into),
             plan_type: Some("prolite".into()),
@@ -1821,6 +1833,48 @@ mod tests {
         assert!(claude_section.limits.is_empty());
         assert_eq!(claude.sections[0].tool, "Codex");
         assert_eq!(claude.sections.len(), 5);
+    }
+
+    #[test]
+    fn non_codex_limit_rows_attach_to_their_usage_sections() {
+        let ingested = Ingested {
+            calls: Vec::new(),
+            limits: vec![
+                mk_limit_for_tool(
+                    "claude-code",
+                    "claude-code",
+                    None,
+                    "2026-04-29T08:00:00Z",
+                    42.0,
+                    12.0,
+                ),
+                mk_limit_for_tool(
+                    "copilot",
+                    "copilot",
+                    Some("Premium Interactions"),
+                    "2026-04-29T08:01:00Z",
+                    68.0,
+                    0.0,
+                ),
+            ],
+        };
+
+        let data = ingested.limits(Tool::All, SortMode::Spend, &CurrencyFormatter::usd());
+        let claude = data
+            .sections
+            .iter()
+            .find(|section| section.tool == "Claude Code")
+            .unwrap();
+        let copilot = data
+            .sections
+            .iter()
+            .find(|section| section.tool == "Copilot")
+            .unwrap();
+
+        assert_eq!(claude.limits.len(), 2);
+        assert_eq!(claude.limits[0].scope, "Claude");
+        assert_eq!(copilot.limits.len(), 2);
+        assert_eq!(copilot.limits[0].scope, "Premium Interactions");
     }
 
     #[test]

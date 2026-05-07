@@ -15,6 +15,33 @@ pub struct SessionSource {
     pub path: PathBuf,
     pub project: String,
     pub tool: &'static str,
+    pub kind: SessionSourceKind,
+}
+
+impl SessionSource {
+    pub fn session(path: PathBuf, project: impl Into<String>, tool: &'static str) -> Self {
+        Self {
+            path,
+            project: project.into(),
+            tool,
+            kind: SessionSourceKind::Session,
+        }
+    }
+
+    pub fn limit(path: PathBuf, project: impl Into<String>, tool: &'static str) -> Self {
+        Self {
+            path,
+            project: project.into(),
+            tool,
+            kind: SessionSourceKind::Limit,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionSourceKind {
+    Session,
+    Limit,
 }
 
 #[derive(Debug, Clone, PartialEq)]

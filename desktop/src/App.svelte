@@ -382,6 +382,23 @@
           await commit(() => api.refreshPricingSnapshot());
         }
         break;
+      case 'claude_statusline':
+        await runClaudeStatuslineAction(row);
+        break;
+      case 'claude_limits':
+        await commit(() => api.syncClaudeLimits());
+        break;
+      case 'copilot_limits':
+        if (
+          await confirmDownload(
+            snapshot.copy.modals.sync_copilot_limits_title,
+            snapshot.copy.modals.sync_copilot_limits_message,
+            snapshot.copy.actions.sync
+          )
+        ) {
+          await commit(() => api.syncCopilotLimits());
+        }
+        break;
       case 'clear_data':
         if (await confirmClearData()) {
           await runClearData();
@@ -390,12 +407,54 @@
     }
   }
 
-  async function confirmDownload(title: string, message: string) {
+  async function runClaudeStatuslineAction(row: ConfigRow) {
+    if (!snapshot) return;
+    const installedPrefix = snapshot.copy.config.values.statusline_installed_passthrough.split(' · ')[0];
+    const isInstalled = row.value.startsWith(installedPrefix);
+    const c = snapshot.copy;
+    if (isInstalled) {
+      try {
+        const ok = await confirm(c.modals.uninstall_claude_statusline_message, {
+          title: c.modals.uninstall_claude_statusline_title,
+          kind: 'warning',
+          okLabel: c.actions.uninstall,
+          cancelLabel: c.actions.cancel
+        });
+        if (ok) await commit(() => api.uninstallClaudeStatusline());
+      } catch (err) {
+        error = err instanceof Error ? err.message : String(err);
+      }
+      return;
+    }
+    try {
+      const ok = await confirm(c.modals.install_claude_statusline_message, {
+        title: c.modals.install_claude_statusline_title,
+        kind: 'info',
+        okLabel: c.actions.install,
+        cancelLabel: c.actions.cancel
+      });
+      if (ok) {
+        await commit(() => api.installClaudeStatusline());
+        return;
+      }
+      const manual = await confirm(c.modals.install_claude_statusline_manual_message, {
+        title: c.modals.install_claude_statusline_manual_title,
+        kind: 'info',
+        okLabel: c.actions.install_manual,
+        cancelLabel: c.actions.cancel
+      });
+      if (manual) await commit(() => api.installClaudeStatuslineManual());
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  async function confirmDownload(title: string, message: string, okLabel = snapshot?.copy.actions.download ?? '') {
     try {
       return await confirm(message, {
         title,
         kind: 'warning',
-        okLabel: snapshot?.copy.actions.download ?? '',
+        okLabel,
         cancelLabel: snapshot?.copy.actions.cancel ?? ''
       });
     } catch (err) {

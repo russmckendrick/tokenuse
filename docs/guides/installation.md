@@ -2,7 +2,7 @@
 
 `tokenuse` ships as a terminal UI for Linux, macOS, and Windows, plus a desktop app for all three platforms. Both frontends read the same local archive and configuration directory.
 
-There is no API key, proxy, telemetry endpoint, daemon, or live file watcher. Usage ingestion stays local-only; outbound network is limited to explicit Config-page downloads and maintainer refresh or release paths.
+There is no API key, proxy, telemetry endpoint, daemon, or live file watcher. Usage ingestion stays local-only; outbound network is limited to explicit Config-page downloads, explicit Copilot quota sync, and maintainer refresh or release paths.
 
 ## macOS
 

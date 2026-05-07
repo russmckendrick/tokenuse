@@ -235,6 +235,9 @@ pub struct ConfigRowsCopy {
     pub currency_override: ConfigRowCopy,
     pub rates_json: ConfigRowCopy,
     pub litellm_prices: ConfigRowCopy,
+    pub claude_statusline: ConfigRowCopy,
+    pub claude_limits: ConfigRowCopy,
+    pub copilot_limits: ConfigRowCopy,
     pub clear_data: ConfigRowCopy,
 }
 
@@ -249,6 +252,14 @@ pub struct ConfigValuesCopy {
     pub local_snapshot: String,
     pub legacy_snapshot: String,
     pub embedded_snapshot: String,
+    pub sidecar_found: String,
+    pub sidecar_missing: String,
+    pub statusline_not_installed: String,
+    pub statusline_installed_wrapping: String,
+    pub statusline_installed_passthrough: String,
+    pub statusline_external: String,
+    pub quota_snapshot_found: String,
+    pub quota_snapshot_missing: String,
     pub delete_archive_then_rebuild: String,
     pub build_archive_from_history: String,
 }
@@ -260,6 +271,8 @@ pub struct ConfigPathsCopy {
     pub archive_db: String,
     pub rates_data: String,
     pub pricing_data: String,
+    pub claude_limits: String,
+    pub copilot_limits: String,
     pub rates_source: String,
 }
 
@@ -323,14 +336,25 @@ pub struct ModalCopy {
     pub reimporting: String,
     pub download_rates_title: String,
     pub download_prices_title: String,
+    pub sync_copilot_limits_title: String,
+    pub install_claude_statusline_title: String,
+    pub install_claude_statusline_message: String,
+    pub install_claude_statusline_manual_title: String,
+    pub install_claude_statusline_manual_message: String,
+    pub uninstall_claude_statusline_title: String,
+    pub uninstall_claude_statusline_message: String,
     pub rates_file: String,
     pub pricing_file: String,
+    pub copilot_limits_file: String,
     pub rates_source: String,
     pub prices_source: String,
+    pub copilot_limits_source: String,
     pub rates_effect: String,
     pub prices_effect: String,
+    pub copilot_limits_effect: String,
     pub download_latest_rates_message: String,
     pub download_latest_prices_message: String,
+    pub sync_copilot_limits_message: String,
     pub clear_data_message: String,
     pub current_period_filters_apply: String,
     pub hidden_folders: String,
@@ -346,6 +370,11 @@ pub struct ModalCopy {
 pub struct ActionCopy {
     pub download: String,
     pub download_lower: String,
+    pub sync: String,
+    pub sync_lower: String,
+    pub install: String,
+    pub install_manual: String,
+    pub uninstall: String,
     pub cancel: String,
     pub cancel_lower: String,
     pub clear_data: String,
@@ -598,6 +627,18 @@ pub struct StatusCopy {
     pub litellm_prices_refreshed: String,
     pub litellm_refresh_failed: String,
     pub litellm_download_unavailable: String,
+    pub claude_limits_sidecar_missing: String,
+    pub claude_limits_synced: String,
+    pub claude_statusline_installed: String,
+    pub claude_statusline_installed_wrapping: String,
+    pub claude_statusline_installed_manual: String,
+    pub claude_statusline_already_installed: String,
+    pub claude_statusline_uninstalled: String,
+    pub claude_statusline_settings_backed_up: String,
+    pub claude_statusline_failed: String,
+    pub copilot_limits_synced: String,
+    pub copilot_limits_sync_failed: String,
+    pub copilot_limits_sync_unavailable: String,
     pub config_failed_defaults: String,
     pub currency_rates_failed_embedded: String,
     pub legacy_cache_imported_records: String,
@@ -663,6 +704,23 @@ impl CopyDeck {
         ensure_template(&self.status.report_failed, &["error"])?;
         ensure_template(&self.status.report_folder, &["path"])?;
         ensure_template(&self.status.clear_data_failed, &["error"])?;
+        ensure_template(&self.status.claude_limits_sidecar_missing, &["path"])?;
+        ensure_template(&self.status.claude_limits_synced, &["limits"])?;
+        ensure_template(&self.status.claude_statusline_installed, &["path"])?;
+        ensure_template(
+            &self.status.claude_statusline_installed_wrapping,
+            &["inner"],
+        )?;
+        ensure_template(&self.status.claude_statusline_installed_manual, &["path"])?;
+        ensure_template(&self.status.claude_statusline_settings_backed_up, &["path"])?;
+        ensure_template(&self.status.claude_statusline_failed, &["error"])?;
+        ensure_template(
+            &self.config.values.statusline_installed_wrapping,
+            &["inner"],
+        )?;
+        ensure_template(&self.config.values.statusline_external, &["command"])?;
+        ensure_template(&self.status.copilot_limits_synced, &["snapshots", "limits"])?;
+        ensure_template(&self.status.copilot_limits_sync_failed, &["error"])?;
         ensure_template(&self.status.background_usage_body, &["summary"])?;
         ensure_template(&self.report_cli.prompt, &["label", "default"])?;
         ensure_template(&self.report_cli.invalid_number, &["max"])?;

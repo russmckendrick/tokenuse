@@ -12,11 +12,11 @@ pub fn discover() -> Result<Vec<SessionSource>> {
 
     if let Some(db) = config::state_db_path() {
         if db.exists() {
-            sources.push(SessionSource {
-                path: db,
-                project: "cursor-workspace".into(),
-                tool: config::TOOL_ID,
-            });
+            sources.push(SessionSource::session(
+                db,
+                "cursor-workspace",
+                config::TOOL_ID,
+            ));
         }
     }
 
@@ -70,11 +70,11 @@ fn collect_transcript_files(
 
         if file_type.is_file() {
             if is_transcript_file(&path) {
-                sources.push(SessionSource {
+                sources.push(SessionSource::session(
                     path,
-                    project: project.to_string(),
-                    tool: config::TOOL_ID,
-                });
+                    project.to_string(),
+                    config::TOOL_ID,
+                ));
             }
             continue;
         }

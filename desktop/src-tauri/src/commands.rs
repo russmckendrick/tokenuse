@@ -239,6 +239,61 @@ pub(crate) async fn refresh_pricing_snapshot(
 }
 
 #[tauri::command]
+pub(crate) async fn sync_claude_limits(
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    with_app(state, |app| {
+        app.sync_claude_limits();
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn install_claude_statusline(
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    with_app(state, |app| {
+        app.install_claude_statusline();
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn install_claude_statusline_manual(
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    with_app(state, |app| {
+        app.install_claude_statusline_manual();
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn uninstall_claude_statusline(
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    with_app(state, |app| {
+        app.uninstall_claude_statusline();
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn sync_copilot_limits(
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    with_app(state, |app| {
+        app.sync_copilot_limits();
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[tauri::command]
 pub(crate) async fn set_report_dir(
     path: String,
     state: State<'_, SharedState>,

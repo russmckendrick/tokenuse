@@ -68,13 +68,13 @@ In the session page, use `Up` / `Down`, `PgUp` / `PgDn`, `Home` / `End` to move 
 
 ## Usage Page
 
-The Usage page is always a rolling 24-hour view. Opening it automatically selects the 24 Hours period. The page ignores the project filter; the tool filter can still narrow the visible console sections.
+The Usage page is always a rolling 24-hour view. Opening it automatically selects the 24 Hours period. The page ignores project filters and renders all tool console sections so plan-limit gauges stay comparable across tools.
 The active sort mode controls the order of tool sections and model rows; rate-limit rows keep their scope/window order.
 
 Each tool section includes:
 
 - One 24-hour pulse graph plus calls, tokens, cost, and last seen time.
-- Zero or more limit gauge rows from imported `LimitSnapshot` records. Currently Codex is the only adapter that imports plan rate-limit snapshots.
+- Zero or more limit gauge rows from imported `LimitSnapshot` records. Codex imports snapshots from rollout JSONL; Claude Code and Copilot import optional local sidecars from the tokenuse config directory.
 - Up to three top model rows for that tool's 24-hour slice.
 
 ## Configuration
@@ -90,13 +90,15 @@ Runtime settings live in the platform config directory under `tokenuse`:
 | `pricing-upstream.json` | Optional local broad pricing book |
 | `pricing-overrides.json` | Optional local official overrides and aliases |
 | `pricing-snapshot.json` | Legacy local pricing snapshot |
+| `limits/claude-code.json` | Optional Claude Code status-line limit sidecar |
+| `limits/copilot.json` | Optional Copilot quota sidecar written by confirmed sync |
 | `reports/` | Fallback report directory |
 
 USD remains the default display currency. Costs are calculated and stored internally as import-time USD, then converted for display using the configured currency.
 
-The Config page lists the published rates and pricing book URLs next to the local file paths, so users can inspect exactly what the download actions fetch before confirming. The pricing row also shows the active book source and its latest checked/generated date.
+The Config page lists the published rates and pricing book URLs next to the local file paths, so users can inspect exactly what the download actions fetch before confirming. The pricing row also shows the active book source and its latest checked/generated date. The Claude limits row imports an existing local sidecar and shows a setup hint until Claude Code's `statusLine` writes the OS-specific sidecar path. The Copilot limits row asks for confirmation before reading local Copilot credentials and fetching current quota state from GitHub.
 
-The Config page's clear-data action asks for confirmation, deletes `archive.db`, and immediately reimports from local tool history. Config, exchange rates, pricing books, legacy pricing snapshots, and reports are kept. Archive-only rows disappear if the original source files are gone, and rebuilt rows use the current configured pricing.
+The Config page's clear-data action asks for confirmation, deletes `archive.db`, and immediately reimports from local tool history. Config, exchange rates, pricing books, limit sidecars, legacy pricing snapshots, and reports are kept. Archive-only rows disappear if the original source files are gone, and rebuilt rows use the current configured pricing.
 
 ## Reports
 

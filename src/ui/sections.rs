@@ -690,9 +690,9 @@ pub(super) fn render_config(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
         .constraints([
             Constraint::Length(1),
             Constraint::Length(1),
-            Constraint::Length(8),
+            Constraint::Length(10),
             Constraint::Length(1),
-            Constraint::Length(12),
+            Constraint::Length(14),
             Constraint::Min(1),
             Constraint::Length(3),
         ])
@@ -801,6 +801,14 @@ fn render_config_paths(frame: &mut Frame<'_>, area: Rect, app: &App) {
                 app.paths.pricing_upstream_file.display(),
                 app.paths.pricing_overrides_file.display()
             ),
+        ),
+        path_line(
+            copy.config.paths.claude_limits.as_str(),
+            app.paths.claude_code_limits_file.display().to_string(),
+        ),
+        path_line(
+            copy.config.paths.copilot_limits.as_str(),
+            app.paths.copilot_limits_file.display().to_string(),
         ),
     ]);
     lines.push(Line::from(vec![
@@ -1296,6 +1304,7 @@ pub(super) fn render_download_confirm_modal(frame: &mut Frame<'_>, area: Rect, a
             app.paths.pricing_upstream_file.display(),
             app.paths.pricing_overrides_file.display()
         ),
+        ConfigDownload::CopilotLimits => app.paths.copilot_limits_file.display().to_string(),
     };
 
     let mut lines = vec![
@@ -1327,7 +1336,7 @@ pub(super) fn render_download_confirm_modal(frame: &mut Frame<'_>, area: Rect, a
         Line::from(vec![
             Span::styled("Enter/y", theme::key()),
             Span::styled(
-                format!(" {}    ", copy.actions.download_lower),
+                format!(" {}    ", target.confirm_action_lower()),
                 theme::muted(),
             ),
             Span::styled("Esc/n", theme::key()),

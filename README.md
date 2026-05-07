@@ -4,7 +4,7 @@
 
 Website: [tokenuse.app](https://www.tokenuse.app/)
 
-There is no API key, proxy, telemetry endpoint, daemon, or live file watcher. Usage ingestion stays local-only; outbound network is limited to explicit confirmed Config-page downloads or maintainer refresh flags.
+There is no API key, proxy, telemetry endpoint, daemon, or live file watcher. Usage ingestion stays local-only; outbound network is limited to explicit confirmed Config-page downloads, explicit Copilot quota sync, or maintainer refresh flags.
 
 ## Quick Start
 
@@ -91,10 +91,12 @@ The dashboard stores user settings and downloaded data in the platform config di
 - `rates.json`: legacy local currency snapshot, still read when `exchange-rates.json` is absent
 - `pricing-upstream.json` and `pricing-overrides.json`: latest downloaded pricing books
 - `pricing-snapshot.json`: legacy local pricing snapshot
+- `limits/claude-code.json`: optional Claude Code status-line limit sidecar
+- `limits/copilot.json`: optional Copilot quota sidecar written by confirmed sync
 
-USD remains the default. Costs are calculated and stored internally as import-time USD, then converted for display using the configured currency. Open the TUI configuration page with `c` to pick a currency, download the latest local data, or clear and rebuild the local archive. Downloading `exchange-rates.json` asks for confirmation and updates display rates immediately; downloading pricing books asks for confirmation and applies to newly imported calls. Clear data also asks for confirmation, deletes `archive.db`, and immediately reimports from local tool history.
+USD remains the default. Costs are calculated and stored internally as import-time USD, then converted for display using the configured currency. Open the TUI configuration page with `c` to pick a currency, download the latest local data, sync Claude/Copilot limit sidecars, or clear and rebuild the local archive. Downloading `exchange-rates.json` asks for confirmation and updates display rates immediately; downloading pricing books asks for confirmation and applies to newly imported calls. Copilot quota sync asks for confirmation, reads existing local Copilot credentials, writes `limits/copilot.json`, and refreshes archive limits. Clear data also asks for confirmation, deletes `archive.db`, and immediately reimports from local tool history.
 
-Default TUI and desktop builds include the confirmed download actions. Build with `--no-default-features` when you need a no-download binary; those builds keep ingestion local-only and report Config-page downloads as unavailable.
+Default TUI and desktop builds include the confirmed download and quota sync actions. Build with `--no-default-features` when you need a no-download binary; those builds keep ingestion local-only and report Config-page downloads and Copilot quota sync as unavailable.
 
 ## CLI Helper
 

@@ -444,11 +444,7 @@ mod tests {
             ],
         );
 
-        let source = SessionSource {
-            path: events.clone(),
-            project: "demo".into(),
-            tool: config::TOOL_ID,
-        };
+        let source = SessionSource::session(events.clone(), "demo", config::TOOL_ID);
         let mut seen = HashSet::new();
         let calls = parse_session(&source, &mut seen).unwrap();
         assert_eq!(calls.len(), 1);
@@ -479,11 +475,7 @@ mod tests {
                 r#"{"type":"assistant.message","data":{"messageId":"m1","outputTokens":0}}"#,
             ],
         );
-        let source = SessionSource {
-            path: events,
-            project: "demo".into(),
-            tool: config::TOOL_ID,
-        };
+        let source = SessionSource::session(events, "demo", config::TOOL_ID);
         let mut seen = HashSet::new();
         let calls = parse_session(&source, &mut seen).unwrap();
         assert!(calls.is_empty());
@@ -513,11 +505,7 @@ mod tests {
             ],
         );
 
-        let source = SessionSource {
-            path: transcript.clone(),
-            project: "vscode-ws".into(),
-            tool: config::TOOL_ID,
-        };
+        let source = SessionSource::session(transcript.clone(), "vscode-ws", config::TOOL_ID);
         let mut seen = HashSet::new();
         let calls = parse_session(&source, &mut seen).unwrap();
         assert_eq!(calls.len(), 2);
@@ -554,11 +542,7 @@ mod tests {
                 r#"{"type":"assistant.message","data":{"messageId":"m1","content":"hi","toolRequests":[{"toolCallId":"call_1","name":"web_search"}]}}"#,
             ],
         );
-        let source = SessionSource {
-            path: dir.path().to_path_buf(),
-            project: "ws".into(),
-            tool: config::TOOL_ID,
-        };
+        let source = SessionSource::session(dir.path().to_path_buf(), "ws", config::TOOL_ID);
         let mut seen = HashSet::new();
         let calls = parse_session(&source, &mut seen).unwrap();
         assert_eq!(calls.len(), 1);

@@ -2,10 +2,11 @@ use std::collections::HashSet;
 
 use color_eyre::Result;
 
-use super::{ParsedCall, SessionSource, ToolAdapter};
+use super::{LimitSnapshot, ParsedCall, SessionSource, SessionSourceKind, ToolAdapter};
 
 pub mod config;
 pub mod discovery;
+pub mod limits;
 pub mod parser;
 
 pub struct Copilot;
@@ -24,7 +25,17 @@ impl ToolAdapter for Copilot {
     }
 
     fn parse(&self, source: &SessionSource, seen: &mut HashSet<String>) -> Result<Vec<ParsedCall>> {
+        if source.kind == SessionSourceKind::Limit {
+            return Ok(Vec::new());
+        }
         parser::parse_session(source, seen)
+    }
+
+    fn parse_limits(&self, source: &SessionSource) -> Result<Vec<LimitSnapshot>> {
+        if source.kind == SessionSourceKind::Limit {
+            return limits::parse_sidecar(source);
+        }
+        Ok(Vec::new())
     }
 
     fn model_display(&self, model: &str) -> String {

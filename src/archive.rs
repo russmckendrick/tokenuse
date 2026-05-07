@@ -12,7 +12,7 @@ use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
 use crate::config::ConfigPaths;
 use crate::ingest::Ingested;
-use crate::tools::{self, LimitSnapshot, ParsedCall, Speed, ToolAdapter};
+use crate::tools::{self, LimitSnapshot, ParsedCall, SessionSourceKind, Speed, ToolAdapter};
 
 pub const SYNC_INTERVAL: Duration = crate::ingest_cache::TTL;
 
@@ -162,10 +162,21 @@ impl Archive {
                     }
                 }
 
-                let calls_result = adapter.parse(&source, &mut seen);
+                let calls_result = if source.kind == SessionSourceKind::Limit {
+                    Ok(Vec::new())
+                } else {
+                    adapter.parse(&source, &mut seen)
+                };
                 let limits_result = adapter.parse_limits(&source);
                 let parsed_calls_ok = calls_result.is_ok();
-                if !parsed_calls_ok && limits_result.is_err() {
+                let parsed_limits_ok = limits_result.is_ok();
+                if source.kind == SessionSourceKind::Limit && !parsed_limits_ok {
+                    continue;
+                }
+                if source.kind == SessionSourceKind::Session
+                    && !parsed_calls_ok
+                    && !parsed_limits_ok
+                {
                     continue;
                 }
 
@@ -182,7 +193,11 @@ impl Archive {
                         stats.limits_inserted += 1;
                     }
                 }
-                if parsed_calls_ok {
+                let should_store_fingerprint = match source.kind {
+                    SessionSourceKind::Session => parsed_calls_ok,
+                    SessionSourceKind::Limit => parsed_limits_ok,
+                };
+                if should_store_fingerprint {
                     if let Some(fingerprint) = fingerprint.as_deref() {
                         upsert_source_fingerprint(&tx, source.tool, &path, fingerprint)?;
                     }
@@ -863,11 +878,7 @@ mod tests {
     }
 
     fn fake_source(path: PathBuf) -> SessionSource {
-        SessionSource {
-            path,
-            project: "fake-project".into(),
-            tool: crate::tools::codex::config::TOOL_ID,
-        }
+        SessionSource::session(path, "fake-project", crate::tools::codex::config::TOOL_ID)
     }
 
     #[test]

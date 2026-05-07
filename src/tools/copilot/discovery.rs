@@ -17,11 +17,11 @@ pub fn discover() -> Result<Vec<SessionSource>> {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_dir() {
-                    sources.push(SessionSource {
-                        project: entry.file_name().to_string_lossy().to_string(),
+                    sources.push(SessionSource::session(
                         path,
-                        tool: config::TOOL_ID,
-                    });
+                        entry.file_name().to_string_lossy().to_string(),
+                        config::TOOL_ID,
+                    ));
                 }
             }
         }
@@ -40,17 +40,27 @@ pub fn discover() -> Result<Vec<SessionSource>> {
                 }
                 if entry.file_name() == "transcripts" {
                     let workspace_dir = workspace_dir_for_transcripts(entry.path());
-                    sources.push(SessionSource {
-                        project: workspace_dir
+                    sources.push(SessionSource::session(
+                        entry.path().to_path_buf(),
+                        workspace_dir
                             .as_deref()
                             .and_then(read_workspace_project)
                             .or_else(|| workspace_dir.as_deref().and_then(workspace_hash_label))
                             .unwrap_or_else(|| "vscode-workspace".into()),
-                        path: entry.path().to_path_buf(),
-                        tool: config::TOOL_ID,
-                    });
+                        config::TOOL_ID,
+                    ));
                 }
             }
+        }
+    }
+
+    if let Some(sidecar) = config::limit_sidecar() {
+        if sidecar.is_file() {
+            sources.push(SessionSource::limit(
+                sidecar,
+                "copilot-limits",
+                config::TOOL_ID,
+            ));
         }
     }
 

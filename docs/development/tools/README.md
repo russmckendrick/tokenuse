@@ -1,6 +1,6 @@
 # Tool Ingestion
 
-`tokenuse` reads usage data **directly from local files** written by AI coding tools. There is no proxy, no API key, no telemetry endpoint, and no live watcher.
+`tokenuse` reads usage data **directly from local files** written by AI coding tools. There is no proxy, no API key, no telemetry endpoint, and no live watcher. Optional quota sync actions can write local limit sidecars under the tokenuse config directory; Copilot quota sync is explicit and uses the existing local Copilot OAuth token.
 
 The UI calls these sources **tools**. Internally each one is implemented as a `ToolAdapter` under `src/tools/<name>/`.
 
@@ -8,10 +8,10 @@ The UI calls these sources **tools**. Internally each one is implemented as a `T
 
 | Tool | Status | Source format | Token quality | Doc |
 | --- | --- | --- | --- | --- |
-| Claude Code | implemented | JSONL session files under `~/.claude/projects/` and Claude Desktop agent sessions | exact usage, cache reads/writes, tool calls | [claude-code.md](claude-code.md) |
+| Claude Code | implemented | JSONL session files under `~/.claude/projects/`, Claude Desktop agent sessions, optional status-line limits sidecar | exact usage, cache reads/writes, tool calls, file-backed 5h/weekly limit snapshots | [claude-code.md](claude-code.md) |
 | Cursor | implemented | SQLite `state.vscdb` and `~/.cursor/projects/**/agent-transcripts` | exact when `tokenCount` exists; estimated fallback otherwise | [cursor.md](cursor.md) |
 | Codex | implemented | JSONL rollouts under `~/.codex/sessions/` | exact per-turn token-count deltas | [codex.md](codex.md) |
-| GitHub Copilot | implemented | JSONL events from legacy CLI and VS Code Copilot Chat transcripts | legacy output exact when present; transcripts estimated | [copilot.md](copilot.md) |
+| GitHub Copilot | implemented | JSONL events from legacy CLI, VS Code Copilot Chat transcripts, optional quota sidecar | legacy output exact when present; transcripts estimated; quota snapshots from confirmed local sync | [copilot.md](copilot.md) |
 | Gemini | implemented | JSON/JSONL chat sessions under `~/.gemini/tmp/<project_hash>/chats/` | exact usage, cache reads, thoughts, tool calls | [gemini.md](gemini.md) |
 
 ## Data Path
@@ -23,7 +23,10 @@ flowchart LR
     C --> D["archive source fingerprint"]
     D -->|changed| E["adapter.parse(source, seen)"]
     E --> F["append ParsedCall rows"]
+    C --> L["adapter.parse_limits(source)"]
+    L --> M["append LimitSnapshot rows"]
     F --> G["archive.db"]
+    M --> G
     G --> H["DashboardData"]
     E -. "dedup_key" .-> I["shared seen set"]
 ```

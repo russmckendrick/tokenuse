@@ -35,11 +35,11 @@ pub fn discover() -> Result<Vec<SessionSource>> {
             .and_then(|p| p.parent())
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_default();
-        out.push(SessionSource {
-            path: path.to_path_buf(),
+        out.push(SessionSource::session(
+            path.to_path_buf(),
             project,
-            tool: config::TOOL_ID,
-        });
+            config::TOOL_ID,
+        ));
     }
     Ok(out)
 }

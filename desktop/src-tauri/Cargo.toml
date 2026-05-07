@@ -29,6 +29,7 @@ tokenuse = { path = "../..", default-features = false }
 tauri-plugin-updater = "2"
 
 [features]
-default = ["refresh-currency", "refresh-prices"]
+default = ["refresh-currency", "refresh-prices", "quota-sync"]
 refresh-currency = ["tokenuse/refresh-currency"]
 refresh-prices = ["tokenuse/refresh-prices"]
+quota-sync = ["tokenuse/quota-sync"]

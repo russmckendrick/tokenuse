@@ -36,6 +36,8 @@ flowchart TD
     F --> G
     G --> H[user updates last user text]
     G --> I[assistant with usage emits ParsedCall]
+    J[tokenuse limits sidecar] --> K[statusLine rate_limits]
+    K --> L[emit LimitSnapshot]
 ```
 
 ## Record format
@@ -125,3 +127,60 @@ flowchart LR
 - The user message captured per call is the most recent user turn before the assistant response, truncated to 500 chars. If a user sends multiple messages in rapid succession before any assistant reply, only the last is recorded.
 - Synthetic models (`<synthetic>`, used by Claude Code for placeholder rows) hit the pricing fallback — they cost `$0` because their token counts are zero, but they still count toward call totals.
 - No live file watching: press `r` or wait for the 15-minute background archive sync to pick up new sessions.
+
+## Rate-limit snapshots
+
+Claude Code does not write plan-window rate-limit usage into the transcript JSONL. It does expose the data to status-line commands for Claude.ai Pro/Max subscribers after the first API response in a session. `tokenuse` imports that data from:
+
+```text
+<config dir>/tokenuse/limits/claude-code.json
+```
+
+The default sidecar path is platform-specific:
+
+| Platform | Sidecar path |
+| --- | --- |
+| macOS | `~/Library/Application Support/tokenuse/limits/claude-code.json` |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/tokenuse/limits/claude-code.json` |
+| Windows | `%APPDATA%\tokenuse\limits\claude-code.json` |
+
+The sidecar should contain the JSON object Claude Code passes to the configured `statusLine` command. `tokenuse` reads `rate_limits.five_hour.used_percentage`, `rate_limits.five_hour.resets_at`, `rate_limits.seven_day.used_percentage`, and `rate_limits.seven_day.resets_at`, then emits one `LimitSnapshot` with 5h and weekly windows. `resets_at` is a Unix epoch timestamp in seconds.
+
+### Recommended: install the wrapper from the desktop app
+
+Open the **Config** page and click **Install** on the *Claude statusLine* row. Token Use will:
+
+1. Detect whatever is already in `~/.claude/settings.json` (e.g. `cship`).
+2. Write a wrapper script under `<config>/tokenuse/statusline/claude-code.sh` (or `.ps1` on Windows) that tees the JSON Claude Code passes on stdin into the sidecar path *and* pipes the same JSON through the previously detected command — so the visible status line is unchanged.
+3. Back up `~/.claude/settings.json` to `settings.json.bak.<unix-ts>` and rewrite `statusLine.command` to point at the wrapper.
+
+If you prefer not to let the app touch `settings.json`, choose **Generate wrapper only** in the second dialog. The app will write the wrapper script and tell you the exact path to paste into your settings yourself. **Uninstall** restores the previous `statusLine.command` and removes the wrapper; the sidecar JSON file is left in place.
+
+### Manual setup
+
+A minimal macOS/Linux wrapper can write the sidecar while preserving status output:
+
+```bash
+#!/bin/bash
+input=$(cat)
+if [ "$(uname)" = "Darwin" ]; then
+  dir="$HOME/Library/Application Support/tokenuse/limits"
+else
+  dir="${XDG_CONFIG_HOME:-$HOME/.config}/tokenuse/limits"
+fi
+mkdir -p "$dir"
+printf '%s\n' "$input" > "$dir/claude-code.json"
+echo "Claude"
+```
+
+A minimal Windows PowerShell wrapper writes the same file under `%APPDATA%`:
+
+```powershell
+$inputJson = [Console]::In.ReadToEnd()
+$dir = Join-Path $env:APPDATA "tokenuse\limits"
+New-Item -ItemType Directory -Force -Path $dir | Out-Null
+Set-Content -Path (Join-Path $dir "claude-code.json") -Value $inputJson -NoNewline -Encoding UTF8
+"Claude"
+```
+
+After configuring Claude Code to use the wrapper as its `statusLine` command, run at least one Claude Code request. Claude only includes `rate_limits` after an API response, so the Config page will continue to show the setup hint until that sidecar exists.

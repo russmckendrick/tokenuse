@@ -19,6 +19,16 @@ pub fn discover() -> Result<Vec<SessionSource>> {
         sources.extend(walk_desktop(&desktop));
     }
 
+    if let Some(sidecar) = config::limit_sidecar() {
+        if sidecar.is_file() {
+            sources.push(SessionSource::limit(
+                sidecar,
+                "claude-code-limits",
+                config::TOOL_ID,
+            ));
+        }
+    }
+
     Ok(sources)
 }
 
@@ -34,11 +44,11 @@ fn list_project_dirs(root: &Path) -> Vec<SessionSource> {
             continue;
         }
         let name = entry.file_name().to_string_lossy().to_string();
-        out.push(SessionSource {
-            project: config::unsanitize_project(&name),
+        out.push(SessionSource::session(
             path,
-            tool: config::TOOL_ID,
-        });
+            config::unsanitize_project(&name),
+            config::TOOL_ID,
+        ));
     }
     out
 }

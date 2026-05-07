@@ -356,11 +356,7 @@ mod tests {
     }
 
     fn source_for(path: PathBuf) -> SessionSource {
-        SessionSource {
-            path,
-            project: "project-hash".into(),
-            tool: config::TOOL_ID,
-        }
+        SessionSource::session(path, "project-hash", config::TOOL_ID)
     }
 
     #[test]

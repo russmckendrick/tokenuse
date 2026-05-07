@@ -23,6 +23,9 @@ const LOCAL_PRICING_UPSTREAM_FILE_NAME: &str = "pricing-upstream.json";
 const LOCAL_PRICING_OVERRIDES_FILE_NAME: &str = "pricing-overrides.json";
 const LEGACY_LOCAL_PRICING_FILE_NAME: &str = "pricing-snapshot.json";
 const ARCHIVE_DB_FILE_NAME: &str = "archive.db";
+const LIMITS_DIR_NAME: &str = "limits";
+const CLAUDE_CODE_LIMITS_FILE_NAME: &str = "claude-code.json";
+const COPILOT_LIMITS_FILE_NAME: &str = "copilot.json";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigPaths {
@@ -34,10 +37,14 @@ pub struct ConfigPaths {
     pub pricing_overrides_file: PathBuf,
     pub pricing_snapshot_file: PathBuf,
     pub archive_db_file: PathBuf,
+    pub limits_dir: PathBuf,
+    pub claude_code_limits_file: PathBuf,
+    pub copilot_limits_file: PathBuf,
 }
 
 impl ConfigPaths {
     pub fn new(dir: PathBuf) -> Self {
+        let limits_dir = dir.join(LIMITS_DIR_NAME);
         Self {
             config_file: dir.join(CONFIG_FILE_NAME),
             currency_rates_file: dir.join(LOCAL_EXCHANGE_RATES_FILE_NAME),
@@ -46,12 +53,18 @@ impl ConfigPaths {
             pricing_overrides_file: dir.join(LOCAL_PRICING_OVERRIDES_FILE_NAME),
             pricing_snapshot_file: dir.join(LEGACY_LOCAL_PRICING_FILE_NAME),
             archive_db_file: dir.join(ARCHIVE_DB_FILE_NAME),
+            claude_code_limits_file: limits_dir.join(CLAUDE_CODE_LIMITS_FILE_NAME),
+            copilot_limits_file: limits_dir.join(COPILOT_LIMITS_FILE_NAME),
+            limits_dir,
             dir,
         }
     }
 
     pub fn ensure_dir(&self) -> Result<()> {
-        fs::create_dir_all(&self.dir).wrap_err_with(|| format!("create {}", self.dir.display()))
+        fs::create_dir_all(&self.dir).wrap_err_with(|| format!("create {}", self.dir.display()))?;
+        fs::create_dir_all(&self.limits_dir)
+            .wrap_err_with(|| format!("create {}", self.limits_dir.display()))?;
+        Ok(())
     }
 }
 
@@ -279,6 +292,20 @@ mod tests {
                 .file_name()
                 .and_then(|name| name.to_str()),
             Some("rates.json")
+        );
+        assert_eq!(
+            paths
+                .claude_code_limits_file
+                .file_name()
+                .and_then(|name| name.to_str()),
+            Some("claude-code.json")
+        );
+        assert_eq!(
+            paths
+                .copilot_limits_file
+                .file_name()
+                .and_then(|name| name.to_str()),
+            Some("copilot.json")
         );
     }
 

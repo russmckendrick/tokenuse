@@ -36,6 +36,12 @@ export const api = {
   clearData: () => invoke<DesktopSnapshot>('clear_data'),
   refreshCurrencyRates: () => invoke<DesktopSnapshot>('refresh_currency_rates'),
   refreshPricingSnapshot: () => invoke<DesktopSnapshot>('refresh_pricing_snapshot'),
+  syncClaudeLimits: () => invoke<DesktopSnapshot>('sync_claude_limits'),
+  installClaudeStatusline: () => invoke<DesktopSnapshot>('install_claude_statusline'),
+  installClaudeStatuslineManual: () =>
+    invoke<DesktopSnapshot>('install_claude_statusline_manual'),
+  uninstallClaudeStatusline: () => invoke<DesktopSnapshot>('uninstall_claude_statusline'),
+  syncCopilotLimits: () => invoke<DesktopSnapshot>('sync_copilot_limits'),
   checkDesktopUpdate: () => invoke<DesktopUpdateMetadata | null>('check_desktop_update'),
   installDesktopUpdate: (onEvent: Channel<DesktopUpdateDownloadEvent>) =>
     invoke<void>('install_desktop_update', { onEvent }),

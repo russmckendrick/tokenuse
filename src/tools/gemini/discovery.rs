@@ -36,11 +36,11 @@ fn discover_in(root: &Path) -> Result<Vec<SessionSource>> {
             if !path.is_file() || !is_session_file(&path) {
                 continue;
             }
-            sources.push(SessionSource {
+            sources.push(SessionSource::session(
                 path,
-                project: project.clone(),
-                tool: config::TOOL_ID,
-            });
+                project.clone(),
+                config::TOOL_ID,
+            ));
         }
     }
     sources.sort_by(|a, b| a.path.cmp(&b.path));

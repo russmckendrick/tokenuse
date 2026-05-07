@@ -67,4 +67,4 @@ The pricing books are also refreshed by `.github/workflows/refresh-pricing.yml` 
 
 ## No-Download Builds
 
-Default TUI and desktop builds include confirmed Config-page downloads for `exchange-rates.json`, `pricing-upstream.json`, and `pricing-overrides.json`. Build with `--no-default-features` when you need a no-download binary; those builds keep ingestion local-only and report Config-page downloads as unavailable.
+Default TUI and desktop builds include confirmed Config-page downloads for `exchange-rates.json`, `pricing-upstream.json`, and `pricing-overrides.json`, plus confirmed Copilot quota sync. Build with `--no-default-features` when you need a no-download binary; those builds keep ingestion local-only and report Config-page downloads and Copilot quota sync as unavailable.

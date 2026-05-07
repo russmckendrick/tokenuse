@@ -1319,11 +1319,11 @@ mod tests {
     }
 
     fn source() -> SessionSource {
-        SessionSource {
-            path: std::path::PathBuf::from(":memory:"),
-            project: "cursor-workspace".into(),
-            tool: config::TOOL_ID,
-        }
+        SessionSource::session(
+            std::path::PathBuf::from(":memory:"),
+            "cursor-workspace",
+            config::TOOL_ID,
+        )
     }
 
     struct TempDir(PathBuf);
@@ -1355,11 +1355,7 @@ mod tests {
     }
 
     fn transcript_source(path: PathBuf) -> SessionSource {
-        SessionSource {
-            path,
-            project: "/Users/me/Code/fallback".into(),
-            tool: config::TOOL_ID,
-        }
+        SessionSource::session(path, "/Users/me/Code/fallback", config::TOOL_ID)
     }
 
     fn tracking_db(path: &Path, conversation_id: &str, model: &str, observed_at: i64) -> PathBuf {

@@ -12,7 +12,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 
 use crate::archive;
 use crate::config::{ConfigPaths, UserConfig};
-use crate::copy::{self, copy};
+use crate::copy::{self, copy, CopyDeck};
 use crate::currency::{CurrencyFormatter, CurrencyTable};
 use crate::data::{
     DashboardData, LimitsData, ProjectOption, SessionDetail, SessionDetailView, SessionOption,
@@ -381,6 +381,7 @@ impl ExportModal {
 pub enum ConfigDownload {
     CurrencyRates,
     PricingSnapshot,
+    CopilotLimits,
 }
 
 impl ConfigDownload {
@@ -389,6 +390,7 @@ impl ConfigDownload {
         match self {
             Self::CurrencyRates => copy.modals.download_rates_title.as_str(),
             Self::PricingSnapshot => copy.modals.download_prices_title.as_str(),
+            Self::CopilotLimits => copy.modals.sync_copilot_limits_title.as_str(),
         }
     }
 
@@ -397,6 +399,7 @@ impl ConfigDownload {
         match self {
             Self::CurrencyRates => copy.modals.rates_file.as_str(),
             Self::PricingSnapshot => copy.modals.pricing_file.as_str(),
+            Self::CopilotLimits => copy.modals.copilot_limits_file.as_str(),
         }
     }
 
@@ -405,6 +408,7 @@ impl ConfigDownload {
         match self {
             Self::CurrencyRates => copy.modals.rates_source.as_str(),
             Self::PricingSnapshot => copy.modals.prices_source.as_str(),
+            Self::CopilotLimits => copy.modals.copilot_limits_source.as_str(),
         }
     }
 
@@ -413,6 +417,15 @@ impl ConfigDownload {
         match self {
             Self::CurrencyRates => copy.modals.rates_effect.as_str(),
             Self::PricingSnapshot => copy.modals.prices_effect.as_str(),
+            Self::CopilotLimits => copy.modals.copilot_limits_effect.as_str(),
+        }
+    }
+
+    pub fn confirm_action_lower(self) -> &'static str {
+        let copy = copy();
+        match self {
+            Self::CurrencyRates | Self::PricingSnapshot => copy.actions.download_lower.as_str(),
+            Self::CopilotLimits => copy.actions.sync_lower.as_str(),
         }
     }
 
@@ -420,6 +433,7 @@ impl ConfigDownload {
         match self {
             Self::CurrencyRates => rates_download_links(),
             Self::PricingSnapshot => pricing_download_links(),
+            Self::CopilotLimits => Vec::new(),
         }
     }
 }
@@ -631,6 +645,29 @@ fn rates_download_links() -> Vec<ConfigLinkView> {
         label: copy().config.links.published_rates.clone(),
         url: crate::config::CURRENCY_RATES_URL.to_string(),
     }]
+}
+
+fn render_statusline_value(
+    copy: &CopyDeck,
+    state: Option<&crate::tools::claude_code::statusline::InstallState>,
+) -> String {
+    use crate::tools::claude_code::statusline::InstallState;
+    match state {
+        None | Some(InstallState::NotInstalled) => {
+            copy.config.values.statusline_not_installed.clone()
+        }
+        Some(InstallState::InstalledWrapping(inner)) => crate::copy::template(
+            &copy.config.values.statusline_installed_wrapping,
+            &[("inner", inner.clone())],
+        ),
+        Some(InstallState::InstalledPassthrough) => {
+            copy.config.values.statusline_installed_passthrough.clone()
+        }
+        Some(InstallState::External(cmd)) => crate::copy::template(
+            &copy.config.values.statusline_external,
+            &[("command", cmd.clone())],
+        ),
+    }
 }
 
 fn pricing_download_links() -> Vec<ConfigLinkView> {
@@ -1449,6 +1486,28 @@ impl App {
         } else {
             copy.config.values.build_archive_from_history.clone()
         };
+        let claude_limits_value = format!(
+            "{} · {}",
+            if self.paths.claude_code_limits_file.exists() {
+                &copy.config.values.sidecar_found
+            } else {
+                &copy.config.values.sidecar_missing
+            },
+            self.paths.claude_code_limits_file.display()
+        );
+        let statusline_state = crate::tools::claude_code::statusline::detect()
+            .ok()
+            .map(|d| d.state);
+        let statusline_value = render_statusline_value(copy, statusline_state.as_ref());
+        let copilot_limits_value = format!(
+            "{} · {}",
+            if self.paths.copilot_limits_file.exists() {
+                &copy.config.values.quota_snapshot_found
+            } else {
+                &copy.config.values.quota_snapshot_missing
+            },
+            self.paths.copilot_limits_file.display()
+        );
 
         vec![
             ConfigRowView {
@@ -1471,6 +1530,27 @@ impl App {
                 value: pricing_value,
                 action: copy.config.rows.litellm_prices.action.as_str(),
                 links: pricing_download_links(),
+            },
+            ConfigRowView {
+                id: "claude_statusline",
+                name: copy.config.rows.claude_statusline.name.as_str(),
+                value: statusline_value,
+                action: copy.config.rows.claude_statusline.action.as_str(),
+                links: Vec::new(),
+            },
+            ConfigRowView {
+                id: "claude_limits",
+                name: copy.config.rows.claude_limits.name.as_str(),
+                value: claude_limits_value,
+                action: copy.config.rows.claude_limits.action.as_str(),
+                links: Vec::new(),
+            },
+            ConfigRowView {
+                id: "copilot_limits",
+                name: copy.config.rows.copilot_limits.name.as_str(),
+                value: copilot_limits_value,
+                action: copy.config.rows.copilot_limits.action.as_str(),
+                links: Vec::new(),
             },
             ConfigRowView {
                 id: "clear_data",
@@ -1715,6 +1795,7 @@ impl App {
         match target {
             Some(ConfigDownload::CurrencyRates) => self.refresh_currency_rates(),
             Some(ConfigDownload::PricingSnapshot) => self.refresh_pricing_snapshot(),
+            Some(ConfigDownload::CopilotLimits) => self.sync_copilot_limits(),
             None => {}
         }
     }
@@ -2048,11 +2129,18 @@ impl App {
     }
 
     fn activate_config_row(&mut self) {
-        match self.config_selected {
-            0 => self.open_currency_modal(),
-            1 => self.open_download_confirm(ConfigDownload::CurrencyRates),
-            2 => self.open_download_confirm(ConfigDownload::PricingSnapshot),
-            3 => self.open_clear_data_confirm(),
+        match self
+            .config_rows()
+            .get(self.config_selected)
+            .map(|row| row.id)
+        {
+            Some("currency_override") => self.open_currency_modal(),
+            Some("rates_json") => self.open_download_confirm(ConfigDownload::CurrencyRates),
+            Some("litellm_prices") => self.open_download_confirm(ConfigDownload::PricingSnapshot),
+            Some("claude_statusline") => self.install_claude_statusline(),
+            Some("claude_limits") => self.sync_claude_limits(),
+            Some("copilot_limits") => self.open_download_confirm(ConfigDownload::CopilotLimits),
+            Some("clear_data") => self.open_clear_data_confirm(),
             _ => {}
         }
     }
@@ -2105,6 +2193,152 @@ impl App {
                 );
             }
         }
+    }
+
+    pub fn install_claude_statusline(&mut self) {
+        match crate::tools::claude_code::statusline::install() {
+            Ok(report) => {
+                if report.already_installed {
+                    self.set_status(
+                        copy().status.claude_statusline_already_installed.clone(),
+                        StatusTone::Info,
+                    );
+                } else if let Some(inner) = &report.previous_inner {
+                    self.set_status(
+                        copy::template(
+                            &copy().status.claude_statusline_installed_wrapping,
+                            &[("inner", inner.clone())],
+                        ),
+                        StatusTone::Success,
+                    );
+                } else {
+                    self.set_status(
+                        copy::template(
+                            &copy().status.claude_statusline_installed,
+                            &[("path", report.wrapper_path.display().to_string())],
+                        ),
+                        StatusTone::Success,
+                    );
+                }
+            }
+            Err(e) => self.set_status(
+                copy::template(
+                    &copy().status.claude_statusline_failed,
+                    &[("error", e.to_string())],
+                ),
+                StatusTone::Error,
+            ),
+        }
+    }
+
+    pub fn install_claude_statusline_manual(&mut self) {
+        match crate::tools::claude_code::statusline::install_manual() {
+            Ok(path) => self.set_status(
+                copy::template(
+                    &copy().status.claude_statusline_installed_manual,
+                    &[("path", path.display().to_string())],
+                ),
+                StatusTone::Success,
+            ),
+            Err(e) => self.set_status(
+                copy::template(
+                    &copy().status.claude_statusline_failed,
+                    &[("error", e.to_string())],
+                ),
+                StatusTone::Error,
+            ),
+        }
+    }
+
+    pub fn uninstall_claude_statusline(&mut self) {
+        match crate::tools::claude_code::statusline::uninstall() {
+            Ok(_) => self.set_status(
+                copy().status.claude_statusline_uninstalled.clone(),
+                StatusTone::Success,
+            ),
+            Err(e) => self.set_status(
+                copy::template(
+                    &copy().status.claude_statusline_failed,
+                    &[("error", e.to_string())],
+                ),
+                StatusTone::Error,
+            ),
+        }
+    }
+
+    pub fn sync_claude_limits(&mut self) {
+        if !self.paths.claude_code_limits_file.exists() {
+            self.set_status(
+                copy::template(
+                    &copy().status.claude_limits_sidecar_missing,
+                    &[(
+                        "path",
+                        self.paths.claude_code_limits_file.display().to_string(),
+                    )],
+                ),
+                StatusTone::Warning,
+            );
+            return;
+        }
+
+        match crate::archive::sync_and_load(&self.paths) {
+            Ok(ingested) => {
+                let limits = ingested.limits.len();
+                self.apply_synced_archive(ingested);
+                self.set_status(
+                    copy::template(
+                        &copy().status.claude_limits_synced,
+                        &[("limits", limits.to_string())],
+                    ),
+                    StatusTone::Success,
+                );
+            }
+            Err(e) => self.set_status(
+                copy::template(
+                    &copy().status.reload_failed_prior_data_kept,
+                    &[("error", e.to_string())],
+                ),
+                StatusTone::Error,
+            ),
+        }
+    }
+
+    #[cfg(feature = "quota-sync")]
+    pub fn sync_copilot_limits(&mut self) {
+        match crate::tools::copilot::limits::refresh_sidecar(&self.paths.copilot_limits_file)
+            .and_then(|snapshots| {
+                crate::archive::sync_and_load(&self.paths).map(|ingested| (snapshots, ingested))
+            }) {
+            Ok((snapshots, ingested)) => {
+                let limits = ingested.limits.len();
+                self.apply_synced_archive(ingested);
+                self.set_status(
+                    copy::template(
+                        &copy().status.copilot_limits_synced,
+                        &[
+                            ("snapshots", snapshots.to_string()),
+                            ("limits", limits.to_string()),
+                        ],
+                    ),
+                    StatusTone::Success,
+                );
+            }
+            Err(e) => self.set_status(
+                copy::template(
+                    &copy().status.copilot_limits_sync_failed,
+                    &[("error", e.to_string())],
+                ),
+                StatusTone::Error,
+            ),
+        }
+    }
+
+    #[cfg(not(feature = "quota-sync"))]
+    pub fn sync_copilot_limits(&mut self) {
+        self.set_status(
+            copy().status.copilot_limits_sync_unavailable.clone(),
+            StatusTone::Warning,
+        );
     }
 
     fn confirm_clear_data(&mut self) {
@@ -2188,6 +2422,23 @@ impl App {
                     RefreshSource::Archive(Box::new(self.paths.clone())),
                 ));
             }
+        }
+        self.refresh_session_view();
+    }
+
+    fn apply_synced_archive(&mut self, ingested: Ingested) {
+        self.background_alert_baseline =
+            (!ingested.is_empty()).then(|| UsageTotals::from_ingested(&ingested));
+        if ingested.is_empty() {
+            if !self.sample_forced {
+                self.source = DataSource::Sample;
+                self.live_source = None;
+            }
+        } else if self.sample_forced {
+            self.live_source = Some(ingested);
+        } else {
+            self.source = DataSource::Live(ingested);
+            self.live_source = None;
         }
         self.refresh_session_view();
     }
@@ -2670,9 +2921,24 @@ mod tests {
             .starts_with(&copy().config.values.embedded_snapshot));
         assert!(rows[2].value.contains(" · "));
         assert_eq!(rows[2].links.len(), 2);
-        assert_eq!(rows[3].id, "clear_data");
-        assert_eq!(rows[3].name, copy().config.rows.clear_data.name);
-        assert_eq!(rows[3].action, copy().config.rows.clear_data.action);
+        assert_eq!(rows[3].id, "claude_statusline");
+        assert_eq!(rows[3].name, copy().config.rows.claude_statusline.name);
+        assert_eq!(rows[3].action, copy().config.rows.claude_statusline.action);
+        assert_eq!(rows[4].id, "claude_limits");
+        assert_eq!(rows[4].name, copy().config.rows.claude_limits.name);
+        assert_eq!(rows[4].action, copy().config.rows.claude_limits.action);
+        assert!(rows[4]
+            .value
+            .starts_with(&copy().config.values.sidecar_missing));
+        assert_eq!(rows[5].id, "copilot_limits");
+        assert_eq!(rows[5].name, copy().config.rows.copilot_limits.name);
+        assert_eq!(rows[5].action, copy().config.rows.copilot_limits.action);
+        assert!(rows[5]
+            .value
+            .starts_with(&copy().config.values.quota_snapshot_missing));
+        assert_eq!(rows[6].id, "clear_data");
+        assert_eq!(rows[6].name, copy().config.rows.clear_data.name);
+        assert_eq!(rows[6].action, copy().config.rows.clear_data.action);
     }
 
     #[test]

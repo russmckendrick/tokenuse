@@ -40,6 +40,7 @@ flowchart TD
     A["legacy session-state dir"] --> B["events.jsonl"]
     A --> C["workspace.yaml cwd"]
     D["VS Code workspaceStorage"] --> E["transcripts/*.jsonl"]
+    J["tokenuse limits/copilot.json"] --> K["quota_snapshots"]
     E --> F["first line data.producer == copilot-agent"]
     B --> G["legacy parser"]
     F --> H["transcript parser"]
@@ -47,6 +48,7 @@ flowchart TD
     C --> H
     G --> I["ParsedCall output"]
     H --> I
+    K --> L["LimitSnapshot output"]
 ```
 
 ## Record Format
@@ -180,3 +182,37 @@ flowchart LR
 - VS Code transcript token counts are estimates based on `chars / 4.0`; treat Copilot totals as approximate.
 - VS Code `data.model` is currently ignored for pricing; tool-call id inference picks one model alias for the whole transcript. Auto aliases are displayed as Copilot-specific model buckets.
 - `workspace.yaml` parsing reads only the scalar `cwd:` line used by Copilot session-state files. If Copilot starts writing richer YAML, replace the small parser with a YAML crate.
+
+## Rate-limit snapshots
+
+Copilot transcripts do not include quota state. `tokenuse` imports Copilot limits from a local sidecar:
+
+```text
+<config dir>/tokenuse/limits/copilot.json
+```
+
+The sidecar can be either the raw `GET https://api.github.com/copilot_internal/user` payload or the wrapper object written by the Config page sync action:
+
+```jsonc
+{
+  "observed_at": "2026-01-15T12:00:00Z",
+  "source": "https://api.github.com/copilot_internal/user",
+  "payload": {
+    "copilot_plan": "individual_pro",
+    "quota_reset_date": "2026-02-01",
+    "quota_snapshots": {
+      "premium_interactions": {
+        "entitlement": 300,
+        "percent_remaining": 31.16,
+        "remaining": 93,
+        "unlimited": false,
+        "timestamp_utc": "2026-01-15T12:02:00Z"
+      }
+    }
+  }
+}
+```
+
+`tokenuse` skips unlimited snapshots with no entitlement, converts `percent_remaining` into `used_percent`, and emits one `LimitSnapshot` per constrained quota key. `quota_reset_date` is treated as a monthly reset at 00:00 UTC unless a future quota key indicates a weekly window.
+
+The Config page's Copilot sync action is explicit and confirmed. It reads the existing GitHub Copilot OAuth token from local `github-copilot` config files, fetches the quota payload from GitHub, writes the sidecar above, then syncs the archive so Usage gauges update immediately. Builds without the `quota-sync` feature keep this action unavailable.

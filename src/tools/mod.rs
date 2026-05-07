@@ -15,7 +15,9 @@ pub mod jsonl;
 pub mod paths;
 pub mod types;
 
-pub use types::{LimitCredits, LimitSnapshot, LimitWindow, ParsedCall, SessionSource, Speed};
+pub use types::{
+    LimitCredits, LimitSnapshot, LimitWindow, ParsedCall, SessionSource, SessionSourceKind, Speed,
+};
 
 pub trait ToolAdapter: Send + Sync {
     fn id(&self) -> &'static str;

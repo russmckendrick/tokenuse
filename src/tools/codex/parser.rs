@@ -463,11 +463,7 @@ mod tests {
     }
 
     fn source_for(path: std::path::PathBuf) -> SessionSource {
-        SessionSource {
-            path,
-            project: "2026/03/29".into(),
-            tool: config::TOOL_ID,
-        }
+        SessionSource::session(path, "2026/03/29", config::TOOL_ID)
     }
 
     const META_OK: &str = r#"{"timestamp":"2026-03-29T15:04:01.475Z","type":"session_meta","payload":{"id":"sess-1","cwd":"/Users/me/proj","originator":"Codex Desktop"}}"#;
