@@ -1645,6 +1645,7 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Page::Config => "config",
         Page::Session => "session",
         Page::Usage => "usage",
+        Page::Insights => "insights",
         Page::Overview | Page::DeepDive => "dashboard",
     };
     let commands = footer_line(copy().footer(footer), app);

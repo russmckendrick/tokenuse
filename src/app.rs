@@ -112,11 +112,12 @@ pub enum Page {
     DeepDive,
     Config,
     Usage,
+    Insights,
     Session,
 }
 
 impl Page {
-    pub const TABS: [Page; 3] = [Page::Overview, Page::DeepDive, Page::Usage];
+    pub const TABS: [Page; 4] = [Page::Overview, Page::DeepDive, Page::Usage, Page::Insights];
 
     pub fn label(self) -> &'static str {
         let copy = copy();
@@ -124,6 +125,7 @@ impl Page {
             Self::Overview => copy.nav.overview.as_str(),
             Self::DeepDive => copy.nav.deep_dive.as_str(),
             Self::Usage => copy.nav.usage.as_str(),
+            Self::Insights => copy.nav.insights.as_str(),
             Self::Config => copy.nav.config.as_str(),
             Self::Session => copy.nav.session.as_str(),
         }
@@ -1012,6 +1014,13 @@ impl App {
         }
     }
 
+    pub fn insights(&self) -> crate::insights::InsightsView {
+        match &self.source {
+            DataSource::Live(ingested) => ingested.insights(),
+            DataSource::Sample => crate::data::insights_view(),
+        }
+    }
+
     pub fn currency(&self) -> CurrencyFormatter {
         self.currency_table.formatter(&self.settings.currency)
     }
@@ -1619,6 +1628,7 @@ impl App {
         match self.page {
             Page::Config => keymap::CONTEXT_CONFIG_PAGE,
             Page::Usage => keymap::CONTEXT_USAGE_PAGE,
+            Page::Insights => keymap::CONTEXT_INSIGHTS_PAGE,
             Page::Session => keymap::CONTEXT_SESSION_PAGE,
             Page::Overview | Page::DeepDive => keymap::CONTEXT_DASHBOARD,
         }
@@ -1649,6 +1659,7 @@ impl App {
             keymap::ACTION_PAGE_OVERVIEW => self.set_page(Page::Overview),
             keymap::ACTION_PAGE_DEEP_DIVE => self.set_page(Page::DeepDive),
             keymap::ACTION_PAGE_USAGE => self.set_page(Page::Usage),
+            keymap::ACTION_PAGE_INSIGHTS => self.set_page(Page::Insights),
             keymap::ACTION_PAGE_CONFIG => self.set_page(Page::Config),
             keymap::ACTION_CLOSE_SESSION => self.leave_session(),
             keymap::ACTION_RELOAD => self.reload(),
@@ -2697,9 +2708,13 @@ mod tests {
         assert_eq!(app.page, Page::Usage);
         assert_eq!(app.period, Period::Today);
         app.handle_key(key(KeyCode::Tab));
+        assert_eq!(app.page, Page::Insights);
+        app.handle_key(key(KeyCode::Tab));
         assert_eq!(app.page, Page::Overview);
 
         app.set_period(Period::AllTime);
+        app.handle_key(key(KeyCode::BackTab));
+        assert_eq!(app.page, Page::Insights);
         app.handle_key(key(KeyCode::BackTab));
         assert_eq!(app.page, Page::Usage);
         assert_eq!(app.period, Period::Today);

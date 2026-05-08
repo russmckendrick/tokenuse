@@ -13,9 +13,13 @@ pub(crate) struct DesktopUpdateMetadata {
 #[serde(tag = "event", content = "data", rename_all = "camelCase")]
 pub(crate) enum DesktopUpdateDownloadEvent {
     #[serde(rename_all = "camelCase")]
-    Started { content_length: Option<u64> },
+    Started {
+        content_length: Option<u64>,
+    },
     #[serde(rename_all = "camelCase")]
-    Progress { chunk_length: usize },
+    Progress {
+        chunk_length: usize,
+    },
     Finished,
 }
 
@@ -53,8 +57,7 @@ mod supported {
     use tauri_plugin_updater::{Update, UpdaterExt};
 
     use super::{
-        DesktopUpdateDownloadEvent, DesktopUpdateError, DesktopUpdateMetadata,
-        DesktopUpdateResult,
+        DesktopUpdateDownloadEvent, DesktopUpdateError, DesktopUpdateMetadata, DesktopUpdateResult,
     };
 
     #[derive(Default)]
@@ -98,13 +101,11 @@ mod supported {
             .download_and_install(
                 |chunk_length, content_length| {
                     if !started {
-                        let _ = on_event.send(DesktopUpdateDownloadEvent::Started {
-                            content_length,
-                        });
+                        let _ =
+                            on_event.send(DesktopUpdateDownloadEvent::Started { content_length });
                         started = true;
                     }
-                    let _ = on_event
-                        .send(DesktopUpdateDownloadEvent::Progress { chunk_length });
+                    let _ = on_event.send(DesktopUpdateDownloadEvent::Progress { chunk_length });
                 },
                 || {
                     let _ = on_event.send(DesktopUpdateDownloadEvent::Finished);
@@ -140,8 +141,7 @@ pub(crate) async fn install_desktop_update(
 
 #[cfg(not(any(windows, target_os = "linux")))]
 #[tauri::command]
-pub(crate) async fn check_desktop_update(
-) -> DesktopUpdateResult<Option<DesktopUpdateMetadata>> {
+pub(crate) async fn check_desktop_update() -> DesktopUpdateResult<Option<DesktopUpdateMetadata>> {
     Err(DesktopUpdateError::Unsupported)
 }
 

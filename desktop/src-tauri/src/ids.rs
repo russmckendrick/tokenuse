@@ -20,6 +20,7 @@ pub(crate) fn parse_page(value: &str) -> CommandResult<Page> {
         "overview" => Ok(Page::Overview),
         "deep-dive" => Ok(Page::DeepDive),
         "usage" => Ok(Page::Usage),
+        "insights" => Ok(Page::Insights),
         "config" => Ok(Page::Config),
         "session" => Ok(Page::Session),
         _ => Err(unknown("page", value)),
@@ -32,6 +33,7 @@ pub(crate) fn page_id(page: Page) -> &'static str {
         Page::DeepDive => "deep-dive",
         Page::Config => "config",
         Page::Usage => "usage",
+        Page::Insights => "insights",
         Page::Session => "session",
     }
 }

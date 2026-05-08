@@ -28,8 +28,40 @@ pub struct CopyDeck {
     pub reports: ReportCopy,
     pub report_cli: ReportCliCopy,
     pub cli: CliCopy,
+    pub insights: InsightsCopy,
     pub keymap: KeymapCopy,
     pub status: StatusCopy,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct InsightsCopy {
+    pub title: String,
+    pub subtitle: String,
+    pub kpi_savings: String,
+    pub kpi_risks: String,
+    pub kpi_warns: String,
+    pub kpi_infos: String,
+    pub empty: String,
+    pub categories: BTreeMap<String, String>,
+    pub severity: BTreeMap<String, String>,
+    pub savings: InsightsSavingsCopy,
+    pub silenced: BTreeMap<String, String>,
+    pub rules: BTreeMap<String, InsightsRuleCopy>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct InsightsSavingsCopy {
+    pub per_week: String,
+    pub per_month: String,
+    pub one_off: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct InsightsRuleCopy {
+    pub title: String,
+    pub body: String,
+    #[serde(default)]
+    pub assumption: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -48,6 +80,7 @@ pub struct NavCopy {
     pub overview: String,
     pub deep_dive: String,
     pub usage: String,
+    pub insights: String,
     pub config: String,
     pub configuration: String,
     pub session: String,
@@ -742,6 +775,23 @@ impl CopyDeck {
         ensure_template(&self.export.report_title, &["period", "tool"])?;
         if self.export.calendar_weekdays.len() != 7 {
             return Err("export.calendar_weekdays must contain seven labels".into());
+        }
+        ensure_template(&self.insights.savings.per_week, &["amount"])?;
+        ensure_template(&self.insights.savings.per_month, &["amount"])?;
+        ensure_template(&self.insights.savings.one_off, &["amount"])?;
+        for category in ["model_rightsizing", "cache", "anomalies", "quota"] {
+            if !self.insights.categories.contains_key(category) {
+                return Err(format!(
+                    "insights.categories.{category} missing — every Category must have a label"
+                ));
+            }
+        }
+        for severity in ["risk", "warn", "info"] {
+            if !self.insights.severity.contains_key(severity) {
+                return Err(format!(
+                    "insights.severity.{severity} missing — every Severity must have a label"
+                ));
+            }
         }
         Ok(())
     }

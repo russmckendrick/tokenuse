@@ -1,4 +1,4 @@
-export type PageId = 'overview' | 'deep-dive' | 'usage' | 'config' | 'session';
+export type PageId = 'overview' | 'deep-dive' | 'usage' | 'insights' | 'config' | 'session';
 export type PeriodId = 'today' | 'week' | 'thirty-days' | 'month' | 'all-time';
 export type ToolId = 'all' | 'claude-code' | 'cursor' | 'codex' | 'copilot' | 'gemini';
 export type SortId = 'spend' | 'date' | 'tokens';
@@ -213,6 +213,57 @@ export type ProjectState = {
   label: string;
 };
 
+export type InsightsScopeView = {
+  kind: 'all' | 'project' | 'project_model' | 'tool' | 'session';
+  label: string | null;
+  project: string | null;
+  session: string | null;
+  tool: string | null;
+  model: string | null;
+};
+
+export type RecommendationView = {
+  id: string;
+  rule_id: string;
+  category: string;
+  category_label: string;
+  severity: 'risk' | 'warn' | 'info';
+  severity_label: string;
+  title: string;
+  body: string;
+  assumption: string | null;
+  savings: string | null;
+  savings_amount_usd: number | null;
+  scope: InsightsScopeView;
+  silenced_reason: string | null;
+};
+
+export type InsightsCategoryCount = {
+  id: string;
+  label: string;
+  count: number;
+};
+
+export type InsightsSeverityCount = {
+  id: string;
+  label: string;
+  count: number;
+};
+
+export type InsightsSummary = {
+  total_est_savings_usd: number;
+  total_est_savings: string;
+  by_category: InsightsCategoryCount[];
+  by_severity: InsightsSeverityCount[];
+};
+
+export type InsightsView = {
+  generated_at: string;
+  baseline_window_days: number;
+  summary: InsightsSummary;
+  recommendations: RecommendationView[];
+};
+
 export type ShortcutHint = {
   keys: string;
   label: string;
@@ -251,6 +302,20 @@ export type CopyDeck = {
   export: Record<string, unknown>;
   reports: Record<string, string>;
   cli: Record<string, string>;
+  insights: {
+    title: string;
+    subtitle: string;
+    kpi_savings: string;
+    kpi_risks: string;
+    kpi_warns: string;
+    kpi_infos: string;
+    empty: string;
+    categories: Record<string, string>;
+    severity: Record<string, string>;
+    savings: { per_week: string; per_month: string; one_off: string };
+    silenced: Record<string, string>;
+    rules: Record<string, { title: string; body: string; assumption?: string | null }>;
+  };
   keymap: {
     actions: Record<string, string>;
     help: CopyHintGroup[];
@@ -283,6 +348,7 @@ export type DesktopSnapshot = {
   project: ProjectState;
   dashboard: DashboardData;
   usage: LimitsData;
+  insights: InsightsView;
   projects: ProjectOption[];
   report_projects: ProjectOption[];
   sessions: SessionOption[];

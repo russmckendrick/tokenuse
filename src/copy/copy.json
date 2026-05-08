@@ -12,6 +12,7 @@
     "overview": "Overview",
     "deep_dive": "Deep Dive",
     "usage": "Usage",
+    "insights": "Insights",
     "config": "Config",
     "configuration": "Configuration",
     "session": "Session",
@@ -494,6 +495,101 @@
     "refresh_prices_requires_feature": "--refresh-prices requires the refresh-prices feature",
     "generate_currency_requires_feature": "--generate-currency-json requires the refresh-currency feature"
   },
+  "insights": {
+    "title": "Insights",
+    "subtitle": "Heuristics over your local data — no network calls.",
+    "kpi_savings": "Estimated weekly savings",
+    "kpi_risks": "Risks",
+    "kpi_warns": "Warnings",
+    "kpi_infos": "Info",
+    "empty": "No recommendations — your usage looks clean.",
+    "categories": {
+      "model_rightsizing": "Model right-sizing",
+      "cache": "Cache",
+      "anomalies": "Anomalies",
+      "quota": "Quota"
+    },
+    "severity": {
+      "risk": "Risk",
+      "warn": "Warn",
+      "info": "Info"
+    },
+    "savings": {
+      "per_week": "≈ {amount}/week saved",
+      "per_month": "≈ {amount}/month saved",
+      "one_off": "≈ {amount} avoided"
+    },
+    "silenced": {
+      "no_cache_data": "Skipped — {tool} doesn't expose cache metrics locally."
+    },
+    "rules": {
+      "short_output_sonnet": {
+        "title": "Switch short Sonnet calls to Haiku in {project}",
+        "body": "{calls} Sonnet calls under 200 output tokens cost {current}; Haiku pricing gives {projected}.",
+        "assumption": "Assumes Haiku quality is acceptable for prompts under 4K input / 200 output. Sample a few before switching."
+      },
+      "fast_mode_opus_excess": {
+        "title": "Fast-mode Opus is dominating {project}",
+        "body": "{fast_calls} fast-mode Opus calls cost {fast_cost} vs {standard_cost} for standard-mode Opus on the same project.",
+        "assumption": "Standard-mode Opus may add latency. Estimate uses each call's fast multiplier."
+      },
+      "reasoning_heavy_o_series": {
+        "title": "Reasoning tokens dominate {model}",
+        "body": "{calls} {model} calls had reasoning ≥ 3× output and reasoning is {reasoning_share} of cost ({reasoning_cost}).",
+        "assumption": "Try `--effort medium` or a smaller model first. Estimate halves the reasoning bill conservatively."
+      },
+      "cache_hit_trend_drop": {
+        "title": "Cache hit rate fell on {project} ({tool})",
+        "body": "Last 7 days {recent} vs prior 30 days {prior} (drop {drop}). Reusing the warm prompt cache would have helped.",
+        "assumption": "Pricing assumes the model's cache_read tier; 5-minute TTL means short gaps lose the cache."
+      },
+      "cache_write_overhead": {
+        "title": "Cache writes outpace reads for {tool}",
+        "body": "Write-to-read ratio is {ratio} over {events} recent events — sessions are creating cache they don't reuse.",
+        "assumption": "Pricing uses cache_write minus cache_read deltas. Longer sessions amortise cache writes."
+      },
+      "low_hit_project_outlier": {
+        "title": "{project} has a low cache hit rate vs your {tool} median",
+        "body": "Hit rate {rate} vs tool median {median} across {sessions} sessions in the last 7 days.",
+        "assumption": "Median is computed from your other projects on the same tool."
+      },
+      "cache_tool_silenced": {
+        "title": "Cache rules skipped for {tool}",
+        "body": "{tool} doesn't expose cache_read/write metrics locally, so cache recommendations can't be computed.",
+        "assumption": "This is a data-source gap, not a usage problem."
+      },
+      "outlier_session_cost": {
+        "title": "Session {session} cost {cost} on {project}",
+        "body": "Above the {threshold} outlier threshold (P95 / Q3+1.5·IQR over the last 30 days).",
+        "assumption": "Investigate the session in the Session page to confirm it was intentional."
+      },
+      "day_over_day_spend_zscore": {
+        "title": "Today's spend is {delta_pct} above your 30-day baseline",
+        "body": "Today {today} vs baseline {baseline} (z-score {zscore}).",
+        "assumption": "Baseline uses the trailing 30-day mean/stdev across all tools."
+      },
+      "project_mom_growth": {
+        "title": "{project} cost is up {growth} month-over-month",
+        "body": "This month {current} vs last month {prior}.",
+        "assumption": "Both months had at least 10 calls before the rule fires."
+      },
+      "claude_weekly_forecast": {
+        "title": "Claude weekly limit pacing ahead",
+        "body": "Used {used} with {elapsed} of the window elapsed; projected {projected}. {remaining_hours}h remain.",
+        "assumption": "Forecast extrapolates the current burn rate to the window end."
+      },
+      "copilot_premium_pacing": {
+        "title": "Copilot premium budget pacing ahead",
+        "body": "Used {used} with {elapsed} of the cycle elapsed; projected {projected}. {remaining_hours}h remain.",
+        "assumption": "Forecast extrapolates the current burn rate to the cycle end."
+      },
+      "limit_recently_hit": {
+        "title": "{tool} hit a limit recently",
+        "body": "Limit {limit} reported {hit_type} in the last 24 hours.",
+        "assumption": "Open the Usage page to see the offending tool's snapshots."
+      }
+    }
+  },
   "keymap": {
     "actions": {
       "quit": "quit",
@@ -520,6 +616,7 @@
       "page_overview": "Overview",
       "page_deep_dive": "Deep Dive",
       "page_usage": "Usage",
+      "page_insights": "Insights",
       "page_config": "Configuration",
       "close_session": "back to Deep Dive",
       "reload": "reload",
@@ -572,6 +669,7 @@
       {
         "title": "Pages",
         "items": [
+          { "keys": "i", "label": "insights", "action": "page_insights" },
           { "keys": "c", "label": "configuration", "action": "page_config" },
           { "keys": "s", "label": "session drill-down", "action": "open_session_picker" }
         ]
@@ -615,6 +713,15 @@
         { "keys": "4", "label": "month", "action": "period_month" },
         { "keys": "5", "label": "all", "action": "period_all_time" },
         { "keys": "g", "label": "sort", "action": "cycle_sort" },
+        { "keys": "i", "label": "insights", "action": "page_insights" },
+        { "keys": "h", "label": "help", "action": "open_help" }
+      ],
+      "insights": [
+        { "keys": "q", "label": "quit", "action": "quit" },
+        { "keys": "Tab", "label": "tabs", "action": "next_tab" },
+        { "keys": "o/d", "label": "overview/deep", "action": "page_overview" },
+        { "keys": "u", "label": "usage", "action": "page_usage" },
+        { "keys": "c", "label": "config", "action": "page_config" },
         { "keys": "h", "label": "help", "action": "open_help" }
       ],
       "config": [
@@ -638,6 +745,7 @@
         { "keys": "q", "label": "quit", "action": "quit" },
         { "keys": "Tab", "label": "tabs", "action": "next_tab" },
         { "keys": "o/d", "label": "overview/deep", "action": "page_overview" },
+        { "keys": "i", "label": "insights", "action": "page_insights" },
         { "keys": "c", "label": "config", "action": "page_config" },
         { "keys": "e", "label": "report", "action": "open_export_picker" },
         { "keys": "g", "label": "sort", "action": "cycle_sort" },
@@ -649,17 +757,25 @@
         { "keys": "g", "label": "sort", "action": "cycle_sort" },
         { "keys": "p", "label": "project", "action": "open_project_picker" },
         { "keys": "s", "label": "session", "action": "open_session_picker" },
+        { "keys": "i", "label": "insights", "action": "page_insights" },
         { "keys": "e", "label": "report", "action": "open_export_picker" },
         { "keys": "r", "label": "refresh", "action": "reload" }
       ],
       "desktop_usage": [
         { "keys": "1", "label": "24h", "action": "period_today" },
         { "keys": "s", "label": "session", "action": "open_session_picker" },
+        { "keys": "i", "label": "insights", "action": "page_insights" },
+        { "keys": "e", "label": "report", "action": "open_export_picker" },
+        { "keys": "r", "label": "refresh", "action": "reload" }
+      ],
+      "desktop_insights": [
+        { "keys": "s", "label": "session", "action": "open_session_picker" },
         { "keys": "e", "label": "report", "action": "open_export_picker" },
         { "keys": "r", "label": "refresh", "action": "reload" }
       ],
       "desktop_config": [
         { "keys": "s", "label": "session", "action": "open_session_picker" },
+        { "keys": "i", "label": "insights", "action": "page_insights" },
         { "keys": "e", "label": "report", "action": "open_export_picker" },
         { "keys": "r", "label": "refresh", "action": "reload" }
       ]

@@ -73,6 +73,9 @@
       "id": "page_usage"
     },
     {
+      "id": "page_insights"
+    },
+    {
       "id": "page_config"
     },
     {
@@ -234,6 +237,13 @@
     {
       "context": "dashboard",
       "keys": [
+        "i"
+      ],
+      "action": "page_insights"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
         "r"
       ],
       "action": "reload"
@@ -363,6 +373,13 @@
     {
       "context": "usage_page",
       "keys": [
+        "i"
+      ],
+      "action": "page_insights"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
         "r"
       ],
       "action": "reload"
@@ -373,6 +390,94 @@
         "e"
       ],
       "action": "open_export_picker"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "q"
+      ],
+      "action": "quit"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "h",
+        "?"
+      ],
+      "action": "open_help"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "Tab"
+      ],
+      "action": "next_tab"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "Shift+Tab"
+      ],
+      "action": "prev_tab"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "Esc",
+        "o"
+      ],
+      "action": "page_overview"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "d"
+      ],
+      "action": "page_deep_dive"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "u"
+      ],
+      "action": "page_usage"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "c"
+      ],
+      "action": "page_config"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "r"
+      ],
+      "action": "reload"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "Shift+D"
+      ],
+      "action": "toggle_data_source"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "Up",
+        "k"
+      ],
+      "action": "move_up"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "Down",
+        "j"
+      ],
+      "action": "move_down"
     },
     {
       "context": "config_page",
@@ -446,6 +551,13 @@
         "Enter"
       ],
       "action": "confirm"
+    },
+    {
+      "context": "config_page",
+      "keys": [
+        "i"
+      ],
+      "action": "page_insights"
     },
     {
       "context": "session_page",
@@ -525,6 +637,13 @@
         "End"
       ],
       "action": "move_end"
+    },
+    {
+      "context": "session_page",
+      "keys": [
+        "i"
+      ],
+      "action": "page_insights"
     },
     {
       "context": "session_page",
@@ -952,6 +1071,13 @@
         "u"
       ],
       "action": "page_usage"
+    },
+    {
+      "context": "desktop",
+      "keys": [
+        "i"
+      ],
+      "action": "page_insights"
     },
     {
       "context": "desktop",

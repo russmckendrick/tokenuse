@@ -4,6 +4,9 @@ use chrono::{Datelike, Duration, Local, NaiveDate};
 use serde::{Deserialize, Serialize};
 
 use crate::currency::CurrencyFormatter;
+use crate::insights::{
+    self, InsightsBundle, InsightsView, Recommendation, RuleId, SavingsBasis, Scope, Severity,
+};
 use crate::{
     app::{Period, ProjectFilter, SortMode, Tool},
     copy::copy,
@@ -792,6 +795,96 @@ pub fn session_detail(
         calls: Vec::new(),
         note: Some(copy().session.sample_note.clone()),
     })
+}
+
+pub fn insights_view() -> InsightsView {
+    let now = chrono::Utc::now();
+    let mut bundle = InsightsBundle::empty();
+    bundle.push(Recommendation {
+        rule_id: RuleId::ShortOutputSonnet,
+        severity: Severity::Warn,
+        body_args: vec![
+            ("project", "tokens".into()),
+            ("calls", "47".into()),
+            ("current", "$8.20".into()),
+            ("projected", "$1.10".into()),
+        ],
+        est_savings_usd: Some(7.10),
+        est_savings_basis: Some(SavingsBasis::PerWeek),
+        scope: Scope::Project {
+            name: "tokens".into(),
+        },
+        silenced_reason_key: None,
+        silenced_reason_args: vec![],
+    });
+    bundle.push(Recommendation {
+        rule_id: RuleId::CacheHitTrendDrop,
+        severity: Severity::Warn,
+        body_args: vec![
+            ("tool", "claude-code".into()),
+            ("project", "tokens".into()),
+            ("recent", "38%".into()),
+            ("prior", "71%".into()),
+            ("drop", "33%".into()),
+        ],
+        est_savings_usd: Some(4.20),
+        est_savings_basis: Some(SavingsBasis::PerWeek),
+        scope: Scope::Project {
+            name: "tokens".into(),
+        },
+        silenced_reason_key: None,
+        silenced_reason_args: vec![],
+    });
+    bundle.push(Recommendation {
+        rule_id: RuleId::CacheToolSilenced,
+        severity: Severity::Info,
+        body_args: vec![("tool", "cursor".into())],
+        est_savings_usd: None,
+        est_savings_basis: None,
+        scope: Scope::Tool {
+            tool: "cursor".into(),
+        },
+        silenced_reason_key: Some("no_cache_data"),
+        silenced_reason_args: vec![("tool", "cursor".into())],
+    });
+    bundle.push(Recommendation {
+        rule_id: RuleId::ClaudeWeeklyForecast,
+        severity: Severity::Risk,
+        body_args: vec![
+            ("limit", "weekly".into()),
+            ("used", "82%".into()),
+            ("projected", "118%".into()),
+            ("elapsed", "70%".into()),
+            ("remaining_hours", "50.4".into()),
+        ],
+        est_savings_usd: None,
+        est_savings_basis: None,
+        scope: Scope::Tool {
+            tool: "claude-code".into(),
+        },
+        silenced_reason_key: None,
+        silenced_reason_args: vec![],
+    });
+    bundle.push(Recommendation {
+        rule_id: RuleId::OutlierSessionCost,
+        severity: Severity::Info,
+        body_args: vec![
+            ("session", "session-9af2".into()),
+            ("project", "tokens".into()),
+            ("cost", "$24.80".into()),
+            ("threshold", "$8.00".into()),
+        ],
+        est_savings_usd: None,
+        est_savings_basis: None,
+        scope: Scope::Session {
+            id: "session-9af2".into(),
+            project: "tokens".into(),
+        },
+        silenced_reason_key: None,
+        silenced_reason_args: vec![],
+    });
+    let bundle = bundle.finalise();
+    insights::build_view(&bundle, now)
 }
 
 pub fn limits_data(_tool: Tool, sort: SortMode, currency: &CurrencyFormatter) -> LimitsData {

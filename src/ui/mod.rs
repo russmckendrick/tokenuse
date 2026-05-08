@@ -1,5 +1,6 @@
 mod components;
 mod graphs;
+mod insights;
 mod sections;
 
 use ratatui::{
@@ -46,6 +47,7 @@ pub fn render(frame: &mut Frame<'_>, app: &App) {
         Page::DeepDive => render_dashboard(frame, area, root, app),
         Page::Config => render_config(frame, area, root, app),
         Page::Usage => render_limits(frame, area, root, app),
+        Page::Insights => insights::render_insights(frame, area, root, app),
         Page::Session => render_session_page(frame, area, root, app),
     }
 

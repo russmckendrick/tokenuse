@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 pub const CONTEXT_DASHBOARD: &str = "dashboard";
 pub const CONTEXT_USAGE_PAGE: &str = "usage_page";
+pub const CONTEXT_INSIGHTS_PAGE: &str = "insights_page";
 pub const CONTEXT_CONFIG_PAGE: &str = "config_page";
 pub const CONTEXT_SESSION_PAGE: &str = "session_page";
 pub const CONTEXT_HELP: &str = "help";
@@ -50,6 +51,7 @@ pub const ACTION_OPEN_EXPORT_FOLDER_PICKER: &str = "open_export_folder_picker";
 pub const ACTION_PAGE_OVERVIEW: &str = "page_overview";
 pub const ACTION_PAGE_DEEP_DIVE: &str = "page_deep_dive";
 pub const ACTION_PAGE_USAGE: &str = "page_usage";
+pub const ACTION_PAGE_INSIGHTS: &str = "page_insights";
 pub const ACTION_PAGE_CONFIG: &str = "page_config";
 pub const ACTION_CLOSE_SESSION: &str = "close_session";
 pub const ACTION_RELOAD: &str = "reload";
@@ -88,6 +90,7 @@ const SUPPORTED_ACTIONS: &[&str] = &[
     ACTION_PAGE_OVERVIEW,
     ACTION_PAGE_DEEP_DIVE,
     ACTION_PAGE_USAGE,
+    ACTION_PAGE_INSIGHTS,
     ACTION_PAGE_CONFIG,
     ACTION_CLOSE_SESSION,
     ACTION_RELOAD,

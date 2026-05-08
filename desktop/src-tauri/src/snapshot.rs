@@ -3,6 +3,7 @@ use tokenuse::{
     app::{App, ConfigRowView, DataSource, Page, Period, ProjectFilter, SortMode, Tool},
     copy::{self, CopyDeck, CopyKeyHint},
     data::{DashboardData, LimitsData, ProjectOption, SessionDetailView, SessionOption},
+    insights::InsightsView,
     reports::ReportFormat,
 };
 
@@ -37,6 +38,7 @@ pub(crate) struct DesktopSnapshot {
     pub(crate) project: ProjectState,
     pub(crate) dashboard: DashboardData,
     pub(crate) usage: LimitsData,
+    pub(crate) insights: InsightsView,
     pub(crate) projects: Vec<ProjectOption>,
     pub(crate) report_projects: Vec<ProjectOption>,
     pub(crate) sessions: Vec<SessionOption>,
@@ -158,6 +160,7 @@ pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
         },
         dashboard: app.dashboard(),
         usage: app.usage_for(tool, sort),
+        insights: app.insights(),
         projects: app.project_options(),
         report_projects: app.report_project_options(app.period),
         sessions: app.session_options(),
@@ -182,6 +185,7 @@ pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
 fn desktop_footer_name(app: &App) -> &'static str {
     match app.page {
         Page::Usage => "desktop_usage",
+        Page::Insights => "desktop_insights",
         Page::Config => "desktop_config",
         _ => "desktop",
     }

@@ -2,6 +2,7 @@
 
 Changes that should be included in the next release go here. Keep this file current during normal development; move the relevant notes into `docs/releases/<version>.md` only when preparing a release.
 
+- New **Insights** page (TUI and desktop) surfaces local heuristic recommendations across model right-sizing, cache efficiency, anomalies, and quota pacing. Each card carries a severity, scope, and estimated weekly savings (where applicable) with the assumption stated inline. The engine is fully local — no network, no telemetry. Cursor and Copilot cache rules silence themselves explicitly because their local logs don't expose cache buckets. Press `i` from any page to jump to it. See `docs/guides/insights.md` for rule details.
 - Usage now imports Claude Code limit snapshots from the local status-line sidecar at `limits/claude-code.json` and Copilot quota snapshots from `limits/copilot.json`.
 - Config adds Claude and Copilot limit sync actions. Copilot sync is explicit, confirmed, feature-gated, and writes a local quota sidecar before refreshing archive limits.
 - Claude limit sync now prompts users to set up the Claude Code `statusLine` sidecar first instead of reporting a vague missing sidecar error.

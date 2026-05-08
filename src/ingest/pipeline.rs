@@ -12,7 +12,8 @@ use crate::data::{
     ProjectMetric, ProjectOption, ProjectToolMetric, RecentModelMetric, RecentUsageMetric,
     SessionDetail, SessionDetailView, SessionMetric, SessionOption, Summary, ToolLimitSection,
 };
-use crate::pricing;
+use crate::insights::{self, InsightsView};
+use crate::pricing::{self, PriceTable};
 use crate::tools::{self, LimitSnapshot, LimitWindow, ParsedCall};
 
 #[cfg(test)]
@@ -143,6 +144,18 @@ impl Ingested {
 
     pub fn is_empty(&self) -> bool {
         self.calls.is_empty() && self.limits.is_empty()
+    }
+
+    pub fn insights(&self) -> InsightsView {
+        let now = Utc::now();
+        let table_lock = PriceTable::configured();
+        let bundle = match table_lock.read() {
+            Ok(table) => insights::compute_insights(&self.calls, &self.limits, &table, now),
+            Err(_) => {
+                insights::compute_insights(&self.calls, &self.limits, PriceTable::embedded(), now)
+            }
+        };
+        insights::build_view(&bundle, now)
     }
 
     pub fn project_inventory(&self) -> Vec<ProjectInventoryRow> {

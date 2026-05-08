@@ -10,6 +10,7 @@
   import TrayPopover from './TrayPopover.svelte';
   import ConfigView from './views/ConfigView.svelte';
   import DeepDiveView from './views/DeepDiveView.svelte';
+  import InsightsView from './views/InsightsView.svelte';
   import OverviewView from './views/OverviewView.svelte';
   import SessionView from './views/SessionView.svelte';
   import UsageView from './views/UsageView.svelte';
@@ -321,20 +322,24 @@
     return activePage() === 'config';
   }
 
+  function isInsightsPage() {
+    return activePage() === 'insights';
+  }
+
   function isPeriodDisabled(period: PeriodId) {
-    return isConfigPage() || (isUsagePage() && period !== 'today');
+    return isConfigPage() || isInsightsPage() || (isUsagePage() && period !== 'today');
   }
 
   function isToolDisabled() {
-    return isConfigPage() || isUsagePage();
+    return isConfigPage() || isUsagePage() || isInsightsPage();
   }
 
   function isSortDisabled() {
-    return isConfigPage() || isUsagePage();
+    return isConfigPage() || isUsagePage() || isInsightsPage();
   }
 
   function isProjectDisabled() {
-    return isConfigPage() || isUsagePage();
+    return isConfigPage() || isUsagePage() || isInsightsPage();
   }
 
   function tabsFor(state: DesktopSnapshot): Array<{ value: PageId; label: string }> {
@@ -342,6 +347,7 @@
       { value: 'overview', label: state.copy.nav.overview },
       { value: 'deep-dive', label: state.copy.nav.deep_dive },
       { value: 'usage', label: state.copy.nav.usage },
+      { value: 'insights', label: state.copy.nav.insights },
       { value: 'config', label: state.copy.nav.config }
     ];
   }
@@ -735,6 +741,8 @@
         <DeepDiveView {snapshot} openSessionPicker={() => openModal('session')} />
       {:else if activePage() === 'usage'}
         <UsageView {snapshot} {usageTone} />
+      {:else if activePage() === 'insights'}
+        <InsightsView {snapshot} />
       {:else if activePage() === 'config'}
         <ConfigView
           {snapshot}
