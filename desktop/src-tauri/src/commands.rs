@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use tauri::{AppHandle, State};
 use tokenuse::{
+    advice::{AdviceDataScope, AdviceItemStatus, AdviceTool},
     app::{AppStatus, Page, StatusTone},
     copy,
     data::ProjectOption,
@@ -137,6 +138,72 @@ pub(crate) async fn set_currency(
 ) -> CommandResult<DesktopSnapshot> {
     with_app(state, move |app| {
         app.set_currency(&code);
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn set_advice_tool(
+    tool: String,
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    with_app(state, move |app| {
+        let tool = AdviceTool::from_id(&tool)
+            .ok_or_else(|| CommandError::Unknown {
+                kind: "advice tool",
+                value: tool,
+            })?;
+        app.set_advice_tool(tool);
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn prepare_advice_prompts(
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    with_app(state, |app| {
+        app.prepare_advice_prompts();
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn generate_advice(
+    data_scope: String,
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    with_app(state, move |app| {
+        let data_scope = AdviceDataScope::from_id(&data_scope)
+            .ok_or_else(|| CommandError::Unknown {
+                kind: "advice data scope",
+                value: data_scope,
+            })?;
+        app.generate_advice(data_scope)
+            .map_err(CommandError::Tokenuse)?;
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn update_advice_item_status(
+    item_id: i64,
+    status: String,
+    notes: Option<String>,
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    with_app(state, move |app| {
+        let status = AdviceItemStatus::from_id(&status)
+            .ok_or_else(|| CommandError::Unknown {
+                kind: "advice item status",
+                value: status,
+            })?;
+        app.update_advice_item_status(item_id, status, notes)
+            .map_err(CommandError::Tokenuse)?;
         Ok(snapshot(app))
     })
     .await

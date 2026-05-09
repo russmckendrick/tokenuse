@@ -194,6 +194,14 @@
         "name": "Copilot limits",
         "action": "Sync"
       },
+      "advice_tool": {
+        "name": "Advice tool",
+        "action": "Pick"
+      },
+      "advice_prompts": {
+        "name": "Advice prompts",
+        "action": "Prepare"
+      },
       "clear_data": {
         "name": "Clear Data",
         "action": "Clear"
@@ -211,6 +219,10 @@
       "statusline_external": "External · {command}",
       "quota_snapshot_found": "Local quota snapshot",
       "quota_snapshot_missing": "No local quota snapshot",
+      "advice_tool_available": "{tool} · available",
+      "advice_tool_missing": "{tool} · binary not found",
+      "advice_prompts_ready": "Prompt files ready · {path}",
+      "advice_prompts_missing": "Prompt files missing ({files}) · {path}",
       "delete_archive_then_rebuild": "Delete archive.db, then rebuild",
       "build_archive_from_history": "Build archive.db from local history"
     },
@@ -328,6 +340,10 @@
     "open": "Open",
     "open_lower": "open",
     "open_session_picker": "Open Session Picker",
+    "generate_advice": "Generate Advice",
+    "mark_done": "Done",
+    "mark_open": "Reopen",
+    "dismiss": "Dismiss",
     "close": "Close",
     "close_lower": "close",
     "select_open": "select/open",
@@ -356,6 +372,7 @@
     "filter_projects": "Filter projects",
     "filter_sessions": "Filter sessions",
     "filter_currencies": "Filter currencies",
+    "filter_advice_tools": "Filter advice tools",
     "rank": "Rank",
     "session_rank": "Session rank",
     "model_usage": "Model usage",
@@ -498,6 +515,20 @@
   "insights": {
     "title": "Insights",
     "subtitle": "Heuristics over your local data — no network calls.",
+    "signals_title": "Signals",
+    "advice_title": "Advice",
+    "advice_empty": "No advice runs yet.",
+    "advice_failed": "Advice run failed: {error}",
+    "advice_scope_title": "Choose advice data scope",
+    "advice_scope_redacted": "Redacted summary",
+    "advice_scope_redacted_detail": "Aggregates and signal evidence only.",
+    "advice_scope_snippets": "Prompt snippets",
+    "advice_scope_snippets_detail": "Adds limited prompt samples for specificity.",
+    "advice_latest": "Latest run · {tool} · {scope} · {status}",
+    "advice_run": "Run · {tool} · {scope} · {status}",
+    "advice_confidence": "confidence {confidence}",
+    "advice_next_step": "Next: {step}",
+    "advice_evidence": "Evidence: {evidence}",
     "kpi_savings": "Estimated weekly savings",
     "kpi_risks": "Risks",
     "kpi_warns": "Warnings",
@@ -628,7 +659,11 @@
       "move_end": "last item",
       "query_backspace": "delete last char",
       "query_clear": "clear filter",
-      "go_parent": "parent folder"
+      "go_parent": "parent folder",
+      "insights_next_tab": "next insights view",
+      "insights_prev_tab": "previous insights view",
+      "generate_advice_redacted": "generate redacted advice",
+      "generate_advice_snippets": "generate snippet advice"
     },
     "help": [
       {
@@ -675,6 +710,15 @@
         ]
       },
       {
+        "title": "Insights",
+        "items": [
+          { "keys": "Left/Right", "label": "switch Advice / Signals", "action": "insights_next_tab" },
+          { "keys": "Up/Down  PgUp/PgDn", "label": "scroll active view", "action": "move_up" },
+          { "keys": "a", "label": "generate redacted advice", "action": "generate_advice_redacted" },
+          { "keys": "A", "label": "generate snippet advice", "action": "generate_advice_snippets" }
+        ]
+      },
+      {
         "title": "Actions",
         "items": [
           { "keys": "e", "label": "report generator", "action": "open_export_picker" },
@@ -718,10 +762,13 @@
       ],
       "insights": [
         { "keys": "q", "label": "quit", "action": "quit" },
-        { "keys": "Tab", "label": "tabs", "action": "next_tab" },
-        { "keys": "o/d", "label": "overview/deep", "action": "page_overview" },
-        { "keys": "u", "label": "usage", "action": "page_usage" },
-        { "keys": "c", "label": "config", "action": "page_config" },
+        { "keys": "Tab", "label": "app tabs", "action": "next_tab" },
+        { "keys": "←/→", "label": "advice/signals", "action": "insights_next_tab" },
+        { "keys": "↑↓", "label": "scroll", "action": "move_up" },
+        { "keys": "Pg", "label": "page", "action": "move_page_down" },
+        { "keys": "a", "label": "redacted", "action": "generate_advice_redacted" },
+        { "keys": "A", "label": "snippets", "action": "generate_advice_snippets" },
+        { "keys": "r", "label": "refresh", "action": "reload" },
         { "keys": "h", "label": "help", "action": "open_help" }
       ],
       "config": [
@@ -826,6 +873,15 @@
     "copilot_limits_synced": "Copilot limits synced · {snapshots} snapshots · {limits} limits",
     "copilot_limits_sync_failed": "Copilot limits sync failed · {error}",
     "copilot_limits_sync_unavailable": "Copilot limits sync unavailable in this build",
+    "advice_tool_set": "Advice tool set to {tool}",
+    "advice_tool_config_failed": "Advice tool config failed · {error}",
+    "advice_requires_live_data": "Advice needs local usage data",
+    "advice_running": "Generating advice with {tool}",
+    "advice_already_running": "Advice is already running",
+    "advice_run_saved": "Advice saved · {items} items · usage {usage_sync}",
+    "advice_item_updated": "Advice item updated",
+    "advice_item_not_found": "Advice item not found · {id}",
+    "advice_failed": "Advice failed · {error}",
     "config_failed_defaults": "Config failed · defaults ({error})",
     "currency_rates_failed_embedded": "Currency rates failed · embedded ({error})",
     "legacy_cache_imported_records": "Legacy cache imported · {records} records",

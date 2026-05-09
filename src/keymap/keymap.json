@@ -110,6 +110,18 @@
     },
     {
       "id": "go_parent"
+    },
+    {
+      "id": "insights_next_tab"
+    },
+    {
+      "id": "insights_prev_tab"
+    },
+    {
+      "id": "generate_advice_redacted"
+    },
+    {
+      "id": "generate_advice_snippets"
     }
   ],
   "shortcuts": [
@@ -466,6 +478,36 @@
     {
       "context": "insights_page",
       "keys": [
+        "Right",
+        "]"
+      ],
+      "action": "insights_next_tab"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "Left",
+        "["
+      ],
+      "action": "insights_prev_tab"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "a"
+      ],
+      "action": "generate_advice_redacted"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "Shift+A"
+      ],
+      "action": "generate_advice_snippets"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
         "Up",
         "k"
       ],
@@ -478,6 +520,34 @@
         "j"
       ],
       "action": "move_down"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "PageUp"
+      ],
+      "action": "move_page_up"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "PageDown"
+      ],
+      "action": "move_page_down"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "Home"
+      ],
+      "action": "move_home"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "End"
+      ],
+      "action": "move_end"
     },
     {
       "context": "config_page",

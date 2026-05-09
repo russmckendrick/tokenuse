@@ -64,6 +64,10 @@ pub const ACTION_MOVE_END: &str = "move_end";
 pub const ACTION_QUERY_BACKSPACE: &str = "query_backspace";
 pub const ACTION_QUERY_CLEAR: &str = "query_clear";
 pub const ACTION_GO_PARENT: &str = "go_parent";
+pub const ACTION_INSIGHTS_NEXT_TAB: &str = "insights_next_tab";
+pub const ACTION_INSIGHTS_PREV_TAB: &str = "insights_prev_tab";
+pub const ACTION_GENERATE_ADVICE_REDACTED: &str = "generate_advice_redacted";
+pub const ACTION_GENERATE_ADVICE_SNIPPETS: &str = "generate_advice_snippets";
 
 const SUPPORTED_ACTIONS: &[&str] = &[
     ACTION_QUIT,
@@ -103,6 +107,10 @@ const SUPPORTED_ACTIONS: &[&str] = &[
     ACTION_QUERY_BACKSPACE,
     ACTION_QUERY_CLEAR,
     ACTION_GO_PARENT,
+    ACTION_INSIGHTS_NEXT_TAB,
+    ACTION_INSIGHTS_PREV_TAB,
+    ACTION_GENERATE_ADVICE_REDACTED,
+    ACTION_GENERATE_ADVICE_SNIPPETS,
 ];
 
 #[derive(Debug, Clone, Deserialize)]

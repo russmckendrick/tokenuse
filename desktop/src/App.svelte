@@ -15,6 +15,8 @@
   import SessionView from './views/SessionView.svelte';
   import UsageView from './views/UsageView.svelte';
   import type {
+    AdviceDataScopeId,
+    AdviceItemStatusId,
     ConfigRow,
     DesktopSnapshot,
     DesktopUpdateDownloadEvent,
@@ -30,7 +32,7 @@
     ToolId
   } from './types';
 
-  type ModalKind = 'project' | 'session' | 'currency' | 'report' | null;
+  type ModalKind = 'project' | 'session' | 'currency' | 'advice_tool' | 'report' | null;
   type DesktopUpdateUiState = {
     checking: boolean;
     installing: boolean;
@@ -267,6 +269,12 @@
     return snapshot.currencies.filter((currency) => !needle || currency.toLowerCase().includes(needle));
   }
 
+  function filteredAdviceTools() {
+    if (!snapshot) return [];
+    const needle = query.trim().toLowerCase();
+    return snapshot.advice_tool_options.filter((tool) => !needle || tool.label.toLowerCase().includes(needle));
+  }
+
   async function chooseReportDir() {
     if (!snapshot) return;
     const selected = await openDialog({
@@ -355,6 +363,7 @@
   function modalTitle(kind: Exclude<ModalKind, null>) {
     if (!snapshot) return kind;
     if (kind === 'report') return snapshot.copy.reports.modal_title;
+    if (kind === 'advice_tool') return snapshot.copy.config.rows.advice_tool.name;
     return snapshot.copy.modals[kind] ?? kind;
   }
 
@@ -404,6 +413,12 @@
         ) {
           await commit(() => api.syncCopilotLimits());
         }
+        break;
+      case 'advice_tool':
+        openModal('advice_tool');
+        break;
+      case 'advice_prompts':
+        await commit(() => api.prepareAdvicePrompts());
         break;
       case 'clear_data':
         if (await confirmClearData()) {
@@ -496,6 +511,14 @@
       clearingData = false;
       busy = false;
     }
+  }
+
+  function generateAdvice(dataScope: AdviceDataScopeId) {
+    void commit(() => api.generateAdvice(dataScope));
+  }
+
+  function updateAdviceItemStatus(itemId: number, status: AdviceItemStatusId) {
+    void commit(() => api.updateAdviceItemStatus(itemId, status));
   }
 
   async function checkDesktopUpdate() {
@@ -742,7 +765,7 @@
       {:else if activePage() === 'usage'}
         <UsageView {snapshot} {usageTone} />
       {:else if activePage() === 'insights'}
-        <InsightsView {snapshot} />
+        <InsightsView {snapshot} {generateAdvice} {updateAdviceItemStatus} />
       {:else if activePage() === 'config'}
         <ConfigView
           {snapshot}
@@ -819,6 +842,19 @@
                 onclick={() => commit(() => api.setCurrency(currency)).then(closeModal)}
               >
                 {currency}
+              </button>
+            {/each}
+          </div>
+        {:else if modal === 'advice_tool'}
+          <input bind:value={query} placeholder={snapshot.copy.desktop.filter_advice_tools} />
+          <div class="picker-list">
+            {#each filteredAdviceTools() as tool}
+              <button
+                type="button"
+                class:selected={tool.value === snapshot.advice_tool}
+                onclick={() => commit(() => api.setAdviceTool(tool.value)).then(closeModal)}
+              >
+                <span>{tool.label}</span>
               </button>
             {/each}
           </div>

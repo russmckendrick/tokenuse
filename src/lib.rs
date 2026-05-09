@@ -1,3 +1,4 @@
+pub mod advice;
 pub mod app;
 pub mod archive;
 pub mod config;

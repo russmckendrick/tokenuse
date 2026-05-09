@@ -1,6 +1,9 @@
 export type PageId = 'overview' | 'deep-dive' | 'usage' | 'insights' | 'config' | 'session';
 export type PeriodId = 'today' | 'week' | 'thirty-days' | 'month' | 'all-time';
 export type ToolId = 'all' | 'claude-code' | 'cursor' | 'codex' | 'copilot' | 'gemini';
+export type AdviceToolId = 'codex' | 'claude-code' | 'gemini';
+export type AdviceDataScopeId = 'redacted' | 'prompt_snippets';
+export type AdviceItemStatusId = 'open' | 'done' | 'dismissed';
 export type SortId = 'spend' | 'date' | 'tokens';
 export type ReportFormatId = 'json' | 'csv' | 'svg' | 'png' | 'html' | 'pdf' | 'xlsx';
 
@@ -264,6 +267,39 @@ export type InsightsView = {
   recommendations: RecommendationView[];
 };
 
+export type AdviceItemView = {
+  id: number;
+  run_id: number;
+  title: string;
+  body: string;
+  category: string;
+  severity: string;
+  confidence: number;
+  impact: string;
+  estimated_savings_usd: number | null;
+  evidence: string[];
+  next_step: string;
+  status: AdviceItemStatusId;
+  notes: string | null;
+};
+
+export type AdviceRunView = {
+  id: number;
+  created_at: string;
+  tool: AdviceToolId;
+  tool_label: string;
+  data_scope: AdviceDataScopeId;
+  status: 'succeeded' | 'failed';
+  summary: string | null;
+  raw_output: string;
+  error: string | null;
+  items: AdviceItemView[];
+};
+
+export type AdviceHistory = {
+  runs: AdviceRunView[];
+};
+
 export type ShortcutHint = {
   keys: string;
   label: string;
@@ -305,6 +341,20 @@ export type CopyDeck = {
   insights: {
     title: string;
     subtitle: string;
+    signals_title: string;
+    advice_title: string;
+    advice_empty: string;
+    advice_failed: string;
+    advice_scope_title: string;
+    advice_scope_redacted: string;
+    advice_scope_redacted_detail: string;
+    advice_scope_snippets: string;
+    advice_scope_snippets_detail: string;
+    advice_latest: string;
+    advice_run: string;
+    advice_confidence: string;
+    advice_next_step: string;
+    advice_evidence: string;
     kpi_savings: string;
     kpi_risks: string;
     kpi_warns: string;
@@ -349,6 +399,10 @@ export type DesktopSnapshot = {
   dashboard: DashboardData;
   usage: LimitsData;
   insights: InsightsView;
+  advice: AdviceHistory;
+  advice_running: boolean;
+  advice_tool: AdviceToolId;
+  advice_tool_options: OptionItem<AdviceToolId>[];
   projects: ProjectOption[];
   report_projects: ProjectOption[];
   sessions: SessionOption[];

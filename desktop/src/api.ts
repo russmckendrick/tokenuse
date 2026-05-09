@@ -1,5 +1,8 @@
 import { type Channel, invoke } from '@tauri-apps/api/core';
 import type {
+  AdviceDataScopeId,
+  AdviceItemStatusId,
+  AdviceToolId,
   DesktopSnapshot,
   DesktopUpdateDownloadEvent,
   DesktopUpdateMetadata,
@@ -28,6 +31,12 @@ export const api = {
   openSession: (key: string) => invoke<DesktopSnapshot>('open_session', { key }),
   closeSession: () => invoke<DesktopSnapshot>('close_session'),
   setCurrency: (code: string) => invoke<DesktopSnapshot>('set_currency', { code }),
+  setAdviceTool: (tool: AdviceToolId) => invoke<DesktopSnapshot>('set_advice_tool', { tool }),
+  prepareAdvicePrompts: () => invoke<DesktopSnapshot>('prepare_advice_prompts'),
+  generateAdvice: (dataScope: AdviceDataScopeId) =>
+    invoke<DesktopSnapshot>('generate_advice', { dataScope }),
+  updateAdviceItemStatus: (itemId: number, status: AdviceItemStatusId, notes: string | null = null) =>
+    invoke<DesktopSnapshot>('update_advice_item_status', { itemId, status, notes }),
   setOpenAtLogin: (enabled: boolean) =>
     invoke<DesktopSnapshot>('set_open_at_login', { enabled }),
   setShowDockOrTaskbarIcon: (enabled: boolean) =>

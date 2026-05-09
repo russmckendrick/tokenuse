@@ -690,7 +690,7 @@ pub(super) fn render_config(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
         .constraints([
             Constraint::Length(1),
             Constraint::Length(1),
-            Constraint::Length(10),
+            Constraint::Length(12),
             Constraint::Length(1),
             Constraint::Length(14),
             Constraint::Min(1),

@@ -390,6 +390,31 @@ mod tests {
     }
 
     #[test]
+    fn insights_render_shows_advice_and_signals_sections() {
+        let backend = TestBackend::new(170, 64);
+        let mut terminal = Terminal::new(backend).expect("create terminal");
+        let mut app = App::default();
+        app.page = Page::Insights;
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("draw insights");
+
+        let rendered = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+
+        let copy = copy();
+        assert!(rendered.contains(&copy.insights.advice_title));
+        assert!(rendered.contains(&copy.insights.advice_empty));
+        assert!(rendered.contains(&copy.insights.signals_title));
+    }
+
+    #[test]
     fn h_opens_help_modal_and_h_or_escape_closes_it() {
         let backend = TestBackend::new(170, 64);
         let mut terminal = Terminal::new(backend).expect("create terminal");
