@@ -40,6 +40,8 @@ struct ResponseItem {
     #[serde(default)]
     name: Option<String>,
     #[serde(default)]
+    namespace: Option<String>,
+    #[serde(default)]
     arguments: Option<String>,
 }
 
@@ -187,7 +189,7 @@ pub fn parse_session(
                         continue;
                     }
                     let Some(raw_name) = item.name else { continue };
-                    let normalized = normalize_tool(&raw_name);
+                    let normalized = normalize_tool(&raw_name, item.namespace.as_deref());
                     if raw_name == "exec_command" {
                         if let Some(args_str) = item.arguments.as_deref() {
                             if let Ok(args) = serde_json::from_str::<ExecArgs>(args_str) {
@@ -432,7 +434,14 @@ fn non_empty_str(value: Option<&Value>) -> Option<String> {
         .map(ToString::to_string)
 }
 
-fn normalize_tool(name: &str) -> String {
+fn normalize_tool(name: &str, namespace: Option<&str>) -> String {
+    if let Some(server) = namespace
+        .and_then(|ns| ns.strip_prefix("mcp__"))
+        .and_then(|rest| rest.strip_suffix("__"))
+        .filter(|s| !s.is_empty())
+    {
+        return format!("mcp__{server}__{name}");
+    }
     match name {
         "exec_command" => "Bash".to_string(),
         "read_file" => "Read".to_string(),
@@ -533,6 +542,19 @@ mod tests {
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].tools, vec!["Bash"]);
         assert_eq!(calls[0].bash_commands, vec!["ls -la", "grep foo"]);
+    }
+
+    #[test]
+    fn mcp_namespace_yields_canonical_tool_name() {
+        const MCP_CALL: &str = r#"{"timestamp":"2026-03-29T15:04:06.000Z","type":"response_item","payload":{"type":"function_call","name":"search_graph","namespace":"mcp__codebase_memory_mcp__","arguments":"{}","call_id":"c2"}}"#;
+        let f = write_session(&[META_OK, TURN_GPT5, MCP_CALL, TOKEN_FIRST]);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source_for(f.path().to_path_buf()), &mut seen).unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(
+            calls[0].tools,
+            vec!["mcp__codebase_memory_mcp__search_graph"]
+        );
     }
 
     #[test]

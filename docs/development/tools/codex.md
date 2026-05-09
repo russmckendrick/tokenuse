@@ -92,6 +92,8 @@ A rollout is heterogeneous JSONL. The interesting types:
 | `web_search` | `WebSearch` |
 | anything else | passed through unchanged |
 
+**MCP calls.** Codex records MCP tool invocations with the underlying tool name in `payload.name` and the server prefix in a separate `payload.namespace` field shaped like `mcp__<server>__`, e.g. `{"name":"search_graph","namespace":"mcp__codebase_memory_mcp__"}`. The parser joins the two into the canonical `mcp__<server>__<name>` form (matching how Claude Code stores MCP calls in a single string), so `aggregate_mcp` picks them up. Note that Codex namespaces use underscores in server names (e.g. `codebase_memory_mcp`) while Claude Code uses dashes (`codebase-memory-mcp`); the same logical server can therefore appear as two distinct rows in the MCP Servers panel — this mirrors how each tool emits the data and is intentional.
+
 ## Token & cost mapping
 
 One `ParsedCall` is emitted per `event_msg/token_count` whose usage is non-null. Prefer `info.last_token_usage` when present. If Codex only writes cumulative `info.total_token_usage`, the parser subtracts the previous cumulative total in the same rollout and uses the delta.
