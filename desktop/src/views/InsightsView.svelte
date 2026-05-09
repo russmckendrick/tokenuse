@@ -149,6 +149,9 @@
                           <span class={`severity ${item.severity}`}>{item.severity}</span>
                           <span>{item.category}</span>
                           <span>{confidenceLabel(item)}</span>
+                          {#if item.status !== 'open'}
+                            <span class={`status-chip ${item.status}`}>{item.status}</span>
+                          {/if}
                         </div>
                         <h4>{item.title}</h4>
                         <p>{item.body}</p>
@@ -159,19 +162,16 @@
                         <p class="next-step">{nextStepLabel(item.next_step)}</p>
                       </div>
                       <div class="item-actions">
-                        <span class={`status-chip ${item.status}`}>{item.status}</span>
-                        {#if item.status === 'done'}
-                          <button class="reopen-command" type="button" title={snapshot.copy.actions.mark_open} onclick={() => updateAdviceItemStatus(item.id, 'open')}>
-                            <RotateCcw size={14} /> {snapshot.copy.actions.mark_open}
-                          </button>
-                        {:else}
+                        {#if item.status === 'open'}
                           <button class="done-command" type="button" title={snapshot.copy.actions.mark_done} onclick={() => updateAdviceItemStatus(item.id, 'done')}>
                             <Check size={14} /> {snapshot.copy.actions.mark_done}
                           </button>
-                        {/if}
-                        {#if item.status !== 'dismissed'}
                           <button class="dismiss-command" type="button" title={snapshot.copy.actions.dismiss} onclick={() => updateAdviceItemStatus(item.id, 'dismissed')}>
                             <X size={14} /> {snapshot.copy.actions.dismiss}
+                          </button>
+                        {:else}
+                          <button class="reopen-command" type="button" title={snapshot.copy.actions.mark_open} onclick={() => updateAdviceItemStatus(item.id, 'open')}>
+                            <RotateCcw size={14} /> {snapshot.copy.actions.mark_open}
                           </button>
                         {/if}
                       </div>
@@ -387,7 +387,7 @@
   }
   .advice-main {
     min-width: 0;
-    padding-right: 218px;
+    padding-right: 156px;
   }
   .advice-meta {
     display: flex;
@@ -472,12 +472,14 @@
   .status-chip {
     display: inline-flex;
     align-items: center;
-    min-height: 24px;
-    padding: 0 7px;
-    background: #25293d;
+    height: 14px;
+    padding: 0 5px;
+    border: 1px solid #30354c;
+    background: transparent;
     color: #a1a7c3;
     font-size: 10px;
     font-weight: 700;
+    line-height: 1;
     text-transform: uppercase;
   }
   .status-chip.done {
