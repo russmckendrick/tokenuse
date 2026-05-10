@@ -2,6 +2,7 @@
 
 ## Tooling
 
+- **Code discovery via `/codebase-memory`.** This repo is indexed by the `codebase-memory-mcp` server. Prefer its tools (`search_graph`, `trace_path`, `get_code_snippet`, `get_architecture`, `query_graph`, `search_code`) for locating functions, callers, call chains, or architecture overviews — they return structured graph results in a fraction of the tokens that `grep`/`Read` would burn. Fall back to `Grep`/`Read` only for plain-text content (markdown, configs, fixtures) or when the graph is stale. If the index is missing or out of date, run `index_repository` first; `detect_changes` maps a working-tree diff to affected symbols.
 - Before finishing code changes, run the same local pass as the CI check jobs: `cargo fmt --check`, `cargo check`, `cargo clippy --all-targets --all-features -- -D warnings`, and `cargo test` from the repo root.
 - For desktop changes, also mirror the CI desktop check job: from `desktop/`, run `CI=true pnpm run check` and `CI=true pnpm run build`; from `desktop/src-tauri/`, run `cargo check`.
 - Run all desktop `pnpm` commands non-interactively with `CI=true` so pnpm never stops on a no-TTY module purge prompt.
