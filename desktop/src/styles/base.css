@@ -1,17 +1,19 @@
 :root {
-  font-family: "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace;
-  color: #cbd4f2;
-  background: #202438;
-  font-size: 14px;
-  line-height: 1.35;
+  font-family: var(--font-ui);
+  color: var(--color-on-surface);
+  background: var(--color-surface);
+  font-size: var(--text-body);
+  line-height: 1.4;
   font-synthesis: none;
   text-rendering: geometricPrecision;
   color-scheme: dark;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 * {
   box-sizing: border-box;
-  scrollbar-color: #414866 #202438;
+  scrollbar-color: var(--color-border) var(--color-surface);
   scrollbar-width: thin;
 }
 
@@ -21,11 +23,12 @@
 }
 
 *::-webkit-scrollbar-thumb {
-  background: #414866;
+  background: var(--color-border);
+  border-radius: var(--radius-sm);
 }
 
 *::-webkit-scrollbar-track {
-  background: #202438;
+  background: var(--color-surface);
 }
 
 html,
@@ -40,7 +43,7 @@ body,
 
 body {
   overflow: hidden;
-  background: #202438;
+  background: var(--color-surface);
 }
 
 button,
@@ -50,22 +53,24 @@ select {
 }
 
 button {
-  color: #cbd4f2;
-  background: #25293d;
-  border: 1px solid #414866;
-  border-radius: 3px;
+  color: var(--color-on-surface);
+  background: var(--color-neutral);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   min-height: 30px;
-  padding: 5px 9px;
+  padding: 6px 10px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   cursor: default;
-  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+  transition: color var(--motion-fast) var(--ease-standard),
+    background var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
 }
 
 button:hover {
-  border-color: #62a6ff;
+  border-color: var(--color-secondary);
   color: #ffffff;
 }
 
@@ -76,10 +81,10 @@ button:disabled {
 input,
 select {
   width: 100%;
-  color: #cbd4f2;
-  background: #202438;
-  border: 1px solid #414866;
-  border-radius: 3px;
+  color: var(--color-on-surface);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   padding: 9px 10px;
   outline: none;
 }
@@ -92,6 +97,5 @@ select {
 
 input:focus,
 select:focus {
-  border-color: #ff8f40;
+  border-color: var(--color-primary);
 }
-

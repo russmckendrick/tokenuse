@@ -251,6 +251,29 @@ pub fn refresh_sidecar(_output: &Path, _session_token: &str) -> Result<usize> {
     Err(eyre!("Codex subscription sync unavailable in this build"))
 }
 
+/// Build the `Cookie:` header value for the ChatGPT auth request.
+///
+/// Accepts either:
+/// - A bare token value (legacy unsharded case) — wrapped as
+///   `__Secure-next-auth.session-token=<value>`.
+/// - A raw cookie header (any string containing `=`) — forwarded as-is after
+///   stripping a leading `Cookie:` prefix. This is the path users must take
+///   when NextAuth has sharded the token across `.0` / `.1` / ... cookies,
+///   because the auth server needs every shard under its original name.
+#[cfg_attr(not(feature = "quota-sync"), allow(dead_code))]
+fn cookie_header(token: &str) -> String {
+    let stripped = token
+        .trim()
+        .trim_start_matches("Cookie:")
+        .trim_start_matches("cookie:")
+        .trim();
+    if stripped.contains('=') {
+        stripped.to_string()
+    } else {
+        format!("__Secure-next-auth.session-token={stripped}")
+    }
+}
+
 #[cfg(feature = "quota-sync")]
 fn fetch_access_token(session_token: &str) -> Result<String> {
     let raw = ureq::get(&config::auth_session_url())
@@ -260,22 +283,77 @@ fn fetch_access_token(session_token: &str) -> Result<String> {
         .set("sec-fetch-dest", "empty")
         .set("sec-fetch-mode", "cors")
         .set("sec-fetch-site", "same-origin")
-        .set(
-            "cookie",
-            &format!("__Secure-next-auth.session-token={session_token}"),
-        )
+        .set("cookie", &cookie_header(session_token))
         .call()
         .map_err(map_ureq_error)?
         .into_string()
         .map_err(|e| eyre!("read Codex auth response: {e}"))?;
     let value: Value =
         serde_json::from_str(&raw).map_err(|e| eyre!("parse Codex auth response: {e}"))?;
-    value
+    if let Some(token) = value
         .get("accessToken")
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .ok_or_else(|| eyre!("Codex auth response missing accessToken"))
+    {
+        return Ok(token.to_string());
+    }
+    Err(missing_access_token_error(&value))
+}
+
+/// Build a diagnostic error when `/api/auth/session` returns JSON without an
+/// `accessToken`. The two common causes are (a) an anonymous session (cookies
+/// didn't authenticate, response is `{}` or `{ "user": null }`) and (b) the
+/// response shape changed and the token is under a different field. The error
+/// surfaces enough shape information to tell those cases apart without leaking
+/// the user's email / id / image.
+#[cfg(feature = "quota-sync")]
+fn missing_access_token_error(value: &Value) -> color_eyre::Report {
+    let Some(obj) = value.as_object() else {
+        return eyre!(
+            "Codex auth response missing accessToken (response was not a JSON object — got {}).",
+            value_kind(value)
+        );
+    };
+    if obj.is_empty() {
+        return eyre!(
+            "Codex auth response missing accessToken — got an empty session (`{{}}`). \
+             This usually means ChatGPT did not accept your cookies as authenticated. \
+             Try pasting the full `Cookie:` request header (including `cf_clearance`, \
+             `__Host-next-auth.csrf-token`, `__Secure-oai-is`) into the Additional cookies field."
+        );
+    }
+    let keys: Vec<&str> = obj.keys().map(String::as_str).collect();
+    let user_present = obj.get("user").map(|v| !v.is_null()).unwrap_or(false);
+    let expires_present = obj
+        .get("expires")
+        .and_then(|v| v.as_str())
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
+    if user_present || expires_present {
+        eyre!(
+            "Codex auth response missing accessToken even though the session looks valid \
+             (user={user_present}, expires={expires_present}, keys={keys:?}). ChatGPT may have \
+             changed the response shape — please report this with the key list above."
+        )
+    } else {
+        eyre!(
+            "Codex auth response missing accessToken (response keys: {keys:?}). \
+             ChatGPT returned JSON but no authenticated session; add `cf_clearance` and the \
+             other chatgpt.com cookies via the Additional cookies field."
+        )
+    }
+}
+
+#[cfg(feature = "quota-sync")]
+fn value_kind(value: &Value) -> &'static str {
+    match value {
+        Value::Null => "null",
+        Value::Bool(_) => "bool",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    }
 }
 
 #[cfg(feature = "quota-sync")]
@@ -329,6 +407,31 @@ fn write_sidecar(output: &Path, usage: &Value) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cookie_header_wraps_bare_token() {
+        let header = cookie_header("  eyJraWQi.Abc.def  ");
+        assert_eq!(header, "__Secure-next-auth.session-token=eyJraWQi.Abc.def");
+    }
+
+    #[test]
+    fn cookie_header_passes_chunked_pair_through() {
+        // NextAuth shards large session JWTs across .0 / .1 cookies; users
+        // paste both shards as a raw cookie header.
+        let raw =
+            "__Secure-next-auth.session-token.0=eyJhbGc; __Secure-next-auth.session-token.1=Je5tOs";
+        assert_eq!(cookie_header(raw), raw);
+    }
+
+    #[test]
+    fn cookie_header_strips_leading_cookie_label() {
+        let raw =
+            "Cookie: __Secure-next-auth.session-token.0=A; __Secure-next-auth.session-token.1=B";
+        assert_eq!(
+            cookie_header(raw),
+            "__Secure-next-auth.session-token.0=A; __Secure-next-auth.session-token.1=B"
+        );
+    }
 
     #[test]
     fn parses_wrapped_codex_sidecar() {

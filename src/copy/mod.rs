@@ -188,6 +188,9 @@ pub struct PanelCopy {
     pub desktop: String,
     pub local_data: String,
     pub local_files: String,
+    pub money_and_data: String,
+    pub tool_integrations: String,
+    pub advice_engine: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

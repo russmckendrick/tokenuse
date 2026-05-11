@@ -93,7 +93,10 @@
     "calls": "Calls",
     "desktop": "Desktop",
     "local_data": "Local Data",
-    "local_files": "Local Files"
+    "local_files": "Local Files",
+    "money_and_data": "Money & Data",
+    "tool_integrations": "Tool Integrations",
+    "advice_engine": "Advice Engine"
   },
   "tables": {
     "blank": "",

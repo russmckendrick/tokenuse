@@ -28,8 +28,8 @@
       active,
       x: index * (cellWidth + gap),
       width: cellWidth,
-      fill: active ? activeColor : '#292d42',
-      stroke: active ? activeColor : '#414866',
+      fill: active ? activeColor : 'var(--color-border-row)',
+      stroke: active ? activeColor : 'var(--color-border)',
       opacity: active ? opacityScale(index) : 0.72
     };
   });
@@ -88,7 +88,7 @@
   }
 
   .rank-marker {
-    stroke: #202438;
+    stroke: var(--color-surface);
     stroke-width: 1;
     opacity: 0.8;
     vector-effect: non-scaling-stroke;

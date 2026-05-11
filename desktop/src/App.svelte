@@ -6,7 +6,7 @@
   import { Download, FolderOpen, RefreshCw, Search, X } from 'lucide-svelte';
   import { api } from './api';
   import { count } from './format';
-  import { fadeIn, reveal } from './motion';
+  import { fadeIn, pill, reveal } from './motion';
   import TrayPopover from './TrayPopover.svelte';
   import ConfigView from './views/ConfigView.svelte';
   import DeepDiveView from './views/DeepDiveView.svelte';
@@ -67,8 +67,12 @@
   let modal: ModalKind = null;
   let cookieProvider: SubscriptionProvider | null = null;
   let cookieValue = '';
+  let codexShard0 = '';
+  let codexShard1 = '';
+  let codexExtraCookies = '';
   let cookieBusy = false;
   let cookieError: string | null = null;
+  let statusExpanded = false;
   let callDetail: SessionDetail | null = null;
   let query = '';
   let reportFormat: ReportFormatId = 'html';
@@ -149,9 +153,35 @@
   function openCookieModal(provider: SubscriptionProvider) {
     cookieProvider = provider;
     cookieValue = '';
+    codexShard0 = '';
+    codexShard1 = '';
+    codexExtraCookies = '';
     cookieError = null;
     cookieBusy = false;
     openModal('subscription_cookie');
+  }
+
+  function composedCookieValue(): string {
+    if (cookieProvider === 'codex') {
+      const s0 = codexShard0.trim();
+      const s1 = codexShard1.trim();
+      if (!s0 || !s1) return '';
+      const parts = [
+        `__Secure-next-auth.session-token.0=${s0}`,
+        `__Secure-next-auth.session-token.1=${s1}`
+      ];
+      const extra = codexExtraCookies.trim().replace(/^Cookie:\s*/i, '');
+      if (extra) parts.push(extra);
+      return parts.join('; ');
+    }
+    return cookieValue.trim();
+  }
+
+  function cookieFormReady(): boolean {
+    if (cookieProvider === 'codex') {
+      return codexShard0.trim().length > 0 && codexShard1.trim().length > 0;
+    }
+    return cookieValue.trim().length > 0;
   }
 
   function cookieIsSet(provider: SubscriptionProvider | null): boolean {
@@ -167,9 +197,12 @@
 
   async function saveAndSyncCookie() {
     if (!cookieProvider) return;
-    const trimmed = cookieValue.trim();
-    if (!trimmed) {
-      cookieError = 'Paste the cookie value first.';
+    const composed = composedCookieValue();
+    if (!composed) {
+      cookieError =
+        cookieProvider === 'codex'
+          ? 'Paste both __Secure-next-auth.session-token.0 and .1 shards.'
+          : 'Paste the cookie value first.';
       return;
     }
     cookieBusy = true;
@@ -177,13 +210,16 @@
     try {
       snapshot =
         cookieProvider === 'claude'
-          ? await api.setClaudeSessionCookie(trimmed)
-          : await api.setCodexSessionCookie(trimmed);
+          ? await api.setClaudeSessionCookie(composed)
+          : await api.setCodexSessionCookie(composed);
       snapshot =
         cookieProvider === 'claude'
           ? await api.syncClaudeSubscriptionLimits()
           : await api.syncCodexSubscriptionLimits();
       cookieValue = '';
+      codexShard0 = '';
+      codexShard1 = '';
+      codexExtraCookies = '';
       closeModal();
     } catch (err) {
       cookieError = err instanceof Error ? err.message : String(err);
@@ -798,6 +834,25 @@
       </nav>
 
       <div class="actions">
+        {#if statusMessage()}
+          {#key statusTone() + (statusMessage() ?? '')}
+            <button
+              class="status-pill"
+              class:error={statusTone() === 'error'}
+              class:success={statusTone() === 'success'}
+              class:warning={statusTone() === 'warning'}
+              class:busy={statusTone() === 'busy'}
+              class:is-expanded={statusExpanded}
+              type="button"
+              use:pill
+              title={statusExpanded ? 'Click to collapse' : statusMessage() ?? ''}
+              onclick={() => (statusExpanded = !statusExpanded)}
+            >
+              <i class="status-dot" aria-hidden="true"></i>
+              <span>{statusMessage()}</span>
+            </button>
+          {/key}
+        {/if}
         <button class="icon-button" type="button" title={snapshot.copy.actions.refresh_archive} onclick={() => commit(() => api.refreshArchive())}>
           <RefreshCw size={16} />
         </button>
@@ -846,18 +901,6 @@
         </button>
       </div>
     </section>
-
-    {#if statusMessage()}
-      <div
-        class:error={statusTone() === 'error'}
-        class:success={statusTone() === 'success'}
-        class:warning={statusTone() === 'warning'}
-        class:busy={statusTone() === 'busy'}
-        class="status-line"
-      >
-        {statusMessage()}
-      </div>
-    {/if}
 
     <main>
       {#if activePage() === 'overview'}
@@ -962,23 +1005,68 @@
           </div>
         {:else if modal === 'subscription_cookie'}
           <div class="cookie-modal">
-            <p class="cookie-help">
-              Paste the <code>{cookieProvider === 'codex' ? '__Secure-next-auth.session-token' : 'sessionKey'}</code> cookie value from your
-              {cookieProviderLabel(cookieProvider)} browser session.
-              {#if cookieIsSet(cookieProvider)}
-                A cookie is already stored — leave the field blank and use <em>Sync now</em>, or paste a new value to replace it.
-              {:else}
-                No cookie stored yet.
-              {/if}
-            </p>
-            <input
-              type="password"
-              autocomplete="off"
-              spellcheck="false"
-              placeholder="Paste cookie value"
-              bind:value={cookieValue}
-              disabled={cookieBusy}
-            />
+            {#if cookieProvider === 'codex'}
+              <p class="cookie-help">
+                ChatGPT shards the NextAuth session token across two cookies. Copy each value from Dev&nbsp;Tools → Storage → Cookies on <em>chatgpt.com</em> and paste them below — both shards are required.
+                {#if cookieIsSet(cookieProvider)}
+                  A cookie set is already stored — leave the fields blank and use <em>Sync now</em>, or paste new values to replace them.
+                {:else}
+                  No cookies stored yet.
+                {/if}
+              </p>
+              <div class="cookie-shards">
+                <label class="cookie-shard">
+                  <span><code>__Secure-next-auth.session-token.0</code></span>
+                  <input
+                    type="password"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="Paste shard 0 value (~3–4 KB)"
+                    bind:value={codexShard0}
+                    disabled={cookieBusy}
+                  />
+                </label>
+                <label class="cookie-shard">
+                  <span><code>__Secure-next-auth.session-token.1</code></span>
+                  <input
+                    type="password"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="Paste shard 1 value (~200 B)"
+                    bind:value={codexShard1}
+                    disabled={cookieBusy}
+                  />
+                </label>
+                <label class="cookie-shard">
+                  <span>Additional cookies <em>(optional — paste the full <code>Cookie:</code> header if Cloudflare or session-token-shards alone aren't enough)</em></span>
+                  <textarea
+                    autocomplete="off"
+                    spellcheck="false"
+                    rows="2"
+                    placeholder="cf_clearance=…; __Host-next-auth.csrf-token=…"
+                    bind:value={codexExtraCookies}
+                    disabled={cookieBusy}
+                  ></textarea>
+                </label>
+              </div>
+            {:else}
+              <p class="cookie-help">
+                Paste the <code>sessionKey</code> cookie value from your {cookieProviderLabel(cookieProvider)} browser session.
+                {#if cookieIsSet(cookieProvider)}
+                  A cookie is already stored — leave the field blank and use <em>Sync now</em>, or paste a new value to replace it.
+                {:else}
+                  No cookie stored yet.
+                {/if}
+              </p>
+              <input
+                type="password"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="Paste cookie value"
+                bind:value={cookieValue}
+                disabled={cookieBusy}
+              />
+            {/if}
             {#if cookieError}
               <div class="cookie-error">{cookieError}</div>
             {/if}
@@ -986,7 +1074,7 @@
               <button
                 class="primary-command"
                 type="button"
-                disabled={cookieBusy || !cookieValue.trim()}
+                disabled={cookieBusy || !cookieFormReady()}
                 onclick={saveAndSyncCookie}
               >
                 Save &amp; sync
@@ -1008,7 +1096,14 @@
               </button>
             </div>
             <p class="cookie-help muted">
-              Stored locally in the OS keychain only. <a href="https://github.com/russmckendrick/tokenuse/blob/main/docs/development/tools/claude-subscription.md" target="_blank" rel="noreferrer">How to find your cookie</a>.
+              Stored locally in the OS keychain only.
+              <a
+                href={cookieProvider === 'codex'
+                  ? 'https://github.com/russmckendrick/tokenuse/blob/main/docs/development/tools/codex-subscription.md'
+                  : 'https://github.com/russmckendrick/tokenuse/blob/main/docs/development/tools/claude-subscription.md'}
+                target="_blank"
+                rel="noreferrer"
+              >How to find your cookie</a>.
             </p>
           </div>
         {:else if modal === 'report'}

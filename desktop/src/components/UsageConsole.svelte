@@ -104,7 +104,7 @@
 
   .console-stats div {
     min-width: 0;
-    border: 1px solid #292d42;
+    border: 1px solid var(--color-border-row);
     padding: 6px 7px;
     display: grid;
     align-content: center;
@@ -113,7 +113,7 @@
 
   .console-stats span,
   .console-labels {
-    color: #a1a7c3;
+    color: var(--color-muted);
     text-transform: uppercase;
     font-size: 12px;
   }
@@ -139,28 +139,28 @@
     grid-template-columns: 70px minmax(140px, 1fr) minmax(82px, 0.8fr) minmax(90px, 0.7fr) minmax(110px, 0.9fr) minmax(98px, 0.8fr);
     gap: 8px;
     align-items: center;
-    border-bottom: 1px solid #292d42;
+    border-bottom: 1px solid var(--color-border-row);
   }
 
   .console-row strong:first-child,
   .limit-row strong:first-child {
-    color: #4df3e8;
+    color: var(--color-cyan);
   }
 
   .limit-row {
-    color: #a1a7c3;
+    color: var(--color-muted);
   }
 
   .money {
-    color: #ffd60a;
+    color: var(--color-warning);
   }
 
   .console-empty {
     min-height: 42px;
     display: grid;
     align-items: center;
-    color: #a1a7c3;
-    border-bottom: 1px solid #292d42;
+    color: var(--color-muted);
+    border-bottom: 1px solid var(--color-border-row);
   }
 
   @media (max-width: 980px) {

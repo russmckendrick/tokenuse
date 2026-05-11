@@ -18,9 +18,10 @@
     display: block;
     width: 100%;
     min-width: 74px;
-    height: 12px;
-    background: #292d42;
-    border: 1px solid #414866;
+    height: 10px;
+    background: var(--color-bar-empty);
+    border: 1px solid var(--color-border-soft);
+    border-radius: var(--radius-pill);
     overflow: hidden;
   }
 
@@ -28,17 +29,18 @@
     display: block;
     width: 100%;
     height: 100%;
+    border-radius: var(--radius-pill);
   }
 
   .gauge-fill.cool {
-    background: #4df3e8;
+    background: var(--color-cyan);
   }
 
   .gauge-fill.warm {
-    background: #ffd60a;
+    background: var(--color-warning);
   }
 
   .gauge-fill.hot {
-    background: #ff5f6d;
+    background: var(--color-error);
   }
 </style>

@@ -81,7 +81,7 @@
     <path class="trend-line" d={trendLine}></path>
   {/if}
 
-  {#each values as value, index}
+  {#each values as value, index (index)}
     <rect
       class="activity-tick"
       class:empty={!active || value <= 0}
@@ -122,6 +122,7 @@
 
   .trend-area {
     fill: var(--chart-fill);
+    transition: d var(--motion-slow) var(--ease-standard);
   }
 
   .trend-line {
@@ -129,19 +130,35 @@
     stroke: var(--chart-accent);
     stroke-width: 2.5;
     vector-effect: non-scaling-stroke;
+    transition: d var(--motion-slow) var(--ease-standard);
   }
 
   .activity-tick {
-    fill: #4df3e8;
+    fill: var(--color-cyan);
     opacity: 0.74;
+    transition:
+      x var(--motion-base) var(--ease-standard),
+      y var(--motion-slow) var(--ease-standard),
+      width var(--motion-base) var(--ease-standard),
+      height var(--motion-slow) var(--ease-standard),
+      fill var(--motion-fast) var(--ease-standard),
+      opacity var(--motion-fast) var(--ease-standard);
   }
 
   .activity-tick.empty {
-    fill: #414866;
+    fill: var(--color-border);
     opacity: 0.38;
   }
 
   svg.quiet .floor-guide {
-    stroke: #6e7492;
+    stroke: var(--color-muted-2);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .activity-tick,
+    .trend-area,
+    .trend-line {
+      transition: none;
+    }
   }
 </style>

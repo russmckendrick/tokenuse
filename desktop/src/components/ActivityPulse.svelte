@@ -117,61 +117,59 @@
     <div class="activity-chart">
       <div class="pulse-label spend">{copy.timeline.spend}</div>
       <div class="pulse-label calls">{copy.timeline.calls}</div>
-      {#key chartKey}
-        <div class="chart-frame" use:chartRefresh={{ y: 2 }}>
-          <svg
-            bind:this={svgElement}
-            viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-            preserveAspectRatio="none"
-            role="img"
-            aria-label={copy.timeline.activity_aria.replace('{first}', firstLabel).replace('{last}', lastLabel)}
-            onpointermove={handlePointerMove}
-            onpointerleave={clearHover}
-          >
-            <rect class="calls-band" x={xInset} y={callsTop - 2} width={chartWidth - xInset * 2} height={callsBottom - callsTop + 2}></rect>
+      <div class="chart-frame" use:chartRefresh={{ y: 2 }}>
+        <svg
+          bind:this={svgElement}
+          viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+          preserveAspectRatio="none"
+          role="img"
+          aria-label={copy.timeline.activity_aria.replace('{first}', firstLabel).replace('{last}', lastLabel)}
+          onpointermove={handlePointerMove}
+          onpointerleave={clearHover}
+        >
+          <rect class="calls-band" x={xInset} y={callsTop - 2} width={chartWidth - xInset * 2} height={callsBottom - callsTop + 2}></rect>
 
-            <line class="guide spend-guide" x1={xInset} x2={chartWidth - xInset} y1={spendTop} y2={spendTop}></line>
-            <line class="guide middle-guide" x1={xInset} x2={chartWidth - xInset} y1={spendBottom} y2={spendBottom}></line>
-            <line class="guide calls-guide" x1={xInset} x2={chartWidth - xInset} y1={callsBottom} y2={callsBottom}></line>
+          <line class="guide spend-guide" x1={xInset} x2={chartWidth - xInset} y1={spendTop} y2={spendTop}></line>
+          <line class="guide middle-guide" x1={xInset} x2={chartWidth - xInset} y1={spendBottom} y2={spendBottom}></line>
+          <line class="guide calls-guide" x1={xInset} x2={chartWidth - xInset} y1={callsBottom} y2={callsBottom}></line>
 
-            {#each points as point, index}
-              <rect
-                class="spend-bar"
-                class:empty={point.value === 0}
-                class:peak={point === high}
-                x={barX(index)}
-                y={spendY(point.value)}
-                width={bucketBarWidth}
-                height={spendHeight(point.value)}
-              >
-                <title>{point.label} · {point.cost} · {point.calls.toLocaleString()} {copy.metrics.calls}</title>
-              </rect>
-            {/each}
+          {#each points as point, index (index)}
+            <rect
+              class="spend-bar"
+              class:empty={point.value === 0}
+              class:peak={point === high}
+              x={barX(index)}
+              y={spendY(point.value)}
+              width={bucketBarWidth}
+              height={spendHeight(point.value)}
+            >
+              <title>{point.label} · {point.cost} · {point.calls.toLocaleString()} {copy.metrics.calls}</title>
+            </rect>
+          {/each}
 
-            <path class="calls-area" d={callsArea}></path>
-            <path class="calls-line" d={callsLine}></path>
-
-            {#if hoverPoint}
-              <line class="hover-line" x1={hoverX} x2={hoverX} y1={spendTop} y2={callsBottom}></line>
-              <rect
-                class="hover-bar"
-                x={hoverBarX}
-                y={spendY(hoverPoint.value)}
-                width={bucketBarWidth}
-                height={spendHeight(hoverPoint.value)}
-              ></rect>
-            {/if}
-          </svg>
+          <path class="calls-area" d={callsArea}></path>
+          <path class="calls-line" d={callsLine}></path>
 
           {#if hoverPoint}
-            <div class="pulse-tooltip" style={`left: ${Math.min(92, Math.max(8, (hoverX / chartWidth) * 100))}%`}>
-              <strong>{hoverPoint.label}</strong>
-              <span>{hoverPoint.cost}</span>
-              <span>{hoverPoint.calls.toLocaleString()} {copy.metrics.calls}</span>
-            </div>
+            <line class="hover-line" x1={hoverX} x2={hoverX} y1={spendTop} y2={callsBottom}></line>
+            <rect
+              class="hover-bar"
+              x={hoverBarX}
+              y={spendY(hoverPoint.value)}
+              width={bucketBarWidth}
+              height={spendHeight(hoverPoint.value)}
+            ></rect>
           {/if}
-        </div>
-      {/key}
+        </svg>
+
+        {#if hoverPoint}
+          <div class="pulse-tooltip" style={`left: ${Math.min(92, Math.max(8, (hoverX / chartWidth) * 100))}%`}>
+            <strong>{hoverPoint.label}</strong>
+            <span>{hoverPoint.cost}</span>
+            <span>{hoverPoint.calls.toLocaleString()} {copy.metrics.calls}</span>
+          </div>
+        {/if}
+      </div>
     </div>
 
     <div class="pulse-meta">
@@ -268,6 +266,13 @@
   .spend-bar {
     fill: #ff8f40;
     opacity: 0.76;
+    transition:
+      x var(--motion-base) var(--ease-standard),
+      y var(--motion-slow) var(--ease-standard),
+      width var(--motion-base) var(--ease-standard),
+      height var(--motion-slow) var(--ease-standard),
+      fill var(--motion-fast) var(--ease-standard),
+      opacity var(--motion-fast) var(--ease-standard);
   }
 
   .spend-bar.empty {
@@ -283,6 +288,7 @@
   .calls-area {
     fill: rgba(77, 243, 232, 0.12);
     stroke: none;
+    transition: d var(--motion-slow) var(--ease-standard);
   }
 
   .calls-line {
@@ -290,6 +296,15 @@
     stroke: #4df3e8;
     stroke-width: 2.5;
     vector-effect: non-scaling-stroke;
+    transition: d var(--motion-slow) var(--ease-standard);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .spend-bar,
+    .calls-area,
+    .calls-line {
+      transition: none;
+    }
   }
 
   .hover-bar {
