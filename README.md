@@ -4,7 +4,7 @@
 
 Website: [tokenuse.app](https://www.tokenuse.app/)
 
-There is no API key, proxy, telemetry endpoint, daemon, or live file watcher. Usage ingestion stays local-only; outbound network is limited to explicit confirmed Config-page downloads, explicit Copilot quota sync, or maintainer refresh flags.
+There is no Anthropic / OpenAI platform API key, proxy, telemetry endpoint, daemon, or live file watcher. Usage ingestion stays local-only; outbound network is limited to explicit confirmed Config-page downloads, explicit Copilot / Claude.ai / ChatGPT quota sync, or maintainer refresh flags. The Claude.ai and ChatGPT (Codex) quota-sync features are opt-in: they call those services' user-facing usage endpoints only when you trigger a sync, using a session cookie you stored locally in the OS keychain.
 
 ## Quick Start
 

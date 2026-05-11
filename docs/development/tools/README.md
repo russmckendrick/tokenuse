@@ -1,6 +1,6 @@
 # Tool Ingestion
 
-`tokenuse` reads usage data **directly from local files** written by AI coding tools. There is no proxy, no API key, no telemetry endpoint, and no live watcher. Optional quota sync actions can write local limit sidecars under the tokenuse config directory; Copilot quota sync is explicit and uses the existing local Copilot OAuth token.
+`tokenuse` reads usage data **directly from local files** written by AI coding tools. There is no proxy, no platform API key, no telemetry endpoint, and no live watcher. Optional quota sync actions can write local limit sidecars under the tokenuse config directory; Copilot quota sync uses the existing local Copilot OAuth token, while Claude.ai and ChatGPT (Codex) quota sync use a session cookie you store in the OS keychain. All three are opt-in and triggered explicitly from the Config page.
 
 The UI calls these sources **tools**. Internally each one is implemented as a `ToolAdapter` under `src/tools/<name>/`.
 
@@ -13,6 +13,8 @@ The UI calls these sources **tools**. Internally each one is implemented as a `T
 | Codex | implemented | JSONL rollouts under `~/.codex/sessions/` | exact per-turn token-count deltas | [codex.md](codex.md) |
 | GitHub Copilot | implemented | JSONL events from legacy CLI, VS Code Copilot Chat transcripts, optional quota sidecar | legacy output exact when present; transcripts estimated; quota snapshots from confirmed local sync | [copilot.md](copilot.md) |
 | Gemini | implemented | JSON/JSONL chat sessions under `~/.gemini/tmp/<project_hash>/chats/` | exact usage, cache reads, thoughts, tool calls | [gemini.md](gemini.md) |
+| Claude.ai subscription | implemented (limits-only) | sidecar written by opt-in Config-page sync of `claude.ai/api/organizations/{uuid}/usage` and `/overage_spend_limit` | exact 5h / 7d / Opus / Sonnet / Extra Usage gauges; rendered inside the Claude Code section | [claude-subscription.md](claude-subscription.md) |
+| ChatGPT (Codex) subscription | implemented (limits-only) | sidecar written by opt-in Config-page sync of `chatgpt.com/backend-api/wham/usage` | exact 5h / 7d / credits gauges; rendered inside the Codex section | [codex-subscription.md](codex-subscription.md) |
 
 ## Data Path
 

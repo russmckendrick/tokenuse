@@ -405,6 +405,8 @@ pub enum ConfigDownload {
     CurrencyRates,
     PricingSnapshot,
     CopilotLimits,
+    ClaudeSubscriptionLimits,
+    CodexSubscriptionLimits,
 }
 
 impl ConfigDownload {
@@ -414,6 +416,12 @@ impl ConfigDownload {
             Self::CurrencyRates => copy.modals.download_rates_title.as_str(),
             Self::PricingSnapshot => copy.modals.download_prices_title.as_str(),
             Self::CopilotLimits => copy.modals.sync_copilot_limits_title.as_str(),
+            Self::ClaudeSubscriptionLimits => {
+                copy.modals.sync_claude_subscription_limits_title.as_str()
+            }
+            Self::CodexSubscriptionLimits => {
+                copy.modals.sync_codex_subscription_limits_title.as_str()
+            }
         }
     }
 
@@ -423,6 +431,8 @@ impl ConfigDownload {
             Self::CurrencyRates => copy.modals.rates_file.as_str(),
             Self::PricingSnapshot => copy.modals.pricing_file.as_str(),
             Self::CopilotLimits => copy.modals.copilot_limits_file.as_str(),
+            Self::ClaudeSubscriptionLimits => copy.modals.claude_subscription_limits_file.as_str(),
+            Self::CodexSubscriptionLimits => copy.modals.codex_subscription_limits_file.as_str(),
         }
     }
 
@@ -432,6 +442,10 @@ impl ConfigDownload {
             Self::CurrencyRates => copy.modals.rates_source.as_str(),
             Self::PricingSnapshot => copy.modals.prices_source.as_str(),
             Self::CopilotLimits => copy.modals.copilot_limits_source.as_str(),
+            Self::ClaudeSubscriptionLimits => {
+                copy.modals.claude_subscription_limits_source.as_str()
+            }
+            Self::CodexSubscriptionLimits => copy.modals.codex_subscription_limits_source.as_str(),
         }
     }
 
@@ -441,6 +455,10 @@ impl ConfigDownload {
             Self::CurrencyRates => copy.modals.rates_effect.as_str(),
             Self::PricingSnapshot => copy.modals.prices_effect.as_str(),
             Self::CopilotLimits => copy.modals.copilot_limits_effect.as_str(),
+            Self::ClaudeSubscriptionLimits => {
+                copy.modals.claude_subscription_limits_effect.as_str()
+            }
+            Self::CodexSubscriptionLimits => copy.modals.codex_subscription_limits_effect.as_str(),
         }
     }
 
@@ -448,7 +466,9 @@ impl ConfigDownload {
         let copy = copy();
         match self {
             Self::CurrencyRates | Self::PricingSnapshot => copy.actions.download_lower.as_str(),
-            Self::CopilotLimits => copy.actions.sync_lower.as_str(),
+            Self::CopilotLimits
+            | Self::ClaudeSubscriptionLimits
+            | Self::CodexSubscriptionLimits => copy.actions.sync_lower.as_str(),
         }
     }
 
@@ -456,7 +476,9 @@ impl ConfigDownload {
         match self {
             Self::CurrencyRates => rates_download_links(),
             Self::PricingSnapshot => pricing_download_links(),
-            Self::CopilotLimits => Vec::new(),
+            Self::CopilotLimits
+            | Self::ClaudeSubscriptionLimits
+            | Self::CodexSubscriptionLimits => Vec::new(),
         }
     }
 }
@@ -915,7 +937,11 @@ impl Refresher {
                     Err(mpsc::RecvTimeoutError::Disconnected) => return,
                 };
                 let result = match &source {
-                    RefreshSource::Archive(paths) => crate::archive::sync_and_load(paths.as_ref()),
+                    RefreshSource::Archive(paths) => {
+                        #[cfg(feature = "quota-sync")]
+                        crate::quota_sync::auto_refresh(paths.as_ref());
+                        crate::archive::sync_and_load(paths.as_ref())
+                    }
                     RefreshSource::RawIngest => crate::ingest::load(),
                 };
                 if result_tx.send(RefreshOutcome { kind, result }).is_err() {
@@ -1659,6 +1685,24 @@ impl App {
             },
             self.paths.copilot_limits_file.display()
         );
+        let claude_subscription_limits_value = format!(
+            "{} · {}",
+            if self.paths.claude_subscription_limits_file.exists() {
+                &copy.config.values.quota_snapshot_found
+            } else {
+                &copy.config.values.quota_snapshot_missing
+            },
+            self.paths.claude_subscription_limits_file.display()
+        );
+        let codex_subscription_limits_value = format!(
+            "{} · {}",
+            if self.paths.codex_subscription_limits_file.exists() {
+                &copy.config.values.quota_snapshot_found
+            } else {
+                &copy.config.values.quota_snapshot_missing
+            },
+            self.paths.codex_subscription_limits_file.display()
+        );
         let advice_tool = AdviceTool::from_config(&self.settings.insights.advice_tool);
         let advice_tool_value = copy::template(
             if crate::advice::tool_available(advice_tool) {
@@ -1725,6 +1769,20 @@ impl App {
                 name: copy.config.rows.copilot_limits.name.as_str(),
                 value: copilot_limits_value,
                 action: copy.config.rows.copilot_limits.action.as_str(),
+                links: Vec::new(),
+            },
+            ConfigRowView {
+                id: "claude_subscription_limits",
+                name: copy.config.rows.claude_subscription_limits.name.as_str(),
+                value: claude_subscription_limits_value,
+                action: copy.config.rows.claude_subscription_limits.action.as_str(),
+                links: Vec::new(),
+            },
+            ConfigRowView {
+                id: "codex_subscription_limits",
+                name: copy.config.rows.codex_subscription_limits.name.as_str(),
+                value: codex_subscription_limits_value,
+                action: copy.config.rows.codex_subscription_limits.action.as_str(),
                 links: Vec::new(),
             },
             ConfigRowView {
@@ -1995,6 +2053,10 @@ impl App {
             Some(ConfigDownload::CurrencyRates) => self.refresh_currency_rates(),
             Some(ConfigDownload::PricingSnapshot) => self.refresh_pricing_snapshot(),
             Some(ConfigDownload::CopilotLimits) => self.sync_copilot_limits(),
+            Some(ConfigDownload::ClaudeSubscriptionLimits) => {
+                self.sync_claude_subscription_limits()
+            }
+            Some(ConfigDownload::CodexSubscriptionLimits) => self.sync_codex_subscription_limits(),
             None => {}
         }
     }
@@ -2453,6 +2515,12 @@ impl App {
             Some("claude_statusline") => self.install_claude_statusline(),
             Some("claude_limits") => self.sync_claude_limits(),
             Some("copilot_limits") => self.open_download_confirm(ConfigDownload::CopilotLimits),
+            Some("claude_subscription_limits") => {
+                self.open_download_confirm(ConfigDownload::ClaudeSubscriptionLimits)
+            }
+            Some("codex_subscription_limits") => {
+                self.open_download_confirm(ConfigDownload::CodexSubscriptionLimits)
+            }
             Some("advice_tool") => self.cycle_advice_tool(),
             Some("advice_prompts") => self.prepare_advice_prompts(),
             Some("clear_data") => self.open_clear_data_confirm(),
@@ -2782,6 +2850,131 @@ impl App {
     pub fn sync_copilot_limits(&mut self) {
         self.set_status(
             copy().status.copilot_limits_sync_unavailable.clone(),
+            StatusTone::Warning,
+        );
+    }
+
+    #[cfg(feature = "quota-sync")]
+    pub fn sync_claude_subscription_limits(&mut self) {
+        let session_key = match crate::secrets::read(
+            crate::tools::claude_subscription::config::KEYRING_ACCOUNT,
+        ) {
+            Ok(Some(value)) => value,
+            Ok(None) => {
+                self.set_status(
+                    copy().status.claude_subscription_cookie_missing.clone(),
+                    StatusTone::Warning,
+                );
+                return;
+            }
+            Err(e) => {
+                self.set_status(
+                    copy::template(
+                        &copy().status.claude_subscription_sync_failed,
+                        &[("error", e.to_string())],
+                    ),
+                    StatusTone::Error,
+                );
+                return;
+            }
+        };
+        match crate::tools::claude_subscription::limits::refresh_sidecar(
+            &self.paths.claude_subscription_limits_file,
+            &session_key,
+        )
+        .and_then(|snapshots| {
+            crate::archive::sync_and_load(&self.paths).map(|ingested| (snapshots, ingested))
+        }) {
+            Ok((snapshots, ingested)) => {
+                let limits = ingested.limits.len();
+                self.apply_synced_archive(ingested);
+                self.set_status(
+                    copy::template(
+                        &copy().status.claude_subscription_synced,
+                        &[
+                            ("snapshots", snapshots.to_string()),
+                            ("limits", limits.to_string()),
+                        ],
+                    ),
+                    StatusTone::Success,
+                );
+            }
+            Err(e) => self.set_status(
+                copy::template(
+                    &copy().status.claude_subscription_sync_failed,
+                    &[("error", e.to_string())],
+                ),
+                StatusTone::Error,
+            ),
+        }
+    }
+
+    #[cfg(not(feature = "quota-sync"))]
+    pub fn sync_claude_subscription_limits(&mut self) {
+        self.set_status(
+            copy().status.claude_subscription_sync_unavailable.clone(),
+            StatusTone::Warning,
+        );
+    }
+
+    #[cfg(feature = "quota-sync")]
+    pub fn sync_codex_subscription_limits(&mut self) {
+        let session_token =
+            match crate::secrets::read(crate::tools::codex_subscription::config::KEYRING_ACCOUNT) {
+                Ok(Some(value)) => value,
+                Ok(None) => {
+                    self.set_status(
+                        copy().status.codex_subscription_cookie_missing.clone(),
+                        StatusTone::Warning,
+                    );
+                    return;
+                }
+                Err(e) => {
+                    self.set_status(
+                        copy::template(
+                            &copy().status.codex_subscription_sync_failed,
+                            &[("error", e.to_string())],
+                        ),
+                        StatusTone::Error,
+                    );
+                    return;
+                }
+            };
+        match crate::tools::codex_subscription::limits::refresh_sidecar(
+            &self.paths.codex_subscription_limits_file,
+            &session_token,
+        )
+        .and_then(|snapshots| {
+            crate::archive::sync_and_load(&self.paths).map(|ingested| (snapshots, ingested))
+        }) {
+            Ok((snapshots, ingested)) => {
+                let limits = ingested.limits.len();
+                self.apply_synced_archive(ingested);
+                self.set_status(
+                    copy::template(
+                        &copy().status.codex_subscription_synced,
+                        &[
+                            ("snapshots", snapshots.to_string()),
+                            ("limits", limits.to_string()),
+                        ],
+                    ),
+                    StatusTone::Success,
+                );
+            }
+            Err(e) => self.set_status(
+                copy::template(
+                    &copy().status.codex_subscription_sync_failed,
+                    &[("error", e.to_string())],
+                ),
+                StatusTone::Error,
+            ),
+        }
+    }
+
+    #[cfg(not(feature = "quota-sync"))]
+    pub fn sync_codex_subscription_limits(&mut self) {
+        self.set_status(
+            copy().status.codex_subscription_sync_unavailable.clone(),
             StatusTone::Warning,
         );
     }
@@ -3488,16 +3681,37 @@ mod tests {
         assert!(rows[5]
             .value
             .starts_with(&copy().config.values.quota_snapshot_missing));
-        assert_eq!(rows[6].id, "advice_tool");
-        assert_eq!(rows[6].name, copy().config.rows.advice_tool.name);
-        assert_eq!(rows[6].action, copy().config.rows.advice_tool.action);
-        assert!(rows[6].value.contains("Codex"));
-        assert_eq!(rows[7].id, "advice_prompts");
-        assert_eq!(rows[7].name, copy().config.rows.advice_prompts.name);
-        assert_eq!(rows[7].action, copy().config.rows.advice_prompts.action);
-        assert_eq!(rows[8].id, "clear_data");
-        assert_eq!(rows[8].name, copy().config.rows.clear_data.name);
-        assert_eq!(rows[8].action, copy().config.rows.clear_data.action);
+        assert_eq!(rows[6].id, "claude_subscription_limits");
+        assert_eq!(
+            rows[6].name,
+            copy().config.rows.claude_subscription_limits.name
+        );
+        assert_eq!(
+            rows[6].action,
+            copy().config.rows.claude_subscription_limits.action
+        );
+        assert!(rows[6]
+            .value
+            .starts_with(&copy().config.values.quota_snapshot_missing));
+        assert_eq!(rows[7].id, "codex_subscription_limits");
+        assert_eq!(
+            rows[7].name,
+            copy().config.rows.codex_subscription_limits.name
+        );
+        assert_eq!(
+            rows[7].action,
+            copy().config.rows.codex_subscription_limits.action
+        );
+        assert_eq!(rows[8].id, "advice_tool");
+        assert_eq!(rows[8].name, copy().config.rows.advice_tool.name);
+        assert_eq!(rows[8].action, copy().config.rows.advice_tool.action);
+        assert!(rows[8].value.contains("Codex"));
+        assert_eq!(rows[9].id, "advice_prompts");
+        assert_eq!(rows[9].name, copy().config.rows.advice_prompts.name);
+        assert_eq!(rows[9].action, copy().config.rows.advice_prompts.action);
+        assert_eq!(rows[10].id, "clear_data");
+        assert_eq!(rows[10].name, copy().config.rows.clear_data.name);
+        assert_eq!(rows[10].action, copy().config.rows.clear_data.action);
     }
 
     #[test]

@@ -194,6 +194,14 @@
         "name": "Copilot limits",
         "action": "Sync"
       },
+      "claude_subscription_limits": {
+        "name": "Claude.ai subscription quota",
+        "action": "Sync"
+      },
+      "codex_subscription_limits": {
+        "name": "ChatGPT (Codex) subscription quota",
+        "action": "Sync"
+      },
       "advice_tool": {
         "name": "Advice tool",
         "action": "Pick"
@@ -293,6 +301,8 @@
     "download_rates_title": "Download exchange-rates.json?",
     "download_prices_title": "Download pricing books?",
     "sync_copilot_limits_title": "Sync Copilot limits?",
+    "sync_claude_subscription_limits_title": "Sync Claude.ai subscription quota?",
+    "sync_codex_subscription_limits_title": "Sync ChatGPT (Codex) subscription quota?",
     "install_claude_statusline_title": "Install Claude statusLine wrapper?",
     "install_claude_statusline_message": "Token Use will write a wrapper script to your config directory and update ~/.claude/settings.json (with a timestamped backup) so that Claude Code calls the wrapper. Your existing statusLine command, if any, will still run inside the wrapper so the visible status line is unchanged.",
     "install_claude_statusline_manual_title": "Generate wrapper without editing settings.json?",
@@ -302,12 +312,18 @@
     "rates_file": "exchange-rates.json",
     "pricing_file": "pricing-upstream.json + pricing-overrides.json",
     "copilot_limits_file": "copilot.json",
+    "claude_subscription_limits_file": "claude_subscription.json",
+    "codex_subscription_limits_file": "codex_subscription.json",
     "rates_source": "Published Token Use currency snapshot",
     "prices_source": "Published Token Use pricing books",
     "copilot_limits_source": "GitHub Copilot usage endpoint",
+    "claude_subscription_limits_source": "claude.ai usage endpoints (session cookie required)",
+    "codex_subscription_limits_source": "chatgpt.com wham usage endpoint (session cookie required)",
     "rates_effect": "display rates update immediately",
     "prices_effect": "new prices apply to newly imported calls",
     "copilot_limits_effect": "writes a local quota snapshot, then syncs archive limits",
+    "claude_subscription_limits_effect": "reads the keychain session cookie, writes a local quota snapshot, then syncs archive limits",
+    "codex_subscription_limits_effect": "reads the keychain session cookie, writes a local quota snapshot, then syncs archive limits",
     "download_latest_rates_message": "This will download the latest published Token Use currency snapshot into your local config directory.",
     "download_latest_prices_message": "This will download the latest pricing books into your local config directory.",
     "sync_copilot_limits_message": "This will read your locally stored Copilot OAuth token, fetch current Copilot quota state from GitHub, and write it into your local config directory.",
@@ -873,6 +889,14 @@
     "copilot_limits_synced": "Copilot limits synced · {snapshots} snapshots · {limits} limits",
     "copilot_limits_sync_failed": "Copilot limits sync failed · {error}",
     "copilot_limits_sync_unavailable": "Copilot limits sync unavailable in this build",
+    "claude_subscription_synced": "Claude.ai quota synced · {snapshots} snapshots · {limits} limits",
+    "claude_subscription_sync_failed": "Claude.ai quota sync failed · {error}",
+    "claude_subscription_sync_unavailable": "Claude.ai quota sync unavailable in this build",
+    "claude_subscription_cookie_missing": "Claude.ai session cookie missing · run `tokenuse --set-claude-cookie <value>` to add it",
+    "codex_subscription_synced": "ChatGPT (Codex) quota synced · {snapshots} snapshots · {limits} limits",
+    "codex_subscription_sync_failed": "ChatGPT (Codex) quota sync failed · {error}",
+    "codex_subscription_sync_unavailable": "ChatGPT (Codex) quota sync unavailable in this build",
+    "codex_subscription_cookie_missing": "ChatGPT session-token cookie missing · run `tokenuse --set-codex-cookie <value>` to add it",
     "advice_tool_set": "Advice tool set to {tool}",
     "advice_tool_config_failed": "Advice tool config failed · {error}",
     "advice_requires_live_data": "Advice needs local usage data",

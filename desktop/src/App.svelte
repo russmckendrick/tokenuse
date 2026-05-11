@@ -32,7 +32,15 @@
     ToolId
   } from './types';
 
-  type ModalKind = 'project' | 'session' | 'currency' | 'advice_tool' | 'report' | null;
+  type ModalKind =
+    | 'project'
+    | 'session'
+    | 'currency'
+    | 'advice_tool'
+    | 'report'
+    | 'subscription_cookie'
+    | null;
+  type SubscriptionProvider = 'claude' | 'codex';
   type DesktopUpdateUiState = {
     checking: boolean;
     installing: boolean;
@@ -57,6 +65,10 @@
   let busy = false;
   let error: string | null = null;
   let modal: ModalKind = null;
+  let cookieProvider: SubscriptionProvider | null = null;
+  let cookieValue = '';
+  let cookieBusy = false;
+  let cookieError: string | null = null;
   let callDetail: SessionDetail | null = null;
   let query = '';
   let reportFormat: ReportFormatId = 'html';
@@ -131,6 +143,85 @@
         ? currentProject
         : '';
       reportRedacted = false;
+    }
+  }
+
+  function openCookieModal(provider: SubscriptionProvider) {
+    cookieProvider = provider;
+    cookieValue = '';
+    cookieError = null;
+    cookieBusy = false;
+    openModal('subscription_cookie');
+  }
+
+  function cookieIsSet(provider: SubscriptionProvider | null): boolean {
+    if (!snapshot || !provider) return false;
+    return provider === 'claude'
+      ? snapshot.subscription_cookies.claude_set
+      : snapshot.subscription_cookies.codex_set;
+  }
+
+  function cookieProviderLabel(provider: SubscriptionProvider | null): string {
+    return provider === 'codex' ? 'ChatGPT (Codex)' : 'Claude.ai';
+  }
+
+  async function saveAndSyncCookie() {
+    if (!cookieProvider) return;
+    const trimmed = cookieValue.trim();
+    if (!trimmed) {
+      cookieError = 'Paste the cookie value first.';
+      return;
+    }
+    cookieBusy = true;
+    cookieError = null;
+    try {
+      snapshot =
+        cookieProvider === 'claude'
+          ? await api.setClaudeSessionCookie(trimmed)
+          : await api.setCodexSessionCookie(trimmed);
+      snapshot =
+        cookieProvider === 'claude'
+          ? await api.syncClaudeSubscriptionLimits()
+          : await api.syncCodexSubscriptionLimits();
+      cookieValue = '';
+      closeModal();
+    } catch (err) {
+      cookieError = err instanceof Error ? err.message : String(err);
+    } finally {
+      cookieBusy = false;
+    }
+  }
+
+  async function syncWithStoredCookie() {
+    if (!cookieProvider) return;
+    cookieBusy = true;
+    cookieError = null;
+    try {
+      snapshot =
+        cookieProvider === 'claude'
+          ? await api.syncClaudeSubscriptionLimits()
+          : await api.syncCodexSubscriptionLimits();
+      closeModal();
+    } catch (err) {
+      cookieError = err instanceof Error ? err.message : String(err);
+    } finally {
+      cookieBusy = false;
+    }
+  }
+
+  async function clearStoredCookie() {
+    if (!cookieProvider) return;
+    cookieBusy = true;
+    cookieError = null;
+    try {
+      snapshot =
+        cookieProvider === 'claude'
+          ? await api.clearClaudeSessionCookie()
+          : await api.clearCodexSessionCookie();
+    } catch (err) {
+      cookieError = err instanceof Error ? err.message : String(err);
+    } finally {
+      cookieBusy = false;
     }
   }
 
@@ -364,6 +455,11 @@
     if (!snapshot) return kind;
     if (kind === 'report') return snapshot.copy.reports.modal_title;
     if (kind === 'advice_tool') return snapshot.copy.config.rows.advice_tool.name;
+    if (kind === 'subscription_cookie') {
+      return cookieProvider === 'codex'
+        ? snapshot.copy.modals.sync_codex_subscription_limits_title
+        : snapshot.copy.modals.sync_claude_subscription_limits_title;
+    }
     return snapshot.copy.modals[kind] ?? kind;
   }
 
@@ -413,6 +509,12 @@
         ) {
           await commit(() => api.syncCopilotLimits());
         }
+        break;
+      case 'claude_subscription_limits':
+        openCookieModal('claude');
+        break;
+      case 'codex_subscription_limits':
+        openCookieModal('codex');
         break;
       case 'advice_tool':
         openModal('advice_tool');
@@ -857,6 +959,57 @@
                 <span>{tool.label}</span>
               </button>
             {/each}
+          </div>
+        {:else if modal === 'subscription_cookie'}
+          <div class="cookie-modal">
+            <p class="cookie-help">
+              Paste the <code>{cookieProvider === 'codex' ? '__Secure-next-auth.session-token' : 'sessionKey'}</code> cookie value from your
+              {cookieProviderLabel(cookieProvider)} browser session.
+              {#if cookieIsSet(cookieProvider)}
+                A cookie is already stored — leave the field blank and use <em>Sync now</em>, or paste a new value to replace it.
+              {:else}
+                No cookie stored yet.
+              {/if}
+            </p>
+            <input
+              type="password"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Paste cookie value"
+              bind:value={cookieValue}
+              disabled={cookieBusy}
+            />
+            {#if cookieError}
+              <div class="cookie-error">{cookieError}</div>
+            {/if}
+            <div class="cookie-actions">
+              <button
+                class="primary-command"
+                type="button"
+                disabled={cookieBusy || !cookieValue.trim()}
+                onclick={saveAndSyncCookie}
+              >
+                Save &amp; sync
+              </button>
+              <button
+                type="button"
+                disabled={cookieBusy || !cookieIsSet(cookieProvider)}
+                onclick={syncWithStoredCookie}
+              >
+                Sync with stored cookie
+              </button>
+              <button
+                class="danger"
+                type="button"
+                disabled={cookieBusy || !cookieIsSet(cookieProvider)}
+                onclick={clearStoredCookie}
+              >
+                Clear stored cookie
+              </button>
+            </div>
+            <p class="cookie-help muted">
+              Stored locally in the OS keychain only. <a href="https://github.com/russmckendrick/tokenuse/blob/main/docs/development/tools/claude-subscription.md" target="_blank" rel="noreferrer">How to find your cookie</a>.
+            </p>
           </div>
         {:else if modal === 'report'}
           <div class="export-box">

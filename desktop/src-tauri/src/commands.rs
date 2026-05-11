@@ -361,6 +361,146 @@ pub(crate) async fn sync_copilot_limits(
 }
 
 #[tauri::command]
+pub(crate) async fn sync_claude_subscription_limits(
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    with_app(state, |app| {
+        app.sync_claude_subscription_limits();
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn sync_codex_subscription_limits(
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    with_app(state, |app| {
+        app.sync_codex_subscription_limits();
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[cfg(feature = "quota-sync")]
+#[tauri::command]
+pub(crate) async fn set_claude_session_cookie(
+    value: String,
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    with_app(state, move |app| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Err(CommandError::Tokenuse(
+                "Claude session cookie value is empty".into(),
+            ));
+        }
+        tokenuse::secrets::store(
+            tokenuse::tools::claude_subscription::config::KEYRING_ACCOUNT,
+            trimmed,
+        )
+        .map_err(|e| CommandError::Tokenuse(e.to_string()))?;
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[cfg(feature = "quota-sync")]
+#[tauri::command]
+pub(crate) async fn clear_claude_session_cookie(
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    with_app(state, |app| {
+        tokenuse::secrets::delete(
+            tokenuse::tools::claude_subscription::config::KEYRING_ACCOUNT,
+        )
+        .map_err(|e| CommandError::Tokenuse(e.to_string()))?;
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[cfg(feature = "quota-sync")]
+#[tauri::command]
+pub(crate) async fn set_codex_session_cookie(
+    value: String,
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    with_app(state, move |app| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Err(CommandError::Tokenuse(
+                "Codex session-token cookie value is empty".into(),
+            ));
+        }
+        tokenuse::secrets::store(
+            tokenuse::tools::codex_subscription::config::KEYRING_ACCOUNT,
+            trimmed,
+        )
+        .map_err(|e| CommandError::Tokenuse(e.to_string()))?;
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[cfg(feature = "quota-sync")]
+#[tauri::command]
+pub(crate) async fn clear_codex_session_cookie(
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    with_app(state, |app| {
+        tokenuse::secrets::delete(
+            tokenuse::tools::codex_subscription::config::KEYRING_ACCOUNT,
+        )
+        .map_err(|e| CommandError::Tokenuse(e.to_string()))?;
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[cfg(not(feature = "quota-sync"))]
+#[tauri::command]
+pub(crate) async fn set_claude_session_cookie(
+    _value: String,
+    _state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    Err(CommandError::Tokenuse(
+        "Subscription quota sync unavailable in this build".into(),
+    ))
+}
+
+#[cfg(not(feature = "quota-sync"))]
+#[tauri::command]
+pub(crate) async fn clear_claude_session_cookie(
+    _state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    Err(CommandError::Tokenuse(
+        "Subscription quota sync unavailable in this build".into(),
+    ))
+}
+
+#[cfg(not(feature = "quota-sync"))]
+#[tauri::command]
+pub(crate) async fn set_codex_session_cookie(
+    _value: String,
+    _state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    Err(CommandError::Tokenuse(
+        "Subscription quota sync unavailable in this build".into(),
+    ))
+}
+
+#[cfg(not(feature = "quota-sync"))]
+#[tauri::command]
+pub(crate) async fn clear_codex_session_cookie(
+    _state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    Err(CommandError::Tokenuse(
+        "Subscription quota sync unavailable in this build".into(),
+    ))
+}
+
+#[tauri::command]
 pub(crate) async fn set_report_dir(
     path: String,
     state: State<'_, SharedState>,

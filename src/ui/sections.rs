@@ -690,7 +690,7 @@ pub(super) fn render_config(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
         .constraints([
             Constraint::Length(1),
             Constraint::Length(1),
-            Constraint::Length(12),
+            Constraint::Length(14),
             Constraint::Length(1),
             Constraint::Length(14),
             Constraint::Min(1),
@@ -1305,6 +1305,16 @@ pub(super) fn render_download_confirm_modal(frame: &mut Frame<'_>, area: Rect, a
             app.paths.pricing_overrides_file.display()
         ),
         ConfigDownload::CopilotLimits => app.paths.copilot_limits_file.display().to_string(),
+        ConfigDownload::ClaudeSubscriptionLimits => app
+            .paths
+            .claude_subscription_limits_file
+            .display()
+            .to_string(),
+        ConfigDownload::CodexSubscriptionLimits => app
+            .paths
+            .codex_subscription_limits_file
+            .display()
+            .to_string(),
     };
 
     let mut lines = vec![

@@ -51,6 +51,18 @@ export const api = {
     invoke<DesktopSnapshot>('install_claude_statusline_manual'),
   uninstallClaudeStatusline: () => invoke<DesktopSnapshot>('uninstall_claude_statusline'),
   syncCopilotLimits: () => invoke<DesktopSnapshot>('sync_copilot_limits'),
+  syncClaudeSubscriptionLimits: () =>
+    invoke<DesktopSnapshot>('sync_claude_subscription_limits'),
+  syncCodexSubscriptionLimits: () =>
+    invoke<DesktopSnapshot>('sync_codex_subscription_limits'),
+  setClaudeSessionCookie: (value: string) =>
+    invoke<DesktopSnapshot>('set_claude_session_cookie', { value }),
+  clearClaudeSessionCookie: () =>
+    invoke<DesktopSnapshot>('clear_claude_session_cookie'),
+  setCodexSessionCookie: (value: string) =>
+    invoke<DesktopSnapshot>('set_codex_session_cookie', { value }),
+  clearCodexSessionCookie: () =>
+    invoke<DesktopSnapshot>('clear_codex_session_cookie'),
   checkDesktopUpdate: () => invoke<DesktopUpdateMetadata | null>('check_desktop_update'),
   installDesktopUpdate: (onEvent: Channel<DesktopUpdateDownloadEvent>) =>
     invoke<void>('install_desktop_update', { onEvent }),

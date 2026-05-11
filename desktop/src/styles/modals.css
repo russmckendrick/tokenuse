@@ -118,6 +118,64 @@
   font-weight: 800;
 }
 
+.cookie-modal {
+  display: grid;
+  gap: 10px;
+}
+
+.cookie-modal input[type='password'] {
+  width: 100%;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.cookie-help {
+  color: #a1a7c3;
+  font-size: 13px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.cookie-help code {
+  background: #202438;
+  border: 1px solid #414866;
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 12px;
+}
+
+.cookie-help.muted {
+  color: #6c728a;
+  font-size: 12px;
+}
+
+.cookie-help a {
+  color: #6c728a;
+  text-decoration: underline;
+}
+
+.cookie-error {
+  color: #ff6470;
+  font-size: 13px;
+}
+
+.cookie-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cookie-actions button {
+  flex: 1 1 auto;
+  min-width: 140px;
+  min-height: 34px;
+}
+
+.cookie-actions button.danger {
+  color: #ff6470;
+  border-color: #ff6470;
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

@@ -7,7 +7,9 @@ use color_eyre::{eyre::Context, Result};
 use walkdir::WalkDir;
 
 pub mod claude_code;
+pub mod claude_subscription;
 pub mod codex;
+pub mod codex_subscription;
 pub mod copilot;
 pub mod cursor;
 pub mod gemini;
@@ -47,8 +49,10 @@ pub trait ToolAdapter: Send + Sync {
 pub fn registry() -> Vec<Box<dyn ToolAdapter>> {
     vec![
         Box::new(claude_code::ClaudeCode),
+        Box::new(claude_subscription::ClaudeSubscription),
         Box::new(cursor::Cursor),
         Box::new(codex::Codex),
+        Box::new(codex_subscription::CodexSubscription),
         Box::new(copilot::Copilot),
         Box::new(gemini::Gemini),
     ]

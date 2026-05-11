@@ -21,6 +21,7 @@ ureq = { version = "2", features = ["json"], optional = true }
 plotters = { version = "0.3", default-features = false, features = ["svg_backend", "bitmap_backend", "bitmap_encoder", "line_series", "ttf", "fontconfig-dlopen"] }
 fulgur = "0.11"
 rust_xlsxwriter = "0.79"
+keyring = { version = "3", optional = true, default-features = false, features = ["apple-native", "windows-native", "sync-secret-service", "linux-native"] }
 
 [dev-dependencies]
 zip = { version = "2", default-features = false, features = ["deflate"] }
@@ -29,4 +30,4 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 default = ["refresh-prices", "refresh-currency", "quota-sync"]
 refresh-prices = ["ureq"]
 refresh-currency = ["ureq"]
-quota-sync = ["ureq"]
+quota-sync = ["ureq", "keyring"]

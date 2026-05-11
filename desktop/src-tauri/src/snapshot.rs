@@ -56,6 +56,14 @@ pub(crate) struct DesktopSnapshot {
     pub(crate) report_dir: String,
     pub(crate) report_formats: Vec<OptionItem>,
     pub(crate) shortcut_footer: Vec<CopyKeyHint>,
+    pub(crate) subscription_cookies: SubscriptionCookieState,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct SubscriptionCookieState {
+    pub(crate) supported: bool,
+    pub(crate) claude_set: bool,
+    pub(crate) codex_set: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -194,6 +202,31 @@ pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
             })
             .collect(),
         shortcut_footer: copy::copy().footer(desktop_footer_name(app)).to_vec(),
+        subscription_cookies: subscription_cookie_state(),
+    }
+}
+
+#[cfg(feature = "quota-sync")]
+fn subscription_cookie_state() -> SubscriptionCookieState {
+    SubscriptionCookieState {
+        supported: true,
+        claude_set: matches!(
+            tokenuse::secrets::read(tokenuse::tools::claude_subscription::config::KEYRING_ACCOUNT),
+            Ok(Some(_))
+        ),
+        codex_set: matches!(
+            tokenuse::secrets::read(tokenuse::tools::codex_subscription::config::KEYRING_ACCOUNT),
+            Ok(Some(_))
+        ),
+    }
+}
+
+#[cfg(not(feature = "quota-sync"))]
+fn subscription_cookie_state() -> SubscriptionCookieState {
+    SubscriptionCookieState {
+        supported: false,
+        claude_set: false,
+        codex_set: false,
     }
 }
 

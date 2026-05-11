@@ -11,8 +11,12 @@ pub mod ingest_cache;
 pub mod insights;
 pub mod keymap;
 pub mod pricing;
+#[cfg(feature = "quota-sync")]
+pub mod quota_sync;
 pub mod reports;
 pub mod runtime;
+#[cfg(feature = "quota-sync")]
+pub mod secrets;
 pub mod theme;
 pub mod tools;
 pub mod ui;

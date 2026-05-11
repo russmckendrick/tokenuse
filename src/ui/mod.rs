@@ -293,7 +293,7 @@ mod tests {
 
     #[test]
     fn dashboard_render_smoke_test() {
-        let backend = TestBackend::new(170, 64);
+        let backend = TestBackend::new(170, 80);
         let mut terminal = Terminal::new(backend).expect("create terminal");
         let mut app = App::default();
         app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
@@ -335,7 +335,7 @@ mod tests {
 
     #[test]
     fn dashboard_omits_redundant_status_summary_strip() {
-        let backend = TestBackend::new(170, 64);
+        let backend = TestBackend::new(170, 80);
         let mut terminal = Terminal::new(backend).expect("create terminal");
         let mut app = App::default();
         app.status = Some(crate::app::AppStatus::info("auto-refreshed · 12399 calls"));
@@ -359,7 +359,7 @@ mod tests {
 
     #[test]
     fn overview_render_smoke_test() {
-        let backend = TestBackend::new(170, 64);
+        let backend = TestBackend::new(170, 80);
         let mut terminal = Terminal::new(backend).expect("create terminal");
         let app = App::default();
 
@@ -391,7 +391,7 @@ mod tests {
 
     #[test]
     fn insights_render_shows_advice_and_signals_sections() {
-        let backend = TestBackend::new(170, 64);
+        let backend = TestBackend::new(170, 80);
         let mut terminal = Terminal::new(backend).expect("create terminal");
         let mut app = App::default();
         app.page = Page::Insights;
@@ -416,7 +416,7 @@ mod tests {
 
     #[test]
     fn h_opens_help_modal_and_h_or_escape_closes_it() {
-        let backend = TestBackend::new(170, 64);
+        let backend = TestBackend::new(170, 80);
         let mut terminal = Terminal::new(backend).expect("create terminal");
         let mut app = App::default();
 
@@ -452,7 +452,7 @@ mod tests {
 
     #[test]
     fn project_modal_render_smoke_test() {
-        let backend = TestBackend::new(170, 64);
+        let backend = TestBackend::new(170, 80);
         let mut terminal = Terminal::new(backend).expect("create terminal");
         let mut app = App::default();
         app.handle_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
@@ -476,7 +476,7 @@ mod tests {
 
     #[test]
     fn config_page_render_smoke_test() {
-        let backend = TestBackend::new(170, 64);
+        let backend = TestBackend::new(170, 80);
         let mut terminal = Terminal::new(backend).expect("create terminal");
         let mut app = App::default();
         app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE));
@@ -507,7 +507,7 @@ mod tests {
 
     #[test]
     fn config_download_confirmation_modal_render_smoke_test() {
-        let backend = TestBackend::new(170, 64);
+        let backend = TestBackend::new(170, 80);
         let mut terminal = Terminal::new(backend).expect("create terminal");
         let mut app = App::default();
         app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE));
@@ -535,7 +535,7 @@ mod tests {
 
     #[test]
     fn config_clear_data_confirmation_modal_render_smoke_test() {
-        let backend = TestBackend::new(170, 64);
+        let backend = TestBackend::new(170, 80);
         let mut terminal = Terminal::new(backend).expect("create terminal");
         let mut app = App::default();
         app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE));
@@ -563,7 +563,7 @@ mod tests {
 
     #[test]
     fn config_clear_data_running_modal_render_smoke_test() {
-        let backend = TestBackend::new(170, 64);
+        let backend = TestBackend::new(170, 80);
         let mut terminal = Terminal::new(backend).expect("create terminal");
         let mut app = App::default();
         app.page = Page::Config;
@@ -589,7 +589,7 @@ mod tests {
 
     #[test]
     fn usage_page_render_smoke_test() {
-        let backend = TestBackend::new(170, 64);
+        let backend = TestBackend::new(170, 80);
         let mut terminal = Terminal::new(backend).expect("create terminal");
         let mut app = App::default();
         app.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::NONE));
@@ -629,7 +629,7 @@ mod tests {
 
     #[test]
     fn currency_modal_render_smoke_test() {
-        let backend = TestBackend::new(170, 64);
+        let backend = TestBackend::new(170, 80);
         let mut terminal = Terminal::new(backend).expect("create terminal");
         let mut app = App::default();
         app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE));
@@ -653,7 +653,7 @@ mod tests {
 
     #[test]
     fn session_call_detail_modal_render_smoke_test() {
-        let backend = TestBackend::new(170, 64);
+        let backend = TestBackend::new(170, 80);
         let mut terminal = Terminal::new(backend).expect("create terminal");
         let app = session_app_with_call_detail();
 

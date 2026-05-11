@@ -28,6 +28,8 @@ const TOKEN_USE_APP_DIR_NAME: &str = "Token Use App";
 const LIMITS_DIR_NAME: &str = "limits";
 const CLAUDE_CODE_LIMITS_FILE_NAME: &str = "claude-code.json";
 const COPILOT_LIMITS_FILE_NAME: &str = "copilot.json";
+const CLAUDE_SUBSCRIPTION_LIMITS_FILE_NAME: &str = "claude_subscription.json";
+const CODEX_SUBSCRIPTION_LIMITS_FILE_NAME: &str = "codex_subscription.json";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigPaths {
@@ -44,6 +46,8 @@ pub struct ConfigPaths {
     pub limits_dir: PathBuf,
     pub claude_code_limits_file: PathBuf,
     pub copilot_limits_file: PathBuf,
+    pub claude_subscription_limits_file: PathBuf,
+    pub codex_subscription_limits_file: PathBuf,
 }
 
 impl ConfigPaths {
@@ -61,6 +65,8 @@ impl ConfigPaths {
             token_use_app_dir: dir.join(TOKEN_USE_APP_DIR_NAME),
             claude_code_limits_file: limits_dir.join(CLAUDE_CODE_LIMITS_FILE_NAME),
             copilot_limits_file: limits_dir.join(COPILOT_LIMITS_FILE_NAME),
+            claude_subscription_limits_file: limits_dir.join(CLAUDE_SUBSCRIPTION_LIMITS_FILE_NAME),
+            codex_subscription_limits_file: limits_dir.join(CODEX_SUBSCRIPTION_LIMITS_FILE_NAME),
             limits_dir,
             dir,
         }

@@ -415,6 +415,13 @@ export type DesktopSnapshot = {
   report_dir: string;
   report_formats: OptionItem<ReportFormatId>[];
   shortcut_footer: ShortcutHint[];
+  subscription_cookies: SubscriptionCookieState;
+};
+
+export type SubscriptionCookieState = {
+  supported: boolean;
+  claude_set: boolean;
+  codex_set: boolean;
 };
 
 export type TraySnapshot = {

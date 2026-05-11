@@ -285,6 +285,8 @@ pub struct ConfigRowsCopy {
     pub claude_statusline: ConfigRowCopy,
     pub claude_limits: ConfigRowCopy,
     pub copilot_limits: ConfigRowCopy,
+    pub claude_subscription_limits: ConfigRowCopy,
+    pub codex_subscription_limits: ConfigRowCopy,
     pub advice_tool: ConfigRowCopy,
     pub advice_prompts: ConfigRowCopy,
     pub clear_data: ConfigRowCopy,
@@ -390,6 +392,8 @@ pub struct ModalCopy {
     pub download_rates_title: String,
     pub download_prices_title: String,
     pub sync_copilot_limits_title: String,
+    pub sync_claude_subscription_limits_title: String,
+    pub sync_codex_subscription_limits_title: String,
     pub install_claude_statusline_title: String,
     pub install_claude_statusline_message: String,
     pub install_claude_statusline_manual_title: String,
@@ -399,12 +403,18 @@ pub struct ModalCopy {
     pub rates_file: String,
     pub pricing_file: String,
     pub copilot_limits_file: String,
+    pub claude_subscription_limits_file: String,
+    pub codex_subscription_limits_file: String,
     pub rates_source: String,
     pub prices_source: String,
     pub copilot_limits_source: String,
+    pub claude_subscription_limits_source: String,
+    pub codex_subscription_limits_source: String,
     pub rates_effect: String,
     pub prices_effect: String,
     pub copilot_limits_effect: String,
+    pub claude_subscription_limits_effect: String,
+    pub codex_subscription_limits_effect: String,
     pub download_latest_rates_message: String,
     pub download_latest_prices_message: String,
     pub sync_copilot_limits_message: String,
@@ -697,6 +707,14 @@ pub struct StatusCopy {
     pub copilot_limits_synced: String,
     pub copilot_limits_sync_failed: String,
     pub copilot_limits_sync_unavailable: String,
+    pub claude_subscription_synced: String,
+    pub claude_subscription_sync_failed: String,
+    pub claude_subscription_sync_unavailable: String,
+    pub claude_subscription_cookie_missing: String,
+    pub codex_subscription_synced: String,
+    pub codex_subscription_sync_failed: String,
+    pub codex_subscription_sync_unavailable: String,
+    pub codex_subscription_cookie_missing: String,
     pub advice_tool_set: String,
     pub advice_tool_config_failed: String,
     pub advice_requires_live_data: String,
@@ -788,6 +806,16 @@ impl CopyDeck {
         ensure_template(&self.config.values.statusline_external, &["command"])?;
         ensure_template(&self.status.copilot_limits_synced, &["snapshots", "limits"])?;
         ensure_template(&self.status.copilot_limits_sync_failed, &["error"])?;
+        ensure_template(
+            &self.status.claude_subscription_synced,
+            &["snapshots", "limits"],
+        )?;
+        ensure_template(&self.status.claude_subscription_sync_failed, &["error"])?;
+        ensure_template(
+            &self.status.codex_subscription_synced,
+            &["snapshots", "limits"],
+        )?;
+        ensure_template(&self.status.codex_subscription_sync_failed, &["error"])?;
         ensure_template(&self.status.background_usage_body, &["summary"])?;
         ensure_template(&self.report_cli.prompt, &["label", "default"])?;
         ensure_template(&self.report_cli.invalid_number, &["max"])?;

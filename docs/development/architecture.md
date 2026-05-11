@@ -1,6 +1,6 @@
 # Architecture
 
-`tokenuse` keeps usage ingestion local: read local session files, append normalized records to its own archive, aggregate in memory, and render a dashboard. The TUI is the default frontend, and the Tauri desktop app is a second frontend over the same Rust core. There is no daemon and no file watcher. Network access is limited to explicit confirmed Config-page downloads, explicit Copilot quota sync, and maintainer refresh flags.
+`tokenuse` keeps usage ingestion local: read local session files, append normalized records to its own archive, aggregate in memory, and render a dashboard. The TUI is the default frontend, and the Tauri desktop app is a second frontend over the same Rust core. There is no daemon and no file watcher. Network access is limited to explicit confirmed Config-page downloads, explicit Copilot / Claude.ai / ChatGPT (Codex) quota sync, and maintainer refresh flags. The Claude.ai and ChatGPT quota sync features store a session cookie locally in the OS keychain (via the `keyring` crate) and are gated behind the `quota-sync` Cargo feature.
 
 ## Startup Flow
 
@@ -157,7 +157,7 @@ Raw project strings come from each tool's local data. Before display, `tokenuse`
 
 The source fingerprint hook defaults to file metadata for file-backed sources and recursive directory metadata for directory-backed sources. Sources are tagged as session or limit sources. Session sources must parse calls successfully before their fingerprint is advanced; limit sidecars must parse limit snapshots successfully before their fingerprint is advanced. When a source fingerprint has not changed, sync skips parsing it. When it changes, sync parses the source, inserts only new call keys, stores any new limit snapshots, and updates the fingerprint.
 
-Codex imports limit snapshots from the same rollout JSONL files as calls. Claude Code and Copilot import optional local sidecars from `<config dir>/tokenuse/limits/`: Claude Code reads a status-line JSON capture, while Copilot reads the local `copilot.json` written by the confirmed Config-page sync action.
+Codex imports limit snapshots from the same rollout JSONL files as calls. Claude Code and Copilot import optional local sidecars from `<config dir>/tokenuse/limits/`: Claude Code reads a status-line JSON capture, while Copilot reads the local `copilot.json` written by the confirmed Config-page sync action. The opt-in `claude_subscription` and `codex_subscription` adapters write `claude_subscription.json` and `codex_subscription.json` sidecars from the same directory; they call Claude.ai's and ChatGPT's user-facing usage endpoints with a session cookie pulled from the OS keychain, and tag the resulting `LimitSnapshot` rows with the existing `claude-code` / `codex` tool IDs so gauges appear inside those sections.
 
 The old JSON ingest cache is now legacy seed input only. New runs do not write `~/.cache/tokenuse/ingest-cache.json`.
 

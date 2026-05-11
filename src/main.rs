@@ -102,10 +102,26 @@ fn handle_subcommand() -> Result<bool> {
             report_cli::run()?;
             Ok(true)
         }
+        CliAction::SetClaudeCookie(value) => {
+            set_subscription_cookie(SubscriptionCookie::Claude, &value)?;
+            Ok(true)
+        }
+        CliAction::ClearClaudeCookie => {
+            clear_subscription_cookie(SubscriptionCookie::Claude)?;
+            Ok(true)
+        }
+        CliAction::SetCodexCookie(value) => {
+            set_subscription_cookie(SubscriptionCookie::Codex, &value)?;
+            Ok(true)
+        }
+        CliAction::ClearCodexCookie => {
+            clear_subscription_cookie(SubscriptionCookie::Codex)?;
+            Ok(true)
+        }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum CliAction {
     Dashboard,
     Help,
@@ -114,6 +130,32 @@ enum CliAction {
     RefreshPrices,
     GenerateCurrencyJson,
     Report,
+    SetClaudeCookie(String),
+    ClearClaudeCookie,
+    SetCodexCookie(String),
+    ClearCodexCookie,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum SubscriptionCookie {
+    Claude,
+    Codex,
+}
+
+impl SubscriptionCookie {
+    fn keyring_account(self) -> &'static str {
+        match self {
+            Self::Claude => tokenuse::tools::claude_subscription::config::KEYRING_ACCOUNT,
+            Self::Codex => tokenuse::tools::codex_subscription::config::KEYRING_ACCOUNT,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Claude => "Claude.ai session cookie",
+            Self::Codex => "ChatGPT (Codex) session-token cookie",
+        }
+    }
 }
 
 fn cli_action(args: &[String]) -> CliAction {
@@ -144,7 +186,70 @@ fn cli_action(args: &[String]) -> CliAction {
         return CliAction::GenerateCurrencyJson;
     }
 
+    if let Some(value) = flag_value(args, "--set-claude-cookie") {
+        return CliAction::SetClaudeCookie(value);
+    }
+    if args.iter().any(|arg| arg == "--clear-claude-cookie") {
+        return CliAction::ClearClaudeCookie;
+    }
+    if let Some(value) = flag_value(args, "--set-codex-cookie") {
+        return CliAction::SetCodexCookie(value);
+    }
+    if args.iter().any(|arg| arg == "--clear-codex-cookie") {
+        return CliAction::ClearCodexCookie;
+    }
+
     CliAction::Dashboard
+}
+
+fn flag_value(args: &[String], flag: &str) -> Option<String> {
+    let prefix = format!("{flag}=");
+    for (idx, arg) in args.iter().enumerate() {
+        if let Some(stripped) = arg.strip_prefix(&prefix) {
+            if !stripped.is_empty() {
+                return Some(stripped.to_string());
+            }
+        }
+        if arg == flag {
+            if let Some(next) = args.get(idx + 1) {
+                if !next.starts_with('-') {
+                    return Some(next.clone());
+                }
+            }
+        }
+    }
+    None
+}
+
+#[cfg(feature = "quota-sync")]
+fn set_subscription_cookie(kind: SubscriptionCookie, value: &str) -> Result<()> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        eprintln!("{} value is empty.", kind.label());
+        std::process::exit(2);
+    }
+    tokenuse::secrets::store(kind.keyring_account(), trimmed)?;
+    println!("{} stored in OS keychain.", kind.label());
+    Ok(())
+}
+
+#[cfg(not(feature = "quota-sync"))]
+fn set_subscription_cookie(_kind: SubscriptionCookie, _value: &str) -> Result<()> {
+    eprintln!("Subscription quota sync is unavailable in this build.");
+    std::process::exit(2);
+}
+
+#[cfg(feature = "quota-sync")]
+fn clear_subscription_cookie(kind: SubscriptionCookie) -> Result<()> {
+    tokenuse::secrets::delete(kind.keyring_account())?;
+    println!("{} cleared from OS keychain.", kind.label());
+    Ok(())
+}
+
+#[cfg(not(feature = "quota-sync"))]
+fn clear_subscription_cookie(_kind: SubscriptionCookie) -> Result<()> {
+    eprintln!("Subscription quota sync is unavailable in this build.");
+    std::process::exit(2);
 }
 
 fn is_help_arg(arg: &str) -> bool {

@@ -17,7 +17,7 @@
 - [Local development](development/local-development.md): commands for Rust, TUI, desktop, pricing, currency, and generated assets.
 - [Source control](development/source-control.md): branch hygiene, generated files, version bumps, and release-prep notes.
 - [Deployments](development/deployments.md): release workflows, binary assets, desktop notarization, and Homebrew tap updates.
-- [Tool parsers](development/tools/README.md): parser contracts for Claude Code, Codex, Cursor, GitHub Copilot, and Gemini.
+- [Tool parsers](development/tools/README.md): parser contracts for Claude Code, Codex, Cursor, GitHub Copilot, Gemini, plus opt-in subscription-quota adapters for Claude.ai and ChatGPT (Codex).
 
 ## Project
 
