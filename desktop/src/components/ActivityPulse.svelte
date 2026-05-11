@@ -68,14 +68,19 @@
     return Math.max(xInset, Math.min(chartWidth - xInset - bucketBarWidth, bucketX(index) - bucketBarWidth / 2));
   }
 
+  // Empty buckets still draw a short baseline tick so the chart visibly
+  // spans the entire selected time range — otherwise a quiet afternoon
+  // or a sparse stretch of "All Time" looks like a half-empty chart.
+  const EMPTY_TICK_HEIGHT = 3;
+
   function spendY(value: number) {
-    if (value <= 0) return spendBottom - 1;
+    if (value <= 0) return spendBottom - EMPTY_TICK_HEIGHT;
     return spendScale(clampPercent(value));
   }
 
   function spendHeight(value: number) {
-    if (value <= 0) return 1;
-    return Math.max(2, spendBottom - spendScale(clampPercent(value)));
+    if (value <= 0) return EMPTY_TICK_HEIGHT;
+    return Math.max(EMPTY_TICK_HEIGHT, spendBottom - spendScale(clampPercent(value)));
   }
 
   function compactCount(value: number) {
@@ -276,8 +281,8 @@
   }
 
   .spend-bar.empty {
-    fill: #414866;
-    opacity: 0.42;
+    fill: var(--color-border);
+    opacity: 0.55;
   }
 
   .spend-bar.peak {

@@ -84,7 +84,16 @@
 
   rect {
     vector-effect: non-scaling-stroke;
-    transition: fill 140ms ease, stroke 140ms ease, opacity 140ms ease;
+    transition:
+      fill var(--motion-base) var(--ease-standard),
+      stroke var(--motion-base) var(--ease-standard),
+      opacity var(--motion-base) var(--ease-standard);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    rect {
+      transition: none;
+    }
   }
 
   .rank-marker {

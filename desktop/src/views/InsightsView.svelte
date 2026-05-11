@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Check, Lightbulb, RotateCcw, Sparkles, X } from 'lucide-svelte';
   import RecommendationCard from '../components/RecommendationCard.svelte';
-  import { staggeredReveal } from '../motion';
+  import { countUp, staggeredReveal } from '../motion';
   import type {
     AdviceDataScopeId,
     AdviceItemStatusId,
@@ -86,19 +86,19 @@
     <dl class="kpis">
       <div>
         <dt>{snapshot.copy.insights.kpi_savings}</dt>
-        <dd class="amount">{view.summary.total_est_savings}</dd>
+        <dd class="amount" use:countUp={view.summary.total_est_savings}>{view.summary.total_est_savings}</dd>
       </div>
       <div>
         <dt>{snapshot.copy.insights.kpi_risks}</dt>
-        <dd class="risk">{severityCount('risk')}</dd>
+        <dd class="risk" use:countUp={String(severityCount('risk'))}>{severityCount('risk')}</dd>
       </div>
       <div>
         <dt>{snapshot.copy.insights.kpi_warns}</dt>
-        <dd class="warn">{severityCount('warn')}</dd>
+        <dd class="warn" use:countUp={String(severityCount('warn'))}>{severityCount('warn')}</dd>
       </div>
       <div>
         <dt>{snapshot.copy.insights.kpi_infos}</dt>
-        <dd class="info">{severityCount('info')}</dd>
+        <dd class="info" use:countUp={String(severityCount('info'))}>{severityCount('info')}</dd>
       </div>
     </dl>
   </header>

@@ -265,6 +265,116 @@ export function segmentIndicator(node: HTMLElement, params: SegmentIndicatorPara
 }
 
 /**
+ * Tween a formatted-number string. Use as a Svelte action on any element
+ * whose text content is a metric value like `£64.50`, `1,300`, `5.9M`,
+ * `96.5%`, or `220.2M Cached`. On update, the action parses the leading
+ * prefix (currency), the numeric core (with optional thousands separators
+ * and decimals), and the trailing suffix (%, K/M/B unit, label) — then
+ * animates the number from the previously displayed value to the new one,
+ * re-formatting on every frame. If the prefix or suffix doesn't match
+ * between old and new (e.g. crossing the K→M threshold) it falls back to
+ * an instant swap so the unit stays accurate.
+ */
+type FormatSpec = {
+  prefix: string;
+  suffix: string;
+  number: number;
+  decimals: number;
+  hasThousandsSep: boolean;
+};
+
+const NUMBER_PATTERN = /^([^\d\-+]*?)(-?(?:\d+(?:,\d{3})*(?:\.\d+)?|\.\d+))(.*)$/;
+
+function parseFormat(text: string): FormatSpec | null {
+  const match = text.match(NUMBER_PATTERN);
+  if (!match) return null;
+  const [, prefix, numStr, suffix] = match;
+  const hasThousandsSep = numStr.includes(',');
+  const cleaned = numStr.replace(/,/g, '');
+  const number = parseFloat(cleaned);
+  if (!Number.isFinite(number)) return null;
+  const dotIdx = cleaned.indexOf('.');
+  const decimals = dotIdx >= 0 ? cleaned.length - dotIdx - 1 : 0;
+  return { prefix, suffix, number, decimals, hasThousandsSep };
+}
+
+function formatNumber(spec: FormatSpec, value: number): string {
+  const fixed = value.toFixed(spec.decimals);
+  const [rawInt, fracPart] = fixed.split('.');
+  let intPart = rawInt;
+  let sign = '';
+  if (intPart.startsWith('-')) {
+    sign = '-';
+    intPart = intPart.slice(1);
+  }
+  if (spec.hasThousandsSep) {
+    intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+  const body = fracPart !== undefined ? `${sign}${intPart}.${fracPart}` : `${sign}${intPart}`;
+  return `${spec.prefix}${body}${spec.suffix}`;
+}
+
+export function countUp(node: HTMLElement, value: string) {
+  let displayed = value;
+  let raf: number | null = null;
+
+  function cancelFrameLoop() {
+    if (raf !== null) {
+      window.cancelAnimationFrame(raf);
+      raf = null;
+    }
+  }
+
+  node.textContent = value;
+
+  return {
+    update(next: string) {
+      if (next === displayed) return;
+      const fromSpec = parseFormat(displayed);
+      const toSpec = parseFormat(next);
+      cancelFrameLoop();
+
+      const incompatible =
+        !fromSpec ||
+        !toSpec ||
+        fromSpec.prefix !== toSpec.prefix ||
+        fromSpec.suffix !== toSpec.suffix;
+      if (reducedMotion() || incompatible) {
+        node.textContent = next;
+        displayed = next;
+        return;
+      }
+
+      const from = fromSpec!.number;
+      const to = toSpec!.number;
+      const duration = 520;
+      const start = performance.now();
+
+      function step(now: number) {
+        const elapsed = now - start;
+        const t = Math.min(1, elapsed / duration);
+        const eased = 1 - Math.pow(1 - t, 3);
+        const current = from + (to - from) * eased;
+        node.textContent = formatNumber(toSpec!, current);
+        if (t < 1) {
+          raf = window.requestAnimationFrame(step);
+        } else {
+          node.textContent = next;
+          displayed = next;
+          raf = null;
+        }
+      }
+
+      raf = window.requestAnimationFrame(step);
+      displayed = next;
+    },
+    destroy() {
+      cancelFrameLoop();
+    }
+  };
+}
+
+/**
  * Subtle hover-state toggle. Adds `is-hover` while the pointer is over the
  * element. CSS owns the actual transition (background tint, etc.). Respecting
  * reduced motion is the CSS author's responsibility for this one.

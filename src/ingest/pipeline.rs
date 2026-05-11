@@ -867,7 +867,7 @@ fn aggregate_activity_timeline(
             aggregate_hourly_timeline(calls, month_to_date_hours(now), false, now, currency)
         }
         Period::ThirtyDays | Period::Month | Period::AllTime => {
-            aggregate_daily_timeline(calls, currency)
+            aggregate_daily_timeline(calls, period, now, currency)
         }
     }
 }
@@ -932,6 +932,8 @@ fn aggregate_hourly_timeline(
 
 fn aggregate_daily_timeline(
     calls: &[&ParsedCall],
+    period: Period,
+    now: DateTime<Local>,
     currency: &CurrencyFormatter,
 ) -> Vec<ActivityMetric> {
     #[derive(Default)]
@@ -949,16 +951,41 @@ fn aggregate_daily_timeline(
         entry.calls += 1;
     }
 
+    let today = now.date_naive();
+    // Fill the full date range so empty days render as zero-value baseline
+    // ticks instead of being omitted — otherwise the frontend lays the
+    // remaining entries at uniform x-positions and the chart appears
+    // compressed when activity is sparse on the edges of the range.
+    let start = match period {
+        Period::ThirtyDays => today
+            .checked_sub_signed(Duration::days(29))
+            .unwrap_or(today),
+        Period::Month => Local
+            .with_ymd_and_hms(now.year(), now.month(), 1, 0, 0, 0)
+            .single()
+            .map(|d| d.date_naive())
+            .unwrap_or(today),
+        Period::AllTime => by_day.keys().next().copied().unwrap_or(today),
+        _ => by_day.keys().next().copied().unwrap_or(today),
+    };
+    let start = start.min(today);
+
     let max_cost = by_day.values().map(|acc| acc.cost).fold(0.0, f64::max);
-    by_day
-        .into_iter()
-        .map(|(date, acc)| ActivityMetric {
-            label: leak(date.format("%m-%d").to_string()),
+
+    let mut result = Vec::new();
+    let mut day = start;
+    while day <= today {
+        let acc = by_day.remove(&day).unwrap_or_default();
+        result.push(ActivityMetric {
+            label: leak(day.format("%m-%d").to_string()),
             cost: leak(currency.format_money(acc.cost)),
             calls: acc.calls,
             value: scale(acc.cost, max_cost),
-        })
-        .collect()
+        });
+        let Some(next) = day.succ_opt() else { break };
+        day = next;
+    }
+    result
 }
 
 fn format_hour_bucket(hour: i64, hour_only: bool) -> String {
@@ -2128,7 +2155,23 @@ mod tests {
             .iter()
             .map(|row| row.label)
             .collect::<Vec<_>>();
-        assert_eq!(labels, vec!["05-01", "05-15"]);
+        // Daily timeline fills the full month-to-date range so the
+        // ActivityPulse chart spans the actual elapsed time; empty days
+        // render as baseline ticks instead of being elided.
+        assert_eq!(
+            labels,
+            vec![
+                "05-01", "05-02", "05-03", "05-04", "05-05", "05-06", "05-07", "05-08", "05-09",
+                "05-10", "05-11", "05-12", "05-13", "05-14", "05-15"
+            ]
+        );
+        let first = data.activity_timeline.first().unwrap();
+        let last = data.activity_timeline.last().unwrap();
+        let middle = &data.activity_timeline[7]; // 05-08 — empty day
+        assert_eq!(first.calls, 1);
+        assert_eq!(last.calls, 1);
+        assert_eq!(middle.calls, 0);
+        assert_eq!(middle.value, 0);
     }
 
     #[test]
