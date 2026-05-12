@@ -68,19 +68,12 @@
     return Math.max(xInset, Math.min(chartWidth - xInset - bucketBarWidth, bucketX(index) - bucketBarWidth / 2));
   }
 
-  // Empty buckets still draw a short baseline tick so the chart visibly
-  // spans the entire selected time range — otherwise a quiet afternoon
-  // or a sparse stretch of "All Time" looks like a half-empty chart.
-  const EMPTY_TICK_HEIGHT = 3;
-
   function spendY(value: number) {
-    if (value <= 0) return spendBottom - EMPTY_TICK_HEIGHT;
     return spendScale(clampPercent(value));
   }
 
   function spendHeight(value: number) {
-    if (value <= 0) return EMPTY_TICK_HEIGHT;
-    return Math.max(EMPTY_TICK_HEIGHT, spendBottom - spendScale(clampPercent(value)));
+    return Math.max(1, spendBottom - spendScale(clampPercent(value)));
   }
 
   function compactCount(value: number) {
@@ -135,21 +128,22 @@
           <rect class="calls-band" x={xInset} y={callsTop - 2} width={chartWidth - xInset * 2} height={callsBottom - callsTop + 2}></rect>
 
           <line class="guide spend-guide" x1={xInset} x2={chartWidth - xInset} y1={spendTop} y2={spendTop}></line>
-          <line class="guide middle-guide" x1={xInset} x2={chartWidth - xInset} y1={spendBottom} y2={spendBottom}></line>
+          <line class="guide spend-baseline" x1={xInset} x2={chartWidth - xInset} y1={spendBottom} y2={spendBottom}></line>
           <line class="guide calls-guide" x1={xInset} x2={chartWidth - xInset} y1={callsBottom} y2={callsBottom}></line>
 
           {#each points as point, index (index)}
-            <rect
-              class="spend-bar"
-              class:empty={point.value === 0}
-              class:peak={point === high}
-              x={barX(index)}
-              y={spendY(point.value)}
-              width={bucketBarWidth}
-              height={spendHeight(point.value)}
-            >
-              <title>{point.label} · {point.cost} · {point.calls.toLocaleString()} {copy.metrics.calls}</title>
-            </rect>
+            {#if point.value > 0}
+              <rect
+                class="spend-bar"
+                class:peak={point === high}
+                x={barX(index)}
+                y={spendY(point.value)}
+                width={bucketBarWidth}
+                height={spendHeight(point.value)}
+              >
+                <title>{point.label} · {point.cost} · {point.calls.toLocaleString()} {copy.metrics.calls}</title>
+              </rect>
+            {/if}
           {/each}
 
           <path class="calls-area" d={callsArea}></path>
@@ -157,13 +151,15 @@
 
           {#if hoverPoint}
             <line class="hover-line" x1={hoverX} x2={hoverX} y1={spendTop} y2={callsBottom}></line>
-            <rect
-              class="hover-bar"
-              x={hoverBarX}
-              y={spendY(hoverPoint.value)}
-              width={bucketBarWidth}
-              height={spendHeight(hoverPoint.value)}
-            ></rect>
+            {#if hoverPoint.value > 0}
+              <rect
+                class="hover-bar"
+                x={hoverBarX}
+                y={spendY(hoverPoint.value)}
+                width={bucketBarWidth}
+                height={spendHeight(hoverPoint.value)}
+              ></rect>
+            {/if}
           {/if}
         </svg>
 
@@ -258,9 +254,10 @@
     opacity: 0.55;
   }
 
-  .middle-guide {
-    stroke-dasharray: 2 4;
-    opacity: 0.7;
+  .spend-baseline {
+    stroke: rgba(255, 143, 64, 0.32);
+    stroke-width: 1.5;
+    opacity: 1;
   }
 
   .calls-guide {
@@ -278,11 +275,6 @@
       height var(--motion-slow) var(--ease-standard),
       fill var(--motion-fast) var(--ease-standard),
       opacity var(--motion-fast) var(--ease-standard);
-  }
-
-  .spend-bar.empty {
-    fill: var(--color-border);
-    opacity: 0.55;
   }
 
   .spend-bar.peak {
