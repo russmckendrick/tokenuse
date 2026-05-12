@@ -18,6 +18,7 @@ pub const CONTEXT_SESSION_PICKER: &str = "session_picker";
 pub const CONTEXT_CURRENCY_PICKER: &str = "currency_picker";
 pub const CONTEXT_DOWNLOAD_CONFIRM: &str = "download_confirm";
 pub const CONTEXT_BUSY_MODAL: &str = "busy_modal";
+pub const CONTEXT_COOKIE_MODAL: &str = "cookie_modal";
 pub const CONTEXT_EXPORT_PICKER: &str = "export_picker";
 pub const CONTEXT_EXPORT_FOLDER_PICKER: &str = "export_folder_picker";
 pub const CONTEXT_DESKTOP: &str = "desktop";
@@ -68,6 +69,10 @@ pub const ACTION_INSIGHTS_NEXT_TAB: &str = "insights_next_tab";
 pub const ACTION_INSIGHTS_PREV_TAB: &str = "insights_prev_tab";
 pub const ACTION_GENERATE_ADVICE_REDACTED: &str = "generate_advice_redacted";
 pub const ACTION_GENERATE_ADVICE_SNIPPETS: &str = "generate_advice_snippets";
+pub const ACTION_COOKIE_FIELD_NEXT: &str = "cookie_field_next";
+pub const ACTION_COOKIE_FIELD_PREV: &str = "cookie_field_prev";
+pub const ACTION_COOKIE_ACTION_NEXT: &str = "cookie_action_next";
+pub const ACTION_COOKIE_ACTION_PREV: &str = "cookie_action_prev";
 
 const SUPPORTED_ACTIONS: &[&str] = &[
     ACTION_QUIT,
@@ -111,6 +116,10 @@ const SUPPORTED_ACTIONS: &[&str] = &[
     ACTION_INSIGHTS_PREV_TAB,
     ACTION_GENERATE_ADVICE_REDACTED,
     ACTION_GENERATE_ADVICE_SNIPPETS,
+    ACTION_COOKIE_FIELD_NEXT,
+    ACTION_COOKIE_FIELD_PREV,
+    ACTION_COOKIE_ACTION_NEXT,
+    ACTION_COOKIE_ACTION_PREV,
 ];
 
 #[derive(Debug, Clone, Deserialize)]

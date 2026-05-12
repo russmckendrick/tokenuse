@@ -430,6 +430,38 @@ pub struct ModalCopy {
     pub dir: String,
     pub active: String,
     pub could_not_read_folder: String,
+    pub subscription_cookie: SubscriptionCookieCopy,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SubscriptionCookieCopy {
+    pub title_claude: String,
+    pub title_codex: String,
+    pub claude_help: String,
+    pub codex_help: String,
+    pub claude_field_label: String,
+    pub claude_field_placeholder: String,
+    pub shard_zero_label: String,
+    pub shard_zero_placeholder: String,
+    pub shard_one_label: String,
+    pub shard_one_placeholder: String,
+    pub extras_label: String,
+    pub extras_help: String,
+    pub extras_placeholder: String,
+    pub stored_yes: String,
+    pub stored_no: String,
+    pub save_and_sync: String,
+    pub sync_stored: String,
+    pub clear_stored: String,
+    pub empty_value_error: String,
+    pub save_failed: String,
+    pub clear_failed: String,
+    pub cleared_status: String,
+    pub field_hint: String,
+    pub action_hint: String,
+    pub keychain_note: String,
+    pub busy: String,
+    pub chars_suffix: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -819,6 +851,8 @@ impl CopyDeck {
             &["snapshots", "limits"],
         )?;
         ensure_template(&self.status.codex_subscription_sync_failed, &["error"])?;
+        ensure_template(&self.modals.subscription_cookie.save_failed, &["error"])?;
+        ensure_template(&self.modals.subscription_cookie.clear_failed, &["error"])?;
         ensure_template(&self.status.background_usage_body, &["summary"])?;
         ensure_template(&self.report_cli.prompt, &["label", "default"])?;
         ensure_template(&self.report_cli.invalid_number, &["max"])?;

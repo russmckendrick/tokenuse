@@ -6,7 +6,10 @@ use ratatui::{
 };
 
 use crate::{
-    app::{App, ClearDataModal, ConfigDownload, FolderPickerEntryKind, Page, Period, StatusTone},
+    app::{
+        App, ClearDataModal, ConfigDownload, CookieAction, CookieField, CookieModalKind,
+        FolderPickerEntryKind, Page, Period, StatusTone, SubscriptionCookieModal,
+    },
     copy::{copy, template, CopyKeyHint},
     data::{
         ActivityMetric, CountMetric, ModelMetric, ProjectMetric, ProjectToolMetric, SessionDetail,
@@ -712,6 +715,7 @@ pub(super) fn render_config(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
     render_currency_modal(frame, root, app);
     render_download_confirm_modal(frame, root, app);
     render_clear_data_confirm_modal(frame, root, app);
+    render_subscription_cookie_modal(frame, root, app);
 }
 
 fn render_config_rows(frame: &mut Frame<'_>, area: Rect, app: &App) {
@@ -1305,16 +1309,6 @@ pub(super) fn render_download_confirm_modal(frame: &mut Frame<'_>, area: Rect, a
             app.paths.pricing_overrides_file.display()
         ),
         ConfigDownload::CopilotLimits => app.paths.copilot_limits_file.display().to_string(),
-        ConfigDownload::ClaudeSubscriptionLimits => app
-            .paths
-            .claude_subscription_limits_file
-            .display()
-            .to_string(),
-        ConfigDownload::CodexSubscriptionLimits => app
-            .paths
-            .codex_subscription_limits_file
-            .display()
-            .to_string(),
     };
 
     let mut lines = vec![
@@ -1435,6 +1429,272 @@ fn render_clear_data_confirm_modal(frame: &mut Frame<'_>, area: Rect, app: &App)
     Paragraph::new(Text::from(lines))
         .style(theme::base())
         .render(inner, frame.buffer_mut());
+}
+
+pub(super) fn render_subscription_cookie_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let Some(modal) = app.subscription_cookie_modal.as_ref() else {
+        return;
+    };
+
+    let copy = copy();
+    let strings = &copy.modals.subscription_cookie;
+
+    let is_codex = modal.kind == CookieModalKind::Codex;
+    let width = 90.min(area.width.saturating_sub(4)).max(64);
+    let height_hint: u16 = if is_codex { 22 } else { 14 };
+    let height = height_hint.min(area.height.saturating_sub(4)).max(12);
+    let modal_area = centered_rect(width, height, area);
+    Clear.render(modal_area, frame.buffer_mut());
+
+    let block = theme::panel_block(modal.kind.title(), theme::PRIMARY);
+    let inner = block.inner(modal_area);
+    block.render(modal_area, frame.buffer_mut());
+
+    let help = if is_codex {
+        strings.codex_help.as_str()
+    } else {
+        strings.claude_help.as_str()
+    };
+    let stored_hint = if modal.has_stored {
+        strings.stored_yes.as_str()
+    } else {
+        strings.stored_no.as_str()
+    };
+
+    let constraints: Vec<Constraint> = if is_codex {
+        vec![
+            Constraint::Length(2), // help (wrapped)
+            Constraint::Length(1), // stored hint
+            Constraint::Length(2), // primary field (label + input)
+            Constraint::Length(2), // shard one
+            Constraint::Length(2), // extras label
+            Constraint::Length(2), // extras input + help
+            Constraint::Length(1), // error
+            Constraint::Length(2), // action row
+            Constraint::Min(1),    // hints
+        ]
+    } else {
+        vec![
+            Constraint::Length(2),
+            Constraint::Length(1),
+            Constraint::Length(2),
+            Constraint::Length(1),
+            Constraint::Length(2),
+            Constraint::Min(1),
+        ]
+    };
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(constraints)
+        .split(inner);
+
+    Paragraph::new(Text::from(help))
+        .style(theme::muted())
+        .wrap(Wrap { trim: true })
+        .render(rows[0], frame.buffer_mut());
+    Paragraph::new(Line::from(Span::styled(stored_hint, theme::dim())))
+        .render(rows[1], frame.buffer_mut());
+
+    if is_codex {
+        render_cookie_field(
+            frame,
+            rows[2],
+            CookieFieldRender {
+                label: strings.shard_zero_label.as_str(),
+                placeholder: strings.shard_zero_placeholder.as_str(),
+                value: &modal.primary,
+                focused: modal.focus == CookieField::Primary,
+                mask: true,
+                chars_suffix: strings.chars_suffix.as_str(),
+            },
+        );
+        render_cookie_field(
+            frame,
+            rows[3],
+            CookieFieldRender {
+                label: strings.shard_one_label.as_str(),
+                placeholder: strings.shard_one_placeholder.as_str(),
+                value: &modal.shard_one,
+                focused: modal.focus == CookieField::ShardOne,
+                mask: true,
+                chars_suffix: strings.chars_suffix.as_str(),
+            },
+        );
+        Paragraph::new(Line::from(vec![
+            Span::styled(strings.extras_label.as_str(), theme::key()),
+            Span::raw("  "),
+            Span::styled(strings.extras_help.as_str(), theme::dim()),
+        ]))
+        .render(rows[4], frame.buffer_mut());
+        render_cookie_field(
+            frame,
+            rows[5],
+            CookieFieldRender {
+                label: "",
+                placeholder: strings.extras_placeholder.as_str(),
+                value: &modal.extras,
+                focused: modal.focus == CookieField::Extras,
+                mask: false,
+                chars_suffix: strings.chars_suffix.as_str(),
+            },
+        );
+        let error_row = rows[6];
+        if let Some(error) = modal.error.as_ref() {
+            Paragraph::new(Line::from(Span::styled(
+                error.as_str(),
+                theme::base().fg(theme::RED).add_modifier(Modifier::BOLD),
+            )))
+            .render(error_row, frame.buffer_mut());
+        }
+        render_cookie_action_row(frame, rows[7], modal, strings);
+        render_cookie_hints(frame, rows[8], strings);
+    } else {
+        render_cookie_field(
+            frame,
+            rows[2],
+            CookieFieldRender {
+                label: strings.claude_field_label.as_str(),
+                placeholder: strings.claude_field_placeholder.as_str(),
+                value: &modal.primary,
+                focused: modal.focus == CookieField::Primary,
+                mask: true,
+                chars_suffix: strings.chars_suffix.as_str(),
+            },
+        );
+        let error_row = rows[3];
+        if let Some(error) = modal.error.as_ref() {
+            Paragraph::new(Line::from(Span::styled(
+                error.as_str(),
+                theme::base().fg(theme::RED).add_modifier(Modifier::BOLD),
+            )))
+            .render(error_row, frame.buffer_mut());
+        }
+        render_cookie_action_row(frame, rows[4], modal, strings);
+        render_cookie_hints(frame, rows[5], strings);
+    }
+}
+
+struct CookieFieldRender<'a> {
+    label: &'a str,
+    placeholder: &'a str,
+    value: &'a str,
+    focused: bool,
+    mask: bool,
+    chars_suffix: &'a str,
+}
+
+fn render_cookie_field(frame: &mut Frame<'_>, area: Rect, field: CookieFieldRender<'_>) {
+    let CookieFieldRender {
+        label,
+        placeholder,
+        value,
+        focused,
+        mask,
+        chars_suffix,
+    } = field;
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Length(1)])
+        .split(area);
+
+    if !label.is_empty() {
+        Paragraph::new(Line::from(Span::styled(label, theme::key())))
+            .render(layout[0], frame.buffer_mut());
+    }
+
+    let marker = if focused { "▌ " } else { "  " };
+    let marker_style = if focused {
+        theme::key().fg(theme::CYAN).add_modifier(Modifier::BOLD)
+    } else {
+        theme::dim()
+    };
+
+    let mut spans: Vec<Span<'_>> = vec![Span::styled(marker.to_string(), marker_style)];
+    if value.is_empty() {
+        spans.push(Span::styled(placeholder.to_string(), theme::dim()));
+    } else {
+        let body: String = if mask {
+            value.chars().map(|_| '•').collect()
+        } else {
+            value.to_string()
+        };
+        spans.push(Span::styled(
+            body,
+            theme::base().add_modifier(Modifier::BOLD),
+        ));
+        if focused {
+            spans.push(Span::styled(" _", theme::muted()));
+        }
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled(
+            format!("{} {}", value.chars().count(), chars_suffix),
+            theme::dim(),
+        ));
+    }
+    if focused && value.is_empty() {
+        spans.push(Span::styled(" _", theme::muted()));
+    }
+
+    Paragraph::new(Line::from(spans)).render(layout[1], frame.buffer_mut());
+}
+
+fn render_cookie_action_row(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    modal: &SubscriptionCookieModal,
+    strings: &crate::copy::SubscriptionCookieCopy,
+) {
+    let action_focused = modal.focus == CookieField::ActionRow;
+    let labels = [
+        (CookieAction::SaveAndSync, strings.save_and_sync.as_str()),
+        (CookieAction::SyncStored, strings.sync_stored.as_str()),
+        (CookieAction::Clear, strings.clear_stored.as_str()),
+    ];
+
+    let mut spans: Vec<Span<'_>> = Vec::with_capacity(labels.len() * 3);
+    for (idx, (action, label)) in labels.iter().enumerate() {
+        if idx > 0 {
+            spans.push(Span::raw("   "));
+        }
+        let selected = modal.action == *action;
+        let disabled = modal.action_disabled(*action);
+        let mut style = theme::base();
+        if disabled {
+            style = theme::dim();
+        }
+        if action_focused && selected {
+            style = if disabled {
+                theme::dim().add_modifier(Modifier::REVERSED)
+            } else {
+                theme::key()
+                    .fg(theme::CYAN)
+                    .add_modifier(Modifier::BOLD)
+                    .add_modifier(Modifier::REVERSED)
+            };
+        } else if selected {
+            style = if disabled {
+                theme::dim().add_modifier(Modifier::UNDERLINED)
+            } else {
+                theme::key().add_modifier(Modifier::BOLD)
+            };
+        }
+        spans.push(Span::styled(format!(" {label} "), style));
+    }
+
+    Paragraph::new(Line::from(spans)).render(area, frame.buffer_mut());
+}
+
+fn render_cookie_hints(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    strings: &crate::copy::SubscriptionCookieCopy,
+) {
+    let lines = vec![
+        Line::from(Span::styled(strings.field_hint.as_str(), theme::dim())),
+        Line::from(Span::styled(strings.action_hint.as_str(), theme::dim())),
+        Line::from(Span::styled(strings.keychain_note.as_str(), theme::dim())),
+    ];
+    Paragraph::new(Text::from(lines)).render(area, frame.buffer_mut());
 }
 
 fn clear_data_activity_bar(frame: usize) -> String {

@@ -405,8 +405,6 @@ pub enum ConfigDownload {
     CurrencyRates,
     PricingSnapshot,
     CopilotLimits,
-    ClaudeSubscriptionLimits,
-    CodexSubscriptionLimits,
 }
 
 impl ConfigDownload {
@@ -416,12 +414,6 @@ impl ConfigDownload {
             Self::CurrencyRates => copy.modals.download_rates_title.as_str(),
             Self::PricingSnapshot => copy.modals.download_prices_title.as_str(),
             Self::CopilotLimits => copy.modals.sync_copilot_limits_title.as_str(),
-            Self::ClaudeSubscriptionLimits => {
-                copy.modals.sync_claude_subscription_limits_title.as_str()
-            }
-            Self::CodexSubscriptionLimits => {
-                copy.modals.sync_codex_subscription_limits_title.as_str()
-            }
         }
     }
 
@@ -431,8 +423,6 @@ impl ConfigDownload {
             Self::CurrencyRates => copy.modals.rates_file.as_str(),
             Self::PricingSnapshot => copy.modals.pricing_file.as_str(),
             Self::CopilotLimits => copy.modals.copilot_limits_file.as_str(),
-            Self::ClaudeSubscriptionLimits => copy.modals.claude_subscription_limits_file.as_str(),
-            Self::CodexSubscriptionLimits => copy.modals.codex_subscription_limits_file.as_str(),
         }
     }
 
@@ -442,10 +432,6 @@ impl ConfigDownload {
             Self::CurrencyRates => copy.modals.rates_source.as_str(),
             Self::PricingSnapshot => copy.modals.prices_source.as_str(),
             Self::CopilotLimits => copy.modals.copilot_limits_source.as_str(),
-            Self::ClaudeSubscriptionLimits => {
-                copy.modals.claude_subscription_limits_source.as_str()
-            }
-            Self::CodexSubscriptionLimits => copy.modals.codex_subscription_limits_source.as_str(),
         }
     }
 
@@ -455,10 +441,6 @@ impl ConfigDownload {
             Self::CurrencyRates => copy.modals.rates_effect.as_str(),
             Self::PricingSnapshot => copy.modals.prices_effect.as_str(),
             Self::CopilotLimits => copy.modals.copilot_limits_effect.as_str(),
-            Self::ClaudeSubscriptionLimits => {
-                copy.modals.claude_subscription_limits_effect.as_str()
-            }
-            Self::CodexSubscriptionLimits => copy.modals.codex_subscription_limits_effect.as_str(),
         }
     }
 
@@ -466,9 +448,7 @@ impl ConfigDownload {
         let copy = copy();
         match self {
             Self::CurrencyRates | Self::PricingSnapshot => copy.actions.download_lower.as_str(),
-            Self::CopilotLimits
-            | Self::ClaudeSubscriptionLimits
-            | Self::CodexSubscriptionLimits => copy.actions.sync_lower.as_str(),
+            Self::CopilotLimits => copy.actions.sync_lower.as_str(),
         }
     }
 
@@ -476,9 +456,188 @@ impl ConfigDownload {
         match self {
             Self::CurrencyRates => rates_download_links(),
             Self::PricingSnapshot => pricing_download_links(),
-            Self::CopilotLimits
-            | Self::ClaudeSubscriptionLimits
-            | Self::CodexSubscriptionLimits => Vec::new(),
+            Self::CopilotLimits => Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CookieModalKind {
+    Claude,
+    Codex,
+}
+
+impl CookieModalKind {
+    pub fn keyring_account(self) -> &'static str {
+        match self {
+            Self::Claude => crate::tools::claude_subscription::config::KEYRING_ACCOUNT,
+            Self::Codex => crate::tools::codex_subscription::config::KEYRING_ACCOUNT,
+        }
+    }
+
+    pub fn config_row_id(self) -> &'static str {
+        match self {
+            Self::Claude => "claude_subscription_limits",
+            Self::Codex => "codex_subscription_limits",
+        }
+    }
+
+    pub fn title(self) -> &'static str {
+        let copy = copy();
+        match self {
+            Self::Claude => copy.modals.subscription_cookie.title_claude.as_str(),
+            Self::Codex => copy.modals.subscription_cookie.title_codex.as_str(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CookieField {
+    Primary,
+    ShardOne,
+    Extras,
+    ActionRow,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CookieAction {
+    SaveAndSync,
+    SyncStored,
+    Clear,
+}
+
+#[derive(Debug, Clone)]
+pub struct SubscriptionCookieModal {
+    pub kind: CookieModalKind,
+    pub primary: String,
+    pub shard_one: String,
+    pub extras: String,
+    pub focus: CookieField,
+    pub action: CookieAction,
+    pub busy: bool,
+    pub error: Option<String>,
+    pub has_stored: bool,
+}
+
+impl SubscriptionCookieModal {
+    pub fn new(kind: CookieModalKind, has_stored: bool) -> Self {
+        Self {
+            kind,
+            primary: String::new(),
+            shard_one: String::new(),
+            extras: String::new(),
+            focus: CookieField::Primary,
+            action: CookieAction::SaveAndSync,
+            busy: false,
+            error: None,
+            has_stored,
+        }
+    }
+
+    pub fn fields(&self) -> &'static [CookieField] {
+        match self.kind {
+            CookieModalKind::Claude => &[CookieField::Primary, CookieField::ActionRow],
+            CookieModalKind::Codex => &[
+                CookieField::Primary,
+                CookieField::ShardOne,
+                CookieField::Extras,
+                CookieField::ActionRow,
+            ],
+        }
+    }
+
+    pub fn actions(&self) -> &'static [CookieAction] {
+        &[
+            CookieAction::SaveAndSync,
+            CookieAction::SyncStored,
+            CookieAction::Clear,
+        ]
+    }
+
+    pub fn cycle_field(&mut self, delta: isize) {
+        let fields = self.fields();
+        let Some(pos) = fields.iter().position(|f| *f == self.focus) else {
+            self.focus = fields[0];
+            return;
+        };
+        let len = fields.len() as isize;
+        let next = ((pos as isize + delta).rem_euclid(len)) as usize;
+        self.focus = fields[next];
+    }
+
+    pub fn cycle_action(&mut self, delta: isize) {
+        let actions = self.actions();
+        let pos = actions.iter().position(|a| *a == self.action).unwrap_or(0) as isize;
+        let len = actions.len() as isize;
+        let next = ((pos + delta).rem_euclid(len)) as usize;
+        self.action = actions[next];
+        self.focus = CookieField::ActionRow;
+    }
+
+    pub fn field_value_mut(&mut self, field: CookieField) -> Option<&mut String> {
+        match field {
+            CookieField::Primary => Some(&mut self.primary),
+            CookieField::ShardOne if self.kind == CookieModalKind::Codex => {
+                Some(&mut self.shard_one)
+            }
+            CookieField::Extras if self.kind == CookieModalKind::Codex => Some(&mut self.extras),
+            _ => None,
+        }
+    }
+
+    pub fn focused_field_value_mut(&mut self) -> Option<&mut String> {
+        let focus = self.focus;
+        self.field_value_mut(focus)
+    }
+
+    pub fn has_input(&self) -> bool {
+        match self.kind {
+            CookieModalKind::Claude => !self.primary.trim().is_empty(),
+            CookieModalKind::Codex => {
+                !self.primary.trim().is_empty() && !self.shard_one.trim().is_empty()
+            }
+        }
+    }
+
+    pub fn save_and_sync_disabled(&self) -> bool {
+        self.busy || !self.has_input()
+    }
+
+    pub fn sync_stored_disabled(&self) -> bool {
+        self.busy || !self.has_stored
+    }
+
+    pub fn clear_disabled(&self) -> bool {
+        self.busy || !self.has_stored
+    }
+
+    pub fn action_disabled(&self, action: CookieAction) -> bool {
+        match action {
+            CookieAction::SaveAndSync => self.save_and_sync_disabled(),
+            CookieAction::SyncStored => self.sync_stored_disabled(),
+            CookieAction::Clear => self.clear_disabled(),
+        }
+    }
+
+    pub fn compose_cookie(&self) -> String {
+        match self.kind {
+            CookieModalKind::Claude => self.primary.trim().to_string(),
+            CookieModalKind::Codex => {
+                let mut parts: Vec<String> = Vec::new();
+                let p0 = self.primary.trim();
+                let p1 = self.shard_one.trim();
+                if !p0.is_empty() {
+                    parts.push(format!("__Secure-next-auth.session-token.0={p0}"));
+                }
+                if !p1.is_empty() {
+                    parts.push(format!("__Secure-next-auth.session-token.1={p1}"));
+                }
+                let extras = self.extras.trim();
+                if !extras.is_empty() {
+                    parts.push(extras.to_string());
+                }
+                parts.join("; ")
+            }
         }
     }
 }
@@ -836,6 +995,15 @@ struct AdviceJobOutcome {
     ingested: Option<Ingested>,
 }
 
+#[cfg(feature = "quota-sync")]
+type SubscriptionSyncResult = std::result::Result<(usize, Ingested), String>;
+
+#[cfg(feature = "quota-sync")]
+struct SubscriptionSyncJob {
+    kind: CookieModalKind,
+    result_rx: Receiver<SubscriptionSyncResult>,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 struct UsageTotals {
     calls: u64,
@@ -966,6 +1134,7 @@ pub struct App {
     pub project_filter: ProjectFilter,
     pub project_modal: Option<ProjectModal>,
     pub currency_modal: Option<CurrencyModal>,
+    pub subscription_cookie_modal: Option<SubscriptionCookieModal>,
     pub download_confirm: Option<ConfigDownload>,
     pub clear_data_modal: Option<ClearDataModal>,
     pub session_modal: Option<SessionModal>,
@@ -985,6 +1154,8 @@ pub struct App {
     pub source: DataSource,
     clear_data_job: Option<ClearDataJob>,
     advice_job: Option<AdviceJob>,
+    #[cfg(feature = "quota-sync")]
+    subscription_sync_job: Option<SubscriptionSyncJob>,
     clear_data_tick: usize,
     background_alert_baseline: Option<UsageTotals>,
     background_alert_last_sent: Option<DateTime<Utc>>,
@@ -1011,6 +1182,7 @@ impl Default for App {
             project_filter: ProjectFilter::All,
             project_modal: None,
             currency_modal: None,
+            subscription_cookie_modal: None,
             download_confirm: None,
             clear_data_modal: None,
             session_modal: None,
@@ -1031,6 +1203,8 @@ impl Default for App {
             source: DataSource::Sample,
             clear_data_job: None,
             advice_job: None,
+            #[cfg(feature = "quota-sync")]
+            subscription_sync_job: None,
             clear_data_tick: 0,
             background_alert_baseline: None,
             background_alert_last_sent: None,
@@ -1226,6 +1400,7 @@ impl App {
     pub fn poll_reload(&mut self) {
         self.poll_clear_data();
         self.poll_advice_job();
+        self.poll_subscription_sync();
 
         let Some(refresher) = self.refresher.as_ref() else {
             return;
@@ -1836,6 +2011,10 @@ impl App {
             return keymap::CONTEXT_CURRENCY_PICKER;
         }
 
+        if self.subscription_cookie_modal.is_some() {
+            return keymap::CONTEXT_COOKIE_MODAL;
+        }
+
         if let Some(clear_modal) = self.clear_data_modal {
             return match clear_modal {
                 ClearDataModal::Confirm => keymap::CONTEXT_DOWNLOAD_CONFIRM,
@@ -1918,6 +2097,10 @@ impl App {
             keymap::ACTION_QUERY_BACKSPACE => self.backspace_active_query(),
             keymap::ACTION_QUERY_CLEAR => self.clear_active_query(),
             keymap::ACTION_GO_PARENT => self.go_active_parent(),
+            keymap::ACTION_COOKIE_FIELD_NEXT => self.cycle_cookie_field(1),
+            keymap::ACTION_COOKIE_FIELD_PREV => self.cycle_cookie_field(-1),
+            keymap::ACTION_COOKIE_ACTION_NEXT => self.cycle_cookie_action(1),
+            keymap::ACTION_COOKIE_ACTION_PREV => self.cycle_cookie_action(-1),
             _ => return false,
         }
         true
@@ -1972,7 +2155,9 @@ impl App {
     }
 
     fn cancel_active_context(&mut self) {
-        if self.currency_modal.is_some() {
+        if self.subscription_cookie_modal.is_some() {
+            self.close_subscription_cookie_modal();
+        } else if self.currency_modal.is_some() {
             self.currency_modal = None;
         } else if self.clear_data_modal == Some(ClearDataModal::Confirm) {
             self.clear_data_modal = None;
@@ -1990,7 +2175,9 @@ impl App {
     }
 
     fn confirm_active_context(&mut self) {
-        if self.clear_data_modal == Some(ClearDataModal::Confirm) {
+        if self.subscription_cookie_modal.is_some() {
+            self.confirm_subscription_cookie_modal();
+        } else if self.clear_data_modal == Some(ClearDataModal::Confirm) {
             self.confirm_clear_data();
         } else if self.download_confirm.is_some() {
             self.confirm_download();
@@ -2053,10 +2240,6 @@ impl App {
             Some(ConfigDownload::CurrencyRates) => self.refresh_currency_rates(),
             Some(ConfigDownload::PricingSnapshot) => self.refresh_pricing_snapshot(),
             Some(ConfigDownload::CopilotLimits) => self.sync_copilot_limits(),
-            Some(ConfigDownload::ClaudeSubscriptionLimits) => {
-                self.sync_claude_subscription_limits()
-            }
-            Some(ConfigDownload::CodexSubscriptionLimits) => self.sync_codex_subscription_limits(),
             None => {}
         }
     }
@@ -2205,6 +2388,291 @@ impl App {
         self.clamp_insights_scroll();
     }
 
+    pub fn handle_paste(&mut self, text: String) {
+        if let Some(modal) = self.subscription_cookie_modal.as_mut() {
+            modal.error = None;
+            if let Some(field) = modal.focused_field_value_mut() {
+                for ch in text.chars() {
+                    if ch == '\r' || ch == '\n' || ch == '\t' {
+                        continue;
+                    }
+                    if ch.is_control() {
+                        continue;
+                    }
+                    field.push(ch);
+                }
+            }
+            return;
+        }
+        // Fall back to per-character routing for other modals that accept text.
+        for ch in text.chars() {
+            if ch.is_control() {
+                continue;
+            }
+            self.push_active_query_char(ch);
+        }
+    }
+
+    fn cycle_cookie_field(&mut self, delta: isize) {
+        if let Some(modal) = self.subscription_cookie_modal.as_mut() {
+            modal.cycle_field(delta);
+        }
+    }
+
+    fn cycle_cookie_action(&mut self, delta: isize) {
+        if let Some(modal) = self.subscription_cookie_modal.as_mut() {
+            modal.cycle_action(delta);
+        }
+    }
+
+    fn open_subscription_cookie_modal(&mut self, kind: CookieModalKind) {
+        #[cfg(feature = "quota-sync")]
+        {
+            let has_stored = crate::secrets::read(kind.keyring_account())
+                .ok()
+                .flatten()
+                .is_some();
+            self.subscription_cookie_modal = Some(SubscriptionCookieModal::new(kind, has_stored));
+        }
+        #[cfg(not(feature = "quota-sync"))]
+        {
+            let status = match kind {
+                CookieModalKind::Claude => {
+                    copy().status.claude_subscription_sync_unavailable.clone()
+                }
+                CookieModalKind::Codex => copy().status.codex_subscription_sync_unavailable.clone(),
+            };
+            self.set_status(status, StatusTone::Warning);
+        }
+    }
+
+    fn close_subscription_cookie_modal(&mut self) {
+        self.subscription_cookie_modal = None;
+    }
+
+    #[cfg(feature = "quota-sync")]
+    fn confirm_subscription_cookie_modal(&mut self) {
+        let Some(modal) = self.subscription_cookie_modal.as_ref() else {
+            return;
+        };
+        if modal.busy {
+            return;
+        }
+        let kind = modal.kind;
+        let action = modal.action;
+        match action {
+            CookieAction::SaveAndSync => {
+                if !modal.has_input() {
+                    if let Some(modal) = self.subscription_cookie_modal.as_mut() {
+                        modal.error =
+                            Some(copy().modals.subscription_cookie.empty_value_error.clone());
+                    }
+                    return;
+                }
+                let cookie = modal.compose_cookie();
+                if let Err(error) = crate::secrets::store(kind.keyring_account(), &cookie) {
+                    let message = copy::template(
+                        &copy().modals.subscription_cookie.save_failed,
+                        &[("error", error.to_string())],
+                    );
+                    if let Some(modal) = self.subscription_cookie_modal.as_mut() {
+                        modal.error = Some(message);
+                    }
+                    return;
+                }
+                if let Some(modal) = self.subscription_cookie_modal.as_mut() {
+                    modal.has_stored = true;
+                    modal.busy = true;
+                    modal.error = None;
+                    modal.primary.clear();
+                    modal.shard_one.clear();
+                    modal.extras.clear();
+                }
+                self.spawn_subscription_sync(kind);
+            }
+            CookieAction::SyncStored => {
+                if !modal.has_stored {
+                    return;
+                }
+                if let Some(modal) = self.subscription_cookie_modal.as_mut() {
+                    modal.busy = true;
+                    modal.error = None;
+                }
+                self.spawn_subscription_sync(kind);
+            }
+            CookieAction::Clear => {
+                if !modal.has_stored {
+                    return;
+                }
+                match crate::secrets::delete(kind.keyring_account()) {
+                    Ok(()) => {
+                        self.set_status(
+                            copy().modals.subscription_cookie.cleared_status.clone(),
+                            StatusTone::Info,
+                        );
+                        self.subscription_cookie_modal = None;
+                    }
+                    Err(error) => {
+                        let message = copy::template(
+                            &copy().modals.subscription_cookie.clear_failed,
+                            &[("error", error.to_string())],
+                        );
+                        if let Some(modal) = self.subscription_cookie_modal.as_mut() {
+                            modal.error = Some(message);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(not(feature = "quota-sync"))]
+    fn confirm_subscription_cookie_modal(&mut self) {
+        // Without the feature the modal cannot be opened, but keep the symbol
+        // resolvable so the keymap dispatch table compiles uniformly.
+        self.subscription_cookie_modal = None;
+    }
+
+    #[cfg(feature = "quota-sync")]
+    fn spawn_subscription_sync(&mut self, kind: CookieModalKind) {
+        if self.subscription_sync_job.is_some() {
+            return;
+        }
+        let cookie = match crate::secrets::read(kind.keyring_account()) {
+            Ok(Some(value)) => value,
+            Ok(None) => {
+                let status = match kind {
+                    CookieModalKind::Claude => {
+                        copy().status.claude_subscription_cookie_missing.clone()
+                    }
+                    CookieModalKind::Codex => {
+                        copy().status.codex_subscription_cookie_missing.clone()
+                    }
+                };
+                self.set_status(status, StatusTone::Warning);
+                if let Some(modal) = self.subscription_cookie_modal.as_mut() {
+                    modal.busy = false;
+                }
+                return;
+            }
+            Err(error) => {
+                let template_str = match kind {
+                    CookieModalKind::Claude => {
+                        copy().status.claude_subscription_sync_failed.clone()
+                    }
+                    CookieModalKind::Codex => copy().status.codex_subscription_sync_failed.clone(),
+                };
+                self.set_status(
+                    copy::template(&template_str, &[("error", error.to_string())]),
+                    StatusTone::Error,
+                );
+                if let Some(modal) = self.subscription_cookie_modal.as_mut() {
+                    modal.busy = false;
+                }
+                return;
+            }
+        };
+
+        let paths = self.paths.clone();
+        let (result_tx, result_rx) = mpsc::channel::<SubscriptionSyncResult>();
+        thread::spawn(move || {
+            let result = match kind {
+                CookieModalKind::Claude => {
+                    crate::tools::claude_subscription::limits::refresh_sidecar(
+                        &paths.claude_subscription_limits_file,
+                        &cookie,
+                    )
+                }
+                CookieModalKind::Codex => {
+                    crate::tools::codex_subscription::limits::refresh_sidecar(
+                        &paths.codex_subscription_limits_file,
+                        &cookie,
+                    )
+                }
+            }
+            .and_then(|snapshots| {
+                crate::archive::sync_and_load(&paths).map(|ingested| (snapshots, ingested))
+            })
+            .map_err(|e| e.to_string());
+            let _ = result_tx.send(result);
+        });
+        self.subscription_sync_job = Some(SubscriptionSyncJob { kind, result_rx });
+        let status = match kind {
+            CookieModalKind::Claude => copy().modals.subscription_cookie.busy.clone(),
+            CookieModalKind::Codex => copy().modals.subscription_cookie.busy.clone(),
+        };
+        self.set_status(status, StatusTone::Busy);
+    }
+
+    #[cfg(feature = "quota-sync")]
+    fn poll_subscription_sync(&mut self) {
+        let result = match self
+            .subscription_sync_job
+            .as_ref()
+            .map(|job| job.result_rx.try_recv())
+        {
+            Some(Ok(result)) => Some(result),
+            Some(Err(TryRecvError::Disconnected)) => Some(Err(
+                "subscription sync worker stopped before reporting".into(),
+            )),
+            Some(Err(TryRecvError::Empty)) | None => None,
+        };
+
+        let Some(result) = result else {
+            return;
+        };
+
+        let kind = self
+            .subscription_sync_job
+            .as_ref()
+            .map(|job| job.kind)
+            .unwrap_or(CookieModalKind::Claude);
+        self.subscription_sync_job = None;
+        if let Some(modal) = self.subscription_cookie_modal.as_mut() {
+            modal.busy = false;
+        }
+
+        match result {
+            Ok((snapshots, ingested)) => {
+                let limits = ingested.limits.len();
+                self.apply_synced_archive(ingested);
+                let template_str = match kind {
+                    CookieModalKind::Claude => copy().status.claude_subscription_synced.clone(),
+                    CookieModalKind::Codex => copy().status.codex_subscription_synced.clone(),
+                };
+                self.set_status(
+                    copy::template(
+                        &template_str,
+                        &[
+                            ("snapshots", snapshots.to_string()),
+                            ("limits", limits.to_string()),
+                        ],
+                    ),
+                    StatusTone::Success,
+                );
+                self.subscription_cookie_modal = None;
+            }
+            Err(error) => {
+                let template_str = match kind {
+                    CookieModalKind::Claude => {
+                        copy().status.claude_subscription_sync_failed.clone()
+                    }
+                    CookieModalKind::Codex => copy().status.codex_subscription_sync_failed.clone(),
+                };
+                self.set_status(
+                    copy::template(&template_str, &[("error", error.clone())]),
+                    StatusTone::Error,
+                );
+                if let Some(modal) = self.subscription_cookie_modal.as_mut() {
+                    modal.error = Some(error);
+                }
+            }
+        }
+    }
+
+    #[cfg(not(feature = "quota-sync"))]
+    fn poll_subscription_sync(&mut self) {}
+
     fn scroll_insights(&mut self, delta: isize) {
         let current = self.insights_scroll();
         let next = if delta.is_negative() {
@@ -2294,6 +2762,13 @@ impl App {
     }
 
     fn backspace_active_query(&mut self) {
+        if let Some(modal) = self.subscription_cookie_modal.as_mut() {
+            modal.error = None;
+            if let Some(field) = modal.focused_field_value_mut() {
+                field.pop();
+            }
+            return;
+        }
         if let Some(modal) = self.currency_modal.as_mut() {
             modal.query.pop();
             modal.refilter();
@@ -2307,6 +2782,13 @@ impl App {
     }
 
     fn clear_active_query(&mut self) {
+        if let Some(modal) = self.subscription_cookie_modal.as_mut() {
+            modal.error = None;
+            if let Some(field) = modal.focused_field_value_mut() {
+                field.clear();
+            }
+            return;
+        }
         if let Some(modal) = self.currency_modal.as_mut() {
             modal.query.clear();
             modal.refilter();
@@ -2320,6 +2802,14 @@ impl App {
     }
 
     fn push_active_query_char(&mut self, c: char) -> bool {
+        if let Some(modal) = self.subscription_cookie_modal.as_mut() {
+            modal.error = None;
+            if let Some(field) = modal.focused_field_value_mut() {
+                field.push(c);
+                return true;
+            }
+            return false;
+        }
         if let Some(modal) = self.currency_modal.as_mut() {
             modal.query.push(c);
             modal.refilter();
@@ -2516,10 +3006,10 @@ impl App {
             Some("claude_limits") => self.sync_claude_limits(),
             Some("copilot_limits") => self.open_download_confirm(ConfigDownload::CopilotLimits),
             Some("claude_subscription_limits") => {
-                self.open_download_confirm(ConfigDownload::ClaudeSubscriptionLimits)
+                self.open_subscription_cookie_modal(CookieModalKind::Claude)
             }
             Some("codex_subscription_limits") => {
-                self.open_download_confirm(ConfigDownload::CodexSubscriptionLimits)
+                self.open_subscription_cookie_modal(CookieModalKind::Codex)
             }
             Some("advice_tool") => self.cycle_advice_tool(),
             Some("advice_prompts") => self.prepare_advice_prompts(),

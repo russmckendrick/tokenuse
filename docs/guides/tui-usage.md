@@ -98,6 +98,8 @@ USD remains the default display currency. Costs are calculated and stored intern
 
 The Config page lists the published rates and pricing book URLs next to the local file paths, so users can inspect exactly what the download actions fetch before confirming. The pricing row also shows the active book source and its latest checked/generated date. The Claude limits row imports an existing local sidecar and shows a setup hint until Claude Code's `statusLine` writes the OS-specific sidecar path. The Copilot limits row asks for confirmation before reading local Copilot credentials and fetching current quota state from GitHub.
 
+Pressing Enter on **Claude.ai subscription quota** or **ChatGPT (Codex) subscription quota** opens a Subscription cookie modal. Paste a `sessionKey` (Claude) or the two `__Secure-next-auth.session-token` shards plus optional extras (Codex), then pick **Save & sync**, **Sync with stored cookie**, or **Clear stored cookie**. Bracketed paste is enabled so long cookies arrive as a single chunk, the input is masked to `•`, and the sync runs on a worker thread so the TUI stays responsive. See [docs/development/tools/claude-subscription.md](../development/tools/claude-subscription.md) and [docs/development/tools/codex-subscription.md](../development/tools/codex-subscription.md).
+
 The Config page's clear-data action asks for confirmation, deletes `archive.db`, and immediately reimports from local tool history. Config, exchange rates, pricing books, limit sidecars, legacy pricing snapshots, and reports are kept. Archive-only rows disappear if the original source files are gone, and rebuilt rows use the current configured pricing.
 
 ## Reports

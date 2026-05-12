@@ -39,26 +39,32 @@ The cookie never leaves your machine. It is stored in:
 
 Service `dev.tokenuse`, account `claude_subscription.session`.
 
-### From the terminal
+### From the terminal (in-app modal)
 
 1. Open `https://claude.ai/settings/usage` in your browser and log in.
 2. Open dev tools → Application → Cookies → `https://claude.ai`.
 3. Copy the value of the `sessionKey` cookie.
-4. Store it:
+4. Launch the dashboard (`tokenuse`), press `c` to open the Config page, scroll to **Claude.ai subscription quota** and press Enter.
+5. In the cookie modal, paste the value (Cmd/Ctrl+V — bracketed paste is enabled, so long cookies arrive as a single chunk). The input is masked to `•` and shows a character count next to it.
+6. Use ←/→ to choose **Save & sync** and press Enter. The status bar shows "Syncing…" while the request runs on a worker thread; on success the Usage page gauges populate.
+7. The modal also offers **Sync with stored cookie** (re-run against the already-saved cookie) and **Clear stored cookie** (delete from the OS keychain).
 
-   ```sh
-   tokenuse --set-claude-cookie 'sk-ant-sid01-...'
-   ```
+`Esc` closes the modal at any time; an in-flight sync continues in the background and its result still updates the status bar.
 
-5. From the dashboard, press `c` to open the Config page, scroll to **Claude.ai subscription quota**, press Enter, then `y` to confirm.
+### From the terminal (one-shot CLI)
 
-To clear: `tokenuse --clear-claude-cookie`.
+The non-interactive flags are still supported for scripted set-up:
 
-> `--set-claude-cookie <value>` is visible in shell history. Use `read -s` or a similar pattern if that's a concern for your environment.
+```sh
+tokenuse --set-claude-cookie 'sk-ant-sid01-...'
+tokenuse --clear-claude-cookie
+```
+
+> `--set-claude-cookie <value>` is visible in shell history. Use `read -s` or a similar pattern if that's a concern for your environment. The in-app modal does not leak to history.
 
 ### From the desktop app
 
-Use the `set_claude_session_cookie` / `clear_claude_session_cookie` Tauri commands. A WebView-driven login flow that harvests the cookie automatically is on the roadmap but not yet shipped — for now the desktop build expects the cookie to be set via CLI or by paste through a future Config-page modal.
+The Config page offers the equivalent Subscription cookie modal — see [docs/guides/desktop-usage.md](../../guides/desktop-usage.md). Underneath it uses the same `set_claude_session_cookie` / `clear_claude_session_cookie` Tauri commands.
 
 ## Sidecar format
 
@@ -101,7 +107,7 @@ The parser also accepts a raw `usage` object (no wrapper) for manual snapshots.
 
 | HTTP / payload | Behaviour |
 | --- | --- |
-| `401` | Status bar shows "Claude session expired or unauthorized" — re-run `--set-claude-cookie`. |
+| `401` | Status bar shows "Claude session expired or unauthorized" — reopen the cookie modal on the Config page (or re-run `--set-claude-cookie`) and paste a fresh `sessionKey`. |
 | `403` or HTML response | Status bar shows "Cloudflare challenge" — usually means the user-agent/header fingerprint is stale; report an issue. |
 | `429` | Status bar shows "rate limited" — wait and retry. |
 | overage endpoint `403`/`404` | Treated as "Extra Usage not enabled"; the rest of the sync still succeeds. |

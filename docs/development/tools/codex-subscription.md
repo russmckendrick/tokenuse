@@ -30,28 +30,28 @@ Service `dev.tokenuse`, account `codex_subscription.session`.
 2. Open dev tools → Application/Storage → Cookies → `https://chatgpt.com`.
 3. Locate the session cookies. NextAuth splits session JWTs larger than ~4 KB across `.0` / `.1` shards; both must be sent under their original names — concatenation does not work.
 
-**Desktop app (recommended).** Open the Config page → **ChatGPT (Codex) subscription quota → Sync**. The modal now has two password fields:
+**TUI (recommended).** Press `c` from the dashboard, scroll to **ChatGPT (Codex) subscription quota** and press Enter. The cookie modal exposes three fields — Tab/Shift+Tab move between them, Cmd/Ctrl+V pastes via bracketed paste:
 
 - `__Secure-next-auth.session-token.0` — paste the value of the first shard (~3–4 KB).
 - `__Secure-next-auth.session-token.1` — paste the value of the second shard (~200 B).
+- **Additional cookies** *(optional, multi-line)* — paste extra cookies (e.g. `cf_clearance=…; __Host-next-auth.csrf-token=…`) if Cloudflare or the two shards alone aren't enough.
 
-If your token is unsharded (rare; you'll see a single `__Secure-next-auth.session-token` cookie with no suffix), use the CLI path below instead.
+When you confirm **Save & sync**, the TUI composes the `Cookie:` header (`__Secure-next-auth.session-token.0=<a>; __Secure-next-auth.session-token.1=<b>[; <extras>]`), writes it to the OS keychain, and runs the sync on a worker thread. The two other modal actions are **Sync with stored cookie** (reuses the stored value) and **Clear stored cookie**.
 
-**CLI.** The flag accepts either form: a bare unsharded token value, or a raw `Cookie:` request header (any string containing `=`, optionally prefixed with `Cookie:`). The desktop GUI composes the cookie header for you; the CLI is for advanced/unsharded cases.
+**Desktop app.** Same Subscription cookie modal — see [docs/guides/desktop-usage.md](../../guides/desktop-usage.md). Underneath: `set_codex_session_cookie` / `clear_codex_session_cookie` Tauri commands.
+
+**CLI (scripted setup).** The flag accepts either form: a bare unsharded token value, or a raw `Cookie:` request header (any string containing `=`, optionally prefixed with `Cookie:`).
 
    ```sh
-   # Unsharded:
+   # Unsharded (rare — when chatgpt.com sets a single __Secure-next-auth.session-token cookie):
    tokenuse --set-codex-cookie '<bare-token-value>'
 
    # Sharded — copy from dev tools → Network → any /api/auth/session request → Headers → Cookie:
    tokenuse --set-codex-cookie '__Secure-next-auth.session-token.0=<a>; __Secure-next-auth.session-token.1=<b>'
+
+   # Clear:
+   tokenuse --clear-codex-cookie
    ```
-
-4. Press `c` from the dashboard, scroll to **ChatGPT (Codex) subscription quota**, press Enter, then `y` to confirm.
-
-To clear: `tokenuse --clear-codex-cookie`.
-
-Tauri commands: `set_codex_session_cookie` / `clear_codex_session_cookie`.
 
 ## Sidecar format
 

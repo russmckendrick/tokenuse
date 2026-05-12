@@ -122,6 +122,18 @@
     },
     {
       "id": "generate_advice_snippets"
+    },
+    {
+      "id": "cookie_field_next"
+    },
+    {
+      "id": "cookie_field_prev"
+    },
+    {
+      "id": "cookie_action_next"
+    },
+    {
+      "id": "cookie_action_prev"
     }
   ],
   "shortcuts": [
@@ -1330,6 +1342,76 @@
         "Esc"
       ],
       "action": "close_call_detail"
+    },
+    {
+      "context": "cookie_modal",
+      "keys": [
+        "Esc"
+      ],
+      "action": "cancel"
+    },
+    {
+      "context": "cookie_modal",
+      "keys": [
+        "Tab"
+      ],
+      "action": "cookie_field_next"
+    },
+    {
+      "context": "cookie_modal",
+      "keys": [
+        "Shift+Tab"
+      ],
+      "action": "cookie_field_prev"
+    },
+    {
+      "context": "cookie_modal",
+      "keys": [
+        "Down"
+      ],
+      "action": "cookie_field_next"
+    },
+    {
+      "context": "cookie_modal",
+      "keys": [
+        "Up"
+      ],
+      "action": "cookie_field_prev"
+    },
+    {
+      "context": "cookie_modal",
+      "keys": [
+        "Right"
+      ],
+      "action": "cookie_action_next"
+    },
+    {
+      "context": "cookie_modal",
+      "keys": [
+        "Left"
+      ],
+      "action": "cookie_action_prev"
+    },
+    {
+      "context": "cookie_modal",
+      "keys": [
+        "Backspace"
+      ],
+      "action": "query_backspace"
+    },
+    {
+      "context": "cookie_modal",
+      "keys": [
+        "Ctrl+U"
+      ],
+      "action": "query_clear"
+    },
+    {
+      "context": "cookie_modal",
+      "keys": [
+        "Enter"
+      ],
+      "action": "confirm"
     }
   ]
 }
