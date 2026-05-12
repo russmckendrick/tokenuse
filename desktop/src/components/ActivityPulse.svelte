@@ -111,6 +111,7 @@
 </script>
 
 {#if points.length}
+  {#key chartKey}
   <div class="activity-pulse" class:compact={density === 'compact'} use:staggeredReveal={{ selector: '.activity-chart, .pulse-meta span', y: 3 }}>
     <div class="activity-chart">
       <div class="pulse-label spend">{copy.timeline.spend}</div>
@@ -180,6 +181,7 @@
       <span>{copy.timeline.calls} <strong>{compactCount(totalCalls)}</strong></span>
     </div>
   </div>
+  {/key}
 {:else}
   <div class="activity-empty">{copy.timeline.no_activity}</div>
 {/if}
@@ -269,9 +271,7 @@
     fill: #ff8f40;
     opacity: 0.76;
     transition:
-      x var(--motion-base) var(--ease-standard),
       y var(--motion-slow) var(--ease-standard),
-      width var(--motion-base) var(--ease-standard),
       height var(--motion-slow) var(--ease-standard),
       fill var(--motion-fast) var(--ease-standard),
       opacity var(--motion-fast) var(--ease-standard);
@@ -285,7 +285,6 @@
   .calls-area {
     fill: rgba(77, 243, 232, 0.12);
     stroke: none;
-    transition: d var(--motion-slow) var(--ease-standard);
   }
 
   .calls-line {
@@ -293,7 +292,6 @@
     stroke: #4df3e8;
     stroke-width: 2.5;
     vector-effect: non-scaling-stroke;
-    transition: d var(--motion-slow) var(--ease-standard);
   }
 
   @media (prefers-reduced-motion: reduce) {
