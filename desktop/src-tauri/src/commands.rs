@@ -605,6 +605,10 @@ pub(crate) async fn handle_shortcut(
                 effect = Some("close_call_detail");
                 true
             }
+            Some(keymap::ACTION_GENERATE_ADVICE_SELECTED) => {
+                effect = Some("generate_advice_selected");
+                true
+            }
             Some(action) => app.apply_shortcut_action(action),
             None => false,
         };

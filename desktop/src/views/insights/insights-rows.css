@@ -1,0 +1,197 @@
+.top-action-list,
+.action-list,
+.signal-list,
+.run-list,
+.data-context,
+.detail-main,
+.detail-side,
+.evidence-list {
+  display: grid;
+  min-width: 0;
+}
+
+.top-action-list,
+.action-list,
+.signal-list,
+.run-list {
+  gap: 1px;
+}
+
+.summary-row,
+.signal-row {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-bottom: 1px solid var(--color-border-row);
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.summary-row,
+.signal-row,
+.action-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr) auto 16px;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px 11px 0;
+}
+
+.summary-row:hover,
+.signal-row:hover,
+.action-row:hover {
+  background: var(--color-surface-sunken);
+}
+
+.row-rail {
+  align-self: stretch;
+  width: 3px;
+  background: var(--color-muted-2);
+}
+
+.severity-risk .row-rail,
+.detail-page.severity-risk {
+  border-left-color: var(--color-error);
+}
+
+.severity-risk .row-rail {
+  background: var(--color-error);
+}
+
+.severity-warn .row-rail,
+.detail-page.severity-warn {
+  border-left-color: var(--color-primary);
+}
+
+.severity-warn .row-rail {
+  background: var(--color-primary);
+}
+
+.severity-info .row-rail,
+.detail-page.severity-info {
+  border-left-color: var(--color-secondary);
+}
+
+.severity-info .row-rail {
+  background: var(--color-secondary);
+}
+
+.row-body {
+  display: grid;
+  gap: 5px;
+}
+
+.row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--color-muted);
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  line-height: 1.2;
+}
+
+.row-body > strong,
+.signal-row strong,
+.action-row h4 {
+  margin: 0;
+  min-width: 0;
+  color: var(--color-on-surface);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.32;
+  overflow-wrap: anywhere;
+}
+
+.row-body > span:last-child,
+.action-row p {
+  margin: 0;
+  color: var(--color-muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.scope-line {
+  color: var(--color-muted-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.severity-label {
+  color: var(--color-on-surface);
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.severity-label.risk {
+  color: var(--color-error);
+}
+
+.severity-label.warn {
+  color: var(--color-primary);
+}
+
+.severity-label.info {
+  color: var(--color-secondary);
+}
+
+.status-open,
+.status-signal,
+.status-succeeded {
+  color: var(--color-secondary);
+}
+
+.status-done {
+  color: var(--color-tertiary);
+}
+
+.status-dismissed {
+  color: var(--color-muted-2);
+}
+
+.status-failed {
+  color: var(--color-error);
+}
+
+.action-row:last-child,
+.summary-row:last-child,
+.signal-row:last-child {
+  border-bottom: 0;
+}
+
+.action-row.is-complete {
+  opacity: 0.68;
+}
+
+.row-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.done-command {
+  color: var(--color-tertiary);
+}
+
+.reopen-command {
+  color: var(--color-secondary);
+}
+
+.dismiss-command {
+  color: var(--color-muted);
+}

@@ -80,6 +80,7 @@
   let reportProjectIdentity = '';
   let reportProjects: ProjectOption[] = [];
   let reportRedacted = false;
+  let insightsGenerateRequest = 0;
   let clearingData = false;
   let pollTimer: number | undefined;
   let desktopUpdate: DesktopUpdateUiState = resetDesktopUpdate();
@@ -314,6 +315,7 @@
     if (modal) return 'desktop_modal';
     if (snapshot?.page === 'session' && event.key === 'Escape') return 'desktop_session_page';
     if (snapshot?.page === 'usage') return 'desktop_usage_page';
+    if (snapshot?.page === 'insights') return 'desktop_insights_page';
     if (snapshot?.page === 'config') return 'desktop_config_page';
     return 'desktop';
   }
@@ -344,6 +346,9 @@
         break;
       case 'close_call_detail':
         closeCallDetail();
+        break;
+      case 'generate_advice_selected':
+        insightsGenerateRequest += 1;
         break;
     }
   }
@@ -910,7 +915,12 @@
       {:else if activePage() === 'usage'}
         <UsageView {snapshot} {usageTone} />
       {:else if activePage() === 'insights'}
-        <InsightsView {snapshot} {generateAdvice} {updateAdviceItemStatus} />
+        <InsightsView
+          {snapshot}
+          {generateAdvice}
+          {updateAdviceItemStatus}
+          generateAdviceRequest={insightsGenerateRequest}
+        />
       {:else if activePage() === 'config'}
         <ConfigView
           {snapshot}

@@ -1,0 +1,240 @@
+.digest-panel {
+  display: grid;
+  align-content: space-between;
+  gap: var(--space-xl);
+  min-height: 174px;
+  padding: var(--space-xl);
+}
+
+.digest-panel h3 {
+  margin: 0;
+  max-width: 78ch;
+  color: #eef3ff;
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+
+.context-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.context-badges span,
+.status-chip,
+.money-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 20px;
+  padding: 2px 7px;
+  color: var(--color-muted);
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.money-chip {
+  color: var(--color-warning);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums slashed-zero;
+  white-space: nowrap;
+}
+
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+  margin: 0;
+  min-width: 0;
+}
+
+.kpi-strip > div {
+  display: flex;
+  min-width: 0;
+  min-height: 83px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 12px;
+  border-left-width: 3px;
+}
+
+.kpi-strip dd {
+  margin: 0;
+  color: var(--color-on-surface);
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums slashed-zero;
+  line-height: 1.1;
+}
+
+.kpi-strip .amount {
+  border-left-color: var(--color-warning);
+}
+
+.kpi-strip .amount dd {
+  color: var(--color-warning);
+}
+
+.kpi-strip .risk {
+  border-left-color: var(--color-error);
+}
+
+.kpi-strip .risk dd {
+  color: var(--color-error);
+}
+
+.kpi-strip .warn {
+  border-left-color: var(--color-primary);
+}
+
+.kpi-strip .warn dd {
+  color: var(--color-primary);
+}
+
+.kpi-strip .info {
+  border-left-color: var(--color-secondary);
+}
+
+.run-note {
+  display: grid;
+  gap: 5px;
+  margin: 12px;
+  padding: 10px 11px;
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border-soft);
+  border-left: 3px solid var(--color-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+.run-note.failed {
+  border-left-color: var(--color-error);
+}
+
+.run-note strong,
+.count-value {
+  color: var(--color-on-surface);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.bar-list {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto 3px;
+  gap: 6px 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.bar-row span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-muted);
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar-row strong {
+  color: var(--color-on-surface);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+.bar-row i {
+  grid-column: 1 / -1;
+  display: block;
+  height: 3px;
+  overflow: hidden;
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+}
+
+.bar-row i::before {
+  content: "";
+  display: block;
+  width: var(--bar-width);
+  height: 100%;
+  background: var(--color-muted-2);
+  transition: width var(--motion-base) var(--ease-standard);
+}
+
+.bar-row.severity-risk i::before {
+  background: var(--color-error);
+}
+
+.bar-row.severity-warn i::before {
+  background: var(--color-primary);
+}
+
+.bar-row.severity-info i::before {
+  background: var(--color-secondary);
+}
+
+.bar-row.category i::before {
+  background: var(--color-cyan);
+}
+
+.run-skeleton {
+  display: grid;
+  gap: 8px;
+  max-width: 720px;
+}
+
+.run-skeleton span {
+  display: block;
+  height: 13px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--color-border-soft) 0%,
+    var(--color-border) 45%,
+    var(--color-border-soft) 90%
+  );
+  background-size: 220% 100%;
+  animation: shimmer 1.2s var(--ease-standard) infinite;
+}
+
+.run-skeleton span:nth-child(1) {
+  width: 62%;
+}
+
+.run-skeleton span:nth-child(2) {
+  width: 88%;
+}
+
+.run-skeleton span:nth-child(3) {
+  width: 74%;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 140% 0;
+  }
+
+  to {
+    background-position: -80% 0;
+  }
+}

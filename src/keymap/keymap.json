@@ -124,6 +124,9 @@
       "id": "generate_advice_snippets"
     },
     {
+      "id": "generate_advice_selected"
+    },
+    {
       "id": "cookie_field_next"
     },
     {
@@ -1265,6 +1268,69 @@
         "r"
       ],
       "action": "reload"
+    },
+    {
+      "context": "desktop_insights_page",
+      "keys": [
+        "Shift+D"
+      ],
+      "action": "toggle_data_source"
+    },
+    {
+      "context": "desktop_insights_page",
+      "keys": [
+        "o"
+      ],
+      "action": "page_overview"
+    },
+    {
+      "context": "desktop_insights_page",
+      "keys": [
+        "d"
+      ],
+      "action": "page_deep_dive"
+    },
+    {
+      "context": "desktop_insights_page",
+      "keys": [
+        "u"
+      ],
+      "action": "page_usage"
+    },
+    {
+      "context": "desktop_insights_page",
+      "keys": [
+        "c"
+      ],
+      "action": "page_config"
+    },
+    {
+      "context": "desktop_insights_page",
+      "keys": [
+        "s"
+      ],
+      "action": "open_session_picker"
+    },
+    {
+      "context": "desktop_insights_page",
+      "keys": [
+        "e"
+      ],
+      "action": "open_export_picker"
+    },
+    {
+      "context": "desktop_insights_page",
+      "keys": [
+        "r"
+      ],
+      "action": "reload"
+    },
+    {
+      "context": "desktop_insights_page",
+      "keys": [
+        "a"
+      ],
+      "action": "generate_advice_selected"
     },
     {
       "context": "desktop_config_page",
