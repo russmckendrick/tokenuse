@@ -604,6 +604,7 @@ pub fn run() {
             commands::set_open_at_login,
             commands::set_show_dock_or_taskbar_icon,
             commands::refresh_archive,
+            commands::refresh_audit,
             commands::clear_data,
             commands::refresh_currency_rates,
             commands::refresh_pricing_snapshot,

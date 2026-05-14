@@ -8,6 +8,7 @@
   import { count } from './format';
   import { fadeIn, pill, reveal } from './motion';
   import TrayPopover from './TrayPopover.svelte';
+  import AuditView from './views/AuditView.svelte';
   import ConfigView from './views/ConfigView.svelte';
   import DeepDiveView from './views/DeepDiveView.svelte';
   import InsightsView from './views/InsightsView.svelte';
@@ -316,6 +317,7 @@
     if (snapshot?.page === 'session' && event.key === 'Escape') return 'desktop_session_page';
     if (snapshot?.page === 'usage') return 'desktop_usage_page';
     if (snapshot?.page === 'insights') return 'desktop_insights_page';
+    if (snapshot?.page === 'audit') return 'desktop_audit_page';
     if (snapshot?.page === 'config') return 'desktop_config_page';
     return 'desktop';
   }
@@ -466,20 +468,24 @@
     return activePage() === 'insights';
   }
 
+  function isAuditPage() {
+    return activePage() === 'audit';
+  }
+
   function isPeriodDisabled(period: PeriodId) {
-    return isConfigPage() || isInsightsPage() || (isUsagePage() && period !== 'today');
+    return isConfigPage() || isInsightsPage() || isAuditPage() || (isUsagePage() && period !== 'today');
   }
 
   function isToolDisabled() {
-    return isConfigPage() || isUsagePage() || isInsightsPage();
+    return isConfigPage() || isUsagePage() || isInsightsPage() || isAuditPage();
   }
 
   function isSortDisabled() {
-    return isConfigPage() || isUsagePage() || isInsightsPage();
+    return isConfigPage() || isUsagePage() || isInsightsPage() || isAuditPage();
   }
 
   function isProjectDisabled() {
-    return isConfigPage() || isUsagePage() || isInsightsPage();
+    return isConfigPage() || isUsagePage() || isInsightsPage() || isAuditPage();
   }
 
   function tabsFor(state: DesktopSnapshot): Array<{ value: PageId; label: string }> {
@@ -488,6 +494,7 @@
       { value: 'deep-dive', label: state.copy.nav.deep_dive },
       { value: 'usage', label: state.copy.nav.usage },
       { value: 'insights', label: state.copy.nav.insights },
+      { value: 'audit', label: state.copy.nav.audit },
       { value: 'config', label: state.copy.nav.config }
     ];
   }
@@ -858,7 +865,12 @@
             </button>
           {/key}
         {/if}
-        <button class="icon-button" type="button" title={snapshot.copy.actions.refresh_archive} onclick={() => commit(() => api.refreshArchive())}>
+        <button
+          class="icon-button"
+          type="button"
+          title={isAuditPage() ? snapshot.copy.actions.refresh_audit : snapshot.copy.actions.refresh_archive}
+          onclick={() => commit(() => (isAuditPage() ? api.refreshAudit() : api.refreshArchive()))}
+        >
           <RefreshCw size={16} />
         </button>
         <button class="icon-button" type="button" title={snapshot.copy.actions.export_current_view} onclick={() => openModal('report')}>
@@ -921,6 +933,8 @@
           {updateAdviceItemStatus}
           generateAdviceRequest={insightsGenerateRequest}
         />
+      {:else if activePage() === 'audit'}
+        <AuditView {snapshot} refreshAudit={() => commit(() => api.refreshAudit())} />
       {:else if activePage() === 'config'}
         <ConfigView
           {snapshot}

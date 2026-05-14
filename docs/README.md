@@ -5,8 +5,8 @@
 ## Guides
 
 - [Installation](guides/installation.md): install the TUI and Apple Silicon macOS desktop app from Homebrew, or download TUI and desktop assets from GitHub Releases.
-- [TUI usage](guides/tui-usage.md): dashboard navigation, filters, keyboard shortcuts, reloads, configuration, session drill-down, reports, and the Usage page.
-- [Desktop app usage](guides/desktop-usage.md): install, open, navigate, refresh, configure, and generate reports from the Tauri desktop app.
+- [TUI usage](guides/tui-usage.md): dashboard navigation, filters, keyboard shortcuts, reloads, configuration, session drill-down, reports, Usage, and Agent Setup.
+- [Desktop app usage](guides/desktop-usage.md): install, open, navigate, refresh, audit agent setup, configure, and generate reports from the Tauri desktop app.
 - [Insights](guides/insights.md): the local heuristic engine that powers the Insights page — categories, rules, savings basis, and limitations.
 
 ## Development

@@ -1,4 +1,4 @@
-export type PageId = 'overview' | 'deep-dive' | 'usage' | 'insights' | 'config' | 'session';
+export type PageId = 'overview' | 'deep-dive' | 'usage' | 'insights' | 'audit' | 'config' | 'session';
 export type PeriodId = 'today' | 'week' | 'thirty-days' | 'month' | 'all-time';
 export type ToolId = 'all' | 'claude-code' | 'cursor' | 'codex' | 'copilot' | 'gemini';
 export type AdviceToolId = 'codex' | 'claude-code' | 'gemini';
@@ -300,6 +300,160 @@ export type AdviceHistory = {
   runs: AdviceRunView[];
 };
 
+export type AuditSection = 'security' | 'efficiency' | 'context' | 'readiness';
+export type AuditSeverity = 'risk' | 'warning' | 'info';
+
+export type AuditSummary = {
+  total_findings: number;
+  security_findings: number;
+  efficiency_findings: number;
+  context_findings: number;
+  readiness_findings: number;
+  risk_findings: number;
+  warning_findings: number;
+  info_findings: number;
+};
+
+export type AuditToolSummary = {
+  id: string;
+  label: string;
+  present: boolean;
+  config_paths: string[];
+  mcp_servers: string[];
+  hooks_count: number;
+  knowledge_files: number;
+  scoped_assets: number;
+  dangerous_alias_detected: boolean;
+};
+
+export type AuditBehavior = {
+  recent_sessions_inspected: number;
+  clear_uses: number | null;
+  compact_uses: number | null;
+  subagent_calls: number | null;
+  plan_mode_uses: number | null;
+  skill_invocations: number | null;
+  longest_session_turns_without_reset: number | null;
+  avg_user_turn_chars: number | null;
+  correction_turn_ratio: number | null;
+};
+
+export type AuditKnowledgeFlags = {
+  mentions_testing: boolean;
+  mentions_security: boolean;
+  mentions_secrets: boolean;
+  has_wrong_right_patterns: boolean;
+  has_command_table: boolean;
+  has_dont_section: boolean;
+  has_external_links: boolean;
+  style_keywords: string[];
+  imports_other_files: boolean;
+  imported_paths: string[];
+};
+
+export type AuditKnowledgeFile = {
+  path: string;
+  exists: boolean;
+  size_bytes: number;
+  line_count: number;
+  content_preview: string;
+  content_truncated: boolean;
+  feature_flags: AuditKnowledgeFlags;
+};
+
+export type AuditRankedItem = {
+  name: string;
+  calls: number;
+  sessions: number;
+  cost_usd: number;
+  cost_label: string;
+  tokens: number;
+};
+
+export type AuditUsageSummary = {
+  available: boolean;
+  window_label: string;
+  calls: number;
+  sessions: number;
+  cost_usd: number;
+  cost_label: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+  total_tokens: number;
+  cache_read_ratio: number | null;
+  cache_hit_ratio: number | null;
+  top_tools: AuditRankedItem[];
+  top_models: AuditRankedItem[];
+  top_projects: AuditRankedItem[];
+};
+
+export type AuditProjectCoverageEntry = {
+  label: string;
+  path: string;
+  calls: number;
+  sessions: number;
+  agent_files: string[];
+  has_ci: boolean;
+  has_manifest: boolean;
+  checked: boolean;
+  skipped_reason: string | null;
+};
+
+export type AuditProjectCoverage = {
+  available: boolean;
+  known_project_roots: number;
+  checked_project_roots: number;
+  roots_with_agent_instructions: number;
+  roots_with_ci: number;
+  roots_with_manifests: number;
+  skipped_project_roots: number;
+  omitted_project_roots: number;
+  entries: AuditProjectCoverageEntry[];
+};
+
+export type AuditActivitySignals = {
+  available: boolean;
+  tool_call_uses: number;
+  shell_command_uses: number;
+  mcp_tool_uses: number;
+  distinct_tools_used: number;
+  distinct_models_used: number;
+  high_cost_projects: string[];
+  high_cost_sessions: string[];
+  repeated_model_patterns: string[];
+  repeated_tool_patterns: string[];
+};
+
+export type AuditFinding = {
+  id: string;
+  section: AuditSection;
+  severity: AuditSeverity;
+  title: string;
+  body: string;
+  evidence: string[];
+  source_paths: string[];
+};
+
+export type AuditSnapshot = {
+  schema_version: string;
+  scanner_version: string;
+  captured_at: string;
+  root: string | null;
+  primary_tool_guess: string | null;
+  redaction: { enabled: boolean; secrets_redacted: boolean; home_paths_folded: boolean };
+  tools: AuditToolSummary[];
+  usage_summary: AuditUsageSummary;
+  recent_usage: AuditUsageSummary;
+  project_coverage: AuditProjectCoverage;
+  activity_signals: AuditActivitySignals;
+  behavior: AuditBehavior;
+  summary: AuditSummary;
+  findings: AuditFinding[];
+  knowledge_files: AuditKnowledgeFile[];
+};
+
 export type ShortcutHint = {
   keys: string;
   label: string;
@@ -433,6 +587,31 @@ export type CopyDeck = {
     silenced: Record<string, string>;
     rules: Record<string, { title: string; body: string; assumption?: string | null }>;
   };
+  audit: {
+    title: string;
+    subtitle: string;
+    refresh: string;
+    captured_at: string;
+    not_captured: string;
+    scanner_version: string;
+    primary_tool: string;
+    redaction: string;
+    tools_title: string;
+    findings_title: string;
+    knowledge_title: string;
+    behavior_title: string;
+    project_title: string;
+    coverage_title: string;
+    all_time: string;
+    recent_7d: string;
+    no_archive_data: string;
+    no_recent_calls: string;
+    no_readable_project_roots: string;
+    not_measured: string;
+    no_findings: string;
+    sections: Record<AuditSection, string>;
+    severity: Record<AuditSeverity, string>;
+  };
   keymap: {
     actions: Record<string, string>;
     help: CopyHintGroup[];
@@ -467,6 +646,7 @@ export type DesktopSnapshot = {
   usage: LimitsData;
   insights: InsightsView;
   advice: AdviceHistory;
+  audit: AuditSnapshot;
   advice_running: boolean;
   advice_tool: AdviceToolId;
   advice_tool_options: OptionItem<AdviceToolId>[];

@@ -27,6 +27,7 @@ Press `g` to cycle the dashboard sort mode between spend, latest date, and token
 - **Overview**: the everyday command center with KPIs, an activity pulse graph, project/tool spend, model spend, shell commands, and MCP servers.
 - **Deep Dive**: the analysis workbench with the full panel set, a larger chronological activity trend, top sessions, project rankings, model efficiency, core tools, shell commands, and MCP servers.
 - **Usage**: rolling 24-hour per-tool consoles with a prominent pulse graph, calls/tokens/cost/last-seen totals, optional rate-limit gauges, and top models. Opening this tab automatically selects the 24 Hours period so the visible filter matches the console window.
+- **Agent Setup**: local-only audit of agent home folders, archive usage, project coverage, tool knowledge files, and recent context-management signals. Press `r` on this page to refresh the cached audit snapshot.
 - **Session**: drill into one `tool:session_id`, inspect per-call timestamp, model, cost, token buckets, tools, and prompt snippet, then open a call detail modal for the full stored prompt, cache price rates, and metadata.
 - **Config**: display currency, confirmed local downloads for currency rates and pricing books, and a confirmed clear-data action that rebuilds the archive.
 
@@ -37,6 +38,8 @@ Overview is the fast read. Start there when you want to know whether current spe
 Deep Dive is the comparison view. The **Activity Trend** panel uses the same chronological timeline as Overview, then the surrounding tables rank projects, project/tool pairs, sessions, models, tools, commands, and MCP servers by the active sort. Use it when you need to explain why a period changed or decide which project/session to inspect next.
 
 Usage is the live capacity view. Each tool gets its own console, and entering the tab switches the visible period selector to 24 Hours. The **24h pulse** line shows hourly relative activity for that tool, followed by totals for calls, tokens, cost, and last seen. Limit rows are gauges from imported plan snapshots when available; model rows are ranked bars for that tool's rolling 24-hour slice.
+
+Agent Setup is the local audit view. It reads local agent home folders, the existing usage archive, archive-known project roots, and recent readable session logs. It stores only a redacted snapshot under the tokenuse config directory and groups findings by security, efficiency, context hygiene, and project coverage. The scan does not make network calls or use an LLM.
 
 Activity Pulse and Activity Trend use hourly buckets for 24 Hours and 7 Days. This Month also uses hourly buckets during the first 14 days of the month, then switches to daily buckets from the 15th onward. 30 Days and All Time use daily buckets. The 24 Hours period is rolling from the current time, not a calendar-day midnight cutoff. Graph bars and pulse lines are relative to the visible panel. They are designed for quick comparison inside the terminal, not exact accounting; use the adjacent numeric columns for exact cost, call, token, reset, and plan values.
 
@@ -53,15 +56,17 @@ The keyboard reference, footer hints, and shortcut behavior come from the shared
 | `g` | Cycle sort mode: spend, latest date, token use |
 | `Shift-D` | Toggle between live and sample data |
 | `p` | Open project picker |
-| `Tab` / `Shift-Tab` | Cycle Overview, Deep Dive, and Usage |
+| `Tab` / `Shift-Tab` | Cycle Overview, Deep Dive, Usage, Insights, and Agent Setup |
 | `o` | Open Overview |
 | `d` | Open Deep Dive |
 | `u` | Open Usage / rate limits |
+| `i` | Open Insights |
+| `a` | Open Agent Setup |
 | `c` | Open Configuration |
 | `s` | Open session picker and drill into a single session |
 | `e` | Generate a project or all-projects report |
 | `f` / `b` in report modal | Choose another report folder for this session |
-| `r` | Sync the local archive in place |
+| `r` | Sync the local archive in place; refreshes the audit when Agent Setup is active |
 | `h` or `?` | Open the keybinding reference |
 
 In the session page, use `Up` / `Down`, `PgUp` / `PgDn`, `Home` / `End` to move through calls, `Enter` or a mouse click to open call details, and `Esc` or `d` to return to Deep Dive. In pickers and configuration, use `Up` / `Down`, `Home` / `End`, `Enter`, and `Esc`.
@@ -92,6 +97,7 @@ Runtime settings live in the platform config directory under `tokenuse`:
 | `pricing-snapshot.json` | Legacy local pricing snapshot |
 | `limits/claude-code.json` | Optional Claude Code status-line limit sidecar |
 | `limits/copilot.json` | Optional Copilot quota sidecar written by confirmed sync |
+| `agent-audit.json` | Latest redacted Agent Setup audit snapshot |
 | `reports/` | Fallback report directory |
 
 USD remains the default display currency. Costs are calculated and stored internally as import-time USD, then converted for display using the configured currency.

@@ -275,6 +275,15 @@ pub(crate) async fn refresh_archive(
 }
 
 #[tauri::command]
+pub(crate) async fn refresh_audit(state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
+    with_app(state, |app| {
+        app.refresh_audit();
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[tauri::command]
 pub(crate) async fn clear_data(state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
     with_app(state, |app| {
         app.clear_data();

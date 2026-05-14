@@ -19,11 +19,11 @@ use crate::{
 
 use components::{centered_rect, weighted_columns};
 use sections::{
-    render_activity_pulse, render_config, render_counts, render_currency_modal, render_daily_trend,
-    render_export_dir_picker_modal, render_export_modal, render_footer, render_help_modal,
-    render_kpi_strip, render_limits, render_model_efficiency, render_models, render_project_modal,
-    render_project_tools, render_projects, render_session_modal, render_session_page,
-    render_sessions, render_title_bar,
+    render_activity_pulse, render_audit, render_config, render_counts, render_currency_modal,
+    render_daily_trend, render_export_dir_picker_modal, render_export_modal, render_footer,
+    render_help_modal, render_kpi_strip, render_limits, render_model_efficiency, render_models,
+    render_project_modal, render_project_tools, render_projects, render_session_modal,
+    render_session_page, render_sessions, render_title_bar,
 };
 
 pub fn render(frame: &mut Frame<'_>, app: &App) {
@@ -48,6 +48,7 @@ pub fn render(frame: &mut Frame<'_>, app: &App) {
         Page::Config => render_config(frame, area, root, app),
         Page::Usage => render_limits(frame, area, root, app),
         Page::Insights => insights::render_insights(frame, area, root, app),
+        Page::Audit => render_audit(frame, area, root, app),
         Page::Session => render_session_page(frame, area, root, app),
     }
 

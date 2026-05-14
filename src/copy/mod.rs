@@ -29,8 +29,36 @@ pub struct CopyDeck {
     pub report_cli: ReportCliCopy,
     pub cli: CliCopy,
     pub insights: InsightsCopy,
+    pub audit: AuditCopy,
     pub keymap: KeymapCopy,
     pub status: StatusCopy,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuditCopy {
+    pub title: String,
+    pub subtitle: String,
+    pub refresh: String,
+    pub captured_at: String,
+    pub not_captured: String,
+    pub scanner_version: String,
+    pub primary_tool: String,
+    pub redaction: String,
+    pub tools_title: String,
+    pub findings_title: String,
+    pub knowledge_title: String,
+    pub behavior_title: String,
+    pub project_title: String,
+    pub coverage_title: String,
+    pub all_time: String,
+    pub recent_7d: String,
+    pub no_archive_data: String,
+    pub no_recent_calls: String,
+    pub no_readable_project_roots: String,
+    pub not_measured: String,
+    pub no_findings: String,
+    pub sections: BTreeMap<String, String>,
+    pub severity: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -162,6 +190,7 @@ pub struct NavCopy {
     pub deep_dive: String,
     pub usage: String,
     pub insights: String,
+    pub audit: String,
     pub config: String,
     pub configuration: String,
     pub session: String,
@@ -258,6 +287,7 @@ pub struct PanelCopy {
     pub money_and_data: String,
     pub tool_integrations: String,
     pub advice_engine: String,
+    pub agent_setup: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -308,6 +338,9 @@ pub struct TableCopy {
     pub archive: String,
     pub currency: String,
     pub exports: String,
+    pub findings: String,
+    pub severity: String,
+    pub evidence: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -552,6 +585,7 @@ pub struct ActionCopy {
     pub open_lower: String,
     pub open_session_picker: String,
     pub generate_advice: String,
+    pub refresh_audit: String,
     pub mark_done: String,
     pub mark_open: String,
     pub dismiss: String,
@@ -826,6 +860,9 @@ pub struct StatusCopy {
     pub advice_item_updated: String,
     pub advice_item_not_found: String,
     pub advice_failed: String,
+    pub audit_refreshing: String,
+    pub audit_refreshed: String,
+    pub audit_refresh_failed: String,
     pub config_failed_defaults: String,
     pub currency_rates_failed_embedded: String,
     pub legacy_cache_imported_records: String,

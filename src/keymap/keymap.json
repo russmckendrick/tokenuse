@@ -76,6 +76,9 @@
       "id": "page_insights"
     },
     {
+      "id": "page_audit"
+    },
+    {
       "id": "page_config"
     },
     {
@@ -271,6 +274,13 @@
     {
       "context": "dashboard",
       "keys": [
+        "a"
+      ],
+      "action": "page_audit"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
         "r"
       ],
       "action": "reload"
@@ -407,6 +417,13 @@
     {
       "context": "usage_page",
       "keys": [
+        "a"
+      ],
+      "action": "page_audit"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
         "r"
       ],
       "action": "reload"
@@ -475,6 +492,13 @@
         "c"
       ],
       "action": "page_config"
+    },
+    {
+      "context": "insights_page",
+      "keys": [
+        "x"
+      ],
+      "action": "page_audit"
     },
     {
       "context": "insights_page",
@@ -565,6 +589,78 @@
       "action": "move_end"
     },
     {
+      "context": "audit_page",
+      "keys": [
+        "q"
+      ],
+      "action": "quit"
+    },
+    {
+      "context": "audit_page",
+      "keys": [
+        "h",
+        "?"
+      ],
+      "action": "open_help"
+    },
+    {
+      "context": "audit_page",
+      "keys": [
+        "Tab"
+      ],
+      "action": "next_tab"
+    },
+    {
+      "context": "audit_page",
+      "keys": [
+        "Shift+Tab"
+      ],
+      "action": "prev_tab"
+    },
+    {
+      "context": "audit_page",
+      "keys": [
+        "Esc",
+        "o"
+      ],
+      "action": "page_overview"
+    },
+    {
+      "context": "audit_page",
+      "keys": [
+        "d"
+      ],
+      "action": "page_deep_dive"
+    },
+    {
+      "context": "audit_page",
+      "keys": [
+        "u"
+      ],
+      "action": "page_usage"
+    },
+    {
+      "context": "audit_page",
+      "keys": [
+        "i"
+      ],
+      "action": "page_insights"
+    },
+    {
+      "context": "audit_page",
+      "keys": [
+        "c"
+      ],
+      "action": "page_config"
+    },
+    {
+      "context": "audit_page",
+      "keys": [
+        "r"
+      ],
+      "action": "reload"
+    },
+    {
       "context": "config_page",
       "keys": [
         "q"
@@ -643,6 +739,13 @@
         "i"
       ],
       "action": "page_insights"
+    },
+    {
+      "context": "config_page",
+      "keys": [
+        "a"
+      ],
+      "action": "page_audit"
     },
     {
       "context": "session_page",
@@ -729,6 +832,13 @@
         "i"
       ],
       "action": "page_insights"
+    },
+    {
+      "context": "session_page",
+      "keys": [
+        "a"
+      ],
+      "action": "page_audit"
     },
     {
       "context": "session_page",
@@ -1167,6 +1277,13 @@
     {
       "context": "desktop",
       "keys": [
+        "a"
+      ],
+      "action": "page_audit"
+    },
+    {
+      "context": "desktop",
+      "keys": [
         "c"
       ],
       "action": "page_config"
@@ -1251,6 +1368,13 @@
     {
       "context": "desktop_usage_page",
       "keys": [
+        "a"
+      ],
+      "action": "page_audit"
+    },
+    {
+      "context": "desktop_usage_page",
+      "keys": [
         "s"
       ],
       "action": "open_session_picker"
@@ -1303,6 +1427,13 @@
         "c"
       ],
       "action": "page_config"
+    },
+    {
+      "context": "desktop_insights_page",
+      "keys": [
+        "x"
+      ],
+      "action": "page_audit"
     },
     {
       "context": "desktop_insights_page",
@@ -1333,6 +1464,62 @@
       "action": "generate_advice_selected"
     },
     {
+      "context": "desktop_audit_page",
+      "keys": [
+        "o"
+      ],
+      "action": "page_overview"
+    },
+    {
+      "context": "desktop_audit_page",
+      "keys": [
+        "d"
+      ],
+      "action": "page_deep_dive"
+    },
+    {
+      "context": "desktop_audit_page",
+      "keys": [
+        "u"
+      ],
+      "action": "page_usage"
+    },
+    {
+      "context": "desktop_audit_page",
+      "keys": [
+        "i"
+      ],
+      "action": "page_insights"
+    },
+    {
+      "context": "desktop_audit_page",
+      "keys": [
+        "c"
+      ],
+      "action": "page_config"
+    },
+    {
+      "context": "desktop_audit_page",
+      "keys": [
+        "s"
+      ],
+      "action": "open_session_picker"
+    },
+    {
+      "context": "desktop_audit_page",
+      "keys": [
+        "e"
+      ],
+      "action": "open_export_picker"
+    },
+    {
+      "context": "desktop_audit_page",
+      "keys": [
+        "r"
+      ],
+      "action": "reload"
+    },
+    {
       "context": "desktop_config_page",
       "keys": [
         "Shift+D"
@@ -1366,6 +1553,13 @@
         "c"
       ],
       "action": "page_config"
+    },
+    {
+      "context": "desktop_config_page",
+      "keys": [
+        "a"
+      ],
+      "action": "page_audit"
     },
     {
       "context": "desktop_config_page",

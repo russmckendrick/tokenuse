@@ -10,6 +10,7 @@ use crate::{
         App, ClearDataModal, ConfigDownload, CookieAction, CookieField, CookieModalKind,
         FolderPickerEntryKind, Page, Period, StatusTone, SubscriptionCookieModal,
     },
+    audit::{AuditSection, AuditSeverity},
     copy::{copy, template, CopyKeyHint},
     data::{
         ActivityMetric, CountMetric, ModelMetric, ProjectMetric, ProjectToolMetric, SessionDetail,
@@ -716,6 +717,378 @@ pub(super) fn render_config(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
     render_download_confirm_modal(frame, root, app);
     render_clear_data_confirm_modal(frame, root, app);
     render_subscription_cookie_modal(frame, root, app);
+}
+
+pub(super) fn render_audit(frame: &mut Frame<'_>, area: Rect, _root: Rect, app: &App) {
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Length(5),
+            Constraint::Length(1),
+            Constraint::Min(16),
+            Constraint::Length(3),
+        ])
+        .split(area);
+
+    render_title_bar(frame, sections[0], app);
+    render_audit_summary(frame, sections[1], app);
+
+    let body = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(58), Constraint::Percentage(42)])
+        .split(sections[3]);
+    let left = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(58), Constraint::Percentage(42)])
+        .split(body[0]);
+    render_audit_findings(frame, left[0], app);
+    render_audit_knowledge(frame, left[1], app.audit());
+    render_audit_side(frame, body[1], app);
+    render_footer(frame, sections[4], app);
+}
+
+fn render_audit_summary(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let copy = copy();
+    let audit = app.audit();
+    let captured = if audit.captured_at.is_empty() {
+        copy.audit.not_captured.as_str()
+    } else {
+        audit.captured_at.as_str()
+    };
+    let primary = audit.primary_tool_guess.as_deref().unwrap_or("-");
+    let text = Text::from(vec![
+        Line::from(vec![
+            Span::styled(
+                copy.audit.title.as_str(),
+                theme::key().add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("  ", theme::dim()),
+            Span::styled(copy.audit.subtitle.as_str(), theme::muted()),
+        ]),
+        Line::from(vec![
+            Span::styled(format!("{} ", copy.audit.captured_at), theme::key()),
+            Span::styled(captured.to_string(), theme::muted()),
+            Span::styled("  ·  ", theme::dim()),
+            Span::styled(format!("{} ", copy.audit.primary_tool), theme::key()),
+            Span::styled(primary.to_string(), theme::muted()),
+            Span::styled("  ·  ", theme::dim()),
+            Span::styled(format!("{} ", copy.tables.findings), theme::key()),
+            Span::styled(audit.summary.total_findings.to_string(), theme::money()),
+        ]),
+    ]);
+    Paragraph::new(text)
+        .block(theme::panel_block(
+            copy.panels.agent_setup.as_str(),
+            theme::PRIMARY,
+        ))
+        .style(theme::base())
+        .render(area, frame.buffer_mut());
+}
+
+fn render_audit_findings(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let copy = copy();
+    let audit = app.audit();
+    if audit.findings.is_empty() {
+        Paragraph::new(copy.audit.no_findings.as_str())
+            .block(theme::panel_block(
+                copy.audit.findings_title.as_str(),
+                theme::GREEN,
+            ))
+            .style(theme::muted())
+            .render(area, frame.buffer_mut());
+        return;
+    }
+
+    let rows = audit.findings.iter().map(|finding| {
+        Row::new(vec![
+            Cell::from(severity_label(finding.severity)).style(severity_style(finding.severity)),
+            Cell::from(section_label(finding.section)).style(theme::key()),
+            Cell::from(finding.title.as_str()).style(theme::base()),
+            Cell::from(finding.evidence.first().map(String::as_str).unwrap_or(""))
+                .style(theme::muted()),
+        ])
+    });
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(8),
+            Constraint::Length(11),
+            Constraint::Percentage(42),
+            Constraint::Percentage(35),
+        ],
+    )
+    .header(Row::new(vec![
+        Cell::from(copy.tables.severity.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.kind.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.findings.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.evidence.as_str()).style(theme::dim()),
+    ]))
+    .column_spacing(1)
+    .block(theme::panel_block(
+        copy.audit.findings_title.as_str(),
+        theme::RED,
+    ));
+    frame.render_widget(table, area);
+}
+
+fn render_audit_side(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let audit = app.audit();
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+        ])
+        .split(area);
+    render_audit_tools(frame, chunks[0], app);
+    render_audit_behavior(frame, chunks[1], app);
+    render_audit_activity(frame, chunks[2], audit);
+    render_audit_coverage(frame, chunks[3], audit);
+}
+
+fn render_audit_tools(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let copy = copy();
+    let rows = app.audit().tools.iter().map(|tool| {
+        let status = if tool.present { "present" } else { "missing" };
+        Row::new(vec![
+            Cell::from(tool.label.as_str()).style(theme::key()),
+            Cell::from(status).style(if tool.present {
+                theme::base()
+            } else {
+                theme::dim()
+            }),
+            Cell::from(tool.mcp_servers.len().to_string()).style(theme::muted()),
+            Cell::from(tool.config_paths.len().to_string()).style(theme::muted()),
+        ])
+    });
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Percentage(38),
+            Constraint::Percentage(24),
+            Constraint::Length(5),
+            Constraint::Length(5),
+        ],
+    )
+    .header(Row::new(vec![
+        Cell::from(copy.tables.tool.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.status.as_str()).style(theme::dim()),
+        Cell::from("MCP").style(theme::dim()),
+        Cell::from("Cfg").style(theme::dim()),
+    ]))
+    .column_spacing(1)
+    .block(theme::panel_block(
+        copy.audit.tools_title.as_str(),
+        theme::CYAN,
+    ));
+    frame.render_widget(table, area);
+}
+
+fn render_audit_behavior(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let copy = copy();
+    let behavior = &app.audit().behavior;
+    let lines = vec![
+        metric_line("logs", behavior.recent_sessions_inspected.to_string()),
+        metric_line("clear", measured_u64(behavior.clear_uses)),
+        metric_line("compact", measured_u64(behavior.compact_uses)),
+        metric_line("subagents", measured_u64(behavior.subagent_calls)),
+        metric_line("plan mode", measured_u64(behavior.plan_mode_uses)),
+        metric_line(
+            "avg turn",
+            behavior
+                .avg_user_turn_chars
+                .map(|v| format!("{v:.1} chars"))
+                .unwrap_or_else(|| "-".into()),
+        ),
+    ];
+    Paragraph::new(Text::from(lines))
+        .block(theme::panel_block(
+            copy.audit.behavior_title.as_str(),
+            theme::MAGENTA,
+        ))
+        .style(theme::base())
+        .render(area, frame.buffer_mut());
+}
+
+fn render_audit_activity(frame: &mut Frame<'_>, area: Rect, audit: &crate::audit::AuditSnapshot) {
+    let copy = copy();
+    let usage = &audit.usage_summary;
+    let recent = &audit.recent_usage;
+    let lines = vec![
+        metric_line(
+            copy.audit.all_time.as_str(),
+            if usage.available {
+                format!("{} · {} calls", usage.cost_label, usage.calls)
+            } else {
+                copy.audit.no_archive_data.clone()
+            },
+        ),
+        metric_line(
+            copy.audit.recent_7d.as_str(),
+            if !recent.available {
+                copy.audit.no_archive_data.clone()
+            } else if recent.calls == 0 {
+                copy.audit.no_recent_calls.clone()
+            } else {
+                format!("{} · {} calls", recent.cost_label, recent.calls)
+            },
+        ),
+        metric_line(
+            "top tools",
+            if usage.top_tools.is_empty() {
+                "-".into()
+            } else {
+                usage
+                    .top_tools
+                    .iter()
+                    .take(3)
+                    .map(|item| format!("{} {}", item.name, item.cost_label))
+                    .collect::<Vec<_>>()
+                    .join("  ")
+            },
+        ),
+        metric_line(
+            "MCP calls",
+            if audit.activity_signals.available {
+                audit.activity_signals.mcp_tool_uses.to_string()
+            } else {
+                copy.audit.no_archive_data.clone()
+            },
+        ),
+    ];
+    Paragraph::new(Text::from(lines))
+        .block(theme::panel_block(
+            copy.audit.project_title.as_str(),
+            theme::GREEN,
+        ))
+        .style(theme::base())
+        .render(area, frame.buffer_mut());
+}
+
+fn render_audit_coverage(frame: &mut Frame<'_>, area: Rect, audit: &crate::audit::AuditSnapshot) {
+    let copy = copy();
+    let coverage = &audit.project_coverage;
+    let lines = if coverage.available {
+        vec![
+            metric_line("known roots", coverage.known_project_roots.to_string()),
+            metric_line("checked", coverage.checked_project_roots.to_string()),
+            metric_line(
+                "with instructions",
+                if coverage.checked_project_roots == 0 {
+                    copy.audit.no_readable_project_roots.clone()
+                } else {
+                    format!(
+                        "{}/{}",
+                        coverage.roots_with_agent_instructions, coverage.checked_project_roots
+                    )
+                },
+            ),
+            metric_line("with CI", coverage.roots_with_ci.to_string()),
+        ]
+    } else {
+        vec![Line::from(Span::styled(
+            copy.audit.no_archive_data.as_str(),
+            theme::muted(),
+        ))]
+    };
+    Paragraph::new(Text::from(lines))
+        .block(theme::panel_block(
+            copy.audit.coverage_title.as_str(),
+            theme::BLUE,
+        ))
+        .style(theme::base())
+        .render(area, frame.buffer_mut());
+}
+
+fn render_audit_knowledge(frame: &mut Frame<'_>, area: Rect, audit: &crate::audit::AuditSnapshot) {
+    let copy = copy();
+    let rows = audit.knowledge_files.iter().map(|file| {
+        Row::new(vec![
+            Cell::from(file.path.as_str()).style(theme::key()),
+            Cell::from(file.line_count.to_string()).style(theme::muted()),
+            Cell::from(knowledge_flag_summary(file)).style(theme::muted()),
+        ])
+    });
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Percentage(62),
+            Constraint::Length(7),
+            Constraint::Percentage(30),
+        ],
+    )
+    .header(Row::new(vec![
+        Cell::from(copy.tables.name.as_str()).style(theme::dim()),
+        Cell::from("Lines").style(theme::dim()),
+        Cell::from(copy.tables.kind.as_str()).style(theme::dim()),
+    ]))
+    .column_spacing(1)
+    .block(theme::panel_block(
+        copy.audit.knowledge_title.as_str(),
+        theme::GREEN,
+    ));
+    frame.render_widget(table, area);
+}
+
+fn metric_line(label: &str, value: String) -> Line<'static> {
+    Line::from(vec![
+        Span::styled(format!("{label:<12}"), theme::key()),
+        Span::styled(value, theme::muted()),
+    ])
+}
+
+fn measured_u64(value: Option<u64>) -> String {
+    value.map(|v| v.to_string()).unwrap_or_else(|| "-".into())
+}
+
+fn severity_label(severity: AuditSeverity) -> &'static str {
+    match severity {
+        AuditSeverity::Risk => "risk",
+        AuditSeverity::Warning => "warn",
+        AuditSeverity::Info => "info",
+    }
+}
+
+fn severity_style(severity: AuditSeverity) -> Style {
+    match severity {
+        AuditSeverity::Risk => theme::base().fg(theme::RED).add_modifier(Modifier::BOLD),
+        AuditSeverity::Warning => theme::money(),
+        AuditSeverity::Info => theme::muted(),
+    }
+}
+
+fn section_label(section: AuditSection) -> &'static str {
+    match section {
+        AuditSection::Security => "security",
+        AuditSection::Efficiency => "efficiency",
+        AuditSection::Context => "context",
+        AuditSection::Readiness => "readiness",
+    }
+}
+
+fn knowledge_flag_summary(file: &crate::audit::AuditKnowledgeFile) -> String {
+    let flags = &file.feature_flags;
+    let mut labels = Vec::new();
+    if flags.mentions_testing {
+        labels.push("tests");
+    }
+    if flags.mentions_security {
+        labels.push("security");
+    }
+    if flags.imports_other_files {
+        labels.push("imports");
+    }
+    if file.content_truncated {
+        labels.push("large");
+    }
+    if labels.is_empty() {
+        "-".into()
+    } else {
+        labels.join(", ")
+    }
 }
 
 fn render_config_rows(frame: &mut Frame<'_>, area: Rect, app: &App) {
@@ -1916,6 +2289,7 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Page::Session => "session",
         Page::Usage => "usage",
         Page::Insights => "insights",
+        Page::Audit => "audit",
         Page::Overview | Page::DeepDive => "dashboard",
     };
     let commands = footer_line(copy().footer(footer), app);

@@ -13,6 +13,7 @@
     "deep_dive": "Deep Dive",
     "usage": "Usage",
     "insights": "Insights",
+    "audit": "Agent Setup",
     "config": "Config",
     "configuration": "Configuration",
     "session": "Session",
@@ -96,7 +97,8 @@
     "local_files": "Local Files",
     "money_and_data": "Money & Data",
     "tool_integrations": "Tool Integrations",
-    "advice_engine": "Advice Engine"
+    "advice_engine": "Advice Engine",
+    "agent_setup": "Agent Setup"
   },
   "tables": {
     "blank": "",
@@ -144,7 +146,10 @@
     "agent": "Agent",
     "archive": "Archive",
     "currency": "Currency",
-    "exports": "Reports"
+    "exports": "Reports",
+    "findings": "Findings",
+    "severity": "Severity",
+    "evidence": "Evidence"
   },
   "timeline": {
     "spend": "Spend",
@@ -389,6 +394,7 @@
     "open_lower": "open",
     "open_session_picker": "Open Session Picker",
     "generate_advice": "Generate Advice",
+    "refresh_audit": "Refresh audit",
     "mark_done": "Done",
     "mark_open": "Reopen",
     "dismiss": "Dismiss",
@@ -736,6 +742,40 @@
       }
     }
   },
+  "audit": {
+    "title": "Agent Setup",
+    "subtitle": "Local-only scan of agent home folders, archive usage, project coverage, and recent context hygiene.",
+    "refresh": "Refresh audit",
+    "captured_at": "Captured",
+    "not_captured": "Not captured yet",
+    "scanner_version": "Scanner",
+    "primary_tool": "Primary tool",
+    "redaction": "Redaction",
+    "tools_title": "Tool Homes",
+    "findings_title": "Findings",
+    "knowledge_title": "Tool Knowledge Files",
+    "behavior_title": "Context Hygiene",
+    "project_title": "Agent Activity",
+    "coverage_title": "Project Coverage",
+    "all_time": "All time",
+    "recent_7d": "Last 7 days",
+    "no_archive_data": "No archive data loaded",
+    "no_recent_calls": "No recent calls in last 7 days",
+    "no_readable_project_roots": "No readable project roots",
+    "not_measured": "Not measured",
+    "no_findings": "No findings in the latest local audit.",
+    "sections": {
+      "security": "Security",
+      "efficiency": "Efficiency",
+      "context": "Context",
+      "readiness": "Readiness"
+    },
+    "severity": {
+      "risk": "Risk",
+      "warning": "Warning",
+      "info": "Info"
+    }
+  },
   "keymap": {
     "actions": {
       "quit": "quit",
@@ -763,6 +803,7 @@
       "page_deep_dive": "Deep Dive",
       "page_usage": "Usage",
       "page_insights": "Insights",
+      "page_audit": "Agent Setup",
       "page_config": "Configuration",
       "close_session": "back to Deep Dive",
       "reload": "reload",
@@ -878,6 +919,7 @@
         { "keys": "5", "label": "all", "action": "period_all_time" },
         { "keys": "g", "label": "sort", "action": "cycle_sort" },
         { "keys": "i", "label": "insights", "action": "page_insights" },
+        { "keys": "a", "label": "agent setup", "action": "page_audit" },
         { "keys": "h", "label": "help", "action": "open_help" }
       ],
       "insights": [
@@ -888,7 +930,16 @@
         { "keys": "Pg", "label": "page", "action": "move_page_down" },
         { "keys": "a", "label": "usage only", "action": "generate_advice_redacted" },
         { "keys": "A", "label": "with prompts", "action": "generate_advice_snippets" },
+        { "keys": "x", "label": "agent setup", "action": "page_audit" },
         { "keys": "r", "label": "refresh", "action": "reload" },
+        { "keys": "h", "label": "help", "action": "open_help" }
+      ],
+      "audit": [
+        { "keys": "q", "label": "quit", "action": "quit" },
+        { "keys": "Tab", "label": "app tabs", "action": "next_tab" },
+        { "keys": "r", "label": "refresh audit", "action": "reload" },
+        { "keys": "i", "label": "insights", "action": "page_insights" },
+        { "keys": "c", "label": "config", "action": "page_config" },
         { "keys": "h", "label": "help", "action": "open_help" }
       ],
       "config": [
@@ -896,6 +947,7 @@
         { "keys": "Esc", "label": "dashboard", "action": "page_deep_dive" },
         { "keys": "Up/Down", "label": "move", "action": "move_up" },
         { "keys": "Enter", "label": "select", "action": "confirm" },
+        { "keys": "a", "label": "agent setup", "action": "page_audit" },
         { "keys": "h", "label": "help", "action": "open_help" }
       ],
       "session": [
@@ -905,6 +957,7 @@
         { "keys": "Enter", "label": "detail", "action": "confirm" },
         { "keys": "s", "label": "pick", "action": "open_session_picker" },
         { "keys": "e", "label": "report", "action": "open_export_picker" },
+        { "keys": "a", "label": "agent setup", "action": "page_audit" },
         { "keys": "g", "label": "sort", "action": "cycle_sort" },
         { "keys": "h", "label": "help", "action": "open_help" }
       ],
@@ -913,6 +966,7 @@
         { "keys": "Tab", "label": "tabs", "action": "next_tab" },
         { "keys": "o/d", "label": "overview/deep", "action": "page_overview" },
         { "keys": "i", "label": "insights", "action": "page_insights" },
+        { "keys": "a", "label": "agent setup", "action": "page_audit" },
         { "keys": "c", "label": "config", "action": "page_config" },
         { "keys": "e", "label": "report", "action": "open_export_picker" },
         { "keys": "g", "label": "sort", "action": "cycle_sort" },
@@ -925,6 +979,7 @@
         { "keys": "p", "label": "project", "action": "open_project_picker" },
         { "keys": "s", "label": "session", "action": "open_session_picker" },
         { "keys": "i", "label": "insights", "action": "page_insights" },
+        { "keys": "a", "label": "agent setup", "action": "page_audit" },
         { "keys": "e", "label": "report", "action": "open_export_picker" },
         { "keys": "r", "label": "refresh", "action": "reload" }
       ],
@@ -932,18 +987,27 @@
         { "keys": "1", "label": "24h", "action": "period_today" },
         { "keys": "s", "label": "session", "action": "open_session_picker" },
         { "keys": "i", "label": "insights", "action": "page_insights" },
+        { "keys": "a", "label": "agent setup", "action": "page_audit" },
         { "keys": "e", "label": "report", "action": "open_export_picker" },
         { "keys": "r", "label": "refresh", "action": "reload" }
       ],
       "desktop_insights": [
         { "keys": "s", "label": "session", "action": "open_session_picker" },
         { "keys": "a", "label": "generate", "action": "generate_advice_selected" },
+        { "keys": "x", "label": "agent setup", "action": "page_audit" },
         { "keys": "e", "label": "report", "action": "open_export_picker" },
         { "keys": "r", "label": "refresh", "action": "reload" }
+      ],
+      "desktop_audit": [
+        { "keys": "s", "label": "session", "action": "open_session_picker" },
+        { "keys": "i", "label": "insights", "action": "page_insights" },
+        { "keys": "c", "label": "config", "action": "page_config" },
+        { "keys": "r", "label": "refresh audit", "action": "reload" }
       ],
       "desktop_config": [
         { "keys": "s", "label": "session", "action": "open_session_picker" },
         { "keys": "i", "label": "insights", "action": "page_insights" },
+        { "keys": "a", "label": "agent setup", "action": "page_audit" },
         { "keys": "e", "label": "report", "action": "open_export_picker" },
         { "keys": "r", "label": "refresh", "action": "reload" }
       ]
@@ -1011,6 +1075,9 @@
     "advice_item_updated": "Advice item updated",
     "advice_item_not_found": "Advice item not found · {id}",
     "advice_failed": "Advice failed · {error}",
+    "audit_refreshing": "Refreshing agent setup audit",
+    "audit_refreshed": "Agent setup audit refreshed · {findings} findings",
+    "audit_refresh_failed": "Agent setup audit failed · {error}",
     "config_failed_defaults": "Config failed · defaults ({error})",
     "currency_rates_failed_embedded": "Currency rates failed · embedded ({error})",
     "legacy_cache_imported_records": "Legacy cache imported · {records} records",

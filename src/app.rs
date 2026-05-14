@@ -13,6 +13,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 
 use crate::advice::{AdviceDataScope, AdviceHistory, AdviceItemStatus, AdviceTool};
 use crate::archive;
+use crate::audit::AuditSnapshot;
 use crate::config::{ConfigPaths, UserConfig};
 use crate::copy::{self, copy, CopyDeck};
 use crate::currency::{CurrencyFormatter, CurrencyTable};
@@ -115,11 +116,18 @@ pub enum Page {
     Config,
     Usage,
     Insights,
+    Audit,
     Session,
 }
 
 impl Page {
-    pub const TABS: [Page; 4] = [Page::Overview, Page::DeepDive, Page::Usage, Page::Insights];
+    pub const TABS: [Page; 5] = [
+        Page::Overview,
+        Page::DeepDive,
+        Page::Usage,
+        Page::Insights,
+        Page::Audit,
+    ];
 
     pub fn label(self) -> &'static str {
         let copy = copy();
@@ -128,6 +136,7 @@ impl Page {
             Self::DeepDive => copy.nav.deep_dive.as_str(),
             Self::Usage => copy.nav.usage.as_str(),
             Self::Insights => copy.nav.insights.as_str(),
+            Self::Audit => copy.nav.audit.as_str(),
             Self::Config => copy.nav.config.as_str(),
             Self::Session => copy.nav.session.as_str(),
         }
@@ -1152,6 +1161,7 @@ pub struct App {
     pub paths: ConfigPaths,
     pub currency_table: CurrencyTable,
     pub source: DataSource,
+    pub audit_snapshot: AuditSnapshot,
     clear_data_job: Option<ClearDataJob>,
     advice_job: Option<AdviceJob>,
     #[cfg(feature = "quota-sync")]
@@ -1174,6 +1184,8 @@ impl Default for App {
     fn default() -> Self {
         let paths = ConfigPaths::default();
         let export_dir = crate::reports::default_report_dir(&paths);
+        let audit_snapshot =
+            crate::audit::load_latest(&paths).unwrap_or_else(|| AuditSnapshot::not_run(&paths));
         Self {
             page: Page::Overview,
             period: Period::Week,
@@ -1201,6 +1213,7 @@ impl Default for App {
             currency_table: CurrencyTable::embedded()
                 .expect("embedded currency rates must be valid JSON"),
             source: DataSource::Sample,
+            audit_snapshot,
             clear_data_job: None,
             advice_job: None,
             #[cfg(feature = "quota-sync")]
@@ -1248,6 +1261,8 @@ impl App {
         let live_source = cached_live_source(&source);
         let background_alert_baseline = live_source.as_ref().map(UsageTotals::from_ingested);
         let advice_history = load_advice_history(&paths);
+        let audit_snapshot =
+            crate::audit::load_latest(&paths).unwrap_or_else(|| AuditSnapshot::not_run(&paths));
         Self {
             source,
             live_source,
@@ -1259,6 +1274,7 @@ impl App {
             currency_table,
             refresher,
             advice_history,
+            audit_snapshot,
             ..Self::default()
         }
     }
@@ -1306,6 +1322,10 @@ impl App {
             DataSource::Live(ingested) => ingested.insights(),
             DataSource::Sample => crate::data::insights_view(),
         }
+    }
+
+    pub fn audit(&self) -> &AuditSnapshot {
+        &self.audit_snapshot
     }
 
     pub fn advice_history(&self) -> AdviceHistory {
@@ -1364,6 +1384,36 @@ impl App {
         };
         if refresher.signal_tx.send(()).is_ok() {
             self.set_status(copy().status.reloading.clone(), StatusTone::Busy);
+        }
+    }
+
+    pub fn refresh_audit(&mut self) {
+        self.set_status(copy().status.audit_refreshing.clone(), StatusTone::Busy);
+        let ingested = match &self.source {
+            DataSource::Live(ingested) => Some(ingested),
+            DataSource::Sample => self.live_source.as_ref(),
+        };
+        match crate::audit::refresh(&self.paths, ingested) {
+            Ok(snapshot) => {
+                let findings = snapshot.summary.total_findings;
+                self.audit_snapshot = snapshot;
+                self.set_status(
+                    copy::template(
+                        &copy().status.audit_refreshed,
+                        &[("findings", findings.to_string())],
+                    ),
+                    StatusTone::Success,
+                );
+            }
+            Err(error) => {
+                self.set_status(
+                    copy::template(
+                        &copy().status.audit_refresh_failed,
+                        &[("error", error.to_string())],
+                    ),
+                    StatusTone::Error,
+                );
+            }
         }
     }
 
@@ -2046,6 +2096,7 @@ impl App {
             Page::Config => keymap::CONTEXT_CONFIG_PAGE,
             Page::Usage => keymap::CONTEXT_USAGE_PAGE,
             Page::Insights => keymap::CONTEXT_INSIGHTS_PAGE,
+            Page::Audit => keymap::CONTEXT_AUDIT_PAGE,
             Page::Session => keymap::CONTEXT_SESSION_PAGE,
             Page::Overview | Page::DeepDive => keymap::CONTEXT_DASHBOARD,
         }
@@ -2077,9 +2128,16 @@ impl App {
             keymap::ACTION_PAGE_DEEP_DIVE => self.set_page(Page::DeepDive),
             keymap::ACTION_PAGE_USAGE => self.set_page(Page::Usage),
             keymap::ACTION_PAGE_INSIGHTS => self.set_page(Page::Insights),
+            keymap::ACTION_PAGE_AUDIT => self.set_page(Page::Audit),
             keymap::ACTION_PAGE_CONFIG => self.set_page(Page::Config),
             keymap::ACTION_CLOSE_SESSION => self.leave_session(),
-            keymap::ACTION_RELOAD => self.reload(),
+            keymap::ACTION_RELOAD => {
+                if self.page == Page::Audit {
+                    self.refresh_audit();
+                } else {
+                    self.reload();
+                }
+            }
             keymap::ACTION_INSIGHTS_NEXT_TAB => self.cycle_insights_tab(1),
             keymap::ACTION_INSIGHTS_PREV_TAB => self.cycle_insights_tab(-1),
             keymap::ACTION_GENERATE_ADVICE_REDACTED => {
@@ -3858,9 +3916,13 @@ mod tests {
         app.handle_key(key(KeyCode::Tab));
         assert_eq!(app.page, Page::Insights);
         app.handle_key(key(KeyCode::Tab));
+        assert_eq!(app.page, Page::Audit);
+        app.handle_key(key(KeyCode::Tab));
         assert_eq!(app.page, Page::Overview);
 
         app.set_period(Period::AllTime);
+        app.handle_key(key(KeyCode::BackTab));
+        assert_eq!(app.page, Page::Audit);
         app.handle_key(key(KeyCode::BackTab));
         assert_eq!(app.page, Page::Insights);
         app.handle_key(key(KeyCode::BackTab));
@@ -3954,6 +4016,9 @@ mod tests {
 
         app.handle_key(key(KeyCode::Char('o')));
         assert_eq!(app.page, Page::Overview);
+
+        app.handle_key(key(KeyCode::Char('a')));
+        assert_eq!(app.page, Page::Audit);
     }
 
     #[test]

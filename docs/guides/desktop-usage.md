@@ -19,6 +19,7 @@ The macOS desktop app also ships as a signed and notarized Apple Silicon DMG. Li
 - **Deep Dive**: analysis workbench with a larger activity trend, project rankings, top sessions, project/tool spend, model efficiency, core tools, shell commands, and MCP servers.
 - **Session**: per-call session drill-down with clickable rows for full stored prompt, tool, command, and token metadata.
 - **Usage**: per-tool consoles with 24-hour activity pulses, call/token/cost summaries, plan limit gauges when available, and top model bars. Opening this tab automatically selects 24 Hours so the filter row matches the console window.
+- **Agent Setup**: local-only audit of agent home folders, archive usage, project coverage, tool knowledge files, and recent context-management signals. The refresh button runs the audit when this tab is active.
 - Model tables show observed cache-hit percentage separately from cache-read price rate. Session call details show cache read/write price rates for the call model.
 - **Config**: currency selection, desktop behavior toggles, explicit Windows/Linux desktop update checks, confirmed local downloads for currency and pricing books, Claude/Copilot limit sidecar sync actions, and a confirmed clear-data action that rebuilds the archive.
 
@@ -69,7 +70,7 @@ On Windows and Linux, the Config tab also includes an explicit update check agai
 
 ## Refresh
 
-Use the refresh button or keyboard shortcut `r` to sync the archive. Refreshes use the same background archive refresher as the TUI and keep the previous data visible if a sync fails.
+Use the refresh button or keyboard shortcut `r` to sync the archive. Refreshes use the same background archive refresher as the TUI and keep the previous data visible if a sync fails. On Agent Setup, the same refresh control updates the redacted local audit snapshot instead of syncing usage.
 
 The Config tab's clear-data action shows a native warning, deletes `archive.db`, and immediately reimports from local tool history. Config, rates, pricing books, legacy pricing snapshots, and reports are kept. Archive-only rows disappear if the original source files are gone, and rebuilt rows use the current configured pricing.
 

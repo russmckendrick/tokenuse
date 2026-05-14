@@ -1,6 +1,7 @@
 pub mod advice;
 pub mod app;
 pub mod archive;
+pub mod audit;
 pub mod config;
 pub mod copy;
 pub mod currency;

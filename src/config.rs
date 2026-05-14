@@ -23,6 +23,7 @@ const LOCAL_PRICING_UPSTREAM_FILE_NAME: &str = "pricing-upstream.json";
 const LOCAL_PRICING_OVERRIDES_FILE_NAME: &str = "pricing-overrides.json";
 const LEGACY_LOCAL_PRICING_FILE_NAME: &str = "pricing-snapshot.json";
 const ARCHIVE_DB_FILE_NAME: &str = "archive.db";
+const AGENT_AUDIT_FILE_NAME: &str = "agent-audit.json";
 const ADVICE_PROMPTS_DIR_NAME: &str = "advice-prompts";
 const TOKEN_USE_APP_DIR_NAME: &str = "Token Use App";
 const LIMITS_DIR_NAME: &str = "limits";
@@ -41,6 +42,7 @@ pub struct ConfigPaths {
     pub pricing_overrides_file: PathBuf,
     pub pricing_snapshot_file: PathBuf,
     pub archive_db_file: PathBuf,
+    pub agent_audit_file: PathBuf,
     pub advice_prompts_dir: PathBuf,
     pub token_use_app_dir: PathBuf,
     pub limits_dir: PathBuf,
@@ -61,6 +63,7 @@ impl ConfigPaths {
             pricing_overrides_file: dir.join(LOCAL_PRICING_OVERRIDES_FILE_NAME),
             pricing_snapshot_file: dir.join(LEGACY_LOCAL_PRICING_FILE_NAME),
             archive_db_file: dir.join(ARCHIVE_DB_FILE_NAME),
+            agent_audit_file: dir.join(AGENT_AUDIT_FILE_NAME),
             advice_prompts_dir: dir.join(ADVICE_PROMPTS_DIR_NAME),
             token_use_app_dir: dir.join(TOKEN_USE_APP_DIR_NAME),
             claude_code_limits_file: limits_dir.join(CLAUDE_CODE_LIMITS_FILE_NAME),

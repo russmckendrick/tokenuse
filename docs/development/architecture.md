@@ -32,7 +32,7 @@ Both Config pages can also clear local usage data after confirmation. That path 
 
 The startup loader lives in `src/runtime.rs` so both frontends use the same config, currency, archive, fallback, and background refresh setup. The desktop app stores an `App` instance behind Tauri managed state and exposes narrow commands for filters, session drill-down, config actions, shortcuts, refresh, reports, desktop settings, and the tray popover. It also runs a small backend monitor that continues calling `App::poll_reload()` while the webview is hidden, drains queued background usage alerts, and sends native notifications from Rust. See [Desktop app usage](../guides/desktop-usage.md).
 
-New sessions written while the dashboard is open are visible after archive sync — press `r` (Dashboard, Usage, or Session pages) to sync on a background thread. The dashboard stays responsive: the status bar shows `reloading…` while it runs, the next tick of the main loop drains completed results via `App::poll_reload`, and the status flips to `reloaded · N calls`. The refresher runs one sync at a time; if several results complete between UI ticks, the latest result wins. Failures or empty sync results keep the prior data unchanged.
+New sessions written while the dashboard is open are visible after archive sync — press `r` (Dashboard, Usage, or Session pages) to sync on a background thread. On Agent Setup, `r` refreshes the redacted audit snapshot instead. The dashboard stays responsive during archive refreshes: the status bar shows `reloading…` while it runs, the next tick of the main loop drains completed results via `App::poll_reload`, and the status flips to `reloaded · N calls`. The refresher runs one sync at a time; if several results complete between UI ticks, the latest result wins. Failures or empty sync results keep the prior data unchanged.
 
 Desktop background alerts use the unfiltered live archive totals as their baseline: cost in USD, activity tokens, and call count across all tools/projects. Automatic refresh deltas accumulate until one configured threshold crosses, then an alert is queued, the baseline resets to the new totals, and the cooldown starts. Manual refreshes reset the baseline without alerting. The thresholds live under `background_alerts` in `config.json`; sample-only startup data does not trigger alerts. Desktop-only startup preferences live under `desktop` in `config.json` and currently control open-at-login plus Dock/taskbar visibility.
 
@@ -90,12 +90,13 @@ The dashboard panels are built from the filtered call set:
 
 ## Pages And Modals
 
-The TUI is a small state machine over six pages (Overview, Deep Dive, Usage, Insights, Config, Session) plus picker, confirmation, detail, and help modals. The first four pages are reachable through the tab strip via `Tab` / `Shift-Tab` or their direct keys; Config and Session are sub-pages opened from any tab. `g` cycles the global sort mode, and `Shift-D` toggles the visible data source between live and sample data when live data is available. Shortcut definitions, help groups, and footer hints live in `src/keymap/keymap.json`; `src/keymap/mod.rs` validates the embedded JSON and resolves keys to action IDs. `src/app.rs` applies those actions to state, while rendering is dispatched from `src/ui/mod.rs`.
+The TUI is a small state machine over seven pages (Overview, Deep Dive, Usage, Insights, Agent Setup, Config, Session) plus picker, confirmation, detail, and help modals. Overview, Deep Dive, Usage, Insights, and Agent Setup are reachable through the tab strip via `Tab` / `Shift-Tab` or their direct keys; Config and Session are sub-pages opened from any tab. `g` cycles the global sort mode, and `Shift-D` toggles the visible data source between live and sample data when live data is available. Shortcut definitions, help groups, and footer hints live in `src/keymap/keymap.json`; `src/keymap/mod.rs` validates the embedded JSON and resolves keys to action IDs. `src/app.rs` applies those actions to state, while rendering is dispatched from `src/ui/mod.rs`.
 
 ```mermaid
 flowchart LR
     O[Overview] -- d / Tab --> DD[Deep Dive]
     O -- u --> U[Usage]
+    O -- a --> A[Agent Setup]
     O -- c --> Cfg[Config]
     O -- s --> SP[Session picker]
     SP -- Enter --> Sess[Session page]
@@ -105,7 +106,10 @@ flowchart LR
     DD -- c --> Cfg
     U -- o --> O
     U -- d --> DD
+    U -- a --> A
     U -- c --> Cfg
+    A -- r --> ARefresh[Refresh audit snapshot]
+    A -- i --> I[Insights]
     Cfg -- Esc/d --> DD
     Cfg -- o --> O
     Cfg -- u --> O
@@ -129,6 +133,7 @@ flowchart LR
 - **Deep Dive** (`Page::DeepDive`): analysis workbench with every panel listed under [Aggregation](#aggregation), including a larger chronological activity trend, top sessions, model efficiency, and core tool counts that are not on Overview.
 - **Usage** (`Page::Usage`): per-tool 24-hour console with an activity pulse, optional plan-side rate limit gauges, and top-3 models per tool. Built from `Ingested::limits` over the same `ParsedCall` set plus `LimitSnapshot` records. Entering Usage normalizes the visible period to `Period::Today`, the rolling 24-hour window; project filters are deliberately ignored, while sort mode controls section/model order. See [TUI usage](../guides/tui-usage.md#usage-page).
 - **Insights** (`Page::Insights`): heuristic recommendations across model right-sizing, cache efficiency, anomalies, and quota pacing. Computed locally by `crate::insights::compute_insights` over `Ingested.calls` and `Ingested.limits`, with rolling 30-day baselines for outlier and z-score detection. Cards carry severity, scope, and an estimated weekly savings figure with the assumption stated inline. Rules live under `src/insights/rules/`; per-rule copy lives under `insights.rules.<id>` in `src/copy/copy.json`. The Tauri snapshot exposes the rendered view at `DesktopSnapshot.insights`. See [Insights](../guides/insights.md).
+- **Agent Setup** (`Page::Audit`): deterministic local audit of agent home folders (`~/.claude`, `~/.codex`, `~/.copilot`, `~/.cursor`, `~/.gemini`), tool knowledge files, MCP declarations, shell bypass aliases, archive usage summaries, and archive-known project-root coverage. `crate::audit::refresh` writes the latest redacted typed snapshot to `<config dir>/tokenuse/agent-audit.json`; startup only loads the cached snapshot. The Tauri snapshot exposes the same data at `DesktopSnapshot.audit`. The scanner performs no network calls and does not call an LLM.
 - **Session** (`Page::Session`): drill-down for one `tool:session_id`. Rendered from `SessionDetailView`, computed by filtering `Ingested.calls` by `session_key(call) == key` and sorting calls with the active sort mode. Live data shows per-call timestamp, model, cost, in/out tokens, cache, tools used, and a 120-char single-line prompt snippet; selecting a call opens a modal with the full stored prompt plus reasoning/web-search counts and bash commands. Sample mode shows a privacy note since per-call records are not bundled.
 - **Config** (`Page::Config`): currency override, local data refresh actions (rates, pricing books, Claude/Copilot limit sidecars), and clear-data archive rebuild. The desktop frontend adds native-only controls for open-at-login and Dock/taskbar visibility on its Config page without changing the TUI state machine.
 - **Project picker, Currency picker, Session picker** (`*Modal` structs): each holds `options`, a typeable `query`, and a `filtered: Vec<usize>` mapping; all three share the same case-insensitive substring filter pattern. The project picker pins `All` regardless of query.

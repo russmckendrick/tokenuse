@@ -72,9 +72,10 @@ The TUI and desktop app share the same checked-in shortcut definitions from `src
 - `1`–`5`: period (24 hours, 7 days, 30 days, this month, all time)
 - `t`: cycle tool filter
 - `p`: open project picker (type to search; Backspace to clear last char; Ctrl-U to clear)
-- `Tab` / `Shift-Tab`: cycle main tabs (Overview ↔ Deep Dive ↔ Usage)
-- `o`: Overview · `d`: Deep Dive · `u`: Usage / rate limits
+- `Tab` / `Shift-Tab`: cycle main tabs (Overview ↔ Deep Dive ↔ Usage ↔ Insights ↔ Agent Setup)
+- `o`: Overview · `d`: Deep Dive · `u`: Usage / rate limits · `i`: Insights · `a`: Agent Setup
 - `c`: open configuration · `s`: open session picker (drill into a single session's calls)
+- In Agent Setup: `r`: refresh the local audit snapshot
 - `e`: generate a report (HTML, PDF, SVG, PNG, JSON, Excel, or CSV folder) to Downloads; press `f`/`b` in the report modal to choose another folder for this session
 - `r`: reload (sync archive in place; keeps prior data on failure)
 - `h` or `?`: open the keybinding reference (full list of shortcuts)
