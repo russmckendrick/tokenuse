@@ -43,9 +43,7 @@ jobs:
 
       - name: "🐧 Install Linux build dependencies"
         if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev libdbus-1-dev
+        uses: ./.github/actions/linux-build-deps
 
       - name: "⚡ Restore Rust cache"
         uses: Swatinem/rust-cache@v2
@@ -78,16 +76,9 @@ jobs:
 
       - name: "🐧 Install Linux desktop build dependencies"
         if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libayatana-appindicator3-dev \
-            libfontconfig1-dev \
-            libgtk-3-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev \
-            librsvg2-dev
+        uses: ./.github/actions/linux-build-deps
+        with:
+          profile: desktop
 
       - name: "⚡ Restore Rust cache"
         uses: Swatinem/rust-cache@v2
@@ -203,9 +194,7 @@ jobs:
 
       - name: "🐧 Install Linux build dependencies"
         if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev libdbus-1-dev
+        uses: ./.github/actions/linux-build-deps
 
       - name: "⚡ Restore Rust cache"
         uses: Swatinem/rust-cache@v2
@@ -528,23 +517,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: "🐧 Install Linux desktop build dependencies"
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            curl \
-            file \
-            libayatana-appindicator3-dev \
-            libfontconfig1-dev \
-            libfuse2 \
-            libgtk-3-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev \
-            librsvg2-dev \
-            patchelf \
-            rpm \
-            wget
+        uses: ./.github/actions/linux-build-deps
+        with:
+          profile: desktop-bundle
 
       - name: "⚡ Restore Rust cache"
         uses: Swatinem/rust-cache@v2
