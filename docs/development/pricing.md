@@ -58,7 +58,16 @@ The command writes both:
 
 Do not hand-edit `pricing-upstream.json`. Curated aliases, fallbacks, and rows that cannot yet be reliably extracted live in `pricing-overrides.json` and `pricing-sources.json`.
 
-GitHub Actions also runs `.github/workflows/refresh-pricing.yml` weekly and on manual dispatch. The workflow follows the currency-rate pattern: generate the books, run pricing tests, and commit `pricing-upstream.json` plus `pricing-overrides.json` only when those generated files differ.
+GitHub Actions also runs `.github/workflows/refresh-pricing.yml` weekly and on manual dispatch. The workflow follows the currency-rate pattern: generate the books, run pricing tests, and commit `pricing-upstream.json` plus `pricing-overrides.json` only when those generated files differ. It installs system build dependencies through the shared `.github/actions/linux-build-deps` composite action (`core` profile), so the `libfontconfig1-dev`/`libdbus-1-dev` package list stays in sync with the rest of CI.
+
+### Upstream row changes
+
+`model-rows` sources tolerate two kinds of upstream drift without failing the whole refresh:
+
+- **Deprecation annotations.** When a source keeps a priced row but relabels it (e.g. `Claude Sonnet 4 ([deprecated](...))`), the matcher strips a trailing parenthetical status annotation and still matches the bare model name.
+- **Retired rows.** When a configured model disappears from a source entirely (e.g. a Copilot model that was pulled), the refresh prints a `warning: ... skipping` line and keeps the model's last-known override row instead of erroring.
+
+As a safety net, a source that matches **none** of its configured rows still fails loudly — that pattern signals a table heading/column change rather than a single model being retired.
 
 ## Local Downloads
 
