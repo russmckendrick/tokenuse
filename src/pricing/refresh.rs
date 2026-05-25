@@ -1308,9 +1308,7 @@ after
         )
         .unwrap();
 
-        assert!(overrides
-            .pointer("/tool_models/copilot/gpt-4.1")
-            .is_some());
+        assert!(overrides.pointer("/tool_models/copilot/gpt-4.1").is_some());
         assert!(overrides
             .pointer("/tool_models/copilot/grok-code-fast-1")
             .is_none());
