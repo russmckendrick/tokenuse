@@ -403,6 +403,7 @@ fn merge_model_rows_source(
     overrides: &mut Value,
 ) -> Result<()> {
     let tables = source_tables(source, raw)?;
+    let mut matched = 0usize;
     for row_rule in &extract.rows {
         let match_text = row_rule
             .match_text
@@ -415,8 +416,18 @@ fn merge_model_rows_source(
                 break;
             }
         }
-        let mut price =
-            price.ok_or_else(|| eyre!("source {} did not contain row {match_text}", source.id))?;
+        let Some(mut price) = price else {
+            // Upstream retired this model (e.g. a Copilot model that was pulled).
+            // Skip the row rather than failing the whole refresh. The zero-match
+            // guard below still trips if the entire table stops matching, which
+            // signals a format/heading change rather than a single removal.
+            eprintln!(
+                "warning: source {} did not contain row {match_text}; skipping (model retired upstream?)",
+                source.id
+            );
+            continue;
+        };
+        matched += 1;
         apply_defaults_and_fixed(&mut price, &extract.defaults, &extract.set);
         apply_fixed(&mut price, &row_rule.set);
         let note = row_rule.note.as_deref().or(extract.note.as_deref());
@@ -432,6 +443,13 @@ fn merge_model_rows_source(
             );
         }
         insert_override_price(source, extract, &row_rule.model, price, overrides)?;
+    }
+    if !extract.rows.is_empty() && matched == 0 {
+        return Err(eyre!(
+            "source {} matched none of its {} configured rows; the upstream table format may have changed",
+            source.id,
+            extract.rows.len()
+        ));
     }
     Ok(())
 }
@@ -450,7 +468,7 @@ fn price_from_model_table(
     let wanted = comparable(match_text);
     let Some(row) = table.iter().skip(1).find(|row| {
         row.get(model_idx)
-            .map(|cell| comparable(cell) == wanted)
+            .map(|cell| model_label_matches(cell, &wanted))
             .unwrap_or(false)
     }) else {
         return Ok(None);
@@ -832,6 +850,30 @@ fn clean_cell(cell: &str) -> String {
     out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// Match a pricing-table model cell against a configured `match` value.
+///
+/// Upstream tables annotate legacy rows in place rather than removing them,
+/// e.g. `Claude Sonnet 4 ([deprecated](...))` or
+/// `Claude Haiku 3.5 ([retired, except on Bedrock and Vertex AI](...))`. So a
+/// row that still carries the price we want no longer matches the bare model
+/// name. Accept an exact match first, then retry with any trailing
+/// parenthetical status annotation stripped.
+fn model_label_matches(cell: &str, wanted: &str) -> bool {
+    if comparable(cell) == wanted {
+        return true;
+    }
+    // `clean_cell` has already flattened the markdown link to its text, so the
+    // annotation is a plain trailing `(...)` group we can drop.
+    let cleaned = clean_cell(cell);
+    let cleaned = cleaned.trim_end();
+    if cleaned.ends_with(')') {
+        if let Some(open) = cleaned.rfind('(') {
+            return comparable(&cleaned[..open]) == wanted;
+        }
+    }
+    false
+}
+
 fn comparable(value: &str) -> String {
     let mut out = String::new();
     let clean = clean_cell(value);
@@ -1182,6 +1224,134 @@ after
         assert_eq!(row["cache_read"], json!(0.0000005));
         assert_eq!(row["output"], json!(0.000008));
         assert_eq!(row["effective_from"], json!("2026-06-01"));
+    }
+
+    #[test]
+    fn model_rows_match_deprecated_annotated_label() {
+        let source: SourceConfig = serde_json::from_str(
+            r#"{
+              "id": "anthropic-pricing",
+              "name": "Anthropic pricing",
+              "url": "https://example.invalid/pricing.md",
+              "kind": "markdown-table",
+              "output": "overrides",
+              "extract": {
+                "mode": "model-rows",
+                "scope": "global",
+                "columns": {
+                  "model": "Model",
+                  "input": "Base Input Tokens",
+                  "output": "Output Tokens"
+                },
+                "rows": [{ "match": "Claude Sonnet 4", "model": "claude-sonnet-4" }]
+              }
+            }"#,
+        )
+        .unwrap();
+        // Upstream keeps the priced row but appends a deprecation annotation.
+        let raw = r#"
+| Model | Base Input Tokens | Output Tokens |
+| --- | ---: | ---: |
+| Claude Sonnet 4.5 | $3 / MTok | $15 / MTok |
+| Claude Sonnet 4 ([deprecated](/docs/en/about-claude/model-deprecations)) | $3 / MTok | $15 / MTok |
+"#;
+        let mut overrides = json!({ "fallback": "claude-sonnet-4", "models": {} });
+
+        merge_model_rows_source(
+            &source,
+            source.extract.as_ref().unwrap(),
+            raw,
+            &mut overrides,
+        )
+        .unwrap();
+
+        let row = overrides.pointer("/models/claude-sonnet-4").unwrap();
+        assert_eq!(row["input"], json!(0.000003));
+        assert_eq!(row["output"], json!(0.000015));
+    }
+
+    #[test]
+    fn model_rows_skip_retired_row_but_keep_present_one() {
+        let source: SourceConfig = serde_json::from_str(
+            r#"{
+              "id": "github-copilot-pricing",
+              "name": "GitHub Copilot models and pricing",
+              "url": "https://example.invalid/github.md",
+              "kind": "markdown-table",
+              "output": "overrides",
+              "extract": {
+                "mode": "model-rows",
+                "scope": "tool",
+                "tool": "copilot",
+                "columns": { "model": "Model", "input": "Input", "output": "Output" },
+                "rows": [
+                  { "match": "GPT-4.1", "model": "gpt-4.1" },
+                  { "match": "Grok Code Fast 1", "model": "grok-code-fast-1" }
+                ]
+              }
+            }"#,
+        )
+        .unwrap();
+        // The Grok row has been pulled upstream; GPT-4.1 is still listed.
+        let raw = r#"
+| Model | Input | Output |
+| --- | ---: | ---: |
+| GPT-4.1 | $2.00 | $8.00 |
+"#;
+        let mut overrides = json!({ "fallback": "gpt-4.1", "tool_models": {} });
+
+        merge_model_rows_source(
+            &source,
+            source.extract.as_ref().unwrap(),
+            raw,
+            &mut overrides,
+        )
+        .unwrap();
+
+        assert!(overrides
+            .pointer("/tool_models/copilot/gpt-4.1")
+            .is_some());
+        assert!(overrides
+            .pointer("/tool_models/copilot/grok-code-fast-1")
+            .is_none());
+    }
+
+    #[test]
+    fn model_rows_error_when_no_rows_match() {
+        let source: SourceConfig = serde_json::from_str(
+            r#"{
+              "id": "github-copilot-pricing",
+              "name": "GitHub Copilot models and pricing",
+              "url": "https://example.invalid/github.md",
+              "kind": "markdown-table",
+              "output": "overrides",
+              "extract": {
+                "mode": "model-rows",
+                "scope": "tool",
+                "tool": "copilot",
+                "columns": { "model": "Model", "input": "Input", "output": "Output" },
+                "rows": [{ "match": "GPT-4.1", "model": "gpt-4.1" }]
+              }
+            }"#,
+        )
+        .unwrap();
+        // A format change: the model column is present but every configured row
+        // is gone. This should fail loudly rather than silently emptying the book.
+        let raw = r#"
+| Model | Input | Output |
+| --- | ---: | ---: |
+| Some Other Model | $2.00 | $8.00 |
+"#;
+        let mut overrides = json!({ "fallback": "gpt-4.1", "tool_models": {} });
+
+        let err = merge_model_rows_source(
+            &source,
+            source.extract.as_ref().unwrap(),
+            raw,
+            &mut overrides,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("matched none"));
     }
 
     #[test]
