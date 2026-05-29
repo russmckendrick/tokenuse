@@ -30,7 +30,7 @@ flowchart TD
     D --> I[event_msg rate_limits]
     E --> G
     F --> G
-    G -->|last_token_usage present| H[emit ParsedCall]
+    G -->|derived usage is non-zero| H[emit ParsedCall]
     I --> J[emit LimitSnapshot]
 ```
 
@@ -96,16 +96,16 @@ A rollout is heterogeneous JSONL. The interesting types:
 
 ## Token & cost mapping
 
-One `ParsedCall` is emitted per `event_msg/token_count` whose usage is non-null. Prefer `info.last_token_usage` when present. If Codex only writes cumulative `info.total_token_usage`, the parser subtracts the previous cumulative total in the same rollout and uses the delta.
+One `ParsedCall` is emitted per `event_msg/token_count` whose usage is non-null and non-zero. Prefer cumulative `info.total_token_usage` when present: the parser subtracts the previous cumulative total in the same rollout and uses the delta. This avoids double-counting duplicate token-count snapshots that repeat the same cumulative total with a different timestamp. If Codex only writes `info.last_token_usage`, the parser uses that as a fallback.
 
 | `ParsedCall` field | Source |
 | --- | --- |
-| `input_tokens` | `last.input_tokens` − `last.cached_input_tokens` |
-| `output_tokens` | `last.output_tokens` + `last.reasoning_output_tokens` |
-| `cached_input_tokens` | `last.cached_input_tokens` |
-| `cache_read_input_tokens` | `last.cached_input_tokens` (priced as cache read) |
+| `input_tokens` | `usage.input_tokens` − `usage.cached_input_tokens` |
+| `output_tokens` | `usage.output_tokens` + `usage.reasoning_output_tokens` |
+| `cached_input_tokens` | `usage.cached_input_tokens` |
+| `cache_read_input_tokens` | `usage.cached_input_tokens` (priced as cache read) |
 | `cache_creation_input_tokens` | always `0` (OpenAI doesn't expose cache writes) |
-| `reasoning_tokens` | `last.reasoning_output_tokens` |
+| `reasoning_tokens` | `usage.reasoning_output_tokens` |
 | `model` | most recent model hint from `turn_context`, `token_count.info`, or payload metadata; `"gpt-5"` if none has appeared yet |
 | `speed` | always `Speed::Standard` (Codex has no fast/standard split) |
 
@@ -120,6 +120,8 @@ Current bundled OpenAI/Codex cache-read rates are not uniformly 50%: GPT-5.x and
 `dedup_key = format!("codex:{path}:{timestamp}:{total.input_tokens}+{total.output_tokens}")`
 
 Including the cumulative totals from `total_token_usage` prevents two consecutive turns that share a timestamp from collapsing, while still catching re-reads of the same file.
+
+Duplicate `token_count` snapshots with unchanged cumulative totals are skipped before deduplication because their derived usage delta is zero.
 
 ## Tools / bash extraction
 
