@@ -228,6 +228,8 @@ pub fn parse_session(
                     && usage.output_tokens == 0
                     && usage.reasoning_output_tokens == 0
                 {
+                    pending_tools.clear();
+                    pending_bash.clear();
                     continue;
                 }
 
@@ -553,6 +555,25 @@ mod tests {
         assert_eq!(calls[0].output_tokens, 371 + 38);
         assert_eq!(calls[1].input_tokens, 21590 - 10624);
         assert_eq!(calls[1].output_tokens, 375 + 12);
+    }
+
+    #[test]
+    fn duplicate_cumulative_token_counts_clear_pending_tools() {
+        let f = write_session(&[
+            META_OK,
+            TURN_GPT5,
+            TOKEN_FIRST,
+            EXEC_LS,
+            TOKEN_FIRST_DUPLICATE,
+            TOKEN_SECOND,
+        ]);
+        let mut seen = HashSet::new();
+
+        let calls = parse_session(&source_for(f.path().to_path_buf()), &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 2);
+        assert!(calls[1].tools.is_empty());
+        assert!(calls[1].bash_commands.is_empty());
     }
 
     #[test]

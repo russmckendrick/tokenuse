@@ -121,11 +121,11 @@ Current bundled OpenAI/Codex cache-read rates are not uniformly 50%: GPT-5.x and
 
 Including the cumulative totals from `total_token_usage` prevents two consecutive turns that share a timestamp from collapsing, while still catching re-reads of the same file.
 
-Duplicate `token_count` snapshots with unchanged cumulative totals are skipped before deduplication because their derived usage delta is zero.
+Duplicate `token_count` snapshots with unchanged cumulative totals are skipped before deduplication because their derived usage delta is zero. Skipped duplicate snapshots also clear pending tool buffers so tool attribution cannot leak into the next emitted call.
 
 ## Tools / bash extraction
 
-`response_item` entries between successive `token_count` events are accumulated into `tools` (and `bash_commands` for `exec_command`). The arguments string is JSON-decoded and the inner `cmd` field is split via `tools::jsonl::split_bash_commands`. On each emitted `ParsedCall` the buffers are drained (so the next turn starts empty); duplicate `token_count` entries that lose to the `seen` dedup set also clear the buffer to avoid leaking tool calls into the following turn.
+`response_item` entries between successive `token_count` events are accumulated into `tools` (and `bash_commands` for `exec_command`). The arguments string is JSON-decoded and the inner `cmd` field is split via `tools::jsonl::split_bash_commands`. On each emitted `ParsedCall` the buffers are drained (so the next turn starts empty); skipped zero-delta token snapshots and duplicate `token_count` entries that lose to the `seen` dedup set also clear the buffer to avoid leaking tool calls into the following turn.
 
 ```mermaid
 flowchart LR
