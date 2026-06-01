@@ -1,6 +1,6 @@
 {
   "_metadata": {
-    "checked_at": "2026-05-25",
+    "checked_at": "2026-06-01",
     "fields": {
       "cache_read": "USD per cache read token",
       "cache_write": "USD per cache write token",
@@ -28,7 +28,7 @@
       "input": 1e-6,
       "output": 5e-6,
       "provenance": {
-        "checked_at": "2026-05-25",
+        "checked_at": "2026-06-01",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
       },
@@ -41,7 +41,7 @@
       "input": 5e-6,
       "output": 0.000025,
       "provenance": {
-        "checked_at": "2026-05-25",
+        "checked_at": "2026-06-01",
         "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.6 fast mode at $30 input and $150 output per MTok.",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
@@ -55,7 +55,7 @@
       "input": 5e-6,
       "output": 0.000025,
       "provenance": {
-        "checked_at": "2026-05-25",
+        "checked_at": "2026-06-01",
         "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.6 fast mode at $30 input and $150 output per MTok.",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
@@ -68,7 +68,7 @@
       "input": 5e-6,
       "output": 0.000025,
       "provenance": {
-        "checked_at": "2026-05-25",
+        "checked_at": "2026-06-01",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
       },
@@ -81,7 +81,7 @@
       "input": 5e-6,
       "output": 0.000025,
       "provenance": {
-        "checked_at": "2026-05-25",
+        "checked_at": "2026-06-01",
         "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.6 fast mode at $30 input and $150 output per MTok.",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
@@ -94,7 +94,7 @@
       "input": 3e-6,
       "output": 0.000015,
       "provenance": {
-        "checked_at": "2026-05-25",
+        "checked_at": "2026-06-01",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
       },
@@ -106,7 +106,7 @@
       "input": 3e-6,
       "output": 0.000015,
       "provenance": {
-        "checked_at": "2026-05-25",
+        "checked_at": "2026-06-01",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
       },
@@ -118,7 +118,7 @@
       "input": 3e-6,
       "output": 0.000015,
       "provenance": {
-        "checked_at": "2026-05-25",
+        "checked_at": "2026-06-01",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
       },
@@ -130,7 +130,7 @@
       "input": 1.25e-6,
       "output": 6e-6,
       "provenance": {
-        "checked_at": "2026-05-25",
+        "checked_at": "2026-06-01",
         "note": "Cursor Auto lists input plus cache write at $1.25/MTok, output at $6/MTok, and cache read at $0.25/MTok.",
         "source_name": "Cursor pricing",
         "source_url": "https://cursor.com/docs/models-and-pricing.md"
@@ -329,7 +329,7 @@
         "input": 1e-6,
         "output": 5e-6,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -341,7 +341,7 @@
         "input": 5e-6,
         "output": 0.000025,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -353,7 +353,7 @@
         "input": 5e-6,
         "output": 0.000025,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -365,7 +365,7 @@
         "input": 5e-6,
         "output": 0.000025,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -377,7 +377,7 @@
         "input": 3e-6,
         "output": 0.000015,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -389,7 +389,7 @@
         "input": 3e-6,
         "output": 0.000015,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -401,7 +401,7 @@
         "input": 3e-6,
         "output": 0.000015,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -412,7 +412,7 @@
         "input": 1.25e-6,
         "output": 0.00001,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -423,7 +423,7 @@
         "input": 5e-7,
         "output": 3e-6,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -434,7 +434,7 @@
         "input": 2e-6,
         "output": 0.000012,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -456,7 +456,7 @@
         "input": 2e-6,
         "output": 8e-6,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -467,7 +467,7 @@
         "input": 2.5e-7,
         "output": 2e-6,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -478,7 +478,7 @@
         "input": 1.75e-6,
         "output": 0.000014,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -489,7 +489,7 @@
         "input": 1.75e-6,
         "output": 0.000014,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -500,7 +500,7 @@
         "input": 1.75e-6,
         "output": 0.000014,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -511,7 +511,7 @@
         "input": 2.5e-6,
         "output": 0.000015,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -522,7 +522,7 @@
         "input": 7.5e-7,
         "output": 4.5e-6,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -533,7 +533,7 @@
         "input": 2.0000000000000002e-7,
         "output": 1.25e-6,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -544,7 +544,7 @@
         "input": 5e-6,
         "output": 0.00003,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -566,7 +566,7 @@
         "input": 2.5e-7,
         "output": 2e-6,
         "provenance": {
-          "checked_at": "2026-05-25",
+          "checked_at": "2026-06-01",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }

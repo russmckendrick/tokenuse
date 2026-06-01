@@ -1,6 +1,6 @@
 {
   "_metadata": {
-    "checked_at": "2026-05-25",
+    "checked_at": "2026-06-01",
     "fields": {
       "cache_read": "USD per cache read token",
       "cache_write": "USD per cache write token",
@@ -122,6 +122,13 @@
       "output": 0.000025,
       "web_search": 0.01
     },
+    "anthropic.claude-opus-4-8": {
+      "cache_read": 5e-7,
+      "cache_write": 6.25e-6,
+      "input": 5e-6,
+      "output": 0.000025,
+      "web_search": 0.01
+    },
     "anthropic.claude-sonnet-4-20250514-v1:0": {
       "cache_read": 3e-7,
       "cache_write": 3.75e-6,
@@ -200,6 +207,13 @@
       "web_search": 0.01
     },
     "au.anthropic.claude-opus-4-7": {
+      "cache_read": 5.5e-7,
+      "cache_write": 6.875e-6,
+      "input": 5.5e-6,
+      "output": 0.0000275,
+      "web_search": 0.01
+    },
+    "au.anthropic.claude-opus-4-8": {
       "cache_read": 5.5e-7,
       "cache_write": 6.875e-6,
       "input": 5.5e-6,
@@ -379,6 +393,13 @@
       "web_search": 0.01
     },
     "claude-opus-4-7-20260416": {
+      "cache_read": 5e-7,
+      "cache_write": 6.25e-6,
+      "input": 5e-6,
+      "output": 0.000025,
+      "web_search": 0.01
+    },
+    "claude-opus-4-8": {
       "cache_read": 5e-7,
       "cache_write": 6.25e-6,
       "input": 5e-6,
@@ -636,6 +657,13 @@
       "web_search": 0.01
     },
     "eu.anthropic.claude-opus-4-7": {
+      "cache_read": 5.5e-7,
+      "cache_write": 6.875e-6,
+      "input": 5.5e-6,
+      "output": 0.0000275,
+      "web_search": 0.01
+    },
+    "eu.anthropic.claude-opus-4-8": {
       "cache_read": 5.5e-7,
       "cache_write": 6.875e-6,
       "input": 5.5e-6,
@@ -937,6 +965,13 @@
       "web_search": 0.01
     },
     "global.anthropic.claude-opus-4-7": {
+      "cache_read": 5e-7,
+      "cache_write": 6.25e-6,
+      "input": 5e-6,
+      "output": 0.000025,
+      "web_search": 0.01
+    },
+    "global.anthropic.claude-opus-4-8": {
       "cache_read": 5e-7,
       "cache_write": 6.25e-6,
       "input": 5e-6,
@@ -1688,6 +1723,13 @@
       "web_search": 0.01
     },
     "us.anthropic.claude-opus-4-7": {
+      "cache_read": 5.5e-7,
+      "cache_write": 6.875e-6,
+      "input": 5.5e-6,
+      "output": 0.0000275,
+      "web_search": 0.01
+    },
+    "us.anthropic.claude-opus-4-8": {
       "cache_read": 5.5e-7,
       "cache_write": 6.875e-6,
       "input": 5.5e-6,
