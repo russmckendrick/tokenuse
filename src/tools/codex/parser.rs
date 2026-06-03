@@ -214,9 +214,9 @@ pub fn parse_session(
                     current_model = model;
                 }
                 let Some(info) = event.info else { continue };
-                let usage = match (info.last_token_usage, info.total_token_usage) {
-                    (Some(last), _) => last,
-                    (None, Some(total)) => total.saturating_delta(previous_total_usage),
+                let usage = match (info.total_token_usage, info.last_token_usage) {
+                    (Some(total), _) => total.saturating_delta(previous_total_usage),
+                    (None, Some(last)) => last,
                     (None, None) => continue,
                 };
                 let total = info.total_token_usage.unwrap_or(usage);
@@ -228,6 +228,8 @@ pub fn parse_session(
                     && usage.output_tokens == 0
                     && usage.reasoning_output_tokens == 0
                 {
+                    pending_tools.clear();
+                    pending_bash.clear();
                     continue;
                 }
 
@@ -481,6 +483,7 @@ mod tests {
     const EXEC_LS: &str = r#"{"timestamp":"2026-03-29T15:04:05.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"ls -la | grep foo\"}","call_id":"c1"}}"#;
     const TOKEN_NULL: &str = r#"{"timestamp":"2026-03-29T15:04:01.591Z","type":"event_msg","payload":{"type":"token_count","info":null}}"#;
     const TOKEN_FIRST: &str = r#"{"timestamp":"2026-03-29T15:04:10.090Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":18193,"cached_input_tokens":10624,"output_tokens":371,"reasoning_output_tokens":38,"total_tokens":18564},"total_token_usage":{"input_tokens":18193,"cached_input_tokens":10624,"output_tokens":371,"reasoning_output_tokens":38,"total_tokens":18564}}}}"#;
+    const TOKEN_FIRST_DUPLICATE: &str = r#"{"timestamp":"2026-03-29T15:04:11.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":18193,"cached_input_tokens":10624,"output_tokens":371,"reasoning_output_tokens":38,"total_tokens":18564},"total_token_usage":{"input_tokens":18193,"cached_input_tokens":10624,"output_tokens":371,"reasoning_output_tokens":38,"total_tokens":18564}}}}"#;
     const TOKEN_SECOND: &str = r#"{"timestamp":"2026-03-29T15:05:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":21590,"cached_input_tokens":10624,"output_tokens":375,"reasoning_output_tokens":12,"total_tokens":21965},"total_token_usage":{"input_tokens":39783,"cached_input_tokens":21248,"output_tokens":746,"reasoning_output_tokens":50,"total_tokens":40529}}}}"#;
     const TOKEN_TOTAL_ONLY_FIRST: &str = r#"{"timestamp":"2026-03-29T15:04:10.090Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cache_read_input_tokens":20,"output_tokens":10,"reasoning_output_tokens":1,"total_tokens":111}}}}"#;
     const TOKEN_TOTAL_ONLY_SECOND: &str = r#"{"timestamp":"2026-03-29T15:05:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"model":"gpt-5.4","total_token_usage":{"input_tokens":180,"cache_read_input_tokens":50,"output_tokens":30,"reasoning_output_tokens":4,"total_tokens":214}}}}"#;
@@ -532,6 +535,45 @@ mod tests {
         assert_eq!(calls[1].cache_read_input_tokens, 30);
         assert_eq!(calls[1].output_tokens, 23);
         assert_eq!(calls[1].reasoning_tokens, 3);
+    }
+
+    #[test]
+    fn duplicate_cumulative_token_counts_do_not_emit_usage() {
+        let f = write_session(&[
+            META_OK,
+            TURN_GPT5,
+            TOKEN_FIRST,
+            TOKEN_FIRST_DUPLICATE,
+            TOKEN_SECOND,
+        ]);
+        let mut seen = HashSet::new();
+
+        let calls = parse_session(&source_for(f.path().to_path_buf()), &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].input_tokens, 18193 - 10624);
+        assert_eq!(calls[0].output_tokens, 371 + 38);
+        assert_eq!(calls[1].input_tokens, 21590 - 10624);
+        assert_eq!(calls[1].output_tokens, 375 + 12);
+    }
+
+    #[test]
+    fn duplicate_cumulative_token_counts_clear_pending_tools() {
+        let f = write_session(&[
+            META_OK,
+            TURN_GPT5,
+            TOKEN_FIRST,
+            EXEC_LS,
+            TOKEN_FIRST_DUPLICATE,
+            TOKEN_SECOND,
+        ]);
+        let mut seen = HashSet::new();
+
+        let calls = parse_session(&source_for(f.path().to_path_buf()), &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 2);
+        assert!(calls[1].tools.is_empty());
+        assert!(calls[1].bash_commands.is_empty());
     }
 
     #[test]
