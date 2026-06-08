@@ -1,6 +1,6 @@
 {
   "_metadata": {
-    "checked_at": "2026-06-01",
+    "checked_at": "2026-06-08",
     "fields": {
       "cache_read": "USD per cache read token",
       "cache_write": "USD per cache write token",
@@ -137,10 +137,10 @@
       "web_search": 0.01
     },
     "anthropic.claude-sonnet-4-5-20250929-v1:0": {
-      "cache_read": 3.3e-7,
-      "cache_write": 4.125e-6,
-      "input": 3.3e-6,
-      "output": 0.0000165,
+      "cache_read": 3.6e-7,
+      "cache_write": 4.5e-6,
+      "input": 3.6e-6,
+      "output": 0.000018,
       "web_search": 0.01
     },
     "anthropic.claude-sonnet-4-6": {
@@ -811,6 +811,9 @@
       "output": 0.00001,
       "web_search": 0.01
     },
+    "gemini-25-flash-image": {
+      "web_search": 0.01
+    },
     "gemini-3-flash-preview": {
       "cache_read": 5e-8,
       "input": 5e-7,
@@ -1452,6 +1455,13 @@
       "output": 5.5e-6,
       "web_search": 0.01
     },
+    "jp.anthropic.claude-opus-4-7": {
+      "cache_read": 5.5e-7,
+      "cache_write": 6.875e-6,
+      "input": 5.5e-6,
+      "output": 0.0000275,
+      "web_search": 0.01
+    },
     "jp.anthropic.claude-sonnet-4-5-20250929-v1:0": {
       "cache_read": 3.3e-7,
       "cache_write": 4.125e-6,
@@ -1606,6 +1616,22 @@
     "openai-gpt-4o-mini": {
       "web_search": 0.01
     },
+    "openai-gpt-5": {
+      "cache_read": 1.25e-7,
+      "input": 1.25e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
+    "openai-gpt-5-mini": {
+      "input": 3e-7,
+      "output": 1.2e-6,
+      "web_search": 0.01
+    },
+    "openai-gpt-5-nano": {
+      "input": 1.5e-7,
+      "output": 6e-7,
+      "web_search": 0.01
+    },
     "openai-o3": {
       "input": 2e-6,
       "output": 8e-6,
@@ -1631,11 +1657,23 @@
       "output": 4e-7,
       "web_search": 0.01
     },
-    "us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0": {
-      "cache_read": 3.3e-7,
-      "cache_write": 4.125e-6,
-      "input": 3.3e-6,
+    "openai.gpt-5.4": {
+      "cache_read": 2.75e-7,
+      "input": 2.75e-6,
       "output": 0.0000165,
+      "web_search": 0.01
+    },
+    "openai.gpt-5.5": {
+      "cache_read": 5.5e-7,
+      "input": 5.5e-6,
+      "output": 0.000033,
+      "web_search": 0.01
+    },
+    "us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0": {
+      "cache_read": 3.6e-7,
+      "cache_write": 4.5e-6,
+      "input": 3.6e-6,
+      "output": 0.000018,
       "web_search": 0.01
     },
     "us.anthropic.claude-3-5-haiku-20241022-v1:0": {
