@@ -1,6 +1,6 @@
 {
   "_metadata": {
-    "checked_at": "2026-06-22",
+    "checked_at": "2026-06-29",
     "fields": {
       "cache_read": "USD per cache read token",
       "cache_write": "USD per cache write token",
@@ -825,6 +825,11 @@
       "output": 0.000012,
       "web_search": 0.01
     },
+    "gemini-3-pro-image": {
+      "input": 2e-6,
+      "output": 0.000012,
+      "web_search": 0.01
+    },
     "gemini-3-pro-image-preview": {
       "input": 2e-6,
       "output": 0.000012,
@@ -834,6 +839,11 @@
       "cache_read": 2e-7,
       "input": 2e-6,
       "output": 0.000012,
+      "web_search": 0.01
+    },
+    "gemini-3.1-flash-image": {
+      "input": 5e-7,
+      "output": 3e-6,
       "web_search": 0.01
     },
     "gemini-3.1-flash-image-preview": {
