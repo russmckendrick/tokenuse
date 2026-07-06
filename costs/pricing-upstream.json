@@ -1,6 +1,6 @@
 {
   "_metadata": {
-    "checked_at": "2026-06-29",
+    "checked_at": "2026-07-06",
     "fields": {
       "cache_read": "USD per cache read token",
       "cache_write": "USD per cache write token",
@@ -150,6 +150,13 @@
       "output": 0.000015,
       "web_search": 0.01
     },
+    "anthropic.claude-sonnet-5": {
+      "cache_read": 2e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
     "apac.anthropic.claude-3-5-sonnet-20240620-v1:0": {
       "cache_read": 3e-7,
       "cache_write": 3.75e-6,
@@ -232,6 +239,13 @@
       "cache_write": 4.125e-6,
       "input": 3.3e-6,
       "output": 0.0000165,
+      "web_search": 0.01
+    },
+    "au.anthropic.claude-sonnet-5": {
+      "cache_read": 2.2e-7,
+      "cache_write": 2.75e-6,
+      "input": 2.2e-6,
+      "output": 0.000011,
       "web_search": 0.01
     },
     "chatgpt-4o-latest": {
@@ -496,6 +510,13 @@
       "output": 0.000015,
       "web_search": 0.01
     },
+    "claude-sonnet-5": {
+      "cache_read": 2e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
     "codex-mini-latest": {
       "cache_read": 3.75e-7,
       "input": 1.5e-6,
@@ -689,6 +710,13 @@
       "cache_write": 4.125e-6,
       "input": 3.3e-6,
       "output": 0.0000165,
+      "web_search": 0.01
+    },
+    "eu.anthropic.claude-sonnet-5": {
+      "cache_read": 2.2e-7,
+      "cache_write": 2.75e-6,
+      "input": 2.2e-6,
+      "output": 0.000011,
       "web_search": 0.01
     },
     "ft:gpt-4o-2024-08-06": {
@@ -1010,6 +1038,13 @@
       "cache_write": 3.75e-6,
       "input": 3e-6,
       "output": 0.000015,
+      "web_search": 0.01
+    },
+    "global.anthropic.claude-sonnet-5": {
+      "cache_read": 2e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
       "web_search": 0.01
     },
     "google.gemini-2.5-flash": {
@@ -1486,6 +1521,13 @@
       "output": 0.0000165,
       "web_search": 0.01
     },
+    "jp.anthropic.claude-sonnet-5": {
+      "cache_read": 2.2e-7,
+      "cache_write": 2.75e-6,
+      "input": 2.2e-6,
+      "output": 0.000011,
+      "web_search": 0.01
+    },
     "l3-70b-euryale-v2.1": {
       "input": 1.48e-6,
       "output": 1.48e-6,
@@ -1803,6 +1845,13 @@
       "cache_write": 4.125e-6,
       "input": 3.3e-6,
       "output": 0.0000165,
+      "web_search": 0.01
+    },
+    "us.anthropic.claude-sonnet-5": {
+      "cache_read": 2.2e-7,
+      "cache_write": 2.75e-6,
+      "input": 2.2e-6,
+      "output": 0.000011,
       "web_search": 0.01
     }
   }
