@@ -647,7 +647,32 @@ mod tests {
     fn opus_47_resolves_with_date_suffix_and_pin() {
         let p = PriceTable::embedded().lookup("anthropic/claude-opus-4-7-20250514@v1");
         assert!(p.input > 0.0);
-        assert!(p.fast_multiplier.is_none());
+        assert_eq!(p.fast_multiplier, Some(6.0));
+    }
+
+    #[test]
+    fn claude_5_family_resolves_with_dated_pricing() {
+        let table = PriceTable::embedded();
+
+        let fable = table.lookup("claude-fable-5");
+        assert!((fable.input * 1e6 - 10.0).abs() < 0.001);
+        assert!(fable.fast_multiplier.is_none());
+
+        let opus_48 = table.lookup("claude-opus-4-8-20260601");
+        assert_eq!(opus_48.fast_multiplier, Some(2.0));
+
+        let intro = table.lookup_for(
+            "claude-code",
+            "claude-sonnet-5",
+            Some(Utc.with_ymd_and_hms(2026, 8, 15, 12, 0, 0).unwrap()),
+        );
+        let standard = table.lookup_for(
+            "claude-code",
+            "claude-sonnet-5",
+            Some(Utc.with_ymd_and_hms(2026, 9, 2, 12, 0, 0).unwrap()),
+        );
+        assert!((intro.input * 1e6 - 2.0).abs() < 0.001);
+        assert!((standard.input * 1e6 - 3.0).abs() < 0.001);
     }
 
     #[test]
@@ -747,23 +772,28 @@ mod tests {
         let opus_46_fast = cost("claude-opus-4-6", &call, Speed::Fast);
         let opus_47_std = cost("claude-opus-4-7", &call, Speed::Standard);
         let opus_47_fast = cost("claude-opus-4-7", &call, Speed::Fast);
+        let opus_48_std = cost("claude-opus-4-8", &call, Speed::Standard);
+        let opus_48_fast = cost("claude-opus-4-8", &call, Speed::Fast);
 
         assert!((standard - 3.0).abs() < 0.001);
         assert!((opus_46_fast / opus_46_std - 6.0).abs() < 0.001);
-        assert!((opus_47_fast - opus_47_std).abs() < 0.001);
+        assert!((opus_47_fast / opus_47_std - 6.0).abs() < 0.001);
+        assert!((opus_48_fast / opus_48_std - 2.0).abs() < 0.001);
     }
 
     #[test]
     fn copilot_pricing_is_gated_until_june_2026() {
-        let before = call_at("copilot", "Grok Code Fast 1", (2026, 5, 31));
-        let after = call_at("copilot", "Grok Code Fast 1", (2026, 6, 1));
-        let codex_after = call_at("codex", "Grok Code Fast 1", (2026, 6, 1));
+        // Uses a Copilot-only model row (no global upstream coverage) so the
+        // pre-June date exercises the fallback path.
+        let before = call_at("copilot", "MAI-Code-1-Flash", (2026, 5, 31));
+        let after = call_at("copilot", "MAI-Code-1-Flash", (2026, 6, 1));
+        let codex_after = call_at("codex", "MAI-Code-1-Flash", (2026, 6, 1));
 
         let before_cost = cost(&before.model, &before, Speed::Standard);
         let after_cost = cost(&after.model, &after, Speed::Standard);
         let codex_cost = cost(&codex_after.model, &codex_after, Speed::Standard);
 
-        assert!((after_cost - 1.72).abs() < 0.001);
+        assert!((after_cost - 5.325).abs() < 0.001);
         assert!((before_cost - after_cost).abs() > 0.001);
         assert!((codex_cost - before_cost).abs() < 0.001);
     }
