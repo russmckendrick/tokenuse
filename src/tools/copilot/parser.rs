@@ -337,6 +337,158 @@ impl Drop for StoreCopy {
     }
 }
 
+struct UsageEvent {
+    id: i64,
+    turn_index: Option<i64>,
+    model: String,
+    input_tokens: u64,
+    output_tokens: u64,
+    cache_read_tokens: u64,
+    cache_write_tokens: u64,
+    reasoning_tokens: u64,
+    timestamp: Option<DateTime<Utc>>,
+    project: String,
+}
+
+/// Per-request usage rows written by newer CLI builds. Older stores have no
+/// `assistant_usage_events` table, which surfaces as a prepare error and an
+/// empty map — the caller then keeps the chars/4 estimate path.
+fn load_usage_events(
+    conn: &Connection,
+    fallback_project: &str,
+) -> HashMap<String, Vec<UsageEvent>> {
+    let Ok(mut stmt) = conn.prepare(config::CLI_USAGE_EVENTS_SQL) else {
+        return HashMap::new();
+    };
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, Option<i64>>(2)?,
+            row.get::<_, Option<String>>(3)?,
+            row.get::<_, Option<i64>>(4)?,
+            row.get::<_, Option<i64>>(5)?,
+            row.get::<_, Option<i64>>(6)?,
+            row.get::<_, Option<i64>>(7)?,
+            row.get::<_, Option<i64>>(8)?,
+            row.get::<_, Option<String>>(9)?,
+            row.get::<_, Option<String>>(10)?,
+            row.get::<_, Option<String>>(11)?,
+        ))
+    });
+    let Ok(rows) = rows else {
+        return HashMap::new();
+    };
+
+    let mut events: HashMap<String, Vec<UsageEvent>> = HashMap::new();
+    for row in rows.flatten() {
+        let (
+            id,
+            session_id,
+            turn_index,
+            model,
+            input,
+            output,
+            cache_read,
+            cache_write,
+            reasoning,
+            created_at,
+            cwd,
+            repository,
+        ) = row;
+        let project = store_project(cwd.as_deref(), repository.as_deref(), fallback_project);
+        events.entry(session_id).or_default().push(UsageEvent {
+            id,
+            turn_index,
+            model: model.unwrap_or_default(),
+            input_tokens: input.unwrap_or(0).max(0) as u64,
+            output_tokens: output.unwrap_or(0).max(0) as u64,
+            cache_read_tokens: cache_read.unwrap_or(0).max(0) as u64,
+            cache_write_tokens: cache_write.unwrap_or(0).max(0) as u64,
+            reasoning_tokens: reasoning.unwrap_or(0).max(0) as u64,
+            timestamp: created_at.as_deref().and_then(parse_store_timestamp),
+            project,
+        });
+    }
+    events
+}
+
+fn usage_dedup_key(session_id: &str, event: &UsageEvent) -> String {
+    // Encoding the covered turn in the key lets the archive zero exactly the
+    // superseded chars/4 estimate row (`copilot:<sid>:turn-<idx>`).
+    match event.turn_index {
+        Some(turn) => format!(
+            "copilot:{session_id}{}{turn}{}{}",
+            config::CLI_TURN_DEDUP_MARKER,
+            config::CLI_USAGE_DEDUP_MARKER,
+            event.id
+        ),
+        None => format!(
+            "copilot:{session_id}{}{}",
+            config::CLI_USAGE_DEDUP_MARKER,
+            event.id
+        ),
+    }
+}
+
+fn usage_event_calls(
+    events_by_session: &HashMap<String, Vec<UsageEvent>>,
+    turn_messages: &HashMap<(String, i64), String>,
+    seen: &mut HashSet<String>,
+) -> Vec<ParsedCall> {
+    let mut sessions: Vec<_> = events_by_session.iter().collect();
+    sessions.sort_by(|a, b| a.0.cmp(b.0));
+
+    let mut calls = Vec::new();
+    for (session_id, events) in sessions {
+        let mut message_taken: HashSet<i64> = HashSet::new();
+        for event in events {
+            let dedup_key = usage_dedup_key(session_id, event);
+            if !seen.insert(dedup_key.clone()) {
+                continue;
+            }
+
+            let user_message = event
+                .turn_index
+                .filter(|turn| message_taken.insert(*turn))
+                .and_then(|turn| turn_messages.get(&(session_id.clone(), turn)))
+                .map(|message| truncate(message, 500))
+                .unwrap_or_default();
+            let model = if event.model.trim().is_empty() {
+                COPILOT_AUTO.to_string()
+            } else {
+                event.model.clone()
+            };
+            // The store's input_tokens column includes cache reads (verified
+            // against token_details_json); subtract before pricing, the same
+            // convention as the data.db aggregates.
+            let cache_read = event.cache_read_tokens.min(event.input_tokens);
+            let input_tokens = event.input_tokens - cache_read;
+
+            let mut call = ParsedCall {
+                tool: config::TOOL_ID,
+                model: model.clone(),
+                input_tokens,
+                output_tokens: event.output_tokens,
+                cache_creation_input_tokens: event.cache_write_tokens,
+                cache_read_input_tokens: cache_read,
+                cached_input_tokens: cache_read,
+                reasoning_tokens: event.reasoning_tokens,
+                speed: Speed::Standard,
+                timestamp: event.timestamp,
+                dedup_key,
+                user_message,
+                session_id: session_id.clone(),
+                project: event.project.clone(),
+                ..ParsedCall::default()
+            };
+            call.cost_usd = pricing::cost(&model, &call, Speed::Standard);
+            calls.push(call);
+        }
+    }
+    calls
+}
+
 fn parse_session_store(
     path: &Path,
     source: &SessionSource,
@@ -348,8 +500,11 @@ fn parse_session_store(
     let Ok(conn) = store.open() else {
         return Vec::new();
     };
+
+    let usage_events = load_usage_events(&conn, &source.project);
+
     let Ok(mut stmt) = conn.prepare(config::CLI_TURNS_SQL) else {
-        return Vec::new();
+        return usage_event_calls(&usage_events, &HashMap::new(), seen);
     };
     let rows = stmt.query_map([], |row| {
         Ok((
@@ -363,13 +518,38 @@ fn parse_session_store(
         ))
     });
     let Ok(rows) = rows else {
-        return Vec::new();
+        return usage_event_calls(&usage_events, &HashMap::new(), seen);
     };
+    let turn_rows: Vec<_> = rows.flatten().collect();
 
-    let mut calls = Vec::new();
-    for row in rows.flatten() {
+    let mut turn_messages: HashMap<(String, i64), String> = HashMap::new();
+    for (session_id, turn_index, user_message, ..) in &turn_rows {
+        if let Some(message) = user_message {
+            if !message.trim().is_empty() {
+                turn_messages
+                    .entry((session_id.clone(), *turn_index))
+                    .or_insert_with(|| message.clone());
+            }
+        }
+    }
+    let evented_turns: HashSet<(String, i64)> = usage_events
+        .iter()
+        .flat_map(|(session_id, events)| {
+            events
+                .iter()
+                .filter_map(|event| event.turn_index.map(|turn| (session_id.clone(), turn)))
+        })
+        .collect();
+
+    let mut calls = usage_event_calls(&usage_events, &turn_messages, seen);
+
+    for row in turn_rows {
         let (session_id, turn_index, user_message, assistant_response, timestamp, cwd, repository) =
             row;
+        // Turns covered by real usage rows would double count as estimates.
+        if evented_turns.contains(&(session_id.clone(), turn_index)) {
+            continue;
+        }
         let user_message = user_message.unwrap_or_default();
         let assistant_response = assistant_response.unwrap_or_default();
         if user_message.trim().is_empty() && assistant_response.trim().is_empty() {
@@ -405,11 +585,74 @@ fn parse_session_store(
     calls
 }
 
+/// A signed-in account from the Copilot CLI's data.db `accounts` table. The
+/// CLI itself stores the access token in plaintext; tokenuse only reads it in
+/// memory for the explicit quota sync and never rewrites it anywhere except
+/// the request Authorization header.
+#[cfg(feature = "quota-sync")]
+pub(crate) struct CliAccount {
+    pub login: String,
+    pub host: String,
+    pub token: String,
+}
+
+#[cfg(feature = "quota-sync")]
+pub(crate) fn cli_accounts(data_db_path: &Path) -> Vec<CliAccount> {
+    let Some(store) = StoreCopy::new(data_db_path) else {
+        return Vec::new();
+    };
+    let Ok(conn) = store.open() else {
+        return Vec::new();
+    };
+    let Ok(mut stmt) = conn.prepare(config::CLI_ACCOUNTS_SQL) else {
+        return Vec::new();
+    };
+    let Ok(rows) = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+        ))
+    }) else {
+        return Vec::new();
+    };
+    rows.flatten()
+        .map(|(login, host, token)| CliAccount { login, host, token })
+        .collect()
+}
+
+/// Session ids with per-request usage rows in the sibling session-store.db.
+/// Their data.db aggregates describe the same requests and would double count
+/// (verified: both stores share session ids and identical token totals).
+fn sibling_usage_session_ids(data_db_path: &Path) -> HashSet<String> {
+    let Some(dir) = data_db_path.parent() else {
+        return HashSet::new();
+    };
+    let store_path = dir.join(config::CLI_SESSION_STORE_FILE);
+    if !store_path.is_file() {
+        return HashSet::new();
+    }
+    let Some(store) = StoreCopy::new(&store_path) else {
+        return HashSet::new();
+    };
+    let Ok(conn) = store.open() else {
+        return HashSet::new();
+    };
+    let Ok(mut stmt) = conn.prepare(config::CLI_USAGE_SESSIONS_SQL) else {
+        return HashSet::new();
+    };
+    let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) else {
+        return HashSet::new();
+    };
+    rows.flatten().collect()
+}
+
 fn parse_data_store(
     path: &Path,
     source: &SessionSource,
     seen: &mut HashSet<String>,
 ) -> Vec<ParsedCall> {
+    let covered = sibling_usage_session_ids(path);
     let Some(store) = StoreCopy::new(path) else {
         return Vec::new();
     };
@@ -438,6 +681,9 @@ fn parse_data_store(
     let mut calls = Vec::new();
     for row in rows.flatten() {
         let (id, model, input, output, cached, reasoning, created_at, updated_at) = row;
+        if covered.contains(&id) {
+            continue;
+        }
         let total_input = input.max(0) as u64;
         let output_tokens = output.max(0) as u64;
         let cached_tokens = (cached.max(0) as u64).min(total_input);
@@ -884,6 +1130,117 @@ mod tests {
             call.timestamp.map(|ts| ts.to_rfc3339()),
             Some("2026-07-01T11:00:00+00:00".to_string())
         );
+    }
+
+    #[test]
+    fn usage_events_supersede_turn_estimates() {
+        let dir = TempDir::new();
+        let db_path = dir.path().join(config::CLI_SESSION_STORE_FILE);
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions (id TEXT PRIMARY KEY, cwd TEXT, repository TEXT, host_type TEXT, branch TEXT, summary TEXT, created_at TEXT, updated_at TEXT);
+             CREATE TABLE turns (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, turn_index INTEGER NOT NULL, user_message TEXT, assistant_response TEXT, timestamp TEXT);
+             CREATE TABLE assistant_usage_events (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, turn_index INTEGER, agent_id TEXT, parent_tool_call_id TEXT, model TEXT NOT NULL, input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, reasoning_tokens INTEGER, total_nano_aiu INTEGER, request_multiplier REAL, duration_ms INTEGER, time_to_first_token_ms INTEGER, inter_token_latency_ms INTEGER, initiator TEXT, api_endpoint TEXT, reasoning_effort TEXT, finish_reason TEXT, content_filter_triggered INTEGER, token_details_json TEXT, created_at TEXT);
+             INSERT INTO sessions (id, cwd) VALUES ('sess-ev', '/Users/me/Code/tokens');
+             INSERT INTO turns (session_id, turn_index, user_message, assistant_response, timestamp) VALUES ('sess-ev', 0, 'fix the bug', 'done', '2026-07-11T13:43:23.000Z');
+             INSERT INTO turns (session_id, turn_index, user_message, assistant_response, timestamp) VALUES ('sess-ev', 1, 'turn without events', 'estimated reply', '2026-07-11T13:50:00.000Z');
+             INSERT INTO assistant_usage_events (session_id, turn_index, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, created_at) VALUES ('sess-ev', 0, 'gpt-5.3-codex', 27803, 122, 27392, 0, 44, '2026-07-11T13:43:25.000Z');
+             INSERT INTO assistant_usage_events (session_id, turn_index, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, created_at) VALUES ('sess-ev', 0, 'gpt-5.3-codex', 28034, 233, 27776, 128, 168, '2026-07-11T13:44:00.000Z');",
+        )
+        .unwrap();
+        drop(conn);
+
+        let source = SessionSource::session(db_path, "copilot-cli", config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source, &mut seen).unwrap();
+
+        assert_eq!(
+            calls.len(),
+            3,
+            "two usage rows plus one uncovered estimate turn"
+        );
+
+        let first = &calls[0];
+        assert_eq!(first.dedup_key, "copilot:sess-ev:turn-0:usage-1");
+        assert_eq!(first.model, "gpt-5.3-codex");
+        assert_eq!(first.input_tokens, 411, "cache reads subtracted from input");
+        assert_eq!(first.cache_read_input_tokens, 27_392);
+        assert_eq!(first.cached_input_tokens, 27_392);
+        assert_eq!(first.output_tokens, 122);
+        assert_eq!(first.reasoning_tokens, 44);
+        assert_eq!(first.user_message, "fix the bug");
+        assert_eq!(first.project, "/Users/me/Code/tokens");
+        assert!(first.cost_usd > 0.0);
+        assert!(first.timestamp.is_some());
+
+        let second = &calls[1];
+        assert_eq!(second.dedup_key, "copilot:sess-ev:turn-0:usage-2");
+        assert_eq!(second.cache_creation_input_tokens, 128);
+        assert_eq!(
+            second.user_message, "",
+            "the turn message attaches only to the first usage row"
+        );
+
+        let estimate = &calls[2];
+        assert_eq!(estimate.dedup_key, "copilot:sess-ev:turn-1");
+        assert_eq!(estimate.model, "copilot-auto");
+    }
+
+    #[cfg(feature = "quota-sync")]
+    #[test]
+    fn cli_accounts_reads_signed_in_hosts() {
+        let dir = TempDir::new();
+        let db_path = dir.path().join(config::CLI_DATA_STORE_FILE);
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE accounts (id TEXT PRIMARY KEY, login TEXT NOT NULL, host TEXT NOT NULL DEFAULT 'github.com', is_default INTEGER NOT NULL DEFAULT 0, access_token TEXT);
+             INSERT INTO accounts VALUES ('a', 'octocat', 'github.com', 1, 'gho_personal');
+             INSERT INTO accounts VALUES ('b', 'worky', 'octocorp.ghe.com', 0, 'gho_work');
+             INSERT INTO accounts VALUES ('c', 'tokenless', 'github.com', 0, NULL);",
+        )
+        .unwrap();
+        drop(conn);
+
+        let accounts = cli_accounts(&db_path);
+
+        assert_eq!(accounts.len(), 2);
+        assert_eq!(accounts[0].login, "octocat");
+        assert_eq!(accounts[0].token, "gho_personal");
+        assert_eq!(accounts[1].host, "octocorp.ghe.com");
+    }
+
+    #[test]
+    fn data_store_skips_sessions_covered_by_usage_events() {
+        let dir = TempDir::new();
+        let store_path = dir.path().join(config::CLI_SESSION_STORE_FILE);
+        let conn = Connection::open(&store_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE assistant_usage_events (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, turn_index INTEGER, model TEXT NOT NULL, input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, reasoning_tokens INTEGER, created_at TEXT);
+             INSERT INTO assistant_usage_events (session_id, turn_index, model, input_tokens, output_tokens) VALUES ('app-1', 0, 'gpt-5.3-codex', 100, 10);",
+        )
+        .unwrap();
+        drop(conn);
+
+        let data_path = dir.path().join(config::CLI_DATA_STORE_FILE);
+        let conn = Connection::open(&data_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions (id TEXT PRIMARY KEY, model TEXT, total_input_tokens INTEGER NOT NULL DEFAULT 0, total_output_tokens INTEGER NOT NULL DEFAULT 0, total_cached_tokens INTEGER NOT NULL DEFAULT 0, total_reasoning_tokens INTEGER NOT NULL DEFAULT 0, created_at TEXT, updated_at TEXT);
+             INSERT INTO sessions VALUES ('app-1', 'auto', 100, 10, 0, 0, '2026-07-11T13:43:15.000Z', '2026-07-11T14:00:00.000Z');
+             INSERT INTO sessions VALUES ('app-2', 'gpt-5', 500, 50, 0, 0, '2026-07-01T10:00:00.000Z', '2026-07-01T11:00:00.000Z');",
+        )
+        .unwrap();
+        drop(conn);
+
+        let source = SessionSource::session(data_path, "copilot-cli", config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source, &mut seen).unwrap();
+
+        assert_eq!(
+            calls.len(),
+            1,
+            "the session covered by usage events is skipped"
+        );
+        assert_eq!(calls[0].dedup_key, "copilot:cli:app-2");
     }
 
     #[test]

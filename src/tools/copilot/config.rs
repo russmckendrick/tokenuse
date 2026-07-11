@@ -35,6 +35,91 @@ pub const CLI_APP_SESSIONS_SQL: &str = "
            total_reasoning_tokens, created_at, updated_at
     FROM sessions";
 
+// Newer CLI builds (~July 2026) also write per-request usage rows with real
+// token counts, cache buckets, and the actual serving model. When present
+// they supersede both the chars/4 turn estimates and the data.db aggregates.
+pub const CLI_USAGE_EVENTS_SQL: &str = "
+    SELECT e.id, e.session_id, e.turn_index, e.model,
+           e.input_tokens, e.output_tokens, e.cache_read_tokens,
+           e.cache_write_tokens, e.reasoning_tokens, e.created_at,
+           s.cwd, s.repository
+    FROM assistant_usage_events e
+    LEFT JOIN sessions s ON s.id = e.session_id
+    ORDER BY e.session_id, e.id";
+
+pub const CLI_USAGE_SESSIONS_SQL: &str = "SELECT DISTINCT session_id FROM assistant_usage_events";
+
+pub const CLI_USAGE_DEDUP_MARKER: &str = ":usage-";
+pub const CLI_TURN_DEDUP_MARKER: &str = ":turn-";
+
+// The Copilot CLI keeps signed-in accounts (including non-github.com hosts)
+// in data.db; access_token is stored in plaintext by the CLI itself.
+pub const CLI_ACCOUNTS_SQL: &str = "
+    SELECT login, host, access_token
+    FROM accounts
+    WHERE access_token IS NOT NULL AND length(access_token) > 0
+    ORDER BY is_default DESC, login";
+
+pub const ENV_TOKEN_VARS: [&str; 3] = ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"];
+pub const ENV_HOST_VARS: [&str; 2] = ["COPILOT_GH_HOST", "GH_HOST"];
+pub const DEFAULT_HOST: &str = "github.com";
+
+/// Copilot's user-quota endpoint for a host. github.com and GitHub Enterprise
+/// Cloud data-residency tenants (`*.ghe.com`, endpoint `api.<host>`) are
+/// supported; other hosts are skipped. Tokens are region-locked, so the host
+/// that supplied a token must also serve its quota request.
+pub fn copilot_user_url(host: &str) -> Option<String> {
+    let host = host.trim().trim_matches('/').to_ascii_lowercase();
+    if host.is_empty() {
+        return None;
+    }
+    if host == DEFAULT_HOST {
+        return Some(COPILOT_INTERNAL_USER_URL.to_string());
+    }
+    if host.ends_with(".ghe.com") {
+        return Some(format!("https://api.{host}/copilot_internal/user"));
+    }
+    None
+}
+
+/// File name for a per-account limit sidecar, e.g.
+/// `copilot-github.com-octocat.json`. The account-less name stays
+/// `copilot.json` (the legacy single-account sidecar).
+pub fn account_sidecar_file_name(host: &str, login: Option<&str>) -> String {
+    let mut label = sanitize_file_component(host);
+    if let Some(login) = login.map(str::trim).filter(|login| !login.is_empty()) {
+        label.push('-');
+        label.push_str(&sanitize_file_component(login));
+    }
+    format!("copilot-{label}.json")
+}
+
+fn sanitize_file_component(raw: &str) -> String {
+    raw.trim()
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
+pub fn is_limit_sidecar_name(name: &str) -> bool {
+    name == LIMIT_SIDECAR_FILE || (name.starts_with("copilot-") && name.ends_with(".json"))
+}
+
+/// gh CLI config directory (`hosts.yml` lives here). gh uses `~/.config/gh`
+/// on every platform, overridable via GH_CONFIG_DIR.
+pub fn gh_config_dir() -> Option<PathBuf> {
+    if let Some(dir) = paths::env_path("GH_CONFIG_DIR") {
+        return Some(dir);
+    }
+    paths::home().map(|home| home.join(".config").join("gh"))
+}
+
 pub fn legacy_root() -> Option<PathBuf> {
     paths::home().map(|h| h.join(LEGACY_DIR))
 }
@@ -85,4 +170,46 @@ pub fn credential_files() -> Vec<PathBuf> {
     files.sort();
     files.dedup();
     files
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn copilot_user_url_routes_supported_hosts() {
+        assert_eq!(
+            copilot_user_url("github.com").as_deref(),
+            Some("https://api.github.com/copilot_internal/user")
+        );
+        assert_eq!(
+            copilot_user_url("OctoCorp.ghe.com").as_deref(),
+            Some("https://api.octocorp.ghe.com/copilot_internal/user")
+        );
+        assert_eq!(copilot_user_url("github.example.com"), None);
+        assert_eq!(copilot_user_url(""), None);
+    }
+
+    #[test]
+    fn account_sidecar_names_are_sanitized() {
+        assert_eq!(
+            account_sidecar_file_name("github.com", Some("R-McKendrick_Node4")),
+            "copilot-github.com-R-McKendrick_Node4.json"
+        );
+        assert_eq!(
+            account_sidecar_file_name("octo corp/ghe", None),
+            "copilot-octo-corp-ghe.json"
+        );
+    }
+
+    #[test]
+    fn limit_sidecar_names_cover_legacy_and_account_files() {
+        assert!(is_limit_sidecar_name("copilot.json"));
+        assert!(is_limit_sidecar_name("copilot-github.com-octocat.json"));
+        assert!(!is_limit_sidecar_name("copilot_subscription.json"));
+        assert!(!is_limit_sidecar_name("claude-code.json"));
+        assert!(!is_limit_sidecar_name(
+            "copilot-github.com-octocat.json.bak"
+        ));
+    }
 }

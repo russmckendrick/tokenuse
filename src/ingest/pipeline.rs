@@ -101,7 +101,17 @@ impl Ingested {
     }
 
     pub fn limits(&self, tool: Tool, sort: SortMode, currency: &CurrencyFormatter) -> LimitsData {
-        build_limits_data(&self.limits, &self.calls, tool, sort, currency)
+        self.limits_at(tool, sort, currency, chrono::Utc::now())
+    }
+
+    pub fn limits_at(
+        &self,
+        tool: Tool,
+        sort: SortMode,
+        currency: &CurrencyFormatter,
+        now: DateTime<Utc>,
+    ) -> LimitsData {
+        build_limits_data(&self.limits, &self.calls, tool, sort, currency, now)
     }
 
     pub fn session_options(
@@ -242,6 +252,7 @@ fn build_limits_data(
     _tool: Tool,
     sort: SortMode,
     currency: &CurrencyFormatter,
+    now: DateTime<Utc>,
 ) -> LimitsData {
     let mut latest: HashMap<(&'static str, String), &LimitSnapshot> = HashMap::new();
 
@@ -257,11 +268,11 @@ fn build_limits_data(
 
     let mut rows = Vec::new();
     for limit in latest.into_values() {
-        if let Some(window) = limit.primary {
-            rows.push((limit.tool, limit_metric(limit, window)));
-        }
-        if let Some(window) = limit.secondary {
-            rows.push((limit.tool, limit_metric(limit, window)));
+        for window in [limit.primary, limit.secondary].into_iter().flatten() {
+            if limit_window_is_hidden(window, limit.observed_at, now) {
+                continue;
+            }
+            rows.push((limit.tool, limit_metric(limit, window, now)));
         }
     }
 
@@ -603,7 +614,7 @@ fn limit_is_newer(candidate: &LimitSnapshot, existing: &LimitSnapshot) -> bool {
     }
 }
 
-fn limit_metric(limit: &LimitSnapshot, window: LimitWindow) -> LimitMetric {
+fn limit_metric(limit: &LimitSnapshot, window: LimitWindow, now: DateTime<Utc>) -> LimitMetric {
     let used = window.used_percent.round().clamp(0.0, 100.0) as u64;
     let left = (100.0 - window.used_percent).round().clamp(0.0, 100.0) as u64;
     let credits = limit.credits.as_ref();
@@ -612,6 +623,12 @@ fn limit_metric(limit: &LimitSnapshot, window: LimitWindow) -> LimitMetric {
     let used_credits = total_credits
         .zip(remaining_credits)
         .map(|(total, remaining)| (total - remaining).max(0.0));
+    let stale = limit_window_is_stale(window, limit.observed_at, now);
+    let as_of = if stale {
+        leak(format_as_of(limit.observed_at))
+    } else {
+        "-"
+    };
     LimitMetric {
         tool: tool_short_label(limit.tool),
         scope: leak(
@@ -635,7 +652,46 @@ fn limit_metric(limit: &LimitSnapshot, window: LimitWindow) -> LimitMetric {
         remaining_credits,
         total_credits,
         additional_usage: credits.and_then(|credits| credits.additional_usage),
+        stale,
+        as_of,
     }
+}
+
+/// A limit window is stale once its reset has passed (the provider's window
+/// renewed, so the snapshot no longer describes the current one) or, for
+/// windows without a reset, once the observation is more than a week old.
+fn limit_window_is_stale(
+    window: LimitWindow,
+    observed_at: Option<DateTime<Utc>>,
+    now: DateTime<Utc>,
+) -> bool {
+    if let Some(reset) = window.resets_at {
+        return reset < now;
+    }
+    observed_at.is_some_and(|at| now - at > chrono::Duration::days(7))
+}
+
+/// Stale rows stay visible (dimmed) for a week, then drop out of the live
+/// gauges entirely. Reports and exports keep the full snapshot history.
+fn limit_window_is_hidden(
+    window: LimitWindow,
+    observed_at: Option<DateTime<Utc>>,
+    now: DateTime<Utc>,
+) -> bool {
+    if let Some(reset) = window.resets_at {
+        return reset + chrono::Duration::days(7) < now;
+    }
+    observed_at.is_some_and(|at| now - at > chrono::Duration::days(14))
+}
+
+fn format_as_of(observed_at: Option<DateTime<Utc>>) -> String {
+    let Some(ts) = observed_at else {
+        return "-".into();
+    };
+    crate::copy::template(
+        &crate::copy::copy().usage.stale_as_of,
+        &[("date", ts.with_timezone(&Local).format("%d %b").to_string())],
+    )
 }
 
 fn window_rank(label: &str) -> u8 {
@@ -1721,6 +1777,14 @@ mod tests {
         }
     }
 
+    /// Contemporaneous with the mk_limit fixtures (resets 2026-04-29 and
+    /// 2026-05-05), so fixture rows render fresh rather than stale/hidden.
+    fn fixed_now() -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339("2026-04-29T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc)
+    }
+
     fn mk_recent_call(tool: &'static str, cost: f64, input_tokens: u64) -> ParsedCall {
         ParsedCall {
             tool,
@@ -1823,7 +1887,12 @@ mod tests {
             ],
         };
 
-        let data = ingested.limits(Tool::All, SortMode::Spend, &CurrencyFormatter::usd());
+        let data = ingested.limits_at(
+            Tool::All,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+            fixed_now(),
+        );
 
         let codex = data
             .sections
@@ -1837,6 +1906,8 @@ mod tests {
         assert_eq!(codex.limits[0].used, 17);
         assert_eq!(codex.limits[0].left, "83% left");
         assert_eq!(codex.limits[0].plan, "Pro Lite");
+        assert!(!codex.limits[0].stale);
+        assert_eq!(codex.limits[0].as_of, "-");
         assert_eq!(codex.limits[1].window, "weekly");
         assert_eq!(codex.limits[1].used, 6);
         assert_eq!(codex.limits[1].left, "94% left");
@@ -1861,8 +1932,18 @@ mod tests {
             ],
         };
 
-        let codex = ingested.limits(Tool::Codex, SortMode::Spend, &CurrencyFormatter::usd());
-        let claude = ingested.limits(Tool::ClaudeCode, SortMode::Spend, &CurrencyFormatter::usd());
+        let codex = ingested.limits_at(
+            Tool::Codex,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+            fixed_now(),
+        );
+        let claude = ingested.limits_at(
+            Tool::ClaudeCode,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+            fixed_now(),
+        );
 
         let codex_section = codex
             .sections
@@ -1909,7 +1990,12 @@ mod tests {
             ],
         };
 
-        let data = ingested.limits(Tool::All, SortMode::Spend, &CurrencyFormatter::usd());
+        let data = ingested.limits_at(
+            Tool::All,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+            fixed_now(),
+        );
         let claude = data
             .sections
             .iter()
@@ -1951,7 +2037,12 @@ mod tests {
             calls: Vec::new(),
             limits: vec![legacy, limit],
         }
-        .limits(Tool::All, SortMode::Spend, &CurrencyFormatter::usd());
+        .limits_at(
+            Tool::All,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+            fixed_now(),
+        );
 
         let copilot = data
             .sections
@@ -1967,6 +2058,119 @@ mod tests {
         assert_eq!(row.total_credits, Some(1_500.0));
         assert_eq!(row.plan, "Copilot Pro");
         assert_eq!(row.additional_usage, Some(false));
+    }
+
+    fn codex_limit_rows(data: &crate::data::LimitsData) -> &[crate::data::LimitMetric] {
+        &data
+            .sections
+            .iter()
+            .find(|section| section.tool == "Codex")
+            .unwrap()
+            .limits
+    }
+
+    #[test]
+    fn limit_rows_go_stale_once_their_reset_passes() {
+        let ingested = Ingested {
+            calls: Vec::new(),
+            limits: vec![mk_limit("codex", None, "2026-04-29T08:00:00Z", 17.0, 6.0)],
+        };
+        // Primary reset 2026-04-29T15:47 has passed; secondary (2026-05-05)
+        // has not.
+        let now = DateTime::parse_from_rfc3339("2026-04-30T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let data = ingested.limits_at(Tool::All, SortMode::Spend, &CurrencyFormatter::usd(), now);
+
+        let rows = codex_limit_rows(&data);
+        assert_eq!(rows.len(), 2);
+        assert!(rows[0].stale, "5h window reset already passed");
+        assert!(rows[0].as_of.contains("Apr"), "as_of was {}", rows[0].as_of);
+        assert!(!rows[1].stale, "weekly window reset is still ahead");
+        assert_eq!(rows[1].as_of, "-");
+    }
+
+    #[test]
+    fn limit_rows_hide_a_week_after_their_reset() {
+        let ingested = Ingested {
+            calls: Vec::new(),
+            limits: vec![mk_limit("codex", None, "2026-04-29T08:00:00Z", 17.0, 6.0)],
+        };
+        // Primary reset + 7d = 2026-05-06 (hidden); secondary reset + 7d =
+        // 2026-05-12 (still visible, stale).
+        let now = DateTime::parse_from_rfc3339("2026-05-07T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let data = ingested.limits_at(Tool::All, SortMode::Spend, &CurrencyFormatter::usd(), now);
+
+        let rows = codex_limit_rows(&data);
+        assert_eq!(rows.len(), 1, "expired 5h window should be hidden");
+        assert_eq!(rows[0].window, "weekly");
+        assert!(rows[0].stale);
+    }
+
+    #[test]
+    fn no_reset_rows_dim_after_a_week_and_hide_after_two() {
+        let mut limit = mk_limit("codex", None, "2026-04-29T08:00:00Z", 17.0, 0.0);
+        limit.primary = limit.primary.map(|window| LimitWindow {
+            resets_at: None,
+            ..window
+        });
+        limit.secondary = None;
+        let ingested = Ingested {
+            calls: Vec::new(),
+            limits: vec![limit],
+        };
+        let currency = CurrencyFormatter::usd();
+
+        let fresh_now = DateTime::parse_from_rfc3339("2026-05-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let fresh = ingested.limits_at(Tool::All, SortMode::Spend, &currency, fresh_now);
+        assert!(!codex_limit_rows(&fresh)[0].stale);
+
+        let stale_now = DateTime::parse_from_rfc3339("2026-05-07T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let stale = ingested.limits_at(Tool::All, SortMode::Spend, &currency, stale_now);
+        assert!(codex_limit_rows(&stale)[0].stale);
+
+        let hidden_now = DateTime::parse_from_rfc3339("2026-05-14T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let hidden = ingested.limits_at(Tool::All, SortMode::Spend, &currency, hidden_now);
+        assert!(codex_limit_rows(&hidden).is_empty());
+    }
+
+    #[test]
+    fn rows_without_timestamps_never_go_stale() {
+        let mut limit = mk_limit("codex", None, "not-a-timestamp", 17.0, 0.0);
+        limit.primary = limit.primary.map(|window| LimitWindow {
+            resets_at: None,
+            ..window
+        });
+        limit.secondary = None;
+        assert!(limit.observed_at.is_none());
+        let ingested = Ingested {
+            calls: Vec::new(),
+            limits: vec![limit],
+        };
+
+        let far_future = DateTime::parse_from_rfc3339("2027-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let data = ingested.limits_at(
+            Tool::All,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+            far_future,
+        );
+
+        let rows = codex_limit_rows(&data);
+        assert_eq!(rows.len(), 1);
+        assert!(!rows[0].stale);
     }
 
     #[test]

@@ -690,8 +690,50 @@ fn insert_call(tx: &Transaction<'_>, call: &ParsedCall) -> Result<bool> {
         update_existing_cursor_project(tx, call)?;
         update_existing_copilot_cli_totals(tx, call)?;
         update_existing_codex_tool_activity(tx, call, &tools_json, &bash_json)?;
+    } else {
+        zero_superseded_copilot_estimates(tx, call)?;
     }
     Ok(inserted > 0)
+}
+
+/// Newly archived per-request Copilot usage rows supersede two kinds of
+/// previously archived estimates for the same session: the chars/4 turn row
+/// they cover (whose dedup key is encoded in the usage key) and the data.db
+/// aggregate row. Zero the superseded rows' token and cost fields so upgraded
+/// archives don't double count; their message metadata stays.
+fn zero_superseded_copilot_estimates(tx: &Transaction<'_>, call: &ParsedCall) -> Result<()> {
+    if call.tool != crate::tools::copilot::config::TOOL_ID {
+        return Ok(());
+    }
+    let Some((turn_part, _)) = call
+        .dedup_key
+        .split_once(crate::tools::copilot::config::CLI_USAGE_DEDUP_MARKER)
+    else {
+        return Ok(());
+    };
+
+    let mut superseded = vec![format!(
+        "{}{}",
+        crate::tools::copilot::config::CLI_APP_DEDUP_PREFIX,
+        call.session_id
+    )];
+    if turn_part.contains(crate::tools::copilot::config::CLI_TURN_DEDUP_MARKER) {
+        superseded.push(turn_part.to_string());
+    }
+    for dedup_key in superseded {
+        tx.execute(
+            "
+            UPDATE calls
+            SET input_tokens = 0, output_tokens = 0,
+                cache_creation_input_tokens = 0, cache_read_input_tokens = 0,
+                cached_input_tokens = 0, reasoning_tokens = 0, cost_usd = 0
+            WHERE tool = ?1
+              AND dedup_key = ?2
+            ",
+            params![call.tool, dedup_key],
+        )?;
+    }
+    Ok(())
 }
 
 fn update_existing_codex_tool_activity(
@@ -1002,6 +1044,66 @@ mod tests {
 
         assert_eq!(loaded.calls, ingested.calls);
         assert_eq!(loaded.limits, ingested.limits);
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn copilot_usage_rows_zero_superseded_estimates() {
+        let paths = temp_paths("copilot-usage-supersede");
+        let mut archive = Archive::open(&paths).unwrap();
+
+        let mut turn_estimate = sample_call("copilot:sess-1:turn-0");
+        turn_estimate.tool = crate::tools::copilot::config::TOOL_ID;
+        let mut cli_aggregate = sample_call("copilot:cli:sess-1");
+        cli_aggregate.tool = crate::tools::copilot::config::TOOL_ID;
+        let mut untouched_turn = sample_call("copilot:sess-1:turn-1");
+        untouched_turn.tool = crate::tools::copilot::config::TOOL_ID;
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![turn_estimate, cli_aggregate, untouched_turn],
+                limits: Vec::new(),
+            })
+            .unwrap();
+
+        let mut usage = sample_call("copilot:sess-1:turn-0:usage-7");
+        usage.tool = crate::tools::copilot::config::TOOL_ID;
+        usage.input_tokens = 411;
+        usage.cache_read_input_tokens = 27_392;
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![usage],
+                limits: Vec::new(),
+            })
+            .unwrap();
+
+        let loaded = archive.load().unwrap();
+        let by_key = |key: &str| {
+            loaded
+                .calls
+                .iter()
+                .find(|call| call.dedup_key == key)
+                .unwrap()
+        };
+
+        let zeroed_turn = by_key("copilot:sess-1:turn-0");
+        assert_eq!(zeroed_turn.input_tokens, 0);
+        assert_eq!(zeroed_turn.output_tokens, 0);
+        assert_eq!(zeroed_turn.cost_usd, 0.0);
+        assert_eq!(
+            zeroed_turn.user_message, "build the thing",
+            "metadata survives the zeroing"
+        );
+
+        let zeroed_aggregate = by_key("copilot:cli:sess-1");
+        assert_eq!(zeroed_aggregate.input_tokens, 0);
+        assert_eq!(zeroed_aggregate.cost_usd, 0.0);
+
+        let untouched = by_key("copilot:sess-1:turn-1");
+        assert_eq!(untouched.input_tokens, 100, "other turns keep their tokens");
+
+        let usage_row = by_key("copilot:sess-1:turn-0:usage-7");
+        assert_eq!(usage_row.input_tokens, 411);
+
         let _ = fs::remove_dir_all(paths.dir);
     }
 

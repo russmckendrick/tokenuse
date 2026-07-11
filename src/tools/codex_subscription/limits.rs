@@ -279,6 +279,7 @@ fn cookie_header(token: &str) -> String {
 #[cfg(feature = "quota-sync")]
 fn fetch_access_token(session_token: &str) -> Result<String> {
     let raw = ureq::get(&config::auth_session_url())
+        .timeout(crate::quota_sync::HTTP_TIMEOUT)
         .set("accept", "*/*")
         .set("user-agent", config::USER_AGENT)
         .set("referer", config::REFERER)
@@ -361,6 +362,7 @@ fn value_kind(value: &Value) -> &'static str {
 #[cfg(feature = "quota-sync")]
 fn fetch_usage(access_token: &str) -> Result<Value> {
     let raw = ureq::get(&config::usage_url())
+        .timeout(crate::quota_sync::HTTP_TIMEOUT)
         .set("accept", "*/*")
         .set("authorization", &format!("Bearer {access_token}"))
         .set("user-agent", config::USER_AGENT)

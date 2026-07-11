@@ -52,6 +52,8 @@ pub struct LimitMetric {
     pub remaining_credits: Option<f64>,
     pub total_credits: Option<f64>,
     pub additional_usage: Option<bool>,
+    pub stale: bool,
+    pub as_of: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -259,6 +261,10 @@ struct WireLimitMetric {
     total_credits: Option<f64>,
     #[serde(default)]
     additional_usage: Option<bool>,
+    #[serde(default)]
+    stale: bool,
+    #[serde(default)]
+    as_of: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -448,6 +454,12 @@ impl From<WireLimitMetric> for LimitMetric {
             remaining_credits: wire.remaining_credits,
             total_credits: wire.total_credits,
             additional_usage: wire.additional_usage,
+            stale: wire.stale,
+            as_of: if wire.as_of.is_empty() {
+                "-"
+            } else {
+                leak(wire.as_of)
+            },
         }
     }
 }

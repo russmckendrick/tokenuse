@@ -373,6 +373,9 @@ pub struct UsageCopy {
     pub credits_short: String,
     pub additional_enabled: String,
     pub additional_disabled: String,
+    pub stale: String,
+    pub stale_as_of: String,
+    pub org_managed_credits: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -947,6 +950,7 @@ impl CopyDeck {
         )?;
         ensure_template(&self.config.values.statusline_external, &["command"])?;
         ensure_template(&self.status.copilot_limits_synced, &["snapshots", "limits"])?;
+        ensure_template(&self.usage.stale_as_of, &["date"])?;
         ensure_template(&self.status.copilot_limits_sync_failed, &["error"])?;
         ensure_template(
             &self.status.claude_subscription_synced,

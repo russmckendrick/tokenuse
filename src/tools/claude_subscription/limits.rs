@@ -323,7 +323,8 @@ fn call_claude_optional(url: &str, session_key: &str) -> Option<String> {
 
 #[cfg(feature = "quota-sync")]
 fn apply_claude_headers(req: ureq::Request, session_key: &str) -> ureq::Request {
-    req.set("accept", "*/*")
+    req.timeout(crate::quota_sync::HTTP_TIMEOUT)
+        .set("accept", "*/*")
         .set("accept-language", "en-US,en;q=0.9")
         .set("content-type", "application/json")
         .set(

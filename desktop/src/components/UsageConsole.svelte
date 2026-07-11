@@ -53,7 +53,7 @@
       </div>
 
       {#each section.limits as limit}
-        <div class="console-row limit-row">
+        <div class="console-row limit-row" class:stale={limit.stale}>
           <strong>{copy.usage.limit}</strong>
           <span>{limit.scope} {limit.window}</span>
           <div class="limit-used">
@@ -70,7 +70,11 @@
           {:else}
             <span>{limit.left}</span>
           {/if}
-          <span>{limit.reset}</span>
+          {#if limit.stale}
+            <span>{limit.as_of === '-' ? copy.usage.stale : `${limit.as_of} · ${copy.usage.stale}`}</span>
+          {:else}
+            <span>{limit.reset}</span>
+          {/if}
           <span class="plan-state">
             <span>{limit.plan}</span>
             {#if limit.additional_usage !== null}
@@ -172,6 +176,17 @@
 
   .limit-row {
     color: var(--color-muted);
+  }
+
+  .limit-row.stale,
+  .limit-row.stale strong:first-child,
+  .limit-row.stale .plan-state > span,
+  .limit-row.stale .credit-balance strong {
+    color: var(--color-muted);
+  }
+
+  .limit-row.stale {
+    opacity: 0.55;
   }
 
   .limit-used {

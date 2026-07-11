@@ -33,7 +33,7 @@ The **Activity Pulse** and **Activity Trend** panels use D3-backed SVG charts. O
 
 Ranked table bars use the same stepped color ramp as the TUI: blue is lower relative volume, yellow/orange is hotter, and red marks the current high end of the table. These bars are relative to the visible table, not generated report images.
 
-Usage consoles switch the visible period to 24 Hours when opened and ignore the project filter because they are rolling 24-hour tool monitors. Empty tools stay visible with compact idle rows so you can still confirm that Codex, Claude Code, Cursor, Copilot, and Gemini were checked. Copilot AI Credits rows pair the gauge with exact used and remaining/total credit counts, reset time, plan, and an additional-usage status.
+Usage consoles switch the visible period to 24 Hours when opened and ignore the project filter because they are rolling 24-hour tool monitors. Empty tools stay visible with compact idle rows so you can still confirm that Codex, Claude Code, Cursor, Copilot, and Gemini were checked. Copilot AI Credits rows pair the gauge with exact used and remaining/total credit counts, reset time, plan, and an additional-usage status. Business/Enterprise seats whose payload hides per-seat credits render an `AI Credits · managed by your organization` row with the plan name instead of an empty section. Limit rows whose reset has passed (or whose snapshot is over a week old, for windows without a reset) dim with an `as of <date> · stale` note and are hidden a week later.
 
 ## Background Alerts
 

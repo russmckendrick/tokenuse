@@ -11,7 +11,10 @@ pub mod parser;
 
 pub struct Copilot;
 
-const LIMIT_SOURCE_FINGERPRINT_VERSION: &str = "copilot-limit-schema:2";
+const LIMIT_SOURCE_FINGERPRINT_VERSION: &str = "copilot-limit-schema:3";
+// Bumped when the CLI store parsers change what they emit, so archived
+// stores reparse once (v2: assistant_usage_events supersede estimates).
+const CLI_STORE_FINGERPRINT_VERSION: &str = "copilot-cli-schema:2";
 
 impl ToolAdapter for Copilot {
     fn id(&self) -> &'static str {
@@ -60,6 +63,18 @@ impl ToolAdapter for Copilot {
         if source.kind == SessionSourceKind::Limit {
             fingerprint.push('|');
             fingerprint.push_str(LIMIT_SOURCE_FINGERPRINT_VERSION);
+        }
+        if source.kind == SessionSourceKind::Session
+            && source
+                .path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| {
+                    name == config::CLI_SESSION_STORE_FILE || name == config::CLI_DATA_STORE_FILE
+                })
+        {
+            fingerprint.push('|');
+            fingerprint.push_str(CLI_STORE_FINGERPRINT_VERSION);
         }
         Ok(fingerprint)
     }
@@ -136,5 +151,19 @@ mod tests {
             Copilot.source_fingerprint(&session).unwrap(),
             legacy_session_fingerprint
         );
+    }
+
+    #[test]
+    fn cli_store_sources_carry_the_store_schema_version() {
+        for store in [config::CLI_SESSION_STORE_FILE, config::CLI_DATA_STORE_FILE] {
+            let path = PathBuf::from("/tokenuse-copilot-fingerprint-test-missing").join(store);
+            let source = SessionSource::session(path, "copilot-cli", config::TOOL_ID);
+            let base = crate::tools::fingerprint_source(&source).unwrap();
+
+            assert_eq!(
+                Copilot.source_fingerprint(&source).unwrap(),
+                format!("{base}|{CLI_STORE_FINGERPRINT_VERSION}")
+            );
+        }
     }
 }

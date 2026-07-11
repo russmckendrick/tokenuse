@@ -1903,7 +1903,7 @@ impl App {
         let statusline_value = render_statusline_value(copy, statusline_state.as_ref());
         let copilot_limits_value = format!(
             "{} · {}",
-            if self.paths.copilot_limits_file.exists() {
+            if crate::tools::copilot::limits::any_sidecar_present(&self.paths.copilot_limits_file) {
                 &copy.config.values.quota_snapshot_found
             } else {
                 &copy.config.values.quota_snapshot_missing

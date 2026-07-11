@@ -630,19 +630,19 @@ fn render_tool_usage_rows(frame: &mut Frame<'_>, area: Rect, section: &ToolLimit
         .limits
         .iter()
         .map(|limit| {
-            let used_cell = limit.used_credits.map_or_else(
-                || graphs::gauge_cell(limit.used),
-                |credits| {
-                    graphs::gauge_labeled_cell(
-                        limit.used,
-                        format!(
-                            "{} {}",
-                            format_credit_value(credits),
-                            copy.usage.credits_short
-                        ),
-                    )
-                },
-            );
+            let credit_label = limit.used_credits.map(|credits| {
+                format!(
+                    "{} {}",
+                    format_credit_value(credits),
+                    copy.usage.credits_short
+                )
+            });
+            let used_cell = match (limit.stale, credit_label) {
+                (false, None) => graphs::gauge_cell(limit.used),
+                (false, Some(label)) => graphs::gauge_labeled_cell(limit.used, label),
+                (true, None) => graphs::gauge_cell_dim(limit.used),
+                (true, Some(label)) => graphs::gauge_labeled_cell_dim(limit.used, label),
+            };
             let left = match (limit.remaining_credits, limit.total_credits) {
                 (Some(remaining), Some(total)) => format!(
                     "{}/{} {}",
@@ -662,13 +662,41 @@ fn render_tool_usage_rows(frame: &mut Frame<'_>, area: Rect, section: &ToolLimit
             let plan = additional
                 .map(|additional| format!("{} · {additional}", limit.plan))
                 .unwrap_or_else(|| limit.plan.to_string());
+            // Stale rows de-emphasize with the dim token and swap the reset
+            // time for the observation age; hidden rows never reach here.
+            let reset = if limit.stale {
+                if limit.as_of == "-" {
+                    copy.usage.stale.clone()
+                } else {
+                    format!("{} · {}", limit.as_of, copy.usage.stale)
+                }
+            } else {
+                limit.reset.to_string()
+            };
+            let (kind_style, scope_style, left_style, reset_style, plan_style) = if limit.stale {
+                (
+                    theme::dim(),
+                    theme::dim(),
+                    theme::dim(),
+                    theme::dim(),
+                    theme::dim(),
+                )
+            } else {
+                (
+                    theme::base().fg(theme::CYAN),
+                    theme::muted(),
+                    theme::base(),
+                    theme::muted(),
+                    theme::base().fg(theme::YELLOW_SOFT),
+                )
+            };
             Row::new(vec![
-                Cell::from(copy.usage.limit.as_str()).style(theme::base().fg(theme::CYAN)),
-                Cell::from(format!("{} {}", limit.scope, limit.window)).style(theme::muted()),
+                Cell::from(copy.usage.limit.as_str()).style(kind_style),
+                Cell::from(format!("{} {}", limit.scope, limit.window)).style(scope_style),
                 used_cell,
-                Cell::from(left).style(theme::base()),
-                Cell::from(limit.reset).style(theme::muted()),
-                Cell::from(plan).style(theme::base().fg(theme::YELLOW_SOFT)),
+                Cell::from(left).style(left_style),
+                Cell::from(reset).style(reset_style),
+                Cell::from(plan).style(plan_style),
             ])
         })
         .collect();

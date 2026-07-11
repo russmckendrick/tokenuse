@@ -177,7 +177,10 @@
     "used_suffix": "Used",
     "credits_short": "cr",
     "additional_enabled": "Additional enabled",
-    "additional_disabled": "Additional disabled"
+    "additional_disabled": "Additional disabled",
+    "stale": "stale",
+    "stale_as_of": "as of {date}",
+    "org_managed_credits": "AI Credits · managed by your organization"
   },
   "config": {
     "rows": {

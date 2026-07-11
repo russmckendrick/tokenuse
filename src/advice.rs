@@ -340,7 +340,15 @@ pub struct StdAdviceCommandExecutor;
 
 impl AdviceCommandExecutor for StdAdviceCommandExecutor {
     fn output(&self, spec: CommandSpec) -> Result<CommandOutput> {
-        let mut child = Command::new(&spec.program)
+        // Resolve to an absolute path so GUI launches (minimal launchd PATH)
+        // still find Homebrew/user-local installs; fall back to the raw name
+        // for shims the resolver cannot see.
+        let program = spec
+            .program
+            .to_str()
+            .and_then(crate::tools::paths::resolve_executable)
+            .map_or_else(|| spec.program.clone(), std::path::PathBuf::into_os_string);
+        let mut child = Command::new(&program)
             .args(&spec.args)
             .current_dir(&spec.cwd)
             .stdin(if spec.stdin.is_some() {
@@ -778,26 +786,7 @@ fn prompt_digest(prompt: &str) -> String {
 }
 
 fn find_executable(program: &str) -> Option<PathBuf> {
-    let candidate = Path::new(program);
-    if candidate.components().count() > 1 && candidate.is_file() {
-        return Some(candidate.to_path_buf());
-    }
-
-    let path = std::env::var_os("PATH")?;
-    for dir in std::env::split_paths(&path) {
-        let candidate = dir.join(program);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-        #[cfg(windows)]
-        {
-            let candidate = dir.join(format!("{program}.exe"));
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-    None
+    crate::tools::paths::resolve_executable(program)
 }
 
 pub fn token_use_app_project() -> &'static str {

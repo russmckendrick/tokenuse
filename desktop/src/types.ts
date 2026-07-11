@@ -104,6 +104,8 @@ export type LimitMetric = {
   remaining_credits: number | null;
   total_credits: number | null;
   additional_usage: boolean | null;
+  stale: boolean;
+  as_of: string;
 };
 
 export type RecentUsageMetric = {

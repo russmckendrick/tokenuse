@@ -67,13 +67,31 @@ pub fn discover() -> Result<Vec<SessionSource>> {
         }
     }
 
+    // The legacy single-account sidecar is copilot.json; multi-account syncs
+    // write one copilot-<host>-<login>.json per account alongside it.
     if let Some(sidecar) = config::limit_sidecar() {
-        if sidecar.is_file() {
-            sources.push(SessionSource::limit(
-                sidecar,
-                "copilot-limits",
-                config::TOOL_ID,
-            ));
+        if let Some(limits_dir) = sidecar.parent() {
+            if let Ok(entries) = fs::read_dir(limits_dir) {
+                let mut files: Vec<PathBuf> = entries
+                    .flatten()
+                    .map(|entry| entry.path())
+                    .filter(|path| {
+                        path.is_file()
+                            && path
+                                .file_name()
+                                .and_then(|name| name.to_str())
+                                .is_some_and(config::is_limit_sidecar_name)
+                    })
+                    .collect();
+                files.sort();
+                for file in files {
+                    sources.push(SessionSource::limit(
+                        file,
+                        "copilot-limits",
+                        config::TOOL_ID,
+                    ));
+                }
+            }
         }
     }
 
