@@ -4,6 +4,7 @@ use crate::tools::paths;
 
 pub const TOOL_ID: &str = "copilot";
 pub const DISPLAY_NAME: &str = "Copilot";
+pub const CLI_DIR: &str = ".copilot";
 pub const LEGACY_DIR: &str = ".copilot/session-state";
 pub const LEGACY_EVENTS: &str = "events.jsonl";
 pub const WORKSPACE_FILE: &str = "workspace.yaml";
@@ -14,8 +15,32 @@ pub const LIMIT_SIDECAR_FILE: &str = "copilot.json";
 pub const COPILOT_INTERNAL_USER_URL: &str = "https://api.github.com/copilot_internal/user";
 pub const GITHUB_COPILOT_CONFIG_DIR: &str = "github-copilot";
 
+// The Copilot CLI stopped writing per-session events.jsonl around May 2026.
+// Newer builds keep turn history in a central session-store.db and, in the
+// workspace app, per-session token totals in data.db.
+pub const CLI_SESSION_STORE_FILE: &str = "session-store.db";
+pub const CLI_DATA_STORE_FILE: &str = "data.db";
+pub const CLI_STORE_PROJECT_LABEL: &str = "copilot-cli";
+pub const CLI_APP_DEDUP_PREFIX: &str = "copilot:cli:";
+
+pub const CLI_TURNS_SQL: &str = "
+    SELECT t.session_id, t.turn_index, t.user_message, t.assistant_response, t.timestamp,
+           s.cwd, s.repository
+    FROM turns t
+    LEFT JOIN sessions s ON s.id = t.session_id
+    ORDER BY t.session_id, t.turn_index";
+
+pub const CLI_APP_SESSIONS_SQL: &str = "
+    SELECT id, model, total_input_tokens, total_output_tokens, total_cached_tokens,
+           total_reasoning_tokens, created_at, updated_at
+    FROM sessions";
+
 pub fn legacy_root() -> Option<PathBuf> {
     paths::home().map(|h| h.join(LEGACY_DIR))
+}
+
+pub fn cli_root() -> Option<PathBuf> {
+    paths::home().map(|h| h.join(CLI_DIR))
 }
 
 pub fn vscode_workspace_storage_dirs() -> Vec<PathBuf> {

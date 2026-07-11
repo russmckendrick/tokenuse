@@ -54,6 +54,19 @@ pub fn discover() -> Result<Vec<SessionSource>> {
         }
     }
 
+    if let Some(cli_root) = config::cli_root() {
+        for store in [config::CLI_SESSION_STORE_FILE, config::CLI_DATA_STORE_FILE] {
+            let path = cli_root.join(store);
+            if path.is_file() {
+                sources.push(SessionSource::session(
+                    path,
+                    config::CLI_STORE_PROJECT_LABEL.to_string(),
+                    config::TOOL_ID,
+                ));
+            }
+        }
+    }
+
     if let Some(sidecar) = config::limit_sidecar() {
         if sidecar.is_file() {
             sources.push(SessionSource::limit(

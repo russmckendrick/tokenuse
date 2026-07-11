@@ -688,8 +688,46 @@ fn insert_call(tx: &Transaction<'_>, call: &ParsedCall) -> Result<bool> {
     )?;
     if inserted == 0 {
         update_existing_cursor_project(tx, call)?;
+        update_existing_copilot_cli_totals(tx, call)?;
     }
     Ok(inserted > 0)
+}
+
+/// Copilot's data.db rows are running totals for potentially still-live
+/// sessions. Their dedup keys are stable per session, so refresh the archived
+/// row whenever a later sync observes updated totals.
+fn update_existing_copilot_cli_totals(tx: &Transaction<'_>, call: &ParsedCall) -> Result<()> {
+    if call.tool != crate::tools::copilot::config::TOOL_ID
+        || !call
+            .dedup_key
+            .starts_with(crate::tools::copilot::config::CLI_APP_DEDUP_PREFIX)
+    {
+        return Ok(());
+    }
+
+    tx.execute(
+        "
+        UPDATE calls
+        SET model = ?1, input_tokens = ?2, output_tokens = ?3,
+            cache_read_input_tokens = ?4, cached_input_tokens = ?5,
+            reasoning_tokens = ?6, cost_usd = ?7, timestamp = ?8
+        WHERE tool = ?9
+          AND dedup_key = ?10
+        ",
+        params![
+            call.model,
+            u64_to_i64(call.input_tokens),
+            u64_to_i64(call.output_tokens),
+            u64_to_i64(call.cache_read_input_tokens),
+            u64_to_i64(call.cached_input_tokens),
+            u64_to_i64(call.reasoning_tokens),
+            call.cost_usd,
+            datetime_to_db(call.timestamp),
+            call.tool,
+            call.dedup_key,
+        ],
+    )?;
+    Ok(())
 }
 
 fn update_existing_cursor_project(tx: &Transaction<'_>, call: &ParsedCall) -> Result<()> {
