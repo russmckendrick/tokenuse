@@ -41,8 +41,14 @@ struct ResponseItem {
     name: Option<String>,
     #[serde(default)]
     namespace: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "input")]
     arguments: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct NestedToolCall<'a> {
+    name: &'a str,
+    arguments: &'a str,
 }
 
 #[derive(Debug, Deserialize)]
@@ -189,17 +195,13 @@ pub fn parse_session(
                         continue;
                     }
                     let Some(raw_name) = item.name else { continue };
-                    let normalized = normalize_tool(&raw_name, item.namespace.as_deref());
-                    if raw_name == "exec_command" {
-                        if let Some(args_str) = item.arguments.as_deref() {
-                            if let Ok(args) = serde_json::from_str::<ExecArgs>(args_str) {
-                                if let Some(cmd) = args.cmd {
-                                    pending_bash.extend(jsonl::split_bash_commands(&cmd));
-                                }
-                            }
-                        }
-                    }
-                    pending_tools.push(normalized);
+                    record_tool_activity(
+                        &raw_name,
+                        item.namespace.as_deref(),
+                        item.arguments.as_deref(),
+                        &mut pending_tools,
+                        &mut pending_bash,
+                    );
                 }
             }
             "event_msg" => {
@@ -386,6 +388,8 @@ impl From<RateLimitCredits> for LimitCredits {
             has_credits: value.has_credits,
             unlimited: value.unlimited,
             balance: value.balance,
+            total: None,
+            additional_usage: None,
         }
     }
 }
@@ -451,6 +455,226 @@ fn normalize_tool(name: &str, namespace: Option<&str>) -> String {
         "web_search" => "WebSearch".to_string(),
         other => other.to_string(),
     }
+}
+
+fn record_tool_activity(
+    raw_name: &str,
+    namespace: Option<&str>,
+    arguments: Option<&str>,
+    pending_tools: &mut Vec<String>,
+    pending_bash: &mut Vec<String>,
+) {
+    if raw_name == "exec" {
+        let nested = arguments.map(nested_tool_calls).unwrap_or_default();
+        if !nested.is_empty() {
+            for call in nested {
+                if call.name == "exec_command" {
+                    if let Some(cmd) = extract_js_cmd(call.arguments) {
+                        pending_bash.extend(jsonl::split_bash_commands(&cmd));
+                    }
+                }
+                pending_tools.push(normalize_tool(call.name, None));
+            }
+            return;
+        }
+    }
+
+    if raw_name == "exec_command" {
+        if let Some(args_str) = arguments {
+            if let Ok(args) = serde_json::from_str::<ExecArgs>(args_str) {
+                if let Some(cmd) = args.cmd {
+                    pending_bash.extend(jsonl::split_bash_commands(&cmd));
+                }
+            }
+        }
+    }
+    pending_tools.push(normalize_tool(raw_name, namespace));
+}
+
+fn nested_tool_calls(script: &str) -> Vec<NestedToolCall<'_>> {
+    let bytes = script.as_bytes();
+    let mut calls = Vec::new();
+    let mut index = 0;
+
+    while index < bytes.len() {
+        if is_js_quote(bytes[index]) {
+            index = skip_js_string(bytes, index);
+            continue;
+        }
+        if let Some(next) = skip_js_comment(bytes, index) {
+            index = next;
+            continue;
+        }
+        if bytes[index..].starts_with(b"tools.")
+            && (index == 0 || !is_js_identifier_byte(bytes[index - 1]))
+        {
+            let name_start = index + "tools.".len();
+            let mut name_end = name_start;
+            while name_end < bytes.len() && is_js_identifier_byte(bytes[name_end]) {
+                name_end += 1;
+            }
+            let mut open = name_end;
+            while open < bytes.len() && bytes[open].is_ascii_whitespace() {
+                open += 1;
+            }
+            if name_end > name_start && bytes.get(open) == Some(&b'(') {
+                if let Some(close) = matching_js_paren(bytes, open) {
+                    calls.push(NestedToolCall {
+                        name: &script[name_start..name_end],
+                        arguments: &script[open + 1..close],
+                    });
+                }
+            }
+            index = name_end;
+            continue;
+        }
+        index += 1;
+    }
+
+    calls
+}
+
+fn extract_js_cmd(arguments: &str) -> Option<String> {
+    let bytes = arguments.as_bytes();
+    let mut index = 0;
+
+    while index < bytes.len() {
+        if is_js_quote(bytes[index]) {
+            index = skip_js_string(bytes, index);
+            continue;
+        }
+        if let Some(next) = skip_js_comment(bytes, index) {
+            index = next;
+            continue;
+        }
+        if bytes[index..].starts_with(b"cmd")
+            && (index == 0 || !is_js_identifier_byte(bytes[index - 1]))
+            && bytes
+                .get(index + 3)
+                .is_none_or(|byte| !is_js_identifier_byte(*byte))
+        {
+            let mut value_start = index + 3;
+            while bytes.get(value_start).is_some_and(u8::is_ascii_whitespace) {
+                value_start += 1;
+            }
+            if bytes.get(value_start) != Some(&b':') {
+                index += 3;
+                continue;
+            }
+            value_start += 1;
+            while bytes.get(value_start).is_some_and(u8::is_ascii_whitespace) {
+                value_start += 1;
+            }
+            return parse_js_string(arguments, value_start).map(|(value, _)| value);
+        }
+        index += 1;
+    }
+
+    None
+}
+
+fn parse_js_string(input: &str, start: usize) -> Option<(String, usize)> {
+    let bytes = input.as_bytes();
+    let quote = *bytes.get(start)?;
+    if !is_js_quote(quote) {
+        return None;
+    }
+    let end = skip_js_string(bytes, start);
+    if end > bytes.len() || bytes.get(end - 1) != Some(&quote) {
+        return None;
+    }
+    let literal = &input[start..end];
+    if quote == b'"' {
+        return serde_json::from_str(literal).ok().map(|value| (value, end));
+    }
+
+    let mut value = String::new();
+    let mut chars = input[start + 1..end - 1].chars();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            value.push(ch);
+            continue;
+        }
+        let escaped = chars.next()?;
+        value.push(match escaped {
+            'n' => '\n',
+            'r' => '\r',
+            't' => '\t',
+            other => other,
+        });
+    }
+    Some((value, end))
+}
+
+fn matching_js_paren(bytes: &[u8], open: usize) -> Option<usize> {
+    let mut depth = 0;
+    let mut index = open;
+    while index < bytes.len() {
+        if is_js_quote(bytes[index]) {
+            index = skip_js_string(bytes, index);
+            continue;
+        }
+        if let Some(next) = skip_js_comment(bytes, index) {
+            index = next;
+            continue;
+        }
+        match bytes[index] {
+            b'(' => depth += 1,
+            b')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(index);
+                }
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    None
+}
+
+fn skip_js_string(bytes: &[u8], start: usize) -> usize {
+    let quote = bytes[start];
+    let mut index = start + 1;
+    while index < bytes.len() {
+        if bytes[index] == b'\\' {
+            index = (index + 2).min(bytes.len());
+        } else if bytes[index] == quote {
+            return index + 1;
+        } else {
+            index += 1;
+        }
+    }
+    bytes.len()
+}
+
+fn skip_js_comment(bytes: &[u8], start: usize) -> Option<usize> {
+    if bytes.get(start) != Some(&b'/') {
+        return None;
+    }
+    match bytes.get(start + 1) {
+        Some(b'/') => Some(
+            bytes[start + 2..]
+                .iter()
+                .position(|byte| *byte == b'\n')
+                .map_or(bytes.len(), |offset| start + 3 + offset),
+        ),
+        Some(b'*') => Some(
+            bytes[start + 2..]
+                .windows(2)
+                .position(|window| window == b"*/")
+                .map_or(bytes.len(), |offset| start + 4 + offset),
+        ),
+        _ => None,
+    }
+}
+
+fn is_js_quote(byte: u8) -> bool {
+    matches!(byte, b'\'' | b'"' | b'`')
+}
+
+fn is_js_identifier_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'$')
 }
 
 fn parse_timestamp(s: &str) -> Option<DateTime<Utc>> {
@@ -596,6 +820,42 @@ mod tests {
         assert_eq!(
             calls[0].tools,
             vec!["mcp__codebase_memory_mcp__search_graph"]
+        );
+    }
+
+    #[test]
+    fn exec_wrapper_exposes_nested_shell_and_mcp_activity() {
+        const EXEC_WRAPPER: &str = r#"{"timestamp":"2026-03-29T15:04:06.000Z","type":"response_item","payload":{"type":"custom_tool_call","name":"exec","input":"const rs = await Promise.all([tools.exec_command({cmd:\"cargo fmt --check && cargo test\"}), tools.mcp__codebase_memory_mcp__search_graph({project:\"tokens\", query:\"Codex parser\"})]);","call_id":"c2"}}"#;
+        let f = write_session(&[META_OK, TURN_GPT5, EXEC_WRAPPER, TOKEN_FIRST]);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source_for(f.path().to_path_buf()), &mut seen).unwrap();
+
+        assert_eq!(
+            (&calls[0].tools, &calls[0].bash_commands),
+            (
+                &vec![
+                    "Bash".to_string(),
+                    "mcp__codebase_memory_mcp__search_graph".to_string()
+                ],
+                &vec!["cargo fmt --check".to_string(), "cargo test".to_string()]
+            )
+        );
+    }
+
+    #[test]
+    fn nested_tool_scanner_ignores_string_and_comment_examples() {
+        let script = r#"
+            const example = "tools.exec_command({cmd: 'not real'})";
+            // tools.mcp__fake__search({});
+            await tools.apply_patch("*** Begin Patch");
+        "#;
+
+        assert_eq!(
+            nested_tool_calls(script),
+            vec![NestedToolCall {
+                name: "apply_patch",
+                arguments: r#""*** Begin Patch""#,
+            }]
         );
     }
 

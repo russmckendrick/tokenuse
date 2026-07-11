@@ -21,6 +21,10 @@
   function modelLabel(model: RecentModelMetric) {
     return `${model.name}: ${count(model.calls)} ${copy.metrics.calls}`;
   }
+
+  function credit(value: number) {
+    return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
 </script>
 
 <Panel title={copy.usage.console_title.replace('{tool}', section.tool)} {tone}>
@@ -52,10 +56,29 @@
         <div class="console-row limit-row">
           <strong>{copy.usage.limit}</strong>
           <span>{limit.scope} {limit.window}</span>
-          <GaugeBar used={limit.used} ariaLabel={`${limit.scope} ${limit.window}`} usedSuffix={copy.usage.used_suffix} />
-          <span>{limit.left}</span>
+          <div class="limit-used">
+            <GaugeBar used={limit.used} ariaLabel={`${limit.scope} ${limit.window}`} usedSuffix={copy.usage.used_suffix} />
+            {#if limit.used_credits !== null}
+              <span class="credit-number">{credit(limit.used_credits)} {copy.usage.credits_short}</span>
+            {/if}
+          </div>
+          {#if limit.remaining_credits !== null && limit.total_credits !== null}
+            <span class="credit-balance">
+              <strong>{credit(limit.remaining_credits)}</strong>
+              <small>/ {credit(limit.total_credits)} {copy.usage.credits_short}</small>
+            </span>
+          {:else}
+            <span>{limit.left}</span>
+          {/if}
           <span>{limit.reset}</span>
-          <span>{limit.plan}</span>
+          <span class="plan-state">
+            <span>{limit.plan}</span>
+            {#if limit.additional_usage !== null}
+              <small class:enabled={limit.additional_usage}>
+                {limit.additional_usage ? copy.usage.additional_enabled : copy.usage.additional_disabled}
+              </small>
+            {/if}
+          </span>
         </div>
       {/each}
 
@@ -136,7 +159,7 @@
     min-width: 0;
     min-height: 30px;
     display: grid;
-    grid-template-columns: 70px minmax(140px, 1fr) minmax(82px, 0.8fr) minmax(90px, 0.7fr) minmax(110px, 0.9fr) minmax(98px, 0.8fr);
+    grid-template-columns: 70px minmax(140px, 1fr) minmax(126px, 0.95fr) minmax(126px, 0.9fr) minmax(110px, 0.8fr) minmax(128px, 0.95fr);
     gap: 8px;
     align-items: center;
     border-bottom: 1px solid var(--color-border-row);
@@ -149,6 +172,56 @@
 
   .limit-row {
     color: var(--color-muted);
+  }
+
+  .limit-used {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(74px, 1fr) auto;
+    gap: 7px;
+    align-items: center;
+  }
+
+  .credit-number,
+  .credit-balance,
+  .plan-state {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .credit-number {
+    color: var(--color-on-surface);
+    font-size: 12px;
+  }
+
+  .credit-balance {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+
+  .credit-balance strong {
+    color: var(--color-on-surface);
+    font-weight: 650;
+  }
+
+  .credit-balance small,
+  .plan-state small {
+    color: var(--color-muted);
+    font-size: 11px;
+  }
+
+  .plan-state {
+    display: grid;
+    gap: 1px;
+  }
+
+  .plan-state > span {
+    color: var(--color-warning);
+  }
+
+  .plan-state small.enabled {
+    color: var(--color-tertiary);
   }
 
   .money {
@@ -176,10 +249,8 @@
       grid-template-columns: 58px minmax(120px, 1fr) 78px 82px;
     }
 
-    .console-row span:nth-child(5),
-    .console-row span:nth-child(6),
-    .console-labels span:nth-child(5),
-    .console-labels span:nth-child(6) {
+    .console-row > :nth-child(5),
+    .console-row > :nth-child(6) {
       display: none;
     }
   }

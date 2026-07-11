@@ -435,7 +435,21 @@
       },
       {
         "tool": "Copilot",
-        "limits": [],
+        "limits": [
+          {
+            "tool": "Copilot",
+            "scope": "AI Credits",
+            "window": "monthly",
+            "used": 9,
+            "left": "91% left",
+            "reset": "01 Aug 01:00",
+            "plan": "Copilot Pro",
+            "used_credits": 128,
+            "remaining_credits": 1372,
+            "total_credits": 1500,
+            "additional_usage": false
+          }
+        ],
         "usage": {
           "buckets": [4, 7, 0, 0, 0, 16, 22, 5, 0, 8, 0, 0, 0, 0, 0, 10, 29, 20, 5, 0, 0, 7, 0, 0],
           "calls": 29,

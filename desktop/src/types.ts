@@ -100,6 +100,10 @@ export type LimitMetric = {
   left: string;
   reset: string;
   plan: string;
+  used_credits: number | null;
+  remaining_credits: number | null;
+  total_credits: number | null;
+  additional_usage: boolean | null;
 };
 
 export type RecentUsageMetric = {

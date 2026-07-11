@@ -174,7 +174,10 @@
     "limit": "Limit",
     "model": "Model",
     "idle": "Idle · No limits or model activity reported",
-    "used_suffix": "Used"
+    "used_suffix": "Used",
+    "credits_short": "cr",
+    "additional_enabled": "Additional enabled",
+    "additional_disabled": "Additional disabled"
   },
   "config": {
     "rows": {
@@ -334,7 +337,7 @@
     "codex_subscription_limits_effect": "reads the keychain session cookie, writes a local quota snapshot, then syncs archive limits",
     "download_latest_rates_message": "This will download the latest published Token Use currency snapshot into your local config directory.",
     "download_latest_prices_message": "This will download the latest pricing books into your local config directory.",
-    "sync_copilot_limits_message": "This will read your locally stored Copilot OAuth token, fetch current Copilot quota state from GitHub, and write it into your local config directory.",
+    "sync_copilot_limits_message": "This will read your locally stored Copilot OAuth token or authenticated GitHub CLI session, fetch current Copilot quota state from GitHub, and write it into your local config directory.",
     "clear_data_message": "Token Use will delete archive.db, rebuild it from local tool history, and keep config, rates, pricing, limits, and reports. Rows whose source files are gone will not return.",
     "current_period_filters_apply": "report period & project scope apply",
     "hidden_folders": "hidden folders are not shown",

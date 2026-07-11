@@ -108,6 +108,8 @@ pub fn limit_snapshot(
             has_credits: true,
             unlimited: false,
             balance: None,
+            total: None,
+            additional_usage: None,
         }),
         rate_limit_reached_type: None,
     }

@@ -689,8 +689,31 @@ fn insert_call(tx: &Transaction<'_>, call: &ParsedCall) -> Result<bool> {
     if inserted == 0 {
         update_existing_cursor_project(tx, call)?;
         update_existing_copilot_cli_totals(tx, call)?;
+        update_existing_codex_tool_activity(tx, call, &tools_json, &bash_json)?;
     }
     Ok(inserted > 0)
+}
+
+fn update_existing_codex_tool_activity(
+    tx: &Transaction<'_>,
+    call: &ParsedCall,
+    tools_json: &str,
+    bash_json: &str,
+) -> Result<()> {
+    if call.tool != crate::tools::codex::config::TOOL_ID {
+        return Ok(());
+    }
+
+    tx.execute(
+        "
+        UPDATE calls
+        SET tools_json = ?1, bash_commands_json = ?2
+        WHERE tool = ?3
+          AND dedup_key = ?4
+        ",
+        params![tools_json, bash_json, call.tool, call.dedup_key],
+    )?;
+    Ok(())
 }
 
 /// Copilot's data.db rows are running totals for potentially still-live
@@ -946,6 +969,8 @@ mod tests {
                 has_credits: true,
                 unlimited: false,
                 balance: Some(12.5),
+                total: None,
+                additional_usage: None,
             }),
             rate_limit_reached_type: Some("primary".into()),
         }
@@ -1057,6 +1082,47 @@ mod tests {
 
         let loaded = archive.load().unwrap();
         assert_eq!(loaded.calls[0].cost_usd, first.cost_usd);
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn duplicate_codex_calls_refresh_tool_activity_only() {
+        let paths = temp_paths("codex-tool-refresh");
+        let mut archive = Archive::open(&paths).unwrap();
+        let mut first = sample_call("codex-k1");
+        first.tools = vec!["exec".into()];
+        first.bash_commands.clear();
+
+        let mut reparsed = first.clone();
+        reparsed.tools = vec![
+            "Bash".into(),
+            "mcp__codebase_memory_mcp__search_graph".into(),
+        ];
+        reparsed.bash_commands = vec!["cargo test".into()];
+        reparsed.cost_usd = 999.0;
+
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![first.clone()],
+                limits: Vec::new(),
+            })
+            .unwrap();
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![reparsed.clone()],
+                limits: Vec::new(),
+            })
+            .unwrap();
+
+        let loaded = archive.load().unwrap();
+        assert_eq!(
+            (
+                &loaded.calls[0].tools,
+                &loaded.calls[0].bash_commands,
+                loaded.calls[0].cost_usd,
+            ),
+            (&reparsed.tools, &reparsed.bash_commands, first.cost_usd,)
+        );
         let _ = fs::remove_dir_all(paths.dir);
     }
 

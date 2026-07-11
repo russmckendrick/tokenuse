@@ -596,16 +596,22 @@ fn format_last_seen(last_seen: Option<DateTime<Local>>, now: DateTime<Local>) ->
 
 fn limit_is_newer(candidate: &LimitSnapshot, existing: &LimitSnapshot) -> bool {
     match (candidate.observed_at, existing.observed_at) {
-        (Some(candidate), Some(existing)) => candidate > existing,
+        (Some(candidate), Some(existing)) => candidate >= existing,
         (Some(_), None) => true,
         (None, Some(_)) => false,
-        (None, None) => false,
+        (None, None) => true,
     }
 }
 
 fn limit_metric(limit: &LimitSnapshot, window: LimitWindow) -> LimitMetric {
     let used = window.used_percent.round().clamp(0.0, 100.0) as u64;
     let left = (100.0 - window.used_percent).round().clamp(0.0, 100.0) as u64;
+    let credits = limit.credits.as_ref();
+    let remaining_credits = credits.and_then(|credits| credits.balance);
+    let total_credits = credits.and_then(|credits| credits.total);
+    let used_credits = total_credits
+        .zip(remaining_credits)
+        .map(|(total, remaining)| (total - remaining).max(0.0));
     LimitMetric {
         tool: tool_short_label(limit.tool),
         scope: leak(
@@ -625,6 +631,10 @@ fn limit_metric(limit: &LimitSnapshot, window: LimitWindow) -> LimitMetric {
                 .map(format_plan_type)
                 .unwrap_or_else(|| "-".into()),
         ),
+        used_credits,
+        remaining_credits,
+        total_credits,
+        additional_usage: credits.and_then(|credits| credits.additional_usage),
     }
 }
 
@@ -1915,6 +1925,48 @@ mod tests {
         assert_eq!(claude.limits[0].scope, "Claude");
         assert_eq!(copilot.limits.len(), 2);
         assert_eq!(copilot.limits[0].scope, "Premium Interactions");
+    }
+
+    #[test]
+    fn copilot_credit_details_reach_the_shared_usage_view() {
+        let mut limit = mk_limit_for_tool(
+            "copilot",
+            "premium_interactions",
+            Some("AI Credits"),
+            "2026-07-11T08:01:00Z",
+            8.6,
+            0.0,
+        );
+        limit.secondary = None;
+        limit.plan_type = Some("copilot_pro".into());
+        let legacy = limit.clone();
+        limit.credits = Some(crate::tools::LimitCredits {
+            has_credits: true,
+            unlimited: false,
+            balance: Some(1_372.0),
+            total: Some(1_500.0),
+            additional_usage: Some(false),
+        });
+        let data = Ingested {
+            calls: Vec::new(),
+            limits: vec![legacy, limit],
+        }
+        .limits(Tool::All, SortMode::Spend, &CurrencyFormatter::usd());
+
+        let copilot = data
+            .sections
+            .iter()
+            .find(|section| section.tool == "Copilot")
+            .unwrap();
+        let row = &copilot.limits[0];
+
+        assert_eq!(row.scope, "AI Credits");
+        assert_eq!(row.used, 9);
+        assert_eq!(row.used_credits, Some(128.0));
+        assert_eq!(row.remaining_credits, Some(1_372.0));
+        assert_eq!(row.total_credits, Some(1_500.0));
+        assert_eq!(row.plan, "Copilot Pro");
+        assert_eq!(row.additional_usage, Some(false));
     }
 
     #[test]

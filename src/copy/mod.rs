@@ -370,6 +370,9 @@ pub struct UsageCopy {
     pub model: String,
     pub idle: String,
     pub used_suffix: String,
+    pub credits_short: String,
+    pub additional_enabled: String,
+    pub additional_disabled: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

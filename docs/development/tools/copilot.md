@@ -219,14 +219,17 @@ The sidecar can be either the raw `GET https://api.github.com/copilot_internal/u
   "observed_at": "2026-07-05T12:00:00Z",
   "source": "https://api.github.com/copilot_internal/user",
   "payload": {
-    "copilot_plan": "individual_pro",
+    "copilot_plan": "individual",
+    "access_type_sku": "monthly_subscriber_quota",
     "quota_reset_date_utc": "2026-08-01T00:00:00.000Z",
-    "token_based_billing": { "enabled": true },
+    "token_based_billing": true,
     "quota_snapshots": {
       "premium_interactions": {
         "entitlement": 1000,
         "percent_remaining": 40.0,
         "remaining": 400,
+        "quota_remaining": 399.5,
+        "overage_permitted": false,
         "unlimited": false,
         "timestamp_utc": "2026-07-05T12:02:00Z"
       }
@@ -237,6 +240,10 @@ The sidecar can be either the raw `GET https://api.github.com/copilot_internal/u
 
 `tokenuse` skips unlimited snapshots with no entitlement, converts `percent_remaining` into `used_percent`, and emits one `LimitSnapshot` per constrained quota key. `quota_reset_date` (or the newer `quota_reset_date_utc`) is treated as a monthly reset at 00:00 UTC unless a future quota key indicates a weekly window.
 
-GitHub moved every Copilot plan to usage-based AI-credit billing on June 1, 2026 (1 credit = $0.01). The payload kept the legacy `premium_interactions` key, but its values are AI-credit units from that date on. When the payload carries `token_based_billing`, or the observation timestamp falls on or after 2026-06-01, `tokenuse` labels the gauge **AI Credits** and reports the remaining balance in credit units; older sidecars keep the legacy **Premium Interactions** label.
+Current individual payloads can report the generic `copilot_plan: "individual"`. Known `access_type_sku` values take precedence so, for example, `monthly_subscriber_quota` is displayed as **Copilot Pro** and `plus_monthly_subscriber_quota` as **Copilot Pro Plus**.
 
-The Config page's Copilot sync action is explicit and confirmed. It reads the existing GitHub Copilot OAuth token from local `github-copilot` config files, fetches the quota payload from GitHub, writes the sidecar above, then syncs the archive so Usage gauges update immediately. Builds without the `quota-sync` feature keep this action unavailable.
+The shared Usage view model keeps the credit entitlement, precise remaining balance, derived used balance, and `overage_permitted` state. Both the TUI and desktop Usage consoles render those fields beside the AI Credits gauge, including whether GitHub additional usage is enabled.
+
+GitHub moved Copilot to usage-based AI-credit billing on June 1, 2026 (1 credit = $0.01), while existing annual plans can remain on legacy request-based billing until their term ends. The payload kept the legacy `premium_interactions` key under both billing models. An explicit `token_based_billing` value therefore takes precedence: `true` labels the gauge **AI Credits**, while `false` keeps **Premium Interactions**. Sidecars without that discriminator fall back to the observation date. When both balance fields are present, the fractional `quota_remaining` value takes precedence over the legacy integer `remaining` value.
+
+The Config page's Copilot sync action is explicit and confirmed. It first reads the existing GitHub Copilot OAuth token from local `github-copilot` config files, then falls back to the active authenticated GitHub CLI session (`gh auth token`). It fetches the quota payload from GitHub, writes the sidecar above, then syncs the archive so Usage gauges update immediately. Builds without the `quota-sync` feature keep this action unavailable.

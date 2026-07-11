@@ -79,7 +79,7 @@ The active sort mode controls the order of tool sections and model rows; rate-li
 Each tool section includes:
 
 - One 24-hour pulse graph plus calls, tokens, cost, and last seen time.
-- Zero or more limit gauge rows from imported `LimitSnapshot` records. Codex imports snapshots from rollout JSONL; Claude Code and Copilot import optional local sidecars from the tokenuse config directory.
+- Zero or more limit gauge rows from imported `LimitSnapshot` records. Codex imports snapshots from rollout JSONL; Claude Code and Copilot import optional local sidecars from the tokenuse config directory. Copilot AI Credits rows show the exact used and remaining/total credit counts, reset time, plan, and whether additional usage is enabled.
 - Up to three top model rows for that tool's 24-hour slice.
 
 ## Configuration

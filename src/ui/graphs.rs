@@ -21,6 +21,13 @@ pub(super) fn gauge_cell(value: u64) -> Cell<'static> {
     )))
 }
 
+pub(super) fn gauge_labeled_cell(value: u64, label: String) -> Cell<'static> {
+    let mut spans = gauge_spans(value, RANK_WIDTH, gauge_color(value));
+    spans.push(Span::raw(" "));
+    spans.push(Span::styled(label, theme::base()));
+    Cell::from(Line::from(spans))
+}
+
 pub(super) fn sparkline_spans(values: &[u64], width: usize) -> Vec<Span<'static>> {
     if width == 0 {
         return Vec::new();

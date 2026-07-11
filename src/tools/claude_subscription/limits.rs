@@ -222,6 +222,8 @@ fn overage_row(
             has_credits: enabled,
             unlimited: false,
             balance,
+            total: None,
+            additional_usage: None,
         }),
         rate_limit_reached_type: overage
             .out_of_credits

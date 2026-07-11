@@ -56,6 +56,10 @@ A rollout is heterogeneous JSONL. The interesting types:
 { "timestamp": "...", "type": "response_item",
   "payload": { "type": "custom_tool_call", "name": "apply_patch",
                "arguments": "{ ... }", "call_id": "call_..." } }
+{ "timestamp": "...", "type": "response_item",
+  "payload": { "type": "custom_tool_call", "name": "exec",
+               "input": "const r = await tools.exec_command({cmd:\"cargo test\"}); ...",
+               "call_id": "call_..." } }
 
 // Usage events — info may be null on the very first emission of a session
 { "timestamp": "...", "type": "event_msg",
@@ -94,6 +98,8 @@ A rollout is heterogeneous JSONL. The interesting types:
 
 **MCP calls.** Codex records MCP tool invocations with the underlying tool name in `payload.name` and the server prefix in a separate `payload.namespace` field shaped like `mcp__<server>__`, e.g. `{"name":"search_graph","namespace":"mcp__codebase_memory_mcp__"}`. The parser joins the two into the canonical `mcp__<server>__<name>` form (matching how Claude Code stores MCP calls in a single string), so `aggregate_mcp` picks them up. Note that Codex namespaces use underscores in server names (e.g. `codebase_memory_mcp`) while Claude Code uses dashes (`codebase-memory-mcp`); the same logical server can therefore appear as two distinct rows in the MCP Servers panel — this mirrors how each tool emits the data and is intentional.
 
+Newer Codex Desktop builds wrap tool orchestration in a `custom_tool_call` named `exec`. Its `input` field is JavaScript containing calls such as `tools.exec_command(...)` and `tools.mcp__codebase_memory_mcp__search_graph(...)`. The adapter treats that wrapper as transparent: it scans executable JavaScript while ignoring strings and comments, records each nested tool, and extracts `cmd` string literals from nested shell calls.
+
 ## Token & cost mapping
 
 One `ParsedCall` is emitted per `event_msg/token_count` whose usage is non-null and non-zero. Prefer cumulative `info.total_token_usage` when present: the parser subtracts the previous cumulative total in the same rollout and uses the delta. This avoids double-counting duplicate token-count snapshots that repeat the same cumulative total with a different timestamp. If Codex only writes `info.last_token_usage`, the parser uses that as a fallback.
@@ -108,6 +114,8 @@ One `ParsedCall` is emitted per `event_msg/token_count` whose usage is non-null 
 | `reasoning_tokens` | `usage.reasoning_output_tokens` |
 | `model` | most recent model hint from `turn_context`, `token_count.info`, or payload metadata; `"gpt-5"` if none has appeared yet |
 | `speed` | always `Speed::Standard` (Codex has no fast/standard split) |
+
+Model breakdown labels preserve the complete GPT identifier. For example, `gpt-5.6-sol` is displayed as `GPT-5.6 Sol`, and `gpt-5.3-codex-spark` as `GPT-5.3 Codex Spark`. Each suffix segment is title-cased instead of matching a broad prefix, so new GPT variants do not collapse into a generic `GPT-5` label.
 
 **Critical quirk:** OpenAI reports cached tokens **inside** `input_tokens`. The parser subtracts `cached_input_tokens` before pricing or the cache read would be double-billed.
 
@@ -125,13 +133,16 @@ Duplicate `token_count` snapshots with unchanged cumulative totals are skipped b
 
 ## Tools / bash extraction
 
-`response_item` entries between successive `token_count` events are accumulated into `tools` (and `bash_commands` for `exec_command`). The arguments string is JSON-decoded and the inner `cmd` field is split via `tools::jsonl::split_bash_commands`. On each emitted `ParsedCall` the buffers are drained (so the next turn starts empty); skipped zero-delta token snapshots and duplicate `token_count` entries that lose to the `seen` dedup set also clear the buffer to avoid leaking tool calls into the following turn.
+`response_item` entries between successive `token_count` events are accumulated into `tools` (and `bash_commands` for direct or nested `exec_command`). Direct arguments are JSON-decoded; nested JavaScript `cmd` string literals are decoded by the lightweight wrapper scanner. Both paths split the command via `tools::jsonl::split_bash_commands`. On each emitted `ParsedCall` the buffers are drained (so the next turn starts empty); skipped zero-delta token snapshots and duplicate `token_count` entries that lose to the `seen` dedup set also clear the buffer to avoid leaking tool calls into the following turn.
 
 ```mermaid
 flowchart LR
     A[response_item] --> B[normalize tool name]
     A -->|exec_command| C[decode arguments json]
+    A -->|exec wrapper| H[scan nested tools and cmd strings]
     C --> D[split_bash_commands]
+    H --> D
+    H --> E
     B --> E[pending tools]
     D --> F[pending bash]
     E --> G[next token_count emits ParsedCall]

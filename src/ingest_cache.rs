@@ -260,6 +260,8 @@ mod tests {
                 has_credits: true,
                 unlimited: false,
                 balance: Some(99.0),
+                total: None,
+                additional_usage: None,
             }),
             rate_limit_reached_type: None,
         }

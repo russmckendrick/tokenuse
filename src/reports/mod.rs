@@ -1092,7 +1092,7 @@ fn latest_limits(limits: &[&LimitSnapshot]) -> Vec<ReportLimitLatest> {
     for limit in limits {
         let key = (limit.tool, limit.limit_id.clone());
         match latest.get(&key) {
-            Some(existing) if existing.observed_at >= limit.observed_at => {}
+            Some(existing) if existing.observed_at > limit.observed_at => {}
             _ => {
                 latest.insert(key, limit);
             }

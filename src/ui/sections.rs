@@ -630,13 +630,45 @@ fn render_tool_usage_rows(frame: &mut Frame<'_>, area: Rect, section: &ToolLimit
         .limits
         .iter()
         .map(|limit| {
+            let used_cell = limit.used_credits.map_or_else(
+                || graphs::gauge_cell(limit.used),
+                |credits| {
+                    graphs::gauge_labeled_cell(
+                        limit.used,
+                        format!(
+                            "{} {}",
+                            format_credit_value(credits),
+                            copy.usage.credits_short
+                        ),
+                    )
+                },
+            );
+            let left = match (limit.remaining_credits, limit.total_credits) {
+                (Some(remaining), Some(total)) => format!(
+                    "{}/{} {}",
+                    format_credit_value(remaining),
+                    format_credit_value(total),
+                    copy.usage.credits_short
+                ),
+                _ => limit.left.to_string(),
+            };
+            let additional = limit.additional_usage.map(|enabled| {
+                if enabled {
+                    copy.usage.additional_enabled.as_str()
+                } else {
+                    copy.usage.additional_disabled.as_str()
+                }
+            });
+            let plan = additional
+                .map(|additional| format!("{} · {additional}", limit.plan))
+                .unwrap_or_else(|| limit.plan.to_string());
             Row::new(vec![
                 Cell::from(copy.usage.limit.as_str()).style(theme::base().fg(theme::CYAN)),
                 Cell::from(format!("{} {}", limit.scope, limit.window)).style(theme::muted()),
-                graphs::gauge_cell(limit.used),
-                Cell::from(limit.left).style(theme::base()),
+                used_cell,
+                Cell::from(left).style(theme::base()),
                 Cell::from(limit.reset).style(theme::muted()),
-                Cell::from(limit.plan).style(theme::base().fg(theme::YELLOW_SOFT)),
+                Cell::from(plan).style(theme::base().fg(theme::YELLOW_SOFT)),
             ])
         })
         .collect();
@@ -657,10 +689,10 @@ fn render_tool_usage_rows(frame: &mut Frame<'_>, area: Rect, section: &ToolLimit
         [
             Constraint::Length(6),
             Constraint::Min(14),
-            Constraint::Length(8),
-            Constraint::Length(10),
-            Constraint::Length(10),
-            Constraint::Length(10),
+            Constraint::Length(18),
+            Constraint::Length(18),
+            Constraint::Length(12),
+            Constraint::Length(26),
         ],
     )
     .header(Row::new(vec![
@@ -674,6 +706,17 @@ fn render_tool_usage_rows(frame: &mut Frame<'_>, area: Rect, section: &ToolLimit
     .column_spacing(1);
 
     frame.render_widget(table, area);
+}
+
+fn format_credit_value(value: f64) -> String {
+    let mut formatted = format!("{value:.2}");
+    while formatted.ends_with('0') {
+        formatted.pop();
+    }
+    if formatted.ends_with('.') {
+        formatted.pop();
+    }
+    formatted
 }
 
 fn usage_tool_color(tool: &str) -> Color {

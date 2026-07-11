@@ -11,6 +11,8 @@ pub mod parser;
 
 pub struct Copilot;
 
+const LIMIT_SOURCE_FINGERPRINT_VERSION: &str = "copilot-limit-schema:2";
+
 impl ToolAdapter for Copilot {
     fn id(&self) -> &'static str {
         config::TOOL_ID
@@ -54,6 +56,10 @@ impl ToolAdapter for Copilot {
                     .unwrap_or(0);
                 fingerprint.push_str(&format!("|wal:{}:{}", metadata.len(), modified));
             }
+        }
+        if source.kind == SessionSourceKind::Limit {
+            fingerprint.push('|');
+            fingerprint.push_str(LIMIT_SOURCE_FINGERPRINT_VERSION);
         }
         Ok(fingerprint)
     }
@@ -107,3 +113,28 @@ const SHORT_NAMES: &[(&str, &str)] = &[
     ("o4-mini", "o4-mini"),
     ("o3", "o3"),
 ];
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+
+    #[test]
+    fn limit_fingerprint_version_invalidates_only_archived_limit_sources() {
+        let path = PathBuf::from("/tokenuse-copilot-fingerprint-test-missing");
+        let limit = SessionSource::limit(path.clone(), "Copilot", config::TOOL_ID);
+        let session = SessionSource::session(path, "Copilot", config::TOOL_ID);
+        let legacy_limit_fingerprint = crate::tools::fingerprint_source(&limit).unwrap();
+        let legacy_session_fingerprint = crate::tools::fingerprint_source(&session).unwrap();
+
+        assert_eq!(
+            Copilot.source_fingerprint(&limit).unwrap(),
+            format!("{legacy_limit_fingerprint}|{LIMIT_SOURCE_FINGERPRINT_VERSION}")
+        );
+        assert_eq!(
+            Copilot.source_fingerprint(&session).unwrap(),
+            legacy_session_fingerprint
+        );
+    }
+}

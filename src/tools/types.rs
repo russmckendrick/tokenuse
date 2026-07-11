@@ -69,6 +69,8 @@ pub struct LimitCredits {
     pub has_credits: bool,
     pub unlimited: bool,
     pub balance: Option<f64>,
+    pub total: Option<f64>,
+    pub additional_usage: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]

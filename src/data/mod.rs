@@ -48,6 +48,10 @@ pub struct LimitMetric {
     pub left: &'static str,
     pub reset: &'static str,
     pub plan: &'static str,
+    pub used_credits: Option<f64>,
+    pub remaining_credits: Option<f64>,
+    pub total_credits: Option<f64>,
+    pub additional_usage: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -247,6 +251,14 @@ struct WireLimitMetric {
     left: String,
     reset: String,
     plan: String,
+    #[serde(default)]
+    used_credits: Option<f64>,
+    #[serde(default)]
+    remaining_credits: Option<f64>,
+    #[serde(default)]
+    total_credits: Option<f64>,
+    #[serde(default)]
+    additional_usage: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -432,6 +444,10 @@ impl From<WireLimitMetric> for LimitMetric {
             left: leak(wire.left),
             reset: leak(wire.reset),
             plan: leak(wire.plan),
+            used_credits: wire.used_credits,
+            remaining_credits: wire.remaining_credits,
+            total_credits: wire.total_credits,
+            additional_usage: wire.additional_usage,
         }
     }
 }

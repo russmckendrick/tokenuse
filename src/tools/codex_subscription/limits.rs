@@ -189,6 +189,8 @@ fn credits_row(
             has_credits,
             unlimited,
             balance,
+            total: None,
+            additional_usage: None,
         }),
         rate_limit_reached_type: reached.then(|| "out_of_credits".to_string()),
     })

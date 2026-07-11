@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+#[cfg(feature = "quota-sync")]
+use std::process::Command;
 
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use color_eyre::{
@@ -26,6 +28,7 @@ enum Sidecar {
 #[derive(Debug, Deserialize)]
 struct CopilotUsage {
     copilot_plan: Option<String>,
+    access_type_sku: Option<String>,
     quota_reset_date: Option<String>,
     quota_reset_date_utc: Option<String>,
     quota_snapshots: Option<HashMap<String, QuotaSnapshot>>,
@@ -37,8 +40,11 @@ struct QuotaSnapshot {
     entitlement: Option<f64>,
     percent_remaining: Option<f64>,
     remaining: Option<f64>,
+    quota_remaining: Option<f64>,
     unlimited: Option<bool>,
+    overage_permitted: Option<bool>,
     timestamp_utc: Option<DateTime<Utc>>,
+    token_based_billing: Option<bool>,
 }
 
 pub fn parse_sidecar(source: &SessionSource) -> Result<Vec<LimitSnapshot>> {
@@ -68,6 +74,7 @@ fn parse_sidecar_str(
         } => (observed_at.or(fallback_observed_at), payload),
         Sidecar::Raw(usage) => (fallback_observed_at, usage),
     };
+    let plan_type = copilot_plan_type(&usage);
 
     let Some(snapshots) = usage.quota_snapshots else {
         return Ok(Vec::new());
@@ -86,27 +93,29 @@ fn parse_sidecar_str(
             continue;
         }
 
+        let remaining = snapshot.quota_remaining.or(snapshot.remaining);
+
         let Some(percent_remaining) = snapshot
             .percent_remaining
-            .or_else(|| percent_remaining_from_balance(&snapshot))
+            .or_else(|| percent_remaining_from_balance(&snapshot, remaining))
         else {
             continue;
         };
         let used_percent = (100.0 - percent_remaining).clamp(0.0, 100.0);
-        let reached = snapshot
-            .remaining
+        let reached = remaining
             .is_some_and(|remaining| remaining <= 0.0)
             .then(|| "primary".to_string());
 
         let row_observed = snapshot.timestamp_utc.or(observed_at);
-        let credits_era = usage.token_based_billing.is_some()
-            || row_observed.is_some_and(|at| at >= credits_era_start());
+        let credits_era = token_based_billing_enabled(usage.token_based_billing.as_ref())
+            .or(snapshot.token_based_billing)
+            .unwrap_or_else(|| row_observed.is_some_and(|at| at >= credits_era_start()));
 
         rows.push(LimitSnapshot {
             tool: config::TOOL_ID,
             limit_id: id.clone(),
             limit_name: Some(human_limit_name(&id, credits_era)),
-            plan_type: usage.copilot_plan.clone(),
+            plan_type: plan_type.clone(),
             observed_at: row_observed,
             primary: Some(LimitWindow {
                 used_percent,
@@ -115,9 +124,13 @@ fn parse_sidecar_str(
             }),
             secondary: None,
             credits: Some(LimitCredits {
-                has_credits: snapshot.entitlement.is_some() || snapshot.remaining.is_some(),
+                has_credits: snapshot.entitlement.is_some()
+                    || snapshot.remaining.is_some()
+                    || snapshot.quota_remaining.is_some(),
                 unlimited: snapshot.unlimited.unwrap_or(false),
-                balance: snapshot.remaining,
+                balance: remaining,
+                total: snapshot.entitlement,
+                additional_usage: snapshot.overage_permitted,
             }),
             rate_limit_reached_type: reached,
         });
@@ -128,8 +141,9 @@ fn parse_sidecar_str(
 
 #[cfg(feature = "quota-sync")]
 pub fn refresh_sidecar(output: &Path) -> Result<usize> {
-    let token = find_oauth_token()
-        .ok_or_else(|| eyre!("Copilot OAuth token not found in github-copilot config files"))?;
+    let token = find_oauth_token().ok_or_else(|| {
+        eyre!("Copilot OAuth token not found in github-copilot config files or GitHub CLI")
+    })?;
     let raw = ureq::get(config::COPILOT_INTERNAL_USER_URL)
         .set("Accept", "application/json")
         .set("User-Agent", "tokenuse")
@@ -180,7 +194,18 @@ fn find_oauth_token() -> Option<String> {
             }
         }
     }
-    None
+    find_github_cli_token()
+}
+
+#[cfg(feature = "quota-sync")]
+fn find_github_cli_token() -> Option<String> {
+    let output = Command::new("gh").args(["auth", "token"]).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    std::str::from_utf8(&output.stdout)
+        .ok()
+        .and_then(clean_token)
 }
 
 #[cfg(feature = "quota-sync")]
@@ -205,12 +230,32 @@ fn clean_token(raw: &str) -> Option<String> {
     (!token.is_empty()).then(|| token.to_string())
 }
 
-fn percent_remaining_from_balance(snapshot: &QuotaSnapshot) -> Option<f64> {
+fn percent_remaining_from_balance(snapshot: &QuotaSnapshot, remaining: Option<f64>) -> Option<f64> {
     let entitlement = snapshot.entitlement?;
     if entitlement <= 0.0 {
         return None;
     }
-    Some((snapshot.remaining? / entitlement * 100.0).clamp(0.0, 100.0))
+    Some((remaining? / entitlement * 100.0).clamp(0.0, 100.0))
+}
+
+fn token_based_billing_enabled(value: Option<&Value>) -> Option<bool> {
+    let value = value?;
+    value
+        .as_bool()
+        .or_else(|| value.get("enabled").and_then(Value::as_bool))
+}
+
+fn copilot_plan_type(usage: &CopilotUsage) -> Option<String> {
+    let normalized = match usage.access_type_sku.as_deref() {
+        Some("free_limited_copilot") => Some("copilot_free"),
+        Some("monthly_subscriber_quota") => Some("copilot_pro"),
+        Some("plus_monthly_subscriber_quota") => Some("copilot_pro_plus"),
+        Some("copilot_standalone_seat_quota") => Some("copilot_business"),
+        _ => None,
+    };
+    normalized
+        .map(str::to_string)
+        .or_else(|| usage.copilot_plan.clone())
 }
 
 fn parse_reset(raw: &str) -> Option<DateTime<Utc>> {
@@ -313,7 +358,8 @@ mod tests {
         let raw = r#"{
           "observed_at": "2026-07-05T12:00:00Z",
           "payload": {
-            "copilot_plan": "individual_pro",
+            "copilot_plan": "individual",
+            "access_type_sku": "monthly_subscriber_quota",
             "quota_reset_date_utc": "2026-08-01T00:00:00.000Z",
             "token_based_billing": { "enabled": true },
             "quota_snapshots": {
@@ -321,6 +367,8 @@ mod tests {
                 "entitlement": 1000,
                 "percent_remaining": 40.0,
                 "remaining": 400,
+                "quota_remaining": 399.5,
+                "overage_permitted": false,
                 "unlimited": false
               }
             }
@@ -332,6 +380,14 @@ mod tests {
         assert_eq!(limits.len(), 1);
         assert_eq!(limits[0].limit_id, "premium_interactions");
         assert_eq!(limits[0].limit_name.as_deref(), Some("AI Credits"));
+        assert_eq!(limits[0].plan_type.as_deref(), Some("copilot_pro"));
+        assert_eq!(
+            limits[0]
+                .credits
+                .as_ref()
+                .and_then(|credits| credits.additional_usage),
+            Some(false)
+        );
         assert_eq!(limits[0].primary.unwrap().used_percent, 60.0);
         assert_eq!(
             limits[0]
@@ -343,7 +399,7 @@ mod tests {
         );
         assert_eq!(
             limits[0].credits.as_ref().and_then(|c| c.balance),
-            Some(400.0)
+            Some(399.5)
         );
     }
 
@@ -367,6 +423,30 @@ mod tests {
         assert_eq!(limits.len(), 1);
         assert_eq!(limits[0].limit_name.as_deref(), Some("AI Credits"));
         assert_eq!(limits[0].primary.unwrap().used_percent, 75.0);
+    }
+
+    #[test]
+    fn explicit_legacy_billing_overrides_post_switch_observation_date() {
+        let raw = r#"{
+          "copilot_plan": "individual_pro",
+          "quota_reset_date": "2026-08-01",
+          "token_based_billing": false,
+          "quota_snapshots": {
+            "premium_interactions": {
+              "entitlement": 1500,
+              "remaining": 1200,
+              "unlimited": false,
+              "timestamp_utc": "2026-07-02T09:00:00Z"
+            }
+          }
+        }"#;
+
+        let limits = parse_sidecar_str(raw, None).unwrap();
+
+        assert_eq!(
+            limits[0].limit_name.as_deref(),
+            Some("Premium Interactions")
+        );
     }
 
     #[test]
