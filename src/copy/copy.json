@@ -731,7 +731,7 @@
         "assumption": "Forecast extrapolates the current burn rate to the window end."
       },
       "copilot_premium_pacing": {
-        "title": "Copilot premium budget pacing ahead",
+        "title": "Copilot AI credit budget pacing ahead",
         "body": "Used {used} with {elapsed} of the cycle elapsed; projected {projected}. {remaining_hours}h remain.",
         "assumption": "Forecast extrapolates the current burn rate to the cycle end."
       },

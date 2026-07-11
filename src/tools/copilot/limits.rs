@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use color_eyre::{
     eyre::{eyre, Context},
     Result,
@@ -27,7 +27,9 @@ enum Sidecar {
 struct CopilotUsage {
     copilot_plan: Option<String>,
     quota_reset_date: Option<String>,
+    quota_reset_date_utc: Option<String>,
     quota_snapshots: Option<HashMap<String, QuotaSnapshot>>,
+    token_based_billing: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -70,7 +72,11 @@ fn parse_sidecar_str(
     let Some(snapshots) = usage.quota_snapshots else {
         return Ok(Vec::new());
     };
-    let reset = usage.quota_reset_date.as_deref().and_then(parse_reset);
+    let reset = usage
+        .quota_reset_date
+        .as_deref()
+        .and_then(parse_reset)
+        .or_else(|| usage.quota_reset_date_utc.as_deref().and_then(parse_reset));
 
     let mut rows = Vec::new();
     let mut snapshots: Vec<_> = snapshots.into_iter().collect();
@@ -92,12 +98,16 @@ fn parse_sidecar_str(
             .is_some_and(|remaining| remaining <= 0.0)
             .then(|| "primary".to_string());
 
+        let row_observed = snapshot.timestamp_utc.or(observed_at);
+        let credits_era = usage.token_based_billing.is_some()
+            || row_observed.is_some_and(|at| at >= credits_era_start());
+
         rows.push(LimitSnapshot {
             tool: config::TOOL_ID,
             limit_id: id.clone(),
-            limit_name: Some(human_limit_name(&id)),
+            limit_name: Some(human_limit_name(&id, credits_era)),
             plan_type: usage.copilot_plan.clone(),
-            observed_at: snapshot.timestamp_utc.or(observed_at),
+            observed_at: row_observed,
             primary: Some(LimitWindow {
                 used_percent,
                 window_minutes: window_minutes_for(&id),
@@ -223,7 +233,17 @@ fn window_minutes_for(limit_id: &str) -> u64 {
     }
 }
 
-fn human_limit_name(limit_id: &str) -> String {
+/// GitHub moved every Copilot plan to AI-credit billing on 2026-06-01. The
+/// usage payload kept the legacy `premium_interactions` key for backwards
+/// compatibility, but its values are AI-credit units from that date on.
+fn credits_era_start() -> DateTime<Utc> {
+    Utc.with_ymd_and_hms(2026, 6, 1, 0, 0, 0).unwrap()
+}
+
+fn human_limit_name(limit_id: &str, credits_era: bool) -> String {
+    if credits_era && limit_id.eq_ignore_ascii_case("premium_interactions") {
+        return "AI Credits".into();
+    }
     let mut words = Vec::new();
     for part in limit_id.split(['_', '-']).filter(|part| !part.is_empty()) {
         let mut chars = part.chars();
@@ -284,6 +304,69 @@ mod tests {
             limits[0].credits.as_ref().and_then(|c| c.balance),
             Some(93.0)
         );
+    }
+
+    #[test]
+    fn labels_premium_interactions_as_ai_credits_after_billing_switch() {
+        // Post-2026-06-01 payloads keep the legacy quota key but report
+        // AI-credit units, and the reset date moved to quota_reset_date_utc.
+        let raw = r#"{
+          "observed_at": "2026-07-05T12:00:00Z",
+          "payload": {
+            "copilot_plan": "individual_pro",
+            "quota_reset_date_utc": "2026-08-01T00:00:00.000Z",
+            "token_based_billing": { "enabled": true },
+            "quota_snapshots": {
+              "premium_interactions": {
+                "entitlement": 1000,
+                "percent_remaining": 40.0,
+                "remaining": 400,
+                "unlimited": false
+              }
+            }
+          }
+        }"#;
+
+        let limits = parse_sidecar_str(raw, None).unwrap();
+
+        assert_eq!(limits.len(), 1);
+        assert_eq!(limits[0].limit_id, "premium_interactions");
+        assert_eq!(limits[0].limit_name.as_deref(), Some("AI Credits"));
+        assert_eq!(limits[0].primary.unwrap().used_percent, 60.0);
+        assert_eq!(
+            limits[0]
+                .primary
+                .unwrap()
+                .resets_at
+                .map(|dt| dt.to_rfc3339()),
+            Some("2026-08-01T00:00:00+00:00".to_string())
+        );
+        assert_eq!(
+            limits[0].credits.as_ref().and_then(|c| c.balance),
+            Some(400.0)
+        );
+    }
+
+    #[test]
+    fn observation_date_alone_switches_to_ai_credits_naming() {
+        let raw = r#"{
+          "copilot_plan": "individual_pro",
+          "quota_reset_date": "2026-08-01",
+          "quota_snapshots": {
+            "premium_interactions": {
+              "entitlement": 1000,
+              "remaining": 250,
+              "unlimited": false,
+              "timestamp_utc": "2026-06-02T09:00:00Z"
+            }
+          }
+        }"#;
+
+        let limits = parse_sidecar_str(raw, None).unwrap();
+
+        assert_eq!(limits.len(), 1);
+        assert_eq!(limits[0].limit_name.as_deref(), Some("AI Credits"));
+        assert_eq!(limits[0].primary.unwrap().used_percent, 75.0);
     }
 
     #[test]

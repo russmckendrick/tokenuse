@@ -19,12 +19,15 @@
           "claude-opus-",
           "claude-sonnet-",
           "claude-haiku-",
+          "claude-fable-",
+          "claude-mythos-",
           "claude-3-",
           "gpt-5",
           "gpt-4o",
           "o1",
           "o3",
-          "gemini-"
+          "gemini-",
+          "grok-"
         ],
         "canonical_exact": [
           "codex-mini-latest"
@@ -61,7 +64,26 @@
           "web_search": 0.01
         },
         "rows": [
-          { "match": "Claude Opus 4.7", "model": "claude-opus-4-7" },
+          { "match": "Claude Fable 5", "model": "claude-fable-5" },
+          { "match": "Claude Mythos 5", "model": "claude-mythos-5" },
+          {
+            "match": "Claude Opus 4.8",
+            "model": "claude-opus-4-8",
+            "set": { "fast_multiplier": 2 },
+            "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.8 fast mode at $10 input and $50 output per MTok (2x base)."
+          },
+          {
+            "match": "Claude Opus 4.8",
+            "model": "claude-opus-4.8",
+            "set": { "fast_multiplier": 2 },
+            "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.8 fast mode at $10 input and $50 output per MTok (2x base)."
+          },
+          {
+            "match": "Claude Opus 4.7",
+            "model": "claude-opus-4-7",
+            "set": { "fast_multiplier": 6 },
+            "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.7 fast mode at $30 input and $150 output per MTok; deprecated upstream with removal scheduled for 2026-07-24."
+          },
           {
             "match": "Claude Opus 4.6",
             "model": "claude-opus-4-6",
@@ -79,6 +101,12 @@
             "model": "claude-opus-4.6",
             "set": { "fast_multiplier": 6 },
             "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.6 fast mode at $30 input and $150 output per MTok."
+          },
+          {
+            "match": "Claude Sonnet 5 starting September 1, 2026",
+            "model": "claude-sonnet-5",
+            "effective_from": "2026-09-01",
+            "note": "Standard Sonnet 5 pricing takes effect 2026-09-01; introductory pricing through 2026-08-31 is carried by the upstream book."
           },
           { "match": "Claude Sonnet 4.6", "model": "claude-sonnet-4-6" },
           { "match": "Claude Sonnet 4.5", "model": "claude-sonnet-4-5" },
@@ -164,6 +192,9 @@
           { "match": "GPT-5.4 mini", "model": "gpt-5.4-mini" },
           { "match": "GPT-5.4 nano", "model": "gpt-5.4-nano" },
           { "match": "GPT-5.5", "model": "gpt-5.5" },
+          { "match": "GPT-5.6 Luna", "model": "gpt-5.6-luna" },
+          { "match": "GPT-5.6 Sol", "model": "gpt-5.6-sol" },
+          { "match": "GPT-5.6 Terra", "model": "gpt-5.6-terra" },
           { "match": "Claude Haiku 4.5", "model": "claude-haiku-4-5" },
           { "match": "Claude Sonnet 4", "model": "claude-sonnet-4" },
           { "match": "Claude Sonnet 4.5", "model": "claude-sonnet-4-5" },
@@ -171,10 +202,21 @@
           { "match": "Claude Opus 4.5", "model": "claude-opus-4-5" },
           { "match": "Claude Opus 4.6", "model": "claude-opus-4-6" },
           { "match": "Claude Opus 4.7", "model": "claude-opus-4-7" },
+          { "match": "Claude Opus 4.8", "model": "claude-opus-4-8" },
+          {
+            "match": "Claude Opus 4.8 (fast mode)",
+            "model": "claude-opus-4-8-fast",
+            "note": "Copilot lists fast mode as its own billable model row."
+          },
+          { "match": "Claude Sonnet 5", "model": "claude-sonnet-5" },
+          { "match": "Claude Fable 5", "model": "claude-fable-5" },
           { "match": "Gemini 2.5 Pro", "model": "gemini-2.5-pro" },
           { "match": "Gemini 3 Flash", "model": "gemini-3-flash" },
           { "match": "Gemini 3.1 Pro", "model": "gemini-3.1-pro" },
+          { "match": "Gemini 3.5 Flash", "model": "gemini-3.5-flash" },
           { "match": "Grok Code Fast 1", "model": "grok-code-fast-1" },
+          { "match": "MAI-Code-1-Flash", "model": "mai-code-1-flash" },
+          { "match": "Kimi K2.7 Code", "model": "kimi-k2.7-code" },
           { "match": "Raptor mini", "model": "raptor-mini" },
           { "match": "Goldeneye", "model": "goldeneye" }
         ]

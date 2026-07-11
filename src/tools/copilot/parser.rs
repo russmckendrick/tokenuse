@@ -1,9 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use color_eyre::Result;
+use rusqlite::Connection;
 use serde_json::Value;
 
 use crate::pricing;
@@ -21,6 +22,17 @@ pub fn parse_session(
     seen: &mut HashSet<String>,
 ) -> Result<Vec<ParsedCall>> {
     let path = &source.path;
+    if path.is_file() {
+        match path.file_name().and_then(|name| name.to_str()) {
+            Some(config::CLI_SESSION_STORE_FILE) => {
+                return Ok(parse_session_store(path, source, seen));
+            }
+            Some(config::CLI_DATA_STORE_FILE) => {
+                return Ok(parse_data_store(path, source, seen));
+            }
+            _ => {}
+        }
+    }
     if path.is_dir() {
         let mut calls = Vec::new();
         if let Ok(entries) = fs::read_dir(path) {
@@ -183,7 +195,17 @@ fn parse_transcript(
         .filter_map(|l| serde_json::from_str::<Value>(l).ok())
         .collect();
 
-    let model = infer_model_from_tool_ids(&events);
+    // Tool-call id prefixes reflect the backend that actually served the
+    // session and win over `session.start data.model`, which has been observed
+    // to disagree (e.g. declaring gpt-5 while the tool ids are Bedrock
+    // Anthropic). The declared model is only trusted when no known prefix
+    // appears, where it beats the generic copilot-auto bucket.
+    let inferred = infer_model_from_tool_ids(&events);
+    let model = if inferred == COPILOT_AUTO {
+        transcript_declared_model(&events).unwrap_or(inferred)
+    } else {
+        inferred
+    };
 
     let mut pending_user_message = String::new();
     let mut calls = Vec::new();
@@ -269,6 +291,220 @@ fn parse_transcript(
     calls
 }
 
+/// Private working copy of a Copilot CLI SQLite store. The CLI keeps these
+/// databases in WAL mode and may hold un-checkpointed rows in the -wal file,
+/// which `immutable=1` reads would miss; copying db + sidecars and opening the
+/// copy lets SQLite recover the WAL without touching the live files.
+struct StoreCopy {
+    dir: PathBuf,
+    db: PathBuf,
+}
+
+impl StoreCopy {
+    fn new(path: &Path) -> Option<Self> {
+        let file_name = path.file_name()?.to_string_lossy().to_string();
+        let dir = std::env::temp_dir().join(format!(
+            "tokenuse-copilot-store-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .ok()?
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).ok()?;
+        let db = dir.join(&file_name);
+        if fs::copy(path, &db).is_err() {
+            let _ = fs::remove_dir_all(&dir);
+            return None;
+        }
+        for suffix in ["-wal", "-shm"] {
+            let sidecar = PathBuf::from(format!("{}{suffix}", path.display()));
+            if sidecar.is_file() {
+                let _ = fs::copy(&sidecar, dir.join(format!("{file_name}{suffix}")));
+            }
+        }
+        Some(Self { dir, db })
+    }
+
+    fn open(&self) -> rusqlite::Result<Connection> {
+        Connection::open(&self.db)
+    }
+}
+
+impl Drop for StoreCopy {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.dir);
+    }
+}
+
+fn parse_session_store(
+    path: &Path,
+    source: &SessionSource,
+    seen: &mut HashSet<String>,
+) -> Vec<ParsedCall> {
+    let Some(store) = StoreCopy::new(path) else {
+        return Vec::new();
+    };
+    let Ok(conn) = store.open() else {
+        return Vec::new();
+    };
+    let Ok(mut stmt) = conn.prepare(config::CLI_TURNS_SQL) else {
+        return Vec::new();
+    };
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, i64>(1)?,
+            row.get::<_, Option<String>>(2)?,
+            row.get::<_, Option<String>>(3)?,
+            row.get::<_, Option<String>>(4)?,
+            row.get::<_, Option<String>>(5)?,
+            row.get::<_, Option<String>>(6)?,
+        ))
+    });
+    let Ok(rows) = rows else {
+        return Vec::new();
+    };
+
+    let mut calls = Vec::new();
+    for row in rows.flatten() {
+        let (session_id, turn_index, user_message, assistant_response, timestamp, cwd, repository) =
+            row;
+        let user_message = user_message.unwrap_or_default();
+        let assistant_response = assistant_response.unwrap_or_default();
+        if user_message.trim().is_empty() && assistant_response.trim().is_empty() {
+            continue;
+        }
+
+        let dedup_key = format!("copilot:{session_id}:turn-{turn_index}");
+        if !seen.insert(dedup_key.clone()) {
+            continue;
+        }
+
+        let input_tokens = ((user_message.len() as f64) / CHARS_PER_TOKEN).ceil() as u64;
+        let output_tokens = ((assistant_response.len() as f64) / CHARS_PER_TOKEN).ceil() as u64;
+        let project = store_project(cwd.as_deref(), repository.as_deref(), &source.project);
+        let model = COPILOT_AUTO.to_string();
+
+        let mut call = ParsedCall {
+            tool: config::TOOL_ID,
+            model: model.clone(),
+            input_tokens,
+            output_tokens,
+            speed: Speed::Standard,
+            timestamp: timestamp.as_deref().and_then(parse_store_timestamp),
+            dedup_key,
+            user_message: truncate(&user_message, 500),
+            session_id,
+            project,
+            ..ParsedCall::default()
+        };
+        call.cost_usd = pricing::cost(&model, &call, Speed::Standard);
+        calls.push(call);
+    }
+    calls
+}
+
+fn parse_data_store(
+    path: &Path,
+    source: &SessionSource,
+    seen: &mut HashSet<String>,
+) -> Vec<ParsedCall> {
+    let Some(store) = StoreCopy::new(path) else {
+        return Vec::new();
+    };
+    let Ok(conn) = store.open() else {
+        return Vec::new();
+    };
+    let Ok(mut stmt) = conn.prepare(config::CLI_APP_SESSIONS_SQL) else {
+        return Vec::new();
+    };
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, Option<String>>(1)?,
+            row.get::<_, i64>(2)?,
+            row.get::<_, i64>(3)?,
+            row.get::<_, i64>(4)?,
+            row.get::<_, i64>(5)?,
+            row.get::<_, Option<String>>(6)?,
+            row.get::<_, Option<String>>(7)?,
+        ))
+    });
+    let Ok(rows) = rows else {
+        return Vec::new();
+    };
+
+    let mut calls = Vec::new();
+    for row in rows.flatten() {
+        let (id, model, input, output, cached, reasoning, created_at, updated_at) = row;
+        let total_input = input.max(0) as u64;
+        let output_tokens = output.max(0) as u64;
+        let cached_tokens = (cached.max(0) as u64).min(total_input);
+        if total_input == 0 && output_tokens == 0 {
+            continue;
+        }
+
+        // One aggregate call per session: data.db keeps running totals, not a
+        // turn log. The dedup key stays stable so re-syncs update in place.
+        let dedup_key = format!("{}{id}", config::CLI_APP_DEDUP_PREFIX);
+        if !seen.insert(dedup_key.clone()) {
+            continue;
+        }
+
+        let model = model
+            .filter(|m| !m.trim().is_empty())
+            .unwrap_or_else(|| COPILOT_AUTO.to_string());
+        // Cached tokens are assumed to be reported inside the input total, the
+        // same subtract-then-price convention the Codex parser uses.
+        let input_tokens = total_input - cached_tokens;
+
+        let mut call = ParsedCall {
+            tool: config::TOOL_ID,
+            model: model.clone(),
+            input_tokens,
+            output_tokens,
+            cache_read_input_tokens: cached_tokens,
+            cached_input_tokens: cached_tokens,
+            reasoning_tokens: reasoning.max(0) as u64,
+            speed: Speed::Standard,
+            timestamp: updated_at
+                .as_deref()
+                .and_then(parse_store_timestamp)
+                .or_else(|| created_at.as_deref().and_then(parse_store_timestamp)),
+            dedup_key,
+            session_id: id,
+            project: source.project.clone(),
+            ..ParsedCall::default()
+        };
+        call.cost_usd = pricing::cost(&model, &call, Speed::Standard);
+        calls.push(call);
+    }
+    calls
+}
+
+fn store_project(cwd: Option<&str>, repository: Option<&str>, fallback: &str) -> String {
+    if let Some(cwd) = cwd.map(str::trim) {
+        if cwd.len() > 1 && cwd != "null" {
+            return cwd.to_string();
+        }
+    }
+    if let Some(repo) = repository.map(str::trim) {
+        if !repo.is_empty() && repo != "null" {
+            return repo.to_string();
+        }
+    }
+    fallback.to_string()
+}
+
+fn parse_store_timestamp(s: &str) -> Option<DateTime<Utc>> {
+    parse_timestamp(s).or_else(|| {
+        NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
+            .ok()
+            .map(|dt| DateTime::from_naive_utc_and_offset(dt, Utc))
+    })
+}
+
 fn transcript_cwd(lines: &[String]) -> Option<String> {
     lines.iter().find_map(|line| {
         let value = serde_json::from_str::<Value>(line).ok()?;
@@ -280,6 +516,20 @@ fn transcript_cwd(lines: &[String]) -> Option<String> {
             .and_then(|cwd| cwd.as_str())
             .filter(|cwd| !cwd.trim().is_empty())
             .map(|cwd| cwd.to_string())
+    })
+}
+
+fn transcript_declared_model(events: &[Value]) -> Option<String> {
+    events.iter().find_map(|event| {
+        if event.get("type").and_then(|t| t.as_str()) != Some("session.start") {
+            return None;
+        }
+        event
+            .pointer("/data/model")
+            .and_then(|model| model.as_str())
+            .map(str::trim)
+            .filter(|model| !model.is_empty() && !model.eq_ignore_ascii_case("auto"))
+            .map(str::to_string)
     })
 }
 
@@ -527,6 +777,113 @@ mod tests {
         assert!(calls[0].output_tokens > 0);
         assert!(calls[0].reasoning_tokens > 0);
         assert!(calls[0].cost_usd > 0.0);
+    }
+
+    #[test]
+    fn declared_model_used_when_no_tool_id_prefix_is_recognized() {
+        let dir = TempDir::new();
+        let transcript = dir
+            .path()
+            .join("99999999-8888-7777-6666-555555555555.jsonl");
+        write_lines(
+            &transcript,
+            &[
+                r#"{"type":"session.start","data":{"producer":"copilot-agent","model":"Claude Sonnet 4.5","context":{"cwd":"/Users/me/Code/tokens"}}}"#,
+                r#"{"type":"user.message","data":{"content":"hello"}}"#,
+                r#"{"type":"assistant.message","data":{"messageId":"m1","content":"hi there","toolRequests":[{"toolCallId":"mystery_123","name":"read_file"}]}}"#,
+            ],
+        );
+
+        let source = SessionSource::session(transcript, "vscode-ws", config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source, &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].model, "Claude Sonnet 4.5");
+        assert!(
+            calls[0].cost_usd > 0.0,
+            "display name resolves via copilot tool aliases"
+        );
+    }
+
+    #[test]
+    fn parses_cli_session_store_turns_including_wal_rows() {
+        let dir = TempDir::new();
+        let db_path = dir.path().join(config::CLI_SESSION_STORE_FILE);
+        let conn = Connection::open(&db_path).unwrap();
+        conn.pragma_update(None, "journal_mode", "WAL").unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions (id TEXT PRIMARY KEY, cwd TEXT, repository TEXT, host_type TEXT, branch TEXT, summary TEXT, created_at TEXT, updated_at TEXT);
+             CREATE TABLE turns (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, turn_index INTEGER NOT NULL, user_message TEXT, assistant_response TEXT, timestamp TEXT);
+             INSERT INTO sessions (id, cwd) VALUES ('sess-1', '/Users/me/Code/tokens');
+             INSERT INTO sessions (id, cwd, repository) VALUES ('sess-2', '/', 'russmckendrick/tokens');
+             INSERT INTO turns (session_id, turn_index, user_message, assistant_response, timestamp) VALUES ('sess-1', 0, 'hello there', 'general kenobi, nice to see you', '2026-07-04T07:20:25.254Z');
+             INSERT INTO turns (session_id, turn_index, user_message, assistant_response, timestamp) VALUES ('sess-2', 0, 'hi', 'ok', '2026-07-04 07:21:00');
+             INSERT INTO turns (session_id, turn_index, user_message, assistant_response) VALUES ('sess-2', 1, '', '');",
+        )
+        .unwrap();
+
+        // Keep the writer connection open so the rows stay in the -wal sidecar;
+        // the parser must surface them through its private store copy.
+        let source = SessionSource::session(db_path.clone(), "copilot-cli", config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source, &mut seen).unwrap();
+        drop(conn);
+
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].model, "copilot-auto");
+        assert_eq!(calls[0].project, "/Users/me/Code/tokens");
+        assert_eq!(calls[0].dedup_key, "copilot:sess-1:turn-0");
+        assert_eq!(calls[0].session_id, "sess-1");
+        assert!(calls[0].input_tokens > 0);
+        assert!(calls[0].output_tokens > 0);
+        assert!(calls[0].cost_usd > 0.0);
+        assert!(calls[0].timestamp.is_some());
+        assert_eq!(calls[1].project, "russmckendrick/tokens");
+        assert!(
+            calls[1].timestamp.is_some(),
+            "sqlite datetime format parses"
+        );
+
+        let again = parse_session(&source, &mut seen).unwrap();
+        assert!(again.is_empty());
+    }
+
+    #[test]
+    fn parses_cli_data_store_session_totals() {
+        let dir = TempDir::new();
+        let db_path = dir.path().join(config::CLI_DATA_STORE_FILE);
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions (id TEXT PRIMARY KEY, model TEXT, total_input_tokens INTEGER NOT NULL DEFAULT 0, total_output_tokens INTEGER NOT NULL DEFAULT 0, total_cached_tokens INTEGER NOT NULL DEFAULT 0, total_reasoning_tokens INTEGER NOT NULL DEFAULT 0, created_at TEXT, updated_at TEXT);
+             INSERT INTO sessions VALUES ('app-1', 'claude-sonnet-4.5', 12000, 3000, 10000, 500, '2026-07-01T10:00:00.000Z', '2026-07-01T11:00:00.000Z');
+             INSERT INTO sessions VALUES ('app-empty', 'gpt-5', 0, 0, 0, 0, NULL, NULL);",
+        )
+        .unwrap();
+        drop(conn);
+
+        let source = SessionSource::session(db_path, "copilot-cli", config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source, &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 1);
+        let call = &calls[0];
+        assert_eq!(call.model, "claude-sonnet-4.5");
+        assert_eq!(
+            call.input_tokens, 2_000,
+            "cached tokens subtracted from input"
+        );
+        assert_eq!(call.cache_read_input_tokens, 10_000);
+        assert_eq!(call.cached_input_tokens, 10_000);
+        assert_eq!(call.output_tokens, 3_000);
+        assert_eq!(call.reasoning_tokens, 500);
+        assert_eq!(call.dedup_key, "copilot:cli:app-1");
+        assert_eq!(call.project, "copilot-cli");
+        assert!(call.cost_usd > 0.0);
+        assert_eq!(
+            call.timestamp.map(|ts| ts.to_rfc3339()),
+            Some("2026-07-01T11:00:00+00:00".to_string())
+        );
     }
 
     #[test]
