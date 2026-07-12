@@ -263,9 +263,9 @@ The Desktop track inherits every shared token above and adds the following.
 A dual-font system. Inter (variable, weights 400/500/600/700) is the UI font; JetBrains Mono is reserved for numbers, IDs, paths, code blocks, and table data cells where column alignment matters.
 
 - **`desktop.typography.ui`** — base 13px Inter for nav, panel titles (when not branded as a TUI panel title), button text, dropdown labels, prose.
-- **`desktop.typography.heading`** — 13px Inter 600 for panel titles and section headings on Config, Insights, and modals.
+- **`desktop.typography.heading`** — 13px Inter 600 for panel titles and section headings on Config and modals.
 - **`desktop.typography.label`** — 11px Inter 600 uppercase with letter-spacing for KPI labels, table headers, status pill text.
-- **`desktop.typography.body`** — 13px Inter 400 for advice prose, descriptions, modal copy.
+- **`desktop.typography.body`** — 13px Inter 400 for descriptions and modal copy.
 - **`desktop.typography.numeric`** — JetBrains Mono with `font-variant-numeric: tabular-nums slashed-zero` for KPI values, costs, call counts, token counts, durations, session IDs, file paths, and code blocks.
 
 Use the `.mono` utility class (or set `font-family: var(--font-mono)` directly) on any cell or span containing a number or identifier.
