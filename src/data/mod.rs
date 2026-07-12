@@ -65,6 +65,7 @@ pub struct RecentUsageMetric {
 #[derive(Debug, Clone, Serialize)]
 pub struct RecentModelMetric {
     pub name: &'static str,
+    pub provider: &'static str,
     pub calls: u64,
     pub tokens: &'static str,
     pub cost: &'static str,
@@ -132,6 +133,9 @@ pub struct SessionMetric {
 #[derive(Debug, Clone, Serialize)]
 pub struct ModelMetric {
     pub name: &'static str,
+    pub provider: &'static str,
+    pub provider_label: &'static str,
+    pub family: &'static str,
     pub cost: &'static str,
     pub cache: &'static str,
     pub cache_rate: &'static str,
@@ -275,7 +279,9 @@ struct WireRecentUsageMetric {
 
 #[derive(Debug, Deserialize)]
 struct WireRecentModelMetric {
-    name: String,
+    id: String,
+    #[serde(default)]
+    tool: String,
     calls: u64,
     tokens: String,
     cost: String,
@@ -334,7 +340,9 @@ struct WireSessionMetric {
 
 #[derive(Debug, Deserialize)]
 struct WireModelMetric {
-    name: String,
+    id: String,
+    #[serde(default)]
+    tool: String,
     cost: String,
     cache: String,
     cache_rate: String,
@@ -475,8 +483,10 @@ impl From<WireRecentUsageMetric> for RecentUsageMetric {
 
 impl From<WireRecentModelMetric> for RecentModelMetric {
     fn from(wire: WireRecentModelMetric) -> Self {
+        let identity = crate::models::resolve(&wire.tool, &wire.id);
         Self {
-            name: leak(wire.name),
+            name: leak(identity.display),
+            provider: identity.provider.id(),
             calls: wire.calls,
             tokens: leak(wire.tokens),
             cost: leak(wire.cost),
@@ -563,8 +573,12 @@ impl From<WireSessionMetric> for SessionMetric {
 
 impl From<WireModelMetric> for ModelMetric {
     fn from(wire: WireModelMetric) -> Self {
+        let identity = crate::models::resolve(&wire.tool, &wire.id);
         Self {
-            name: leak(wire.name),
+            name: leak(identity.display),
+            provider: identity.provider.id(),
+            provider_label: identity.provider.label(),
+            family: leak(identity.family),
             cost: leak(wire.cost),
             cache: leak(wire.cache),
             cache_rate: leak(wire.cache_rate),

@@ -63,6 +63,9 @@ export type SessionMetric = {
 
 export type ModelMetric = {
   name: string;
+  provider: string;
+  provider_label: string;
+  family: string;
   cost: string;
   cache: string;
   cache_rate: string;
@@ -115,6 +118,7 @@ export type RecentUsageMetric = {
 
 export type RecentModelMetric = {
   name: string;
+  provider: string;
   calls: number;
   tokens: string;
   cost: string;

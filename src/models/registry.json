@@ -1,0 +1,53 @@
+{
+  "_metadata": {
+    "schema": "tokenuse model-registry.v1",
+    "notes": "Ordered rules; first match wins. Keys are matched against models::canonical_key output (lowercased, vendor path / @suffix / -YYYYMMDD date stripped). Rules with a tool only apply to that adapter's calls. canonical defaults to the first key. Model, provider, and family names are data-derived values, exempt from the copy.json rule."
+  },
+  "rules": [
+    { "tool": "copilot", "match": "exact", "keys": ["openai-auto", "copilot-openai-auto"], "canonical": "copilot-openai-auto", "display": "OpenAI (auto)", "provider": "openai", "family": "Auto" },
+    { "tool": "copilot", "match": "exact", "keys": ["anthropic-auto", "copilot-anthropic-auto"], "canonical": "copilot-anthropic-auto", "display": "Anthropic (auto)", "provider": "anthropic", "family": "Auto" },
+    { "tool": "copilot", "match": "exact", "keys": ["copilot-auto", "auto"], "canonical": "copilot-auto", "display": "Copilot (auto)", "provider": "github", "family": "Auto" },
+    { "tool": "cursor", "match": "exact", "keys": ["auto"], "canonical": "cursor-auto", "display": "Cursor (auto)", "provider": "cursor", "family": "Auto" },
+    { "tool": "cursor", "match": "exact", "keys": ["default"], "canonical": "cursor-default", "display": "Cursor (default)", "provider": "cursor", "family": "Auto" },
+    { "match": "exact", "keys": ["gemini-auto"], "display": "Gemini (auto)", "provider": "google", "family": "Auto" },
+    { "match": "exact", "keys": ["auto"], "display": "Auto", "provider": "other", "family": "Auto" },
+
+    { "match": "prefix", "keys": ["claude-fable-5"], "display": "Fable 5", "provider": "anthropic", "family": "Fable" },
+    { "match": "prefix", "keys": ["claude-opus-4-8"], "display": "Opus 4.8", "provider": "anthropic", "family": "Opus" },
+    { "match": "prefix", "keys": ["claude-opus-4-7"], "display": "Opus 4.7", "provider": "anthropic", "family": "Opus" },
+    { "match": "prefix", "keys": ["claude-opus-4-6"], "display": "Opus 4.6", "provider": "anthropic", "family": "Opus" },
+    { "match": "prefix", "keys": ["claude-opus-4-5"], "display": "Opus 4.5", "provider": "anthropic", "family": "Opus" },
+    { "match": "prefix", "keys": ["claude-opus-4-1"], "display": "Opus 4.1", "provider": "anthropic", "family": "Opus" },
+    { "match": "prefix", "keys": ["claude-opus-4"], "display": "Opus 4", "provider": "anthropic", "family": "Opus" },
+    { "match": "prefix", "keys": ["claude-sonnet-5"], "display": "Sonnet 5", "provider": "anthropic", "family": "Sonnet" },
+    { "match": "prefix", "keys": ["claude-sonnet-4-6"], "display": "Sonnet 4.6", "provider": "anthropic", "family": "Sonnet" },
+    { "match": "prefix", "keys": ["claude-sonnet-4-5"], "display": "Sonnet 4.5", "provider": "anthropic", "family": "Sonnet" },
+    { "match": "prefix", "keys": ["claude-sonnet-4"], "display": "Sonnet 4", "provider": "anthropic", "family": "Sonnet" },
+    { "match": "prefix", "keys": ["claude-3-7-sonnet"], "display": "Sonnet 3.7", "provider": "anthropic", "family": "Sonnet" },
+    { "match": "prefix", "keys": ["claude-3-5-sonnet"], "display": "Sonnet 3.5", "provider": "anthropic", "family": "Sonnet" },
+    { "match": "prefix", "keys": ["claude-haiku-4-5"], "display": "Haiku 4.5", "provider": "anthropic", "family": "Haiku" },
+    { "match": "prefix", "keys": ["claude-3-5-haiku"], "display": "Haiku 3.5", "provider": "anthropic", "family": "Haiku" },
+
+    { "match": "prefix", "keys": ["gpt-5.3-codex-spark"], "display": "GPT-5.3 Codex Spark", "provider": "openai", "family": "GPT-5 Codex" },
+    { "match": "prefix", "keys": ["gpt-5.3-codex"], "display": "GPT-5.3 Codex", "provider": "openai", "family": "GPT-5 Codex" },
+    { "match": "prefix", "keys": ["gpt-5-codex"], "display": "GPT-5 Codex", "provider": "openai", "family": "GPT-5 Codex" },
+    { "match": "exact", "keys": ["gpt-5-mini"], "display": "GPT-5 Mini", "provider": "openai", "family": "GPT-5" },
+    { "match": "prefix", "keys": ["gpt-4.1-nano"], "display": "GPT-4.1 Nano", "provider": "openai", "family": "GPT-4.1" },
+    { "match": "prefix", "keys": ["gpt-4.1-mini"], "display": "GPT-4.1 Mini", "provider": "openai", "family": "GPT-4.1" },
+    { "match": "prefix", "keys": ["gpt-4.1"], "display": "GPT-4.1", "provider": "openai", "family": "GPT-4.1" },
+    { "match": "prefix", "keys": ["gpt-4o-mini"], "display": "GPT-4o Mini", "provider": "openai", "family": "GPT-4o" },
+    { "match": "prefix", "keys": ["gpt-4o"], "display": "GPT-4o", "provider": "openai", "family": "GPT-4o" },
+    { "match": "prefix", "keys": ["o4-mini"], "display": "o4-mini", "provider": "openai", "family": "o-series" },
+    { "match": "prefix", "keys": ["o3"], "display": "o3", "provider": "openai", "family": "o-series" },
+
+    { "match": "exact", "keys": ["gemini-3-flash-preview"], "display": "Gemini 3 Flash", "provider": "google", "family": "Gemini" },
+    { "match": "exact", "keys": ["gemini-3.1-pro-preview"], "display": "Gemini 3.1 Pro", "provider": "google", "family": "Gemini" },
+    { "match": "exact", "keys": ["gemini-2.5-pro"], "display": "Gemini 2.5 Pro", "provider": "google", "family": "Gemini" },
+    { "match": "exact", "keys": ["gemini-2.5-flash"], "display": "Gemini 2.5 Flash", "provider": "google", "family": "Gemini" },
+    { "match": "exact", "keys": ["gemini-2.0-flash"], "display": "Gemini 2.0 Flash", "provider": "google", "family": "Gemini" },
+    { "match": "exact", "keys": ["gemini-1.5-pro"], "display": "Gemini 1.5 Pro", "provider": "google", "family": "Gemini" },
+    { "match": "exact", "keys": ["gemini-1.5-flash"], "display": "Gemini 1.5 Flash", "provider": "google", "family": "Gemini" },
+
+    { "match": "prefix", "keys": ["grok"], "display": "Grok", "provider": "xai", "family": "Grok" }
+  ]
+}

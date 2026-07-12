@@ -565,29 +565,9 @@ fn parse_pricing_book_date(value: &str) -> Option<NaiveDate> {
 }
 
 fn canonicalize(model: &str) -> String {
-    let mut s = model.trim().to_lowercase();
-    if let Some(idx) = s.find('@') {
-        s.truncate(idx);
-    }
-    if let Some(idx) = s.rfind('/') {
-        s = s[idx + 1..].to_string();
-    }
-    if let Some(stripped) = strip_date_suffix(&s) {
-        s = stripped;
-    }
-    s
-}
-
-fn strip_date_suffix(model: &str) -> Option<String> {
-    let bytes = model.as_bytes();
-    if bytes.len() < 9 {
-        return None;
-    }
-    let tail = &bytes[bytes.len() - 9..];
-    if tail[0] == b'-' && tail[1..].iter().all(|b| b.is_ascii_digit()) {
-        return Some(model[..model.len() - 9].to_string());
-    }
-    None
+    // Pricing and the model registry must agree on what "the same model"
+    // means, so both share one normalization.
+    crate::models::canonical_key(model)
 }
 
 fn effective_date(timestamp: Option<DateTime<Utc>>) -> NaiveDate {

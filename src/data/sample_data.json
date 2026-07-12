@@ -35,10 +35,10 @@
         { "date": "2026-04-29", "project": "brightlane/docs", "cost": "$1.93", "calls": 24, "value": 36 }
       ],
       "models": [
-        { "name": "GPT-5", "cost": "$8.24", "cache": "93.8%", "cache_rate": "10%", "calls": 120, "value": 100 },
-        { "name": "Opus 4.7", "cost": "$6.31", "cache": "96.9%", "cache_rate": "10%", "calls": 91, "value": 77 },
-        { "name": "Sonnet 4.5", "cost": "$2.58", "cache": "89.2%", "cache_rate": "10%", "calls": 48, "value": 31 },
-        { "name": "anthropic-auto", "cost": "$1.31", "cache": "-", "cache_rate": "10%", "calls": 27, "value": 16 }
+        { "id": "gpt-5", "tool": "codex", "cost": "$8.24", "cache": "93.8%", "cache_rate": "10%", "calls": 120, "value": 100 },
+        { "id": "claude-opus-4-7", "tool": "claude-code", "cost": "$6.31", "cache": "96.9%", "cache_rate": "10%", "calls": 91, "value": 77 },
+        { "id": "claude-sonnet-4-5", "tool": "claude-code", "cost": "$2.58", "cache": "89.2%", "cache_rate": "10%", "calls": 48, "value": 31 },
+        { "id": "anthropic-auto", "tool": "copilot", "cost": "$1.31", "cache": "-", "cache_rate": "10%", "calls": 27, "value": 16 }
       ],
       "tools": [
         { "name": "Bash", "calls": 92, "value": 100 },
@@ -108,11 +108,11 @@
         { "date": "2026-04-26", "project": "harbor/data-tools", "cost": "$4.91", "calls": 68, "value": 56 }
       ],
       "models": [
-        { "name": "GPT-5", "cost": "$31.42", "cache": "94.1%", "cache_rate": "10%", "calls": 402, "value": 100 },
-        { "name": "Opus 4.7", "cost": "$24.15", "cache": "96.7%", "cache_rate": "10%", "calls": 318, "value": 77 },
-        { "name": "Sonnet 4.5", "cost": "$14.96", "cache": "91.4%", "cache_rate": "10%", "calls": 228, "value": 48 },
-        { "name": "anthropic-auto", "cost": "$5.61", "cache": "-", "cache_rate": "10%", "calls": 92, "value": 18 },
-        { "name": "openai-auto", "cost": "$2.21", "cache": "-", "cache_rate": "10%", "calls": 44, "value": 7 }
+        { "id": "gpt-5", "tool": "codex", "cost": "$31.42", "cache": "94.1%", "cache_rate": "10%", "calls": 402, "value": 100 },
+        { "id": "claude-opus-4-7", "tool": "claude-code", "cost": "$24.15", "cache": "96.7%", "cache_rate": "10%", "calls": 318, "value": 77 },
+        { "id": "claude-sonnet-4-5", "tool": "claude-code", "cost": "$14.96", "cache": "91.4%", "cache_rate": "10%", "calls": 228, "value": 48 },
+        { "id": "anthropic-auto", "tool": "copilot", "cost": "$5.61", "cache": "-", "cache_rate": "10%", "calls": 92, "value": 18 },
+        { "id": "openai-auto", "tool": "copilot", "cost": "$2.21", "cache": "-", "cache_rate": "10%", "calls": 44, "value": 7 }
       ],
       "tools": [
         { "name": "Bash", "calls": 312, "value": 100 },
@@ -189,11 +189,11 @@
         { "date": "2026-04-27", "project": "northstar/cli", "cost": "$7.64", "calls": 126, "value": 59 }
       ],
       "models": [
-        { "name": "GPT-5", "cost": "$86.41", "cache": "93.6%", "cache_rate": "10%", "calls": 1206, "value": 100 },
-        { "name": "Opus 4.7", "cost": "$64.08", "cache": "96.1%", "cache_rate": "10%", "calls": 928, "value": 74 },
-        { "name": "Sonnet 4.5", "cost": "$42.56", "cache": "90.7%", "cache_rate": "10%", "calls": 772, "value": 49 },
-        { "name": "anthropic-auto", "cost": "$14.26", "cache": "-", "cache_rate": "10%", "calls": 330, "value": 17 },
-        { "name": "openai-auto", "cost": "$7.36", "cache": "-", "cache_rate": "10%", "calls": 182, "value": 9 }
+        { "id": "gpt-5", "tool": "codex", "cost": "$86.41", "cache": "93.6%", "cache_rate": "10%", "calls": 1206, "value": 100 },
+        { "id": "claude-opus-4-7", "tool": "claude-code", "cost": "$64.08", "cache": "96.1%", "cache_rate": "10%", "calls": 928, "value": 74 },
+        { "id": "claude-sonnet-4-5", "tool": "claude-code", "cost": "$42.56", "cache": "90.7%", "cache_rate": "10%", "calls": 772, "value": 49 },
+        { "id": "anthropic-auto", "tool": "copilot", "cost": "$14.26", "cache": "-", "cache_rate": "10%", "calls": 330, "value": 17 },
+        { "id": "openai-auto", "tool": "copilot", "cost": "$7.36", "cache": "-", "cache_rate": "10%", "calls": 182, "value": 9 }
       ],
       "tools": [
         { "name": "Bash", "calls": 906, "value": 100 },
@@ -267,11 +267,11 @@
         { "date": "2026-04-27", "project": "northstar/cli", "cost": "$7.64", "calls": 126, "value": 59 }
       ],
       "models": [
-        { "name": "GPT-5", "cost": "$79.11", "cache": "93.8%", "cache_rate": "10%", "calls": 1084, "value": 100 },
-        { "name": "Opus 4.7", "cost": "$59.66", "cache": "96.2%", "cache_rate": "10%", "calls": 866, "value": 75 },
-        { "name": "Sonnet 4.5", "cost": "$39.84", "cache": "91.1%", "cache_rate": "10%", "calls": 700, "value": 50 },
-        { "name": "anthropic-auto", "cost": "$12.76", "cache": "-", "cache_rate": "10%", "calls": 286, "value": 16 },
-        { "name": "openai-auto", "cost": "$6.85", "cache": "-", "cache_rate": "10%", "calls": 150, "value": 9 }
+        { "id": "gpt-5", "tool": "codex", "cost": "$79.11", "cache": "93.8%", "cache_rate": "10%", "calls": 1084, "value": 100 },
+        { "id": "claude-opus-4-7", "tool": "claude-code", "cost": "$59.66", "cache": "96.2%", "cache_rate": "10%", "calls": 866, "value": 75 },
+        { "id": "claude-sonnet-4-5", "tool": "claude-code", "cost": "$39.84", "cache": "91.1%", "cache_rate": "10%", "calls": 700, "value": 50 },
+        { "id": "anthropic-auto", "tool": "copilot", "cost": "$12.76", "cache": "-", "cache_rate": "10%", "calls": 286, "value": 16 },
+        { "id": "openai-auto", "tool": "copilot", "cost": "$6.85", "cache": "-", "cache_rate": "10%", "calls": 150, "value": 9 }
       ],
       "tools": [
         { "name": "Bash", "calls": 828, "value": 100 },
@@ -350,11 +350,11 @@
         { "date": "2026-04-29", "project": "acme/atlas-dashboard", "cost": "$8.72", "calls": 131, "value": 30 }
       ],
       "models": [
-        { "name": "GPT-5", "cost": "$262.18", "cache": "93.1%", "cache_rate": "10%", "calls": 3846, "value": 100 },
-        { "name": "Opus 4.7", "cost": "$190.72", "cache": "95.7%", "cache_rate": "10%", "calls": 2704, "value": 73 },
-        { "name": "Sonnet 4.5", "cost": "$128.40", "cache": "90.4%", "cache_rate": "10%", "calls": 2408, "value": 49 },
-        { "name": "anthropic-auto", "cost": "$40.86", "cache": "-", "cache_rate": "10%", "calls": 1198, "value": 16 },
-        { "name": "openai-auto", "cost": "$20.02", "cache": "-", "cache_rate": "10%", "calls": 686, "value": 8 }
+        { "id": "gpt-5", "tool": "codex", "cost": "$262.18", "cache": "93.1%", "cache_rate": "10%", "calls": 3846, "value": 100 },
+        { "id": "claude-opus-4-7", "tool": "claude-code", "cost": "$190.72", "cache": "95.7%", "cache_rate": "10%", "calls": 2704, "value": 73 },
+        { "id": "claude-sonnet-4-5", "tool": "claude-code", "cost": "$128.40", "cache": "90.4%", "cache_rate": "10%", "calls": 2408, "value": 49 },
+        { "id": "anthropic-auto", "tool": "copilot", "cost": "$40.86", "cache": "-", "cache_rate": "10%", "calls": 1198, "value": 16 },
+        { "id": "openai-auto", "tool": "copilot", "cost": "$20.02", "cache": "-", "cache_rate": "10%", "calls": 686, "value": 8 }
       ],
       "tools": [
         { "name": "Bash", "calls": 2880, "value": 100 },
@@ -400,8 +400,8 @@
           "last_seen": "now"
         },
         "models": [
-          { "name": "GPT-5", "calls": 24, "tokens": "820K", "cost": "$3.91", "value": 100 },
-          { "name": "GPT-5.3-Codex-Spark", "calls": 17, "tokens": "380K", "cost": "$1.47", "value": 46 }
+          { "id": "gpt-5", "tool": "codex", "calls": 24, "tokens": "820K", "cost": "$3.91", "value": 100 },
+          { "id": "gpt-5.3-codex-spark", "tool": "codex", "calls": 17, "tokens": "380K", "cost": "$1.47", "value": 46 }
         ]
       },
       {
@@ -415,8 +415,8 @@
           "last_seen": "18m"
         },
         "models": [
-          { "name": "Opus 4.7", "calls": 51, "tokens": "4.9M", "cost": "$10.70", "value": 100 },
-          { "name": "Haiku 4.5", "calls": 22, "tokens": "900K", "cost": "$0.72", "value": 18 }
+          { "id": "claude-opus-4-7", "tool": "claude-code", "calls": 51, "tokens": "4.9M", "cost": "$10.70", "value": 100 },
+          { "id": "claude-haiku-4-5", "tool": "claude-code", "calls": 22, "tokens": "900K", "cost": "$0.72", "value": 18 }
         ]
       },
       {
@@ -430,25 +430,13 @@
           "last_seen": "47m"
         },
         "models": [
-          { "name": "Sonnet 4.5", "calls": 18, "tokens": "184K", "cost": "$0.92", "value": 100 }
+          { "id": "claude-sonnet-4-5", "tool": "cursor", "calls": 18, "tokens": "184K", "cost": "$0.92", "value": 100 }
         ]
       },
       {
         "tool": "Copilot",
         "limits": [
-          {
-            "tool": "Copilot",
-            "scope": "AI Credits",
-            "window": "monthly",
-            "used": 9,
-            "left": "91% left",
-            "reset": "01 Aug 01:00",
-            "plan": "Copilot Pro",
-            "used_credits": 128,
-            "remaining_credits": 1372,
-            "total_credits": 1500,
-            "additional_usage": false
-          }
+          { "tool": "Copilot", "scope": "AI Credits", "window": "monthly", "used": 9, "left": "91% left", "reset": "01 Aug 01:00", "plan": "Copilot Pro", "used_credits": 128, "remaining_credits": 1372, "total_credits": 1500, "additional_usage": false }
         ],
         "usage": {
           "buckets": [4, 7, 0, 0, 0, 16, 22, 5, 0, 8, 0, 0, 0, 0, 0, 10, 29, 20, 5, 0, 0, 7, 0, 0],
@@ -458,8 +446,8 @@
           "last_seen": "2h"
         },
         "models": [
-          { "name": "anthropic-auto", "calls": 17, "tokens": "60K", "cost": "$0.31", "value": 100 },
-          { "name": "openai-auto", "calls": 12, "tokens": "36K", "cost": "$0.16", "value": 60 }
+          { "id": "anthropic-auto", "tool": "copilot", "calls": 17, "tokens": "60K", "cost": "$0.31", "value": 100 },
+          { "id": "openai-auto", "tool": "copilot", "calls": 12, "tokens": "36K", "cost": "$0.16", "value": 60 }
         ]
       },
       {
@@ -473,8 +461,8 @@
           "last_seen": "3h"
         },
         "models": [
-          { "name": "Gemini 2.5 Pro", "calls": 14, "tokens": "180K", "cost": "$0.62", "value": 100 },
-          { "name": "Gemini 2.5 Flash", "calls": 8, "tokens": "60K", "cost": "$0.14", "value": 33 }
+          { "id": "gemini-2.5-pro", "tool": "gemini", "calls": 14, "tokens": "180K", "cost": "$0.62", "value": 100 },
+          { "id": "gemini-2.5-flash", "tool": "gemini", "calls": 8, "tokens": "60K", "cost": "$0.14", "value": 33 }
         ]
       }
     ]

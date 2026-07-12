@@ -37,10 +37,6 @@ pub trait ToolAdapter: Send + Sync {
         fingerprint_source(source)
     }
 
-    fn model_display(&self, model: &str) -> String {
-        model.to_string()
-    }
-
     fn tool_display(&self, tool: &str) -> String {
         tool.to_string()
     }

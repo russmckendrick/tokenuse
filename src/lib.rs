@@ -8,6 +8,7 @@ pub mod export;
 pub mod ingest;
 pub mod ingest_cache;
 pub mod keymap;
+pub mod models;
 pub mod pricing;
 #[cfg(feature = "quota-sync")]
 pub mod quota_sync;

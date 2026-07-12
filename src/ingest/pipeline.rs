@@ -387,6 +387,8 @@ fn sort_bar_value(stats: &SortStats, sort: SortMode, max: f64, rank: usize, tota
 
 #[derive(Default)]
 struct ModelAcc {
+    display: String,
+    provider: &'static str,
     calls: u64,
     tokens: u64,
     cost: f64,
@@ -421,7 +423,6 @@ fn build_tool_limit_sections(
     let now = Local::now();
     let mut by_tool: HashMap<&str, Acc> =
         TOOLS.iter().map(|(id, _)| (*id, Acc::default())).collect();
-    let display_lookup = tool_display_lookup();
 
     for call in calls {
         let Some(acc) = by_tool.get_mut(call.tool) else {
@@ -448,11 +449,12 @@ fn build_tool_limit_sections(
         acc.last_seen = Some(acc.last_seen.map(|prev| prev.max(local)).unwrap_or(local));
         acc.latest = latest_timestamp(acc.latest, call.timestamp);
 
-        let model = display_lookup
-            .get(call.tool)
-            .map(|adapter| adapter.model_display(&call.model))
-            .unwrap_or_else(|| call.model.clone());
-        let model_acc = acc.models.entry(model).or_default();
+        let identity = crate::models::resolve(call.tool, &call.model);
+        let model_acc = acc.models.entry(identity.canonical_id).or_default();
+        if model_acc.display.is_empty() {
+            model_acc.display = identity.display;
+            model_acc.provider = identity.provider.id();
+        }
         model_acc.calls += 1;
         model_acc.tokens = model_acc.tokens.saturating_add(tokens);
         model_acc.cost += call.cost_usd;
@@ -495,14 +497,6 @@ fn build_tool_limit_sections(
         .collect()
 }
 
-fn tool_display_lookup() -> HashMap<&'static str, Box<dyn tools::ToolAdapter>> {
-    let mut display_lookup: HashMap<&'static str, Box<dyn tools::ToolAdapter>> = HashMap::new();
-    for adapter in tools::registry() {
-        display_lookup.insert(adapter.id(), adapter);
-    }
-    display_lookup
-}
-
 fn recent_model_rows(
     models: HashMap<String, ModelAcc>,
     sort: SortMode,
@@ -520,7 +514,7 @@ fn recent_model_rows(
             tokens: b.1.tokens as f64,
             latest: b.1.latest,
         };
-        compare_labeled_stats(&a_stats, &b_stats, &a.0, &b.0, sort)
+        compare_labeled_stats(&a_stats, &b_stats, &a.1.display, &b.1.display, sort)
     });
     let max = match sort {
         SortMode::Spend => rows.iter().map(|row| row.1.cost).fold(0.0, f64::max),
@@ -535,8 +529,9 @@ fn recent_model_rows(
     rows.into_iter()
         .take(3)
         .enumerate()
-        .map(|(idx, (name, acc))| RecentModelMetric {
-            name: leak(name),
+        .map(|(idx, (_, acc))| RecentModelMetric {
+            name: leak(acc.display.clone()),
+            provider: acc.provider,
             calls: acc.calls,
             tokens: leak(format_compact(acc.tokens)),
             cost: leak(currency.format_money(acc.cost)),
@@ -1301,8 +1296,6 @@ fn build_session_detail(
     let mut sorted: Vec<&ParsedCall> = calls.to_vec();
     sorted.sort_by(|a, b| compare_calls(a, b, sort));
 
-    let display_lookup = tool_display_lookup();
-
     let total_cost: f64 = sorted.iter().map(|c| c.cost_usd).sum();
     let total_calls = sorted.len() as u64;
     let total_input: u64 = sorted
@@ -1344,10 +1337,7 @@ fn build_session_detail(
     let detail_calls = sorted
         .iter()
         .map(|c| {
-            let model = display_lookup
-                .get(c.tool)
-                .map(|adapter| adapter.model_display(&c.model))
-                .unwrap_or_else(|| c.model.clone());
+            let model = crate::models::resolve(c.tool, &c.model).display;
             let timestamp = c
                 .timestamp
                 .map(|ts| ts.with_timezone(&Local).format("%m-%d %H:%M").to_string())
@@ -1468,6 +1458,10 @@ fn aggregate_models(
 ) -> Vec<ModelMetric> {
     #[derive(Default)]
     struct Acc {
+        display: String,
+        provider: &'static str,
+        provider_label: &'static str,
+        family: String,
         cost: f64,
         calls: u64,
         cache_read: u64,
@@ -1475,19 +1469,20 @@ fn aggregate_models(
         cache_rates: HashSet<String>,
         stats: SortStats,
     }
-    let registry = tools::registry();
-    let mut display_lookup: HashMap<&'static str, Box<dyn tools::ToolAdapter>> = HashMap::new();
-    for p in registry {
-        display_lookup.insert(p.id(), p);
-    }
 
+    // Fold by the registry's canonical id so the same model aggregates into
+    // one row regardless of which tool produced the call or how the raw id
+    // was spelled (dated ids, vendor paths, per-tool aliases).
     let mut by_model: HashMap<String, Acc> = HashMap::new();
     for c in calls {
-        let display = display_lookup
-            .get(c.tool)
-            .map(|p| p.model_display(&c.model))
-            .unwrap_or_else(|| c.model.clone());
-        let entry = by_model.entry(display).or_default();
+        let identity = crate::models::resolve(c.tool, &c.model);
+        let entry = by_model.entry(identity.canonical_id).or_default();
+        if entry.display.is_empty() {
+            entry.display = identity.display;
+            entry.provider = identity.provider.id();
+            entry.provider_label = identity.provider.label();
+            entry.family = identity.family;
+        }
         entry.cost += c.cost_usd;
         entry.calls += 1;
         entry.cache_read += c.cache_read_input_tokens;
@@ -1501,14 +1496,19 @@ fn aggregate_models(
     }
 
     let mut rows: Vec<(String, Acc)> = by_model.into_iter().collect();
-    rows.sort_by(|a, b| compare_labeled_stats(&a.1.stats, &b.1.stats, &a.0, &b.0, sort));
+    rows.sort_by(|a, b| {
+        compare_labeled_stats(&a.1.stats, &b.1.stats, &a.1.display, &b.1.display, sort)
+    });
     let max = max_primary_value(rows.iter().map(|row| &row.1.stats), sort);
     let total = rows.len();
 
     rows.into_iter()
         .enumerate()
-        .map(|(idx, (name, acc))| ModelMetric {
-            name: leak(name),
+        .map(|(idx, (_, acc))| ModelMetric {
+            name: leak(acc.display.clone()),
+            provider: acc.provider,
+            provider_label: acc.provider_label,
+            family: leak(acc.family.clone()),
             cost: leak(currency.format_money(acc.cost)),
             cache: leak(if acc.input == 0 {
                 "-".into()
@@ -2200,7 +2200,7 @@ mod tests {
             .unwrap();
         assert_eq!(claude.usage.tokens, "200");
         assert_eq!(claude.usage.cost, "$2.00");
-        assert_eq!(claude.models[0].name, "test-model");
+        assert_eq!(claude.models[0].name, "Test Model");
         assert_eq!(claude.models[0].calls, 1);
     }
 
@@ -2282,9 +2282,9 @@ mod tests {
         assert_eq!(by_label("04-29").value, 50);
         assert!(tokens.activity_timeline.len() >= 29);
         assert_eq!(tokens.activity_timeline.first().unwrap().label, "04-01");
-        assert_eq!(spend.models[0].name, "spend-model");
-        assert_eq!(date.models[0].name, "date-model");
-        assert_eq!(tokens.models[0].name, "tokens-model");
+        assert_eq!(spend.models[0].name, "Spend Model");
+        assert_eq!(date.models[0].name, "Date Model");
+        assert_eq!(tokens.models[0].name, "Tokens Model");
         assert_eq!(spend.sessions[0].project, "spend");
         assert_eq!(date.sessions[0].project, "date");
         assert_eq!(tokens.sessions[0].project, "tokens");
@@ -2545,9 +2545,9 @@ mod tests {
             .session_detail("other:s1", SortMode::Tokens, &CurrencyFormatter::usd())
             .unwrap();
 
-        assert_eq!(spend.calls[0].model, "spend-model");
-        assert_eq!(date.calls[0].model, "date-model");
-        assert_eq!(tokens.calls[0].model, "tokens-model");
+        assert_eq!(spend.calls[0].model, "Spend Model");
+        assert_eq!(date.calls[0].model, "Date Model");
+        assert_eq!(tokens.calls[0].model, "Tokens Model");
     }
 
     #[test]
