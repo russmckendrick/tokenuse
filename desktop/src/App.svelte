@@ -8,16 +8,12 @@
   import { count } from './format';
   import { fadeIn, pill, reveal } from './motion';
   import TrayPopover from './TrayPopover.svelte';
-  import AuditView from './views/AuditView.svelte';
   import ConfigView from './views/ConfigView.svelte';
   import DeepDiveView from './views/DeepDiveView.svelte';
-  import InsightsView from './views/InsightsView.svelte';
   import OverviewView from './views/OverviewView.svelte';
   import SessionView from './views/SessionView.svelte';
   import UsageView from './views/UsageView.svelte';
   import type {
-    AdviceDataScopeId,
-    AdviceItemStatusId,
     ConfigRow,
     DesktopSnapshot,
     DesktopUpdateDownloadEvent,
@@ -37,7 +33,6 @@
     | 'project'
     | 'session'
     | 'currency'
-    | 'advice_tool'
     | 'report'
     | 'subscription_cookie'
     | null;
@@ -81,7 +76,6 @@
   let reportProjectIdentity = '';
   let reportProjects: ProjectOption[] = [];
   let reportRedacted = false;
-  let insightsGenerateRequest = 0;
   let clearingData = false;
   let pollTimer: number | undefined;
   let desktopUpdate: DesktopUpdateUiState = resetDesktopUpdate();
@@ -316,8 +310,6 @@
     if (modal) return 'desktop_modal';
     if (snapshot?.page === 'session' && event.key === 'Escape') return 'desktop_session_page';
     if (snapshot?.page === 'usage') return 'desktop_usage_page';
-    if (snapshot?.page === 'insights') return 'desktop_insights_page';
-    if (snapshot?.page === 'audit') return 'desktop_audit_page';
     if (snapshot?.page === 'config') return 'desktop_config_page';
     return 'desktop';
   }
@@ -348,9 +340,6 @@
         break;
       case 'close_call_detail':
         closeCallDetail();
-        break;
-      case 'generate_advice_selected':
-        insightsGenerateRequest += 1;
         break;
     }
   }
@@ -401,12 +390,6 @@
     if (!snapshot) return [];
     const needle = query.trim().toLowerCase();
     return snapshot.currencies.filter((currency) => !needle || currency.toLowerCase().includes(needle));
-  }
-
-  function filteredAdviceTools() {
-    if (!snapshot) return [];
-    const needle = query.trim().toLowerCase();
-    return snapshot.advice_tool_options.filter((tool) => !needle || tool.label.toLowerCase().includes(needle));
   }
 
   async function chooseReportDir() {
@@ -464,28 +447,20 @@
     return activePage() === 'config';
   }
 
-  function isInsightsPage() {
-    return activePage() === 'insights';
-  }
-
-  function isAuditPage() {
-    return activePage() === 'audit';
-  }
-
   function isPeriodDisabled(period: PeriodId) {
-    return isConfigPage() || isInsightsPage() || isAuditPage() || (isUsagePage() && period !== 'today');
+    return isConfigPage() || (isUsagePage() && period !== 'today');
   }
 
   function isToolDisabled() {
-    return isConfigPage() || isUsagePage() || isInsightsPage() || isAuditPage();
+    return isConfigPage() || isUsagePage();
   }
 
   function isSortDisabled() {
-    return isConfigPage() || isUsagePage() || isInsightsPage() || isAuditPage();
+    return isConfigPage() || isUsagePage();
   }
 
   function isProjectDisabled() {
-    return isConfigPage() || isUsagePage() || isInsightsPage() || isAuditPage();
+    return isConfigPage() || isUsagePage();
   }
 
   function tabsFor(state: DesktopSnapshot): Array<{ value: PageId; label: string }> {
@@ -493,8 +468,6 @@
       { value: 'overview', label: state.copy.nav.overview },
       { value: 'deep-dive', label: state.copy.nav.deep_dive },
       { value: 'usage', label: state.copy.nav.usage },
-      { value: 'insights', label: state.copy.nav.insights },
-      { value: 'audit', label: state.copy.nav.audit },
       { value: 'config', label: state.copy.nav.config }
     ];
   }
@@ -502,7 +475,6 @@
   function modalTitle(kind: Exclude<ModalKind, null>) {
     if (!snapshot) return kind;
     if (kind === 'report') return snapshot.copy.reports.modal_title;
-    if (kind === 'advice_tool') return snapshot.copy.config.rows.advice_tool.name;
     if (kind === 'subscription_cookie') {
       return cookieProvider === 'codex'
         ? snapshot.copy.modals.sync_codex_subscription_limits_title
@@ -563,12 +535,6 @@
         break;
       case 'codex_subscription_limits':
         openCookieModal('codex');
-        break;
-      case 'advice_tool':
-        openModal('advice_tool');
-        break;
-      case 'advice_prompts':
-        await commit(() => api.prepareAdvicePrompts());
         break;
       case 'clear_data':
         if (await confirmClearData()) {
@@ -661,14 +627,6 @@
       clearingData = false;
       busy = false;
     }
-  }
-
-  function generateAdvice(dataScope: AdviceDataScopeId) {
-    void commit(() => api.generateAdvice(dataScope));
-  }
-
-  function updateAdviceItemStatus(itemId: number, status: AdviceItemStatusId) {
-    void commit(() => api.updateAdviceItemStatus(itemId, status));
   }
 
   async function checkDesktopUpdate() {
@@ -868,8 +826,8 @@
         <button
           class="icon-button"
           type="button"
-          title={isAuditPage() ? snapshot.copy.actions.refresh_audit : snapshot.copy.actions.refresh_archive}
-          onclick={() => commit(() => (isAuditPage() ? api.refreshAudit() : api.refreshArchive()))}
+          title={snapshot.copy.actions.refresh_archive}
+          onclick={() => commit(() => api.refreshArchive())}
         >
           <RefreshCw size={16} />
         </button>
@@ -926,15 +884,6 @@
         <DeepDiveView {snapshot} openSessionPicker={() => openModal('session')} />
       {:else if activePage() === 'usage'}
         <UsageView {snapshot} {usageTone} />
-      {:else if activePage() === 'insights'}
-        <InsightsView
-          {snapshot}
-          {generateAdvice}
-          {updateAdviceItemStatus}
-          generateAdviceRequest={insightsGenerateRequest}
-        />
-      {:else if activePage() === 'audit'}
-        <AuditView {snapshot} refreshAudit={() => commit(() => api.refreshAudit())} />
       {:else if activePage() === 'config'}
         <ConfigView
           {snapshot}
@@ -1011,19 +960,6 @@
                 onclick={() => commit(() => api.setCurrency(currency)).then(closeModal)}
               >
                 {currency}
-              </button>
-            {/each}
-          </div>
-        {:else if modal === 'advice_tool'}
-          <input bind:value={query} placeholder={snapshot.copy.desktop.filter_advice_tools} />
-          <div class="picker-list">
-            {#each filteredAdviceTools() as tool}
-              <button
-                type="button"
-                class:selected={tool.value === snapshot.advice_tool}
-                onclick={() => commit(() => api.setAdviceTool(tool.value)).then(closeModal)}
-              >
-                <span>{tool.label}</span>
               </button>
             {/each}
           </div>

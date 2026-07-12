@@ -33,7 +33,6 @@
       'codex_subscription_limits',
       'copilot_limits'
     ],
-    advice: ['advice_tool', 'advice_prompts'],
     data: ['clear_data']
   };
 
@@ -131,28 +130,6 @@
                     {/each}
                   </div>
                 {/if}
-              </div>
-              <div class="config-row-action">
-                <button class="row-action" type="button" onclick={() => configAction(row)}>
-                  {row.action}
-                </button>
-              </div>
-            </div>
-          {/each}
-        </div>
-      </Panel>
-    {/if}
-
-    {#if rowsFor('advice').length}
-      <Panel title={snapshot.copy.panels.advice_engine} tone="magenta">
-        <div class="config-rows">
-          {#each rowsFor('advice') as row}
-            <div class="config-row">
-              <div class="config-row-title">
-                <strong>{row.name}</strong>
-              </div>
-              <div class="config-row-value">
-                <div>{row.value}</div>
               </div>
               <div class="config-row-action">
                 <button class="row-action" type="button" onclick={() => configAction(row)}>
