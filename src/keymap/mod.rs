@@ -8,8 +8,6 @@ use serde::Deserialize;
 
 pub const CONTEXT_DASHBOARD: &str = "dashboard";
 pub const CONTEXT_USAGE_PAGE: &str = "usage_page";
-pub const CONTEXT_INSIGHTS_PAGE: &str = "insights_page";
-pub const CONTEXT_AUDIT_PAGE: &str = "audit_page";
 pub const CONTEXT_CONFIG_PAGE: &str = "config_page";
 pub const CONTEXT_SESSION_PAGE: &str = "session_page";
 pub const CONTEXT_HELP: &str = "help";
@@ -24,8 +22,6 @@ pub const CONTEXT_EXPORT_PICKER: &str = "export_picker";
 pub const CONTEXT_EXPORT_FOLDER_PICKER: &str = "export_folder_picker";
 pub const CONTEXT_DESKTOP: &str = "desktop";
 pub const CONTEXT_DESKTOP_USAGE_PAGE: &str = "desktop_usage_page";
-pub const CONTEXT_DESKTOP_INSIGHTS_PAGE: &str = "desktop_insights_page";
-pub const CONTEXT_DESKTOP_AUDIT_PAGE: &str = "desktop_audit_page";
 pub const CONTEXT_DESKTOP_CONFIG_PAGE: &str = "desktop_config_page";
 pub const CONTEXT_DESKTOP_SESSION_PAGE: &str = "desktop_session_page";
 pub const CONTEXT_DESKTOP_MODAL: &str = "desktop_modal";
@@ -55,8 +51,6 @@ pub const ACTION_OPEN_EXPORT_FOLDER_PICKER: &str = "open_export_folder_picker";
 pub const ACTION_PAGE_OVERVIEW: &str = "page_overview";
 pub const ACTION_PAGE_DEEP_DIVE: &str = "page_deep_dive";
 pub const ACTION_PAGE_USAGE: &str = "page_usage";
-pub const ACTION_PAGE_INSIGHTS: &str = "page_insights";
-pub const ACTION_PAGE_AUDIT: &str = "page_audit";
 pub const ACTION_PAGE_CONFIG: &str = "page_config";
 pub const ACTION_CLOSE_SESSION: &str = "close_session";
 pub const ACTION_RELOAD: &str = "reload";
@@ -69,11 +63,6 @@ pub const ACTION_MOVE_END: &str = "move_end";
 pub const ACTION_QUERY_BACKSPACE: &str = "query_backspace";
 pub const ACTION_QUERY_CLEAR: &str = "query_clear";
 pub const ACTION_GO_PARENT: &str = "go_parent";
-pub const ACTION_INSIGHTS_NEXT_TAB: &str = "insights_next_tab";
-pub const ACTION_INSIGHTS_PREV_TAB: &str = "insights_prev_tab";
-pub const ACTION_GENERATE_ADVICE_REDACTED: &str = "generate_advice_redacted";
-pub const ACTION_GENERATE_ADVICE_SNIPPETS: &str = "generate_advice_snippets";
-pub const ACTION_GENERATE_ADVICE_SELECTED: &str = "generate_advice_selected";
 pub const ACTION_COOKIE_FIELD_NEXT: &str = "cookie_field_next";
 pub const ACTION_COOKIE_FIELD_PREV: &str = "cookie_field_prev";
 pub const ACTION_COOKIE_ACTION_NEXT: &str = "cookie_action_next";
@@ -104,8 +93,6 @@ const SUPPORTED_ACTIONS: &[&str] = &[
     ACTION_PAGE_OVERVIEW,
     ACTION_PAGE_DEEP_DIVE,
     ACTION_PAGE_USAGE,
-    ACTION_PAGE_INSIGHTS,
-    ACTION_PAGE_AUDIT,
     ACTION_PAGE_CONFIG,
     ACTION_CLOSE_SESSION,
     ACTION_RELOAD,
@@ -118,11 +105,6 @@ const SUPPORTED_ACTIONS: &[&str] = &[
     ACTION_QUERY_BACKSPACE,
     ACTION_QUERY_CLEAR,
     ACTION_GO_PARENT,
-    ACTION_INSIGHTS_NEXT_TAB,
-    ACTION_INSIGHTS_PREV_TAB,
-    ACTION_GENERATE_ADVICE_REDACTED,
-    ACTION_GENERATE_ADVICE_SNIPPETS,
-    ACTION_GENERATE_ADVICE_SELECTED,
     ACTION_COOKIE_FIELD_NEXT,
     ACTION_COOKIE_FIELD_PREV,
     ACTION_COOKIE_ACTION_NEXT,
@@ -509,13 +491,6 @@ mod tests {
             shift: false,
             meta: false,
         };
-        let shift_input = |key: &str| KeyInput {
-            key: key.into(),
-            ctrl: false,
-            alt: false,
-            shift: true,
-            meta: false,
-        };
 
         assert_eq!(
             keymap.resolve_input(CONTEXT_DESKTOP_USAGE_PAGE, &input("2")),
@@ -531,18 +506,6 @@ mod tests {
         );
         assert_eq!(
             keymap.resolve_input(CONTEXT_DESKTOP_USAGE_PAGE, &input("g")),
-            None
-        );
-        assert_eq!(
-            keymap.resolve_input(CONTEXT_DESKTOP_INSIGHTS_PAGE, &input("p")),
-            None
-        );
-        assert_eq!(
-            keymap.resolve_input(CONTEXT_DESKTOP_INSIGHTS_PAGE, &input("a")),
-            Some(ACTION_GENERATE_ADVICE_SELECTED)
-        );
-        assert_eq!(
-            keymap.resolve_input(CONTEXT_DESKTOP_INSIGHTS_PAGE, &shift_input("A")),
             None
         );
         assert_eq!(

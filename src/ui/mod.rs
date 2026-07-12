@@ -1,6 +1,5 @@
 mod components;
 mod graphs;
-mod insights;
 mod sections;
 
 use ratatui::{
@@ -19,11 +18,11 @@ use crate::{
 
 use components::{centered_rect, weighted_columns};
 use sections::{
-    render_activity_pulse, render_audit, render_config, render_counts, render_currency_modal,
-    render_daily_trend, render_export_dir_picker_modal, render_export_modal, render_footer,
-    render_help_modal, render_kpi_strip, render_limits, render_model_efficiency, render_models,
-    render_project_modal, render_project_tools, render_projects, render_session_modal,
-    render_session_page, render_sessions, render_title_bar,
+    render_activity_pulse, render_config, render_counts, render_currency_modal, render_daily_trend,
+    render_export_dir_picker_modal, render_export_modal, render_footer, render_help_modal,
+    render_kpi_strip, render_limits, render_model_efficiency, render_models, render_project_modal,
+    render_project_tools, render_projects, render_session_modal, render_session_page,
+    render_sessions, render_title_bar,
 };
 
 pub fn render(frame: &mut Frame<'_>, app: &App) {
@@ -47,8 +46,6 @@ pub fn render(frame: &mut Frame<'_>, app: &App) {
         Page::DeepDive => render_dashboard(frame, area, root, app),
         Page::Config => render_config(frame, area, root, app),
         Page::Usage => render_limits(frame, area, root, app),
-        Page::Insights => insights::render_insights(frame, area, root, app),
-        Page::Audit => render_audit(frame, area, root, app),
         Page::Session => render_session_page(frame, area, root, app),
     }
 
@@ -388,31 +385,6 @@ mod tests {
         assert!(rendered.contains(&copy.panels.shell_commands));
         assert!(rendered.contains(&copy.panels.mcp_servers));
         assert!(rendered.contains("Tab"));
-    }
-
-    #[test]
-    fn insights_render_shows_advice_and_signals_sections() {
-        let backend = TestBackend::new(170, 80);
-        let mut terminal = Terminal::new(backend).expect("create terminal");
-        let mut app = App::default();
-        app.page = Page::Insights;
-
-        terminal
-            .draw(|frame| render(frame, &app))
-            .expect("draw insights");
-
-        let rendered = terminal
-            .backend()
-            .buffer()
-            .content()
-            .iter()
-            .map(|cell| cell.symbol())
-            .collect::<String>();
-
-        let copy = copy();
-        assert!(rendered.contains(&copy.insights.advice_title));
-        assert!(rendered.contains(&copy.insights.advice_empty));
-        assert!(rendered.contains(&copy.insights.signals_title));
     }
 
     #[test]

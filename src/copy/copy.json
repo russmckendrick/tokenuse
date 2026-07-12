@@ -12,8 +12,6 @@
     "overview": "Overview",
     "deep_dive": "Deep Dive",
     "usage": "Usage",
-    "insights": "Insights",
-    "audit": "Agent Setup",
     "config": "Config",
     "configuration": "Configuration",
     "session": "Session",
@@ -96,9 +94,7 @@
     "local_data": "Local Data",
     "local_files": "Local Files",
     "money_and_data": "Money & Data",
-    "tool_integrations": "Tool Integrations",
-    "advice_engine": "Advice Engine",
-    "agent_setup": "Agent Setup"
+    "tool_integrations": "Tool Integrations"
   },
   "tables": {
     "blank": "",
@@ -216,14 +212,6 @@
         "name": "ChatGPT (Codex) subscription quota",
         "action": "Sync"
       },
-      "advice_tool": {
-        "name": "Advice tool",
-        "action": "Pick"
-      },
-      "advice_prompts": {
-        "name": "Advice prompts",
-        "action": "Prepare"
-      },
       "clear_data": {
         "name": "Clear Data",
         "action": "Clear"
@@ -241,10 +229,6 @@
       "statusline_external": "External · {command}",
       "quota_snapshot_found": "Local quota snapshot",
       "quota_snapshot_missing": "No local quota snapshot",
-      "advice_tool_available": "{tool} · available",
-      "advice_tool_missing": "{tool} · binary not found",
-      "advice_prompts_ready": "Prompt files ready · {path}",
-      "advice_prompts_missing": "Prompt files missing ({files}) · {path}",
       "delete_archive_then_rebuild": "Delete archive.db, then rebuild",
       "build_archive_from_history": "Build archive.db from local history"
     },
@@ -399,11 +383,6 @@
     "open": "Open",
     "open_lower": "open",
     "open_session_picker": "Open Session Picker",
-    "generate_advice": "Generate Advice",
-    "refresh_audit": "Refresh audit",
-    "mark_done": "Done",
-    "mark_open": "Reopen",
-    "dismiss": "Dismiss",
     "close": "Close",
     "close_lower": "close",
     "select_open": "select/open",
@@ -432,7 +411,6 @@
     "filter_projects": "Filter projects",
     "filter_sessions": "Filter sessions",
     "filter_currencies": "Filter currencies",
-    "filter_advice_tools": "Filter advice tools",
     "rank": "Rank",
     "session_rank": "Session rank",
     "model_usage": "Model usage",
@@ -572,216 +550,6 @@
     "refresh_prices_requires_feature": "--refresh-prices requires the refresh-prices feature",
     "generate_currency_requires_feature": "--generate-currency-json requires the refresh-currency feature"
   },
-  "insights": {
-    "title": "Insights",
-    "subtitle": "Local signals.",
-    "signals_title": "Signals",
-    "advice_title": "Advice",
-    "advice_empty": "No advice runs yet.",
-    "advice_failed": "Advice run failed: {error}",
-    "advice_scope_title": "Generate advice",
-    "advice_scope_redacted": "Usage only",
-    "advice_scope_redacted_detail": "No prompt text",
-    "advice_scope_snippets": "Prompt samples",
-    "advice_scope_snippets_detail": "Includes prompt samples",
-    "advice_generate_button": "Run",
-    "advice_scope_running": "Generating...",
-    "advice_latest": "Latest run · {tool} · {scope} · {status}",
-    "advice_run": "Run · {tool} · {scope} · {status}",
-    "advice_confidence": "confidence {confidence}",
-    "advice_next_step": "Next: {step}",
-    "advice_evidence": "Evidence: {evidence}",
-    "dashboard_label": "Insights dashboard",
-    "screen_nav_label": "Insights screens",
-    "screen_overview": "Overview",
-    "screen_actions": "Actions",
-    "screen_signals": "Signals",
-    "screen_runs": "Runs",
-    "overview_digest_title": "Current read",
-    "overview_digest_empty": "Generate advice to summarize the strongest opportunities and recent data-quality signals.",
-    "top_actions_title": "Top actions",
-    "top_actions_detail": "The first few items worth reviewing. Open one for evidence and guardrails.",
-    "actions_title": "Advice actions",
-    "actions_subtitle": "Prioritized recommendations from generated advice runs. Rows stay short; evidence lives in detail.",
-    "actions_empty_title": "No actions in this view",
-    "actions_empty_detail": "Change the filter or generate a new advice run.",
-    "signals_subtitle": "Heuristic signals grouped by category so data quality and anomalies are easy to scan.",
-    "signals_empty_title": "No signals",
-    "signals_empty_detail": "Your local usage has no heuristic findings for this snapshot.",
-    "runs_title": "Advice runs",
-    "runs_subtitle": "Generation history, failures, selected scope, and local data context.",
-    "local_badge": "Local archive",
-    "scope_badge": "Scoped evidence",
-    "latest_run_title": "Latest advice run",
-    "estimated_savings": "{amount} est.",
-    "source_advice": "Advice",
-    "source_signal": "Signal",
-    "status_signal": "Signal",
-    "status_open": "Open",
-    "status_done": "Done",
-    "status_dismissed": "Dismissed",
-    "status_succeeded": "Succeeded",
-    "status_failed": "Failed",
-    "scope_all": "All usage",
-    "filter_title": "Queue filters",
-    "filter_all": "All",
-    "filter_open": "Open",
-    "filter_done": "Done",
-    "filter_dismissed": "Dismissed",
-    "filter_advice": "Advice",
-    "filter_signals": "Signals",
-    "detail_open": "Open",
-    "detail_back": "Back",
-    "detail_observation": "Observation",
-    "detail_impact": "Impact",
-    "detail_next_step": "Next step",
-    "detail_guardrails": "Guardrails",
-    "detail_evidence": "Evidence",
-    "detail_scope": "Scope",
-    "detail_status": "Status",
-    "detail_savings": "Savings",
-    "detail_rule": "Rule",
-    "detail_empty_title": "No insight selected",
-    "detail_empty_detail": "Return to Actions or Signals and open an item.",
-    "latest_issue_title": "Latest Issue",
-    "no_failed_runs_title": "No failed advice runs",
-    "no_failed_runs_detail": "Recent advice runs are completing cleanly.",
-    "signal_map_title": "Signal Map",
-    "run_history_title": "Run History",
-    "data_context_title": "Data Context",
-    "generated_at_label": "Generated",
-    "generated_at_value": "{value}",
-    "baseline_window_label": "Baseline",
-    "baseline_window_value": "{days} days",
-    "archive_source_label": "Archive",
-    "advice_tool_label": "Advice tool",
-    "run_items": "{count} items",
-    "kpi_savings": "Estimated weekly savings",
-    "kpi_risks": "Risks",
-    "kpi_warns": "Warnings",
-    "kpi_infos": "Info",
-    "empty": "No recommendations — your usage looks clean.",
-    "categories": {
-      "model_rightsizing": "Model right-sizing",
-      "cache": "Cache",
-      "anomalies": "Anomalies",
-      "quota": "Quota"
-    },
-    "severity": {
-      "risk": "Risk",
-      "warn": "Warn",
-      "info": "Info"
-    },
-    "savings": {
-      "per_week": "≈ {amount}/week saved",
-      "per_month": "≈ {amount}/month saved",
-      "one_off": "≈ {amount} avoided"
-    },
-    "silenced": {
-      "no_cache_data": "Skipped — {tool} doesn't expose cache metrics locally."
-    },
-    "rules": {
-      "short_output_sonnet": {
-        "title": "Switch short Sonnet calls to Haiku in {project}",
-        "body": "{calls} Sonnet calls under 200 output tokens cost {current}; Haiku pricing gives {projected}.",
-        "assumption": "Assumes Haiku quality is acceptable for prompts under 4K input / 200 output. Sample a few before switching."
-      },
-      "fast_mode_opus_excess": {
-        "title": "Fast-mode Opus is dominating {project}",
-        "body": "{fast_calls} fast-mode Opus calls cost {fast_cost} vs {standard_cost} for standard-mode Opus on the same project.",
-        "assumption": "Standard-mode Opus may add latency. Estimate uses each call's fast multiplier."
-      },
-      "reasoning_heavy_o_series": {
-        "title": "Reasoning tokens dominate {model}",
-        "body": "{calls} {model} calls had reasoning ≥ 3× output and reasoning is {reasoning_share} of cost ({reasoning_cost}).",
-        "assumption": "Try `--effort medium` or a smaller model first. Estimate halves the reasoning bill conservatively."
-      },
-      "cache_hit_trend_drop": {
-        "title": "Cache hit rate fell on {project} ({tool})",
-        "body": "Last 7 days {recent} vs prior 30 days {prior} (drop {drop}). Reusing the warm prompt cache would have helped.",
-        "assumption": "Pricing assumes the model's cache_read tier; 5-minute TTL means short gaps lose the cache."
-      },
-      "cache_write_overhead": {
-        "title": "Cache writes outpace reads for {tool}",
-        "body": "Write-to-read ratio is {ratio} over {events} recent events — sessions are creating cache they don't reuse.",
-        "assumption": "Pricing uses cache_write minus cache_read deltas. Longer sessions amortise cache writes."
-      },
-      "low_hit_project_outlier": {
-        "title": "{project} has a low cache hit rate vs your {tool} median",
-        "body": "Hit rate {rate} vs tool median {median} across {sessions} sessions in the last 7 days.",
-        "assumption": "Median is computed from your other projects on the same tool."
-      },
-      "cache_tool_silenced": {
-        "title": "Cache rules skipped for {tool}",
-        "body": "{tool} doesn't expose cache_read/write metrics locally, so cache recommendations can't be computed.",
-        "assumption": "This is a data-source gap, not a usage problem."
-      },
-      "outlier_session_cost": {
-        "title": "Session {session} cost {cost} on {project}",
-        "body": "Above the {threshold} outlier threshold (P95 / Q3+1.5·IQR over the last 30 days).",
-        "assumption": "Investigate the session in the Session page to confirm it was intentional."
-      },
-      "day_over_day_spend_zscore": {
-        "title": "Today's spend is {delta_pct} above your 30-day baseline",
-        "body": "Today {today} vs baseline {baseline} (z-score {zscore}).",
-        "assumption": "Baseline uses the trailing 30-day mean/stdev across all tools."
-      },
-      "project_mom_growth": {
-        "title": "{project} cost is up {growth} month-over-month",
-        "body": "This month {current} vs last month {prior}.",
-        "assumption": "Both months had at least 10 calls before the rule fires."
-      },
-      "claude_weekly_forecast": {
-        "title": "Claude weekly limit pacing ahead",
-        "body": "Used {used} with {elapsed} of the window elapsed; projected {projected}. {remaining_hours}h remain.",
-        "assumption": "Forecast extrapolates the current burn rate to the window end."
-      },
-      "copilot_premium_pacing": {
-        "title": "Copilot AI credit budget pacing ahead",
-        "body": "Used {used} with {elapsed} of the cycle elapsed; projected {projected}. {remaining_hours}h remain.",
-        "assumption": "Forecast extrapolates the current burn rate to the cycle end."
-      },
-      "limit_recently_hit": {
-        "title": "{tool} hit a limit recently",
-        "body": "Limit {limit} reported {hit_type} in the last 24 hours.",
-        "assumption": "Open the Usage page to see the offending tool's snapshots."
-      }
-    }
-  },
-  "audit": {
-    "title": "Agent Setup",
-    "subtitle": "Local-only scan of agent home folders, archive usage, project coverage, and recent context hygiene.",
-    "refresh": "Refresh audit",
-    "captured_at": "Captured",
-    "not_captured": "Not captured yet",
-    "scanner_version": "Scanner",
-    "primary_tool": "Primary tool",
-    "redaction": "Redaction",
-    "tools_title": "Tool Homes",
-    "findings_title": "Findings",
-    "knowledge_title": "Tool Knowledge Files",
-    "behavior_title": "Context Hygiene",
-    "project_title": "Agent Activity",
-    "coverage_title": "Project Coverage",
-    "all_time": "All time",
-    "recent_7d": "Last 7 days",
-    "no_archive_data": "No archive data loaded",
-    "no_recent_calls": "No recent calls in last 7 days",
-    "no_readable_project_roots": "No readable project roots",
-    "not_measured": "Not measured",
-    "no_findings": "No findings in the latest local audit.",
-    "sections": {
-      "security": "Security",
-      "efficiency": "Efficiency",
-      "context": "Context",
-      "readiness": "Readiness"
-    },
-    "severity": {
-      "risk": "Risk",
-      "warning": "Warning",
-      "info": "Info"
-    }
-  },
   "keymap": {
     "actions": {
       "quit": "quit",
@@ -808,8 +576,6 @@
       "page_overview": "Overview",
       "page_deep_dive": "Deep Dive",
       "page_usage": "Usage",
-      "page_insights": "Insights",
-      "page_audit": "Agent Setup",
       "page_config": "Configuration",
       "close_session": "back to Deep Dive",
       "reload": "reload",
@@ -822,11 +588,6 @@
       "query_backspace": "delete last char",
       "query_clear": "clear filter",
       "go_parent": "parent folder",
-      "insights_next_tab": "next insights view",
-      "insights_prev_tab": "previous insights view",
-      "generate_advice_redacted": "generate redacted advice",
-      "generate_advice_snippets": "generate snippet advice",
-      "generate_advice_selected": "generate advice",
       "cookie_field_next": "next cookie field",
       "cookie_field_prev": "previous cookie field",
       "cookie_action_next": "next cookie action",
@@ -871,7 +632,6 @@
       {
         "title": "Pages",
         "items": [
-          { "keys": "i", "label": "insights", "action": "page_insights" },
           { "keys": "c", "label": "configuration", "action": "page_config" },
           { "keys": "s", "label": "session drill-down", "action": "open_session_picker" }
         ]
@@ -879,10 +639,7 @@
       {
         "title": "Insights",
         "items": [
-          { "keys": "Left/Right", "label": "switch Advice / Signals", "action": "insights_next_tab" },
-          { "keys": "Up/Down  PgUp/PgDn", "label": "scroll active view", "action": "move_up" },
-          { "keys": "a", "label": "generate redacted advice", "action": "generate_advice_redacted" },
-          { "keys": "A", "label": "generate snippet advice", "action": "generate_advice_snippets" }
+          { "keys": "Up/Down  PgUp/PgDn", "label": "scroll active view", "action": "move_up" }
         ]
       },
       {
@@ -924,28 +681,6 @@
         { "keys": "4", "label": "month", "action": "period_month" },
         { "keys": "5", "label": "all", "action": "period_all_time" },
         { "keys": "g", "label": "sort", "action": "cycle_sort" },
-        { "keys": "i", "label": "insights", "action": "page_insights" },
-        { "keys": "a", "label": "agent setup", "action": "page_audit" },
-        { "keys": "h", "label": "help", "action": "open_help" }
-      ],
-      "insights": [
-        { "keys": "q", "label": "quit", "action": "quit" },
-        { "keys": "Tab", "label": "app tabs", "action": "next_tab" },
-        { "keys": "←/→", "label": "advice/signals", "action": "insights_next_tab" },
-        { "keys": "↑↓", "label": "scroll", "action": "move_up" },
-        { "keys": "Pg", "label": "page", "action": "move_page_down" },
-        { "keys": "a", "label": "usage only", "action": "generate_advice_redacted" },
-        { "keys": "A", "label": "with prompts", "action": "generate_advice_snippets" },
-        { "keys": "x", "label": "agent setup", "action": "page_audit" },
-        { "keys": "r", "label": "refresh", "action": "reload" },
-        { "keys": "h", "label": "help", "action": "open_help" }
-      ],
-      "audit": [
-        { "keys": "q", "label": "quit", "action": "quit" },
-        { "keys": "Tab", "label": "app tabs", "action": "next_tab" },
-        { "keys": "r", "label": "refresh audit", "action": "reload" },
-        { "keys": "i", "label": "insights", "action": "page_insights" },
-        { "keys": "c", "label": "config", "action": "page_config" },
         { "keys": "h", "label": "help", "action": "open_help" }
       ],
       "config": [
@@ -953,7 +688,6 @@
         { "keys": "Esc", "label": "dashboard", "action": "page_deep_dive" },
         { "keys": "Up/Down", "label": "move", "action": "move_up" },
         { "keys": "Enter", "label": "select", "action": "confirm" },
-        { "keys": "a", "label": "agent setup", "action": "page_audit" },
         { "keys": "h", "label": "help", "action": "open_help" }
       ],
       "session": [
@@ -963,7 +697,6 @@
         { "keys": "Enter", "label": "detail", "action": "confirm" },
         { "keys": "s", "label": "pick", "action": "open_session_picker" },
         { "keys": "e", "label": "report", "action": "open_export_picker" },
-        { "keys": "a", "label": "agent setup", "action": "page_audit" },
         { "keys": "g", "label": "sort", "action": "cycle_sort" },
         { "keys": "h", "label": "help", "action": "open_help" }
       ],
@@ -971,8 +704,6 @@
         { "keys": "q", "label": "quit", "action": "quit" },
         { "keys": "Tab", "label": "tabs", "action": "next_tab" },
         { "keys": "o/d", "label": "overview/deep", "action": "page_overview" },
-        { "keys": "i", "label": "insights", "action": "page_insights" },
-        { "keys": "a", "label": "agent setup", "action": "page_audit" },
         { "keys": "c", "label": "config", "action": "page_config" },
         { "keys": "e", "label": "report", "action": "open_export_picker" },
         { "keys": "g", "label": "sort", "action": "cycle_sort" },
@@ -984,36 +715,17 @@
         { "keys": "g", "label": "sort", "action": "cycle_sort" },
         { "keys": "p", "label": "project", "action": "open_project_picker" },
         { "keys": "s", "label": "session", "action": "open_session_picker" },
-        { "keys": "i", "label": "insights", "action": "page_insights" },
-        { "keys": "a", "label": "agent setup", "action": "page_audit" },
         { "keys": "e", "label": "report", "action": "open_export_picker" },
         { "keys": "r", "label": "refresh", "action": "reload" }
       ],
       "desktop_usage": [
         { "keys": "1", "label": "24h", "action": "period_today" },
         { "keys": "s", "label": "session", "action": "open_session_picker" },
-        { "keys": "i", "label": "insights", "action": "page_insights" },
-        { "keys": "a", "label": "agent setup", "action": "page_audit" },
         { "keys": "e", "label": "report", "action": "open_export_picker" },
         { "keys": "r", "label": "refresh", "action": "reload" }
-      ],
-      "desktop_insights": [
-        { "keys": "s", "label": "session", "action": "open_session_picker" },
-        { "keys": "a", "label": "generate", "action": "generate_advice_selected" },
-        { "keys": "x", "label": "agent setup", "action": "page_audit" },
-        { "keys": "e", "label": "report", "action": "open_export_picker" },
-        { "keys": "r", "label": "refresh", "action": "reload" }
-      ],
-      "desktop_audit": [
-        { "keys": "s", "label": "session", "action": "open_session_picker" },
-        { "keys": "i", "label": "insights", "action": "page_insights" },
-        { "keys": "c", "label": "config", "action": "page_config" },
-        { "keys": "r", "label": "refresh audit", "action": "reload" }
       ],
       "desktop_config": [
         { "keys": "s", "label": "session", "action": "open_session_picker" },
-        { "keys": "i", "label": "insights", "action": "page_insights" },
-        { "keys": "a", "label": "agent setup", "action": "page_audit" },
         { "keys": "e", "label": "report", "action": "open_export_picker" },
         { "keys": "r", "label": "refresh", "action": "reload" }
       ]
@@ -1072,18 +784,6 @@
     "codex_subscription_sync_failed": "ChatGPT (Codex) quota sync failed · {error}",
     "codex_subscription_sync_unavailable": "ChatGPT (Codex) quota sync unavailable in this build",
     "codex_subscription_cookie_missing": "ChatGPT session-token cookie missing · open the Config page and press Enter on this row to paste one, or run `tokenuse --set-codex-cookie <value>`",
-    "advice_tool_set": "Advice tool set to {tool}",
-    "advice_tool_config_failed": "Advice tool config failed · {error}",
-    "advice_requires_live_data": "Advice needs local usage data",
-    "advice_running": "Generating advice with {tool}",
-    "advice_already_running": "Advice is already running",
-    "advice_run_saved": "Advice saved · {items} items · usage {usage_sync}",
-    "advice_item_updated": "Advice item updated",
-    "advice_item_not_found": "Advice item not found · {id}",
-    "advice_failed": "Advice failed · {error}",
-    "audit_refreshing": "Refreshing agent setup audit",
-    "audit_refreshed": "Agent setup audit refreshed · {findings} findings",
-    "audit_refresh_failed": "Agent setup audit failed · {error}",
     "config_failed_defaults": "Config failed · defaults ({error})",
     "currency_rates_failed_embedded": "Currency rates failed · embedded ({error})",
     "legacy_cache_imported_records": "Legacy cache imported · {records} records",

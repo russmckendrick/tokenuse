@@ -73,12 +73,6 @@
       "id": "page_usage"
     },
     {
-      "id": "page_insights"
-    },
-    {
-      "id": "page_audit"
-    },
-    {
       "id": "page_config"
     },
     {
@@ -113,21 +107,6 @@
     },
     {
       "id": "go_parent"
-    },
-    {
-      "id": "insights_next_tab"
-    },
-    {
-      "id": "insights_prev_tab"
-    },
-    {
-      "id": "generate_advice_redacted"
-    },
-    {
-      "id": "generate_advice_snippets"
-    },
-    {
-      "id": "generate_advice_selected"
     },
     {
       "id": "cookie_field_next"
@@ -267,20 +246,6 @@
     {
       "context": "dashboard",
       "keys": [
-        "i"
-      ],
-      "action": "page_insights"
-    },
-    {
-      "context": "dashboard",
-      "keys": [
-        "a"
-      ],
-      "action": "page_audit"
-    },
-    {
-      "context": "dashboard",
-      "keys": [
         "r"
       ],
       "action": "reload"
@@ -410,20 +375,6 @@
     {
       "context": "usage_page",
       "keys": [
-        "i"
-      ],
-      "action": "page_insights"
-    },
-    {
-      "context": "usage_page",
-      "keys": [
-        "a"
-      ],
-      "action": "page_audit"
-    },
-    {
-      "context": "usage_page",
-      "keys": [
         "r"
       ],
       "action": "reload"
@@ -434,231 +385,6 @@
         "e"
       ],
       "action": "open_export_picker"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "q"
-      ],
-      "action": "quit"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "h",
-        "?"
-      ],
-      "action": "open_help"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "Tab"
-      ],
-      "action": "next_tab"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "Shift+Tab"
-      ],
-      "action": "prev_tab"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "Esc",
-        "o"
-      ],
-      "action": "page_overview"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "d"
-      ],
-      "action": "page_deep_dive"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "u"
-      ],
-      "action": "page_usage"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "c"
-      ],
-      "action": "page_config"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "x"
-      ],
-      "action": "page_audit"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "r"
-      ],
-      "action": "reload"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "Shift+D"
-      ],
-      "action": "toggle_data_source"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "Right",
-        "]"
-      ],
-      "action": "insights_next_tab"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "Left",
-        "["
-      ],
-      "action": "insights_prev_tab"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "a"
-      ],
-      "action": "generate_advice_redacted"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "Shift+A"
-      ],
-      "action": "generate_advice_snippets"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "Up",
-        "k"
-      ],
-      "action": "move_up"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "Down",
-        "j"
-      ],
-      "action": "move_down"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "PageUp"
-      ],
-      "action": "move_page_up"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "PageDown"
-      ],
-      "action": "move_page_down"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "Home"
-      ],
-      "action": "move_home"
-    },
-    {
-      "context": "insights_page",
-      "keys": [
-        "End"
-      ],
-      "action": "move_end"
-    },
-    {
-      "context": "audit_page",
-      "keys": [
-        "q"
-      ],
-      "action": "quit"
-    },
-    {
-      "context": "audit_page",
-      "keys": [
-        "h",
-        "?"
-      ],
-      "action": "open_help"
-    },
-    {
-      "context": "audit_page",
-      "keys": [
-        "Tab"
-      ],
-      "action": "next_tab"
-    },
-    {
-      "context": "audit_page",
-      "keys": [
-        "Shift+Tab"
-      ],
-      "action": "prev_tab"
-    },
-    {
-      "context": "audit_page",
-      "keys": [
-        "Esc",
-        "o"
-      ],
-      "action": "page_overview"
-    },
-    {
-      "context": "audit_page",
-      "keys": [
-        "d"
-      ],
-      "action": "page_deep_dive"
-    },
-    {
-      "context": "audit_page",
-      "keys": [
-        "u"
-      ],
-      "action": "page_usage"
-    },
-    {
-      "context": "audit_page",
-      "keys": [
-        "i"
-      ],
-      "action": "page_insights"
-    },
-    {
-      "context": "audit_page",
-      "keys": [
-        "c"
-      ],
-      "action": "page_config"
-    },
-    {
-      "context": "audit_page",
-      "keys": [
-        "r"
-      ],
-      "action": "reload"
     },
     {
       "context": "config_page",
@@ -732,20 +458,6 @@
         "Enter"
       ],
       "action": "confirm"
-    },
-    {
-      "context": "config_page",
-      "keys": [
-        "i"
-      ],
-      "action": "page_insights"
-    },
-    {
-      "context": "config_page",
-      "keys": [
-        "a"
-      ],
-      "action": "page_audit"
     },
     {
       "context": "session_page",
@@ -825,20 +537,6 @@
         "End"
       ],
       "action": "move_end"
-    },
-    {
-      "context": "session_page",
-      "keys": [
-        "i"
-      ],
-      "action": "page_insights"
-    },
-    {
-      "context": "session_page",
-      "keys": [
-        "a"
-      ],
-      "action": "page_audit"
     },
     {
       "context": "session_page",
@@ -1270,20 +968,6 @@
     {
       "context": "desktop",
       "keys": [
-        "i"
-      ],
-      "action": "page_insights"
-    },
-    {
-      "context": "desktop",
-      "keys": [
-        "a"
-      ],
-      "action": "page_audit"
-    },
-    {
-      "context": "desktop",
-      "keys": [
         "c"
       ],
       "action": "page_config"
@@ -1368,13 +1052,6 @@
     {
       "context": "desktop_usage_page",
       "keys": [
-        "a"
-      ],
-      "action": "page_audit"
-    },
-    {
-      "context": "desktop_usage_page",
-      "keys": [
         "s"
       ],
       "action": "open_session_picker"
@@ -1388,132 +1065,6 @@
     },
     {
       "context": "desktop_usage_page",
-      "keys": [
-        "r"
-      ],
-      "action": "reload"
-    },
-    {
-      "context": "desktop_insights_page",
-      "keys": [
-        "Shift+D"
-      ],
-      "action": "toggle_data_source"
-    },
-    {
-      "context": "desktop_insights_page",
-      "keys": [
-        "o"
-      ],
-      "action": "page_overview"
-    },
-    {
-      "context": "desktop_insights_page",
-      "keys": [
-        "d"
-      ],
-      "action": "page_deep_dive"
-    },
-    {
-      "context": "desktop_insights_page",
-      "keys": [
-        "u"
-      ],
-      "action": "page_usage"
-    },
-    {
-      "context": "desktop_insights_page",
-      "keys": [
-        "c"
-      ],
-      "action": "page_config"
-    },
-    {
-      "context": "desktop_insights_page",
-      "keys": [
-        "x"
-      ],
-      "action": "page_audit"
-    },
-    {
-      "context": "desktop_insights_page",
-      "keys": [
-        "s"
-      ],
-      "action": "open_session_picker"
-    },
-    {
-      "context": "desktop_insights_page",
-      "keys": [
-        "e"
-      ],
-      "action": "open_export_picker"
-    },
-    {
-      "context": "desktop_insights_page",
-      "keys": [
-        "r"
-      ],
-      "action": "reload"
-    },
-    {
-      "context": "desktop_insights_page",
-      "keys": [
-        "a"
-      ],
-      "action": "generate_advice_selected"
-    },
-    {
-      "context": "desktop_audit_page",
-      "keys": [
-        "o"
-      ],
-      "action": "page_overview"
-    },
-    {
-      "context": "desktop_audit_page",
-      "keys": [
-        "d"
-      ],
-      "action": "page_deep_dive"
-    },
-    {
-      "context": "desktop_audit_page",
-      "keys": [
-        "u"
-      ],
-      "action": "page_usage"
-    },
-    {
-      "context": "desktop_audit_page",
-      "keys": [
-        "i"
-      ],
-      "action": "page_insights"
-    },
-    {
-      "context": "desktop_audit_page",
-      "keys": [
-        "c"
-      ],
-      "action": "page_config"
-    },
-    {
-      "context": "desktop_audit_page",
-      "keys": [
-        "s"
-      ],
-      "action": "open_session_picker"
-    },
-    {
-      "context": "desktop_audit_page",
-      "keys": [
-        "e"
-      ],
-      "action": "open_export_picker"
-    },
-    {
-      "context": "desktop_audit_page",
       "keys": [
         "r"
       ],
@@ -1553,13 +1104,6 @@
         "c"
       ],
       "action": "page_config"
-    },
-    {
-      "context": "desktop_config_page",
-      "keys": [
-        "a"
-      ],
-      "action": "page_audit"
     },
     {
       "context": "desktop_config_page",

@@ -32,8 +32,6 @@ pub(crate) fn page_id(page: Page) -> &'static str {
         Page::DeepDive => "deep-dive",
         Page::Config => "config",
         Page::Usage => "usage",
-        Page::Insights => "insights",
-        Page::Audit => "audit",
         Page::Session => "session",
     }
 }

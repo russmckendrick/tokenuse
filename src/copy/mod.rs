@@ -28,149 +28,8 @@ pub struct CopyDeck {
     pub reports: ReportCopy,
     pub report_cli: ReportCliCopy,
     pub cli: CliCopy,
-    pub insights: InsightsCopy,
-    pub audit: AuditCopy,
     pub keymap: KeymapCopy,
     pub status: StatusCopy,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct AuditCopy {
-    pub title: String,
-    pub subtitle: String,
-    pub refresh: String,
-    pub captured_at: String,
-    pub not_captured: String,
-    pub scanner_version: String,
-    pub primary_tool: String,
-    pub redaction: String,
-    pub tools_title: String,
-    pub findings_title: String,
-    pub knowledge_title: String,
-    pub behavior_title: String,
-    pub project_title: String,
-    pub coverage_title: String,
-    pub all_time: String,
-    pub recent_7d: String,
-    pub no_archive_data: String,
-    pub no_recent_calls: String,
-    pub no_readable_project_roots: String,
-    pub not_measured: String,
-    pub no_findings: String,
-    pub sections: BTreeMap<String, String>,
-    pub severity: BTreeMap<String, String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct InsightsCopy {
-    pub title: String,
-    pub subtitle: String,
-    pub signals_title: String,
-    pub advice_title: String,
-    pub advice_empty: String,
-    pub advice_failed: String,
-    pub advice_scope_title: String,
-    pub advice_scope_redacted: String,
-    pub advice_scope_redacted_detail: String,
-    pub advice_scope_snippets: String,
-    pub advice_scope_snippets_detail: String,
-    pub advice_generate_button: String,
-    pub advice_scope_running: String,
-    pub advice_latest: String,
-    pub advice_run: String,
-    pub advice_confidence: String,
-    pub advice_next_step: String,
-    pub advice_evidence: String,
-    pub dashboard_label: String,
-    pub screen_nav_label: String,
-    pub screen_overview: String,
-    pub screen_actions: String,
-    pub screen_signals: String,
-    pub screen_runs: String,
-    pub overview_digest_title: String,
-    pub overview_digest_empty: String,
-    pub top_actions_title: String,
-    pub top_actions_detail: String,
-    pub actions_title: String,
-    pub actions_subtitle: String,
-    pub actions_empty_title: String,
-    pub actions_empty_detail: String,
-    pub signals_subtitle: String,
-    pub signals_empty_title: String,
-    pub signals_empty_detail: String,
-    pub runs_title: String,
-    pub runs_subtitle: String,
-    pub local_badge: String,
-    pub scope_badge: String,
-    pub latest_run_title: String,
-    pub estimated_savings: String,
-    pub source_advice: String,
-    pub source_signal: String,
-    pub status_signal: String,
-    pub status_open: String,
-    pub status_done: String,
-    pub status_dismissed: String,
-    pub status_succeeded: String,
-    pub status_failed: String,
-    pub scope_all: String,
-    pub filter_title: String,
-    pub filter_all: String,
-    pub filter_open: String,
-    pub filter_done: String,
-    pub filter_dismissed: String,
-    pub filter_advice: String,
-    pub filter_signals: String,
-    pub detail_open: String,
-    pub detail_back: String,
-    pub detail_observation: String,
-    pub detail_impact: String,
-    pub detail_next_step: String,
-    pub detail_guardrails: String,
-    pub detail_evidence: String,
-    pub detail_scope: String,
-    pub detail_status: String,
-    pub detail_savings: String,
-    pub detail_rule: String,
-    pub detail_empty_title: String,
-    pub detail_empty_detail: String,
-    pub latest_issue_title: String,
-    pub no_failed_runs_title: String,
-    pub no_failed_runs_detail: String,
-    pub signal_map_title: String,
-    pub run_history_title: String,
-    pub data_context_title: String,
-    pub generated_at_label: String,
-    pub generated_at_value: String,
-    pub baseline_window_label: String,
-    pub baseline_window_value: String,
-    pub archive_source_label: String,
-    pub advice_tool_label: String,
-    pub run_items: String,
-    pub kpi_savings: String,
-    pub kpi_risks: String,
-    pub kpi_warns: String,
-    pub kpi_infos: String,
-    pub empty: String,
-    pub categories: BTreeMap<String, String>,
-    pub severity: BTreeMap<String, String>,
-    pub savings: InsightsSavingsCopy,
-    pub silenced: BTreeMap<String, String>,
-    pub rules: BTreeMap<String, InsightsRuleCopy>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct InsightsSavingsCopy {
-    pub per_week: String,
-    pub per_month: String,
-    pub one_off: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct InsightsRuleCopy {
-    pub title: String,
-    pub body: String,
-    #[serde(default)]
-    pub assumption: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -189,8 +48,6 @@ pub struct NavCopy {
     pub overview: String,
     pub deep_dive: String,
     pub usage: String,
-    pub insights: String,
-    pub audit: String,
     pub config: String,
     pub configuration: String,
     pub session: String,
@@ -286,8 +143,6 @@ pub struct PanelCopy {
     pub local_files: String,
     pub money_and_data: String,
     pub tool_integrations: String,
-    pub advice_engine: String,
-    pub agent_setup: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -396,8 +251,6 @@ pub struct ConfigRowsCopy {
     pub copilot_limits: ConfigRowCopy,
     pub claude_subscription_limits: ConfigRowCopy,
     pub codex_subscription_limits: ConfigRowCopy,
-    pub advice_tool: ConfigRowCopy,
-    pub advice_prompts: ConfigRowCopy,
     pub clear_data: ConfigRowCopy,
 }
 
@@ -420,10 +273,6 @@ pub struct ConfigValuesCopy {
     pub statusline_external: String,
     pub quota_snapshot_found: String,
     pub quota_snapshot_missing: String,
-    pub advice_tool_available: String,
-    pub advice_tool_missing: String,
-    pub advice_prompts_ready: String,
-    pub advice_prompts_missing: String,
     pub delete_archive_then_rebuild: String,
     pub build_archive_from_history: String,
 }
@@ -590,11 +439,6 @@ pub struct ActionCopy {
     pub open: String,
     pub open_lower: String,
     pub open_session_picker: String,
-    pub generate_advice: String,
-    pub refresh_audit: String,
-    pub mark_done: String,
-    pub mark_open: String,
-    pub dismiss: String,
     pub close: String,
     pub close_lower: String,
     pub select_open: String,
@@ -625,7 +469,6 @@ pub struct DesktopCopy {
     pub filter_projects: String,
     pub filter_sessions: String,
     pub filter_currencies: String,
-    pub filter_advice_tools: String,
     pub rank: String,
     pub session_rank: String,
     pub model_usage: String,
@@ -857,18 +700,6 @@ pub struct StatusCopy {
     pub codex_subscription_sync_failed: String,
     pub codex_subscription_sync_unavailable: String,
     pub codex_subscription_cookie_missing: String,
-    pub advice_tool_set: String,
-    pub advice_tool_config_failed: String,
-    pub advice_requires_live_data: String,
-    pub advice_running: String,
-    pub advice_already_running: String,
-    pub advice_run_saved: String,
-    pub advice_item_updated: String,
-    pub advice_item_not_found: String,
-    pub advice_failed: String,
-    pub audit_refreshing: String,
-    pub audit_refreshed: String,
-    pub audit_refresh_failed: String,
     pub config_failed_defaults: String,
     pub currency_rates_failed_embedded: String,
     pub legacy_cache_imported_records: String,
@@ -985,23 +816,6 @@ impl CopyDeck {
         ensure_template(&self.export.report_title, &["period", "tool"])?;
         if self.export.calendar_weekdays.len() != 7 {
             return Err("export.calendar_weekdays must contain seven labels".into());
-        }
-        ensure_template(&self.insights.savings.per_week, &["amount"])?;
-        ensure_template(&self.insights.savings.per_month, &["amount"])?;
-        ensure_template(&self.insights.savings.one_off, &["amount"])?;
-        for category in ["model_rightsizing", "cache", "anomalies", "quota"] {
-            if !self.insights.categories.contains_key(category) {
-                return Err(format!(
-                    "insights.categories.{category} missing — every Category must have a label"
-                ));
-            }
-        }
-        for severity in ["risk", "warn", "info"] {
-            if !self.insights.severity.contains_key(severity) {
-                return Err(format!(
-                    "insights.severity.{severity} missing — every Severity must have a label"
-                ));
-            }
         }
         Ok(())
     }

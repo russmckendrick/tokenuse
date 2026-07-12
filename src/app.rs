@@ -11,9 +11,7 @@ use crossterm::event::{
 };
 use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 
-use crate::advice::{AdviceDataScope, AdviceHistory, AdviceItemStatus, AdviceTool};
 use crate::archive;
-use crate::audit::AuditSnapshot;
 use crate::config::{ConfigPaths, UserConfig};
 use crate::copy::{self, copy, CopyDeck};
 use crate::currency::{CurrencyFormatter, CurrencyTable};
@@ -115,19 +113,11 @@ pub enum Page {
     DeepDive,
     Config,
     Usage,
-    Insights,
-    Audit,
     Session,
 }
 
 impl Page {
-    pub const TABS: [Page; 5] = [
-        Page::Overview,
-        Page::DeepDive,
-        Page::Usage,
-        Page::Insights,
-        Page::Audit,
-    ];
+    pub const TABS: [Page; 3] = [Page::Overview, Page::DeepDive, Page::Usage];
 
     pub fn label(self) -> &'static str {
         let copy = copy();
@@ -135,8 +125,6 @@ impl Page {
             Self::Overview => copy.nav.overview.as_str(),
             Self::DeepDive => copy.nav.deep_dive.as_str(),
             Self::Usage => copy.nav.usage.as_str(),
-            Self::Insights => copy.nav.insights.as_str(),
-            Self::Audit => copy.nav.audit.as_str(),
             Self::Config => copy.nav.config.as_str(),
             Self::Session => copy.nav.session.as_str(),
         }
@@ -152,25 +140,6 @@ impl Page {
         let tabs = Self::TABS;
         let idx = tabs.iter().position(|p| *p == self).unwrap_or(0);
         tabs[(idx + tabs.len() - 1) % tabs.len()]
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InsightsTab {
-    Advice,
-    Signals,
-}
-
-impl InsightsTab {
-    fn next(self) -> Self {
-        match self {
-            Self::Advice => Self::Signals,
-            Self::Signals => Self::Advice,
-        }
-    }
-
-    fn prev(self) -> Self {
-        self.next()
     }
 }
 
@@ -798,10 +767,6 @@ fn move_index(selected: &mut usize, len: usize, delta: isize) {
     }
 }
 
-fn estimated_wrapped_lines(text: &str) -> usize {
-    text.chars().count().div_ceil(100).max(1)
-}
-
 #[derive(Debug, Clone)]
 pub struct SessionModal {
     pub options: Vec<SessionOption>,
@@ -915,43 +880,6 @@ fn cached_live_source(source: &DataSource) -> Option<Ingested> {
     }
 }
 
-fn load_advice_history(paths: &ConfigPaths) -> AdviceHistory {
-    archive::Archive::open(paths)
-        .and_then(|archive| archive.advice_history())
-        .unwrap_or_default()
-}
-
-fn run_advice_job(
-    ingested: Ingested,
-    paths: ConfigPaths,
-    tool: AdviceTool,
-    data_scope: AdviceDataScope,
-) -> AdviceJobResult {
-    let run = crate::advice::generate_advice_run(&ingested, &paths, tool, data_scope);
-    let item_count = run.items.len();
-    let run_error = run.error.clone();
-    let mut archive = archive::Archive::open(&paths).map_err(|e| e.to_string())?;
-    let usage_sync_status = match archive.sync() {
-        Ok(stats) => format!(
-            "{} calls · {} limits",
-            stats.calls_inserted, stats.limits_inserted
-        ),
-        Err(e) => format!("sync failed: {e}"),
-    };
-    let ingested = archive.load().ok();
-
-    archive
-        .insert_advice_run(&run, &usage_sync_status)
-        .map_err(|e| e.to_string())?;
-
-    Ok(AdviceJobOutcome {
-        item_count,
-        run_error,
-        usage_sync_status,
-        ingested,
-    })
-}
-
 /// Channel pair used to talk to the long-lived refresher thread. The thread
 /// sleeps for `archive::SYNC_INTERVAL`, then syncs the local archive and sends
 /// the resulting in-memory view. `signal_tx` lets the UI request an out-of-cycle
@@ -989,19 +917,6 @@ type ClearDataResult = std::result::Result<(Ingested, archive::SyncStats), Strin
 
 struct ClearDataJob {
     result_rx: Receiver<ClearDataResult>,
-}
-
-type AdviceJobResult = std::result::Result<AdviceJobOutcome, String>;
-
-struct AdviceJob {
-    result_rx: Receiver<AdviceJobResult>,
-}
-
-struct AdviceJobOutcome {
-    item_count: usize,
-    run_error: Option<String>,
-    usage_sync_status: String,
-    ingested: Option<Ingested>,
 }
 
 #[cfg(feature = "quota-sync")]
@@ -1161,9 +1076,7 @@ pub struct App {
     pub paths: ConfigPaths,
     pub currency_table: CurrencyTable,
     pub source: DataSource,
-    pub audit_snapshot: AuditSnapshot,
     clear_data_job: Option<ClearDataJob>,
-    advice_job: Option<AdviceJob>,
     #[cfg(feature = "quota-sync")]
     subscription_sync_job: Option<SubscriptionSyncJob>,
     clear_data_tick: usize,
@@ -1172,10 +1085,6 @@ pub struct App {
     background_alerts: Vec<BackgroundUsageAlert>,
     live_source: Option<Ingested>,
     sample_forced: bool,
-    advice_history: AdviceHistory,
-    insights_tab: InsightsTab,
-    insights_advice_scroll: usize,
-    insights_signals_scroll: usize,
     pub status: Option<AppStatus>,
     should_quit: bool,
 }
@@ -1184,8 +1093,6 @@ impl Default for App {
     fn default() -> Self {
         let paths = ConfigPaths::default();
         let export_dir = crate::reports::default_report_dir(&paths);
-        let audit_snapshot =
-            crate::audit::load_latest(&paths).unwrap_or_else(|| AuditSnapshot::not_run(&paths));
         Self {
             page: Page::Overview,
             period: Period::Week,
@@ -1213,9 +1120,7 @@ impl Default for App {
             currency_table: CurrencyTable::embedded()
                 .expect("embedded currency rates must be valid JSON"),
             source: DataSource::Sample,
-            audit_snapshot,
             clear_data_job: None,
-            advice_job: None,
             #[cfg(feature = "quota-sync")]
             subscription_sync_job: None,
             clear_data_tick: 0,
@@ -1224,10 +1129,6 @@ impl Default for App {
             background_alerts: Vec::new(),
             live_source: None,
             sample_forced: false,
-            advice_history: AdviceHistory::default(),
-            insights_tab: InsightsTab::Advice,
-            insights_advice_scroll: 0,
-            insights_signals_scroll: 0,
             status: None,
             should_quit: false,
         }
@@ -1260,9 +1161,6 @@ impl App {
         let export_dir = crate::reports::default_report_dir(&paths);
         let live_source = cached_live_source(&source);
         let background_alert_baseline = live_source.as_ref().map(UsageTotals::from_ingested);
-        let advice_history = load_advice_history(&paths);
-        let audit_snapshot =
-            crate::audit::load_latest(&paths).unwrap_or_else(|| AuditSnapshot::not_run(&paths));
         Self {
             source,
             live_source,
@@ -1273,8 +1171,6 @@ impl App {
             paths,
             currency_table,
             refresher,
-            advice_history,
-            audit_snapshot,
             ..Self::default()
         }
     }
@@ -1317,41 +1213,6 @@ impl App {
         }
     }
 
-    pub fn insights(&self) -> crate::insights::InsightsView {
-        match &self.source {
-            DataSource::Live(ingested) => ingested.insights(),
-            DataSource::Sample => crate::data::insights_view(),
-        }
-    }
-
-    pub fn audit(&self) -> &AuditSnapshot {
-        &self.audit_snapshot
-    }
-
-    pub fn advice_history(&self) -> AdviceHistory {
-        self.advice_history.clone()
-    }
-
-    pub fn advice_running(&self) -> bool {
-        self.advice_job.is_some()
-    }
-
-    pub fn insights_tab(&self) -> InsightsTab {
-        self.insights_tab
-    }
-
-    pub fn insights_scroll(&self) -> usize {
-        match self.insights_tab {
-            InsightsTab::Advice => self.insights_advice_scroll,
-            InsightsTab::Signals => self.insights_signals_scroll,
-        }
-    }
-
-    pub fn set_insights_tab(&mut self, tab: InsightsTab) {
-        self.insights_tab = tab;
-        self.clamp_insights_scroll();
-    }
-
     pub fn currency(&self) -> CurrencyFormatter {
         self.currency_table.formatter(&self.settings.currency)
     }
@@ -1387,36 +1248,6 @@ impl App {
         }
     }
 
-    pub fn refresh_audit(&mut self) {
-        self.set_status(copy().status.audit_refreshing.clone(), StatusTone::Busy);
-        let ingested = match &self.source {
-            DataSource::Live(ingested) => Some(ingested),
-            DataSource::Sample => self.live_source.as_ref(),
-        };
-        match crate::audit::refresh(&self.paths, ingested) {
-            Ok(snapshot) => {
-                let findings = snapshot.summary.total_findings;
-                self.audit_snapshot = snapshot;
-                self.set_status(
-                    copy::template(
-                        &copy().status.audit_refreshed,
-                        &[("findings", findings.to_string())],
-                    ),
-                    StatusTone::Success,
-                );
-            }
-            Err(error) => {
-                self.set_status(
-                    copy::template(
-                        &copy().status.audit_refresh_failed,
-                        &[("error", error.to_string())],
-                    ),
-                    StatusTone::Error,
-                );
-            }
-        }
-    }
-
     pub fn take_background_alerts(&mut self) -> Vec<BackgroundUsageAlert> {
         std::mem::take(&mut self.background_alerts)
     }
@@ -1449,7 +1280,6 @@ impl App {
     /// successful one. Called every tick from the main loop.
     pub fn poll_reload(&mut self) {
         self.poll_clear_data();
-        self.poll_advice_job();
         self.poll_subscription_sync();
 
         let Some(refresher) = self.refresher.as_ref() else {
@@ -1475,7 +1305,6 @@ impl App {
         };
 
         let manual = matches!(outcome.kind, RefreshKind::Manual);
-        let keep_busy_status = self.advice_job.is_some() && !manual;
         match outcome.result {
             Ok(ingested) if !ingested.is_empty() => {
                 let n = ingested.calls.len();
@@ -1486,43 +1315,37 @@ impl App {
                     self.source = DataSource::Live(ingested);
                     self.live_source = None;
                 }
-                if !keep_busy_status {
-                    let template = if manual {
-                        &copy().status.reloaded_calls
-                    } else {
-                        &copy().status.auto_refreshed_calls
-                    };
-                    self.set_status(
-                        copy::template(template, &[("calls", n.to_string())]),
-                        StatusTone::Success,
-                    );
-                }
+                let template = if manual {
+                    &copy().status.reloaded_calls
+                } else {
+                    &copy().status.auto_refreshed_calls
+                };
+                self.set_status(
+                    copy::template(template, &[("calls", n.to_string())]),
+                    StatusTone::Success,
+                );
             }
             Ok(_) => {
-                if !keep_busy_status {
-                    let text = if manual {
-                        copy().status.reload_no_sessions_prior_data_kept.clone()
-                    } else {
-                        copy()
-                            .status
-                            .auto_refresh_no_sessions_prior_data_kept
-                            .clone()
-                    };
-                    self.set_status(text, StatusTone::Warning);
-                }
+                let text = if manual {
+                    copy().status.reload_no_sessions_prior_data_kept.clone()
+                } else {
+                    copy()
+                        .status
+                        .auto_refresh_no_sessions_prior_data_kept
+                        .clone()
+                };
+                self.set_status(text, StatusTone::Warning);
             }
             Err(e) => {
-                if !keep_busy_status {
-                    let template = if manual {
-                        &copy().status.reload_failed_prior_data_kept
-                    } else {
-                        &copy().status.auto_refresh_failed_prior_data_kept
-                    };
-                    self.set_status(
-                        copy::template(template, &[("error", e.to_string())]),
-                        StatusTone::Error,
-                    );
-                }
+                let template = if manual {
+                    &copy().status.reload_failed_prior_data_kept
+                } else {
+                    &copy().status.auto_refresh_failed_prior_data_kept
+                };
+                self.set_status(
+                    copy::template(template, &[("error", e.to_string())]),
+                    StatusTone::Error,
+                );
             }
         }
 
@@ -1550,29 +1373,6 @@ impl App {
             self.clear_data_job = None;
             self.clear_data_modal = None;
             self.apply_clear_data_result(result);
-        }
-    }
-
-    fn poll_advice_job(&mut self) {
-        let result = match self.advice_job.as_ref().map(|job| job.result_rx.try_recv()) {
-            Some(Ok(result)) => Some(result),
-            Some(Err(TryRecvError::Disconnected)) => {
-                Some(Err("advice worker stopped before reporting".into()))
-            }
-            Some(Err(TryRecvError::Empty)) | None => None,
-        };
-
-        let Some(result) = result else {
-            return;
-        };
-
-        self.advice_job = None;
-        match result {
-            Ok(outcome) => self.apply_advice_job_result(outcome),
-            Err(error) => self.set_status(
-                copy::template(&copy().status.advice_failed, &[("error", error)]),
-                StatusTone::Error,
-            ),
         }
     }
 
@@ -1928,31 +1728,6 @@ impl App {
             },
             self.paths.codex_subscription_limits_file.display()
         );
-        let advice_tool = AdviceTool::from_config(&self.settings.insights.advice_tool);
-        let advice_tool_value = copy::template(
-            if crate::advice::tool_available(advice_tool) {
-                &copy.config.values.advice_tool_available
-            } else {
-                &copy.config.values.advice_tool_missing
-            },
-            &[("tool", advice_tool.label().to_string())],
-        );
-        let advice_prompt_status = crate::advice::prompt_file_status(&self.paths);
-        let advice_prompts_value = if advice_prompt_status.ready {
-            copy::template(
-                &copy.config.values.advice_prompts_ready,
-                &[("path", advice_prompt_status.dir.display().to_string())],
-            )
-        } else {
-            copy::template(
-                &copy.config.values.advice_prompts_missing,
-                &[
-                    ("files", advice_prompt_status.missing.join(", ")),
-                    ("path", advice_prompt_status.dir.display().to_string()),
-                ],
-            )
-        };
-
         vec![
             ConfigRowView {
                 id: "currency_override",
@@ -2008,20 +1783,6 @@ impl App {
                 name: copy.config.rows.codex_subscription_limits.name.as_str(),
                 value: codex_subscription_limits_value,
                 action: copy.config.rows.codex_subscription_limits.action.as_str(),
-                links: Vec::new(),
-            },
-            ConfigRowView {
-                id: "advice_tool",
-                name: copy.config.rows.advice_tool.name.as_str(),
-                value: advice_tool_value,
-                action: copy.config.rows.advice_tool.action.as_str(),
-                links: Vec::new(),
-            },
-            ConfigRowView {
-                id: "advice_prompts",
-                name: copy.config.rows.advice_prompts.name.as_str(),
-                value: advice_prompts_value,
-                action: copy.config.rows.advice_prompts.action.as_str(),
                 links: Vec::new(),
             },
             ConfigRowView {
@@ -2095,8 +1856,6 @@ impl App {
         match self.page {
             Page::Config => keymap::CONTEXT_CONFIG_PAGE,
             Page::Usage => keymap::CONTEXT_USAGE_PAGE,
-            Page::Insights => keymap::CONTEXT_INSIGHTS_PAGE,
-            Page::Audit => keymap::CONTEXT_AUDIT_PAGE,
             Page::Session => keymap::CONTEXT_SESSION_PAGE,
             Page::Overview | Page::DeepDive => keymap::CONTEXT_DASHBOARD,
         }
@@ -2127,25 +1886,9 @@ impl App {
             keymap::ACTION_PAGE_OVERVIEW => self.set_page(Page::Overview),
             keymap::ACTION_PAGE_DEEP_DIVE => self.set_page(Page::DeepDive),
             keymap::ACTION_PAGE_USAGE => self.set_page(Page::Usage),
-            keymap::ACTION_PAGE_INSIGHTS => self.set_page(Page::Insights),
-            keymap::ACTION_PAGE_AUDIT => self.set_page(Page::Audit),
             keymap::ACTION_PAGE_CONFIG => self.set_page(Page::Config),
             keymap::ACTION_CLOSE_SESSION => self.leave_session(),
-            keymap::ACTION_RELOAD => {
-                if self.page == Page::Audit {
-                    self.refresh_audit();
-                } else {
-                    self.reload();
-                }
-            }
-            keymap::ACTION_INSIGHTS_NEXT_TAB => self.cycle_insights_tab(1),
-            keymap::ACTION_INSIGHTS_PREV_TAB => self.cycle_insights_tab(-1),
-            keymap::ACTION_GENERATE_ADVICE_REDACTED => {
-                self.generate_advice_from_tui(AdviceDataScope::Redacted)
-            }
-            keymap::ACTION_GENERATE_ADVICE_SNIPPETS => {
-                self.generate_advice_from_tui(AdviceDataScope::PromptSnippets)
-            }
+            keymap::ACTION_RELOAD => self.reload(),
             keymap::ACTION_MOVE_UP => self.move_active_selection(-1),
             keymap::ACTION_MOVE_DOWN => self.move_active_selection(1),
             keymap::ACTION_MOVE_PAGE_UP => self.move_active_page(-10),
@@ -2353,8 +2096,6 @@ impl App {
         } else if self.page == Page::Config {
             let len = self.config_rows().len();
             move_index(&mut self.config_selected, len, delta);
-        } else if self.page == Page::Insights {
-            self.scroll_insights(delta);
         } else if self.page == Page::Session {
             let row_count = self
                 .session_view
@@ -2387,8 +2128,6 @@ impl App {
                 (self.session_selected + delta as usize).min(last)
             };
             self.select_session_call(next);
-        } else if self.page == Page::Insights {
-            self.scroll_insights(delta);
         }
     }
 
@@ -2405,8 +2144,6 @@ impl App {
             modal.selected = 0;
         } else if self.page == Page::Config {
             self.config_selected = 0;
-        } else if self.page == Page::Insights {
-            self.set_insights_scroll(0);
         } else if self.page == Page::Session {
             self.select_session_call(0);
         }
@@ -2425,8 +2162,6 @@ impl App {
             modal.selected = modal.options.len().saturating_sub(1);
         } else if self.page == Page::Config {
             self.config_selected = self.config_rows().len().saturating_sub(1);
-        } else if self.page == Page::Insights {
-            self.set_insights_scroll(self.insights_scroll_limit());
         } else if self.page == Page::Session {
             let row_count = self
                 .session_view
@@ -2435,15 +2170,6 @@ impl App {
                 .unwrap_or(0);
             self.select_session_call(row_count.saturating_sub(1));
         }
-    }
-
-    fn cycle_insights_tab(&mut self, delta: isize) {
-        self.insights_tab = if delta.is_negative() {
-            self.insights_tab.prev()
-        } else {
-            self.insights_tab.next()
-        };
-        self.clamp_insights_scroll();
     }
 
     pub fn handle_paste(&mut self, text: String) {
@@ -2731,94 +2457,6 @@ impl App {
     #[cfg(not(feature = "quota-sync"))]
     fn poll_subscription_sync(&mut self) {}
 
-    fn scroll_insights(&mut self, delta: isize) {
-        let current = self.insights_scroll();
-        let next = if delta.is_negative() {
-            current.saturating_sub(delta.unsigned_abs())
-        } else {
-            current.saturating_add(delta as usize)
-        };
-        self.set_insights_scroll(next);
-    }
-
-    fn set_insights_scroll(&mut self, offset: usize) {
-        let offset = offset.min(self.insights_scroll_limit());
-        match self.insights_tab {
-            InsightsTab::Advice => self.insights_advice_scroll = offset,
-            InsightsTab::Signals => self.insights_signals_scroll = offset,
-        }
-    }
-
-    fn clamp_insights_scroll(&mut self) {
-        self.set_insights_scroll(self.insights_scroll());
-    }
-
-    fn insights_scroll_limit(&self) -> usize {
-        let line_count = match self.insights_tab {
-            InsightsTab::Advice => self.advice_line_count(),
-            InsightsTab::Signals => self.signals_line_count(),
-        };
-        line_count.saturating_sub(1)
-    }
-
-    fn advice_line_count(&self) -> usize {
-        if self.advice_history.runs.is_empty() {
-            return 1;
-        }
-        self.advice_history
-            .runs
-            .iter()
-            .map(|run| {
-                1 + run
-                    .summary
-                    .as_ref()
-                    .map(|summary| estimated_wrapped_lines(summary))
-                    .unwrap_or(0)
-                    + usize::from(run.status == "failed")
-                    + if run.items.is_empty() {
-                        1
-                    } else {
-                        run.items
-                            .iter()
-                            .map(|item| {
-                                2 + estimated_wrapped_lines(&item.body)
-                                    + estimated_wrapped_lines(&item.impact)
-                                    + if item.evidence.is_empty() {
-                                        0
-                                    } else {
-                                        estimated_wrapped_lines(&item.evidence.join(" · "))
-                                    }
-                                    + estimated_wrapped_lines(&item.next_step)
-                            })
-                            .sum::<usize>()
-                    }
-            })
-            .sum()
-    }
-
-    fn signals_line_count(&self) -> usize {
-        let recs = self.insights().recommendations;
-        if recs.is_empty() {
-            1
-        } else {
-            recs.iter()
-                .map(|rec| {
-                    2 + estimated_wrapped_lines(&rec.body)
-                        + rec
-                            .silenced_reason
-                            .as_ref()
-                            .map(|line| estimated_wrapped_lines(line))
-                            .unwrap_or(0)
-                        + rec
-                            .assumption
-                            .as_ref()
-                            .map(|line| estimated_wrapped_lines(line))
-                            .unwrap_or(0)
-                })
-                .sum()
-        }
-    }
-
     fn backspace_active_query(&mut self) {
         if let Some(modal) = self.subscription_cookie_modal.as_mut() {
             modal.error = None;
@@ -2893,14 +2531,6 @@ impl App {
 
     pub fn handle_mouse(&mut self, mouse: MouseEvent, terminal_area: Rect) {
         match mouse.kind {
-            MouseEventKind::ScrollUp if self.page == Page::Insights => {
-                self.scroll_insights(-3);
-                return;
-            }
-            MouseEventKind::ScrollDown if self.page == Page::Insights => {
-                self.scroll_insights(3);
-                return;
-            }
             MouseEventKind::Down(MouseButton::Left) => {}
             _ => return,
         }
@@ -3069,8 +2699,6 @@ impl App {
             Some("codex_subscription_limits") => {
                 self.open_subscription_cookie_modal(CookieModalKind::Codex)
             }
-            Some("advice_tool") => self.cycle_advice_tool(),
-            Some("advice_prompts") => self.prepare_advice_prompts(),
             Some("clear_data") => self.open_clear_data_confirm(),
             _ => {}
         }
@@ -3123,136 +2751,6 @@ impl App {
                     StatusTone::Error,
                 );
             }
-        }
-    }
-
-    pub fn set_advice_tool(&mut self, tool: AdviceTool) {
-        self.settings.insights.advice_tool = tool.id().to_string();
-        match self.settings.save(&self.paths) {
-            Ok(()) => self.set_status(
-                copy::template(
-                    &copy().status.advice_tool_set,
-                    &[("tool", tool.label().to_string())],
-                ),
-                StatusTone::Success,
-            ),
-            Err(e) => self.set_status(
-                copy::template(
-                    &copy().status.advice_tool_config_failed,
-                    &[("error", e.to_string())],
-                ),
-                StatusTone::Error,
-            ),
-        }
-    }
-
-    fn cycle_advice_tool(&mut self) {
-        let current = AdviceTool::from_config(&self.settings.insights.advice_tool);
-        let next = AdviceTool::ALL
-            .iter()
-            .position(|tool| *tool == current)
-            .map(|idx| AdviceTool::ALL[(idx + 1) % AdviceTool::ALL.len()])
-            .unwrap_or(AdviceTool::Codex);
-        self.set_advice_tool(next);
-    }
-
-    pub fn prepare_advice_prompts(&mut self) {
-        match crate::advice::ensure_prompt_files(&self.paths) {
-            Ok(()) => {
-                let status = crate::advice::prompt_file_status(&self.paths);
-                self.set_status(
-                    copy::template(
-                        &copy().config.values.advice_prompts_ready,
-                        &[("path", status.dir.display().to_string())],
-                    ),
-                    StatusTone::Success,
-                );
-            }
-            Err(e) => self.set_status(
-                copy::template(&copy().status.advice_failed, &[("error", e.to_string())]),
-                StatusTone::Error,
-            ),
-        }
-    }
-
-    pub fn generate_advice(&mut self, data_scope: AdviceDataScope) -> Result<(), String> {
-        if self.advice_job.is_some() {
-            self.set_status(
-                copy().status.advice_already_running.clone(),
-                StatusTone::Busy,
-            );
-            return Ok(());
-        }
-
-        let ingested = match &self.source {
-            DataSource::Live(ingested) => ingested.clone(),
-            DataSource::Sample => {
-                self.set_status(
-                    copy().status.advice_requires_live_data.clone(),
-                    StatusTone::Warning,
-                );
-                return Ok(());
-            }
-        };
-
-        let tool = AdviceTool::from_config(&self.settings.insights.advice_tool);
-        self.set_status(
-            copy::template(
-                &copy().status.advice_running,
-                &[("tool", tool.label().to_string())],
-            ),
-            StatusTone::Busy,
-        );
-
-        let paths = self.paths.clone();
-        let (result_tx, result_rx) = mpsc::channel::<AdviceJobResult>();
-        thread::spawn(move || {
-            let result = run_advice_job(ingested, paths, tool, data_scope);
-            let _ = result_tx.send(result);
-        });
-        self.advice_job = Some(AdviceJob { result_rx });
-        Ok(())
-    }
-
-    fn generate_advice_from_tui(&mut self, data_scope: AdviceDataScope) {
-        if let Err(error) = self.generate_advice(data_scope) {
-            self.set_status(
-                copy::template(&copy().status.advice_failed, &[("error", error)]),
-                StatusTone::Error,
-            );
-        } else {
-            self.set_insights_tab(InsightsTab::Advice);
-            self.set_insights_scroll(0);
-        }
-    }
-
-    pub fn update_advice_item_status(
-        &mut self,
-        item_id: i64,
-        status: AdviceItemStatus,
-        notes: Option<String>,
-    ) -> Result<(), String> {
-        let mut archive = archive::Archive::open(&self.paths).map_err(|e| e.to_string())?;
-        match archive.update_advice_item_status(item_id, status, notes) {
-            Ok(true) => {
-                self.refresh_advice_history();
-                self.set_status(
-                    copy().status.advice_item_updated.clone(),
-                    StatusTone::Success,
-                );
-                Ok(())
-            }
-            Ok(false) => {
-                self.set_status(
-                    copy::template(
-                        &copy().status.advice_item_not_found,
-                        &[("id", item_id.to_string())],
-                    ),
-                    StatusTone::Warning,
-                );
-                Ok(())
-            }
-            Err(e) => Err(e.to_string()),
         }
     }
 
@@ -3612,37 +3110,6 @@ impl App {
         self.refresh_session_view();
     }
 
-    fn refresh_advice_history(&mut self) {
-        self.advice_history = load_advice_history(&self.paths);
-    }
-
-    fn apply_advice_job_result(&mut self, outcome: AdviceJobOutcome) {
-        if let Some(ingested) = outcome.ingested {
-            self.apply_synced_archive(ingested);
-        }
-        self.refresh_advice_history();
-        self.set_insights_tab(InsightsTab::Advice);
-        self.set_insights_scroll(0);
-
-        if let Some(error) = outcome.run_error {
-            self.set_status(
-                copy::template(&copy().status.advice_failed, &[("error", error)]),
-                StatusTone::Error,
-            );
-        } else {
-            self.set_status(
-                copy::template(
-                    &copy().status.advice_run_saved,
-                    &[
-                        ("items", outcome.item_count.to_string()),
-                        ("usage_sync", outcome.usage_sync_status),
-                    ],
-                ),
-                StatusTone::Success,
-            );
-        }
-    }
-
     fn apply_synced_archive(&mut self, ingested: Ingested) {
         self.background_alert_baseline =
             (!ingested.is_empty()).then(|| UsageTotals::from_ingested(&ingested));
@@ -3914,92 +3381,12 @@ mod tests {
         assert_eq!(app.page, Page::Usage);
         assert_eq!(app.period, Period::Today);
         app.handle_key(key(KeyCode::Tab));
-        assert_eq!(app.page, Page::Insights);
-        app.handle_key(key(KeyCode::Tab));
-        assert_eq!(app.page, Page::Audit);
-        app.handle_key(key(KeyCode::Tab));
         assert_eq!(app.page, Page::Overview);
 
         app.set_period(Period::AllTime);
         app.handle_key(key(KeyCode::BackTab));
-        assert_eq!(app.page, Page::Audit);
-        app.handle_key(key(KeyCode::BackTab));
-        assert_eq!(app.page, Page::Insights);
-        app.handle_key(key(KeyCode::BackTab));
         assert_eq!(app.page, Page::Usage);
         assert_eq!(app.period, Period::Today);
-    }
-
-    #[test]
-    fn insights_tab_scroll_and_generate_keys_are_manual() {
-        let mut app = App::default();
-        app.set_page(Page::Insights);
-        assert_eq!(app.insights_tab(), InsightsTab::Advice);
-
-        app.handle_key(key(KeyCode::Right));
-        assert_eq!(app.insights_tab(), InsightsTab::Signals);
-
-        app.handle_key(key(KeyCode::Down));
-        assert_eq!(app.insights_scroll(), 1);
-
-        app.handle_key(key(KeyCode::PageDown));
-        assert!(app.insights_scroll() > 1);
-        let scrolled_by_key = app.insights_scroll();
-
-        app.handle_mouse(
-            MouseEvent {
-                kind: MouseEventKind::ScrollDown,
-                column: 20,
-                row: 20,
-                modifiers: KeyModifiers::NONE,
-            },
-            Rect::new(0, 0, 170, 64),
-        );
-        assert!(app.insights_scroll() > scrolled_by_key);
-
-        app.handle_key(key(KeyCode::Left));
-        assert_eq!(app.insights_tab(), InsightsTab::Advice);
-
-        app.handle_key(key(KeyCode::Char('a')));
-        assert_eq!(
-            app.status_text(),
-            Some(copy().status.advice_requires_live_data.as_str())
-        );
-
-        app.handle_key(shift_key(KeyCode::Char('A')));
-        assert_eq!(
-            app.status_text(),
-            Some(copy().status.advice_requires_live_data.as_str())
-        );
-    }
-
-    #[test]
-    fn advice_job_completion_updates_status_after_poll() {
-        let (result_tx, result_rx) = mpsc::channel::<AdviceJobResult>();
-        result_tx
-            .send(Ok(AdviceJobOutcome {
-                item_count: 2,
-                run_error: None,
-                usage_sync_status: "1 calls · 0 limits".into(),
-                ingested: None,
-            }))
-            .unwrap();
-        let mut app = App {
-            page: Page::Insights,
-            paths: ConfigPaths::new(tempdir("advice-job")),
-            advice_job: Some(AdviceJob { result_rx }),
-            status: Some(AppStatus::new("Generating advice", StatusTone::Busy)),
-            ..App::default()
-        };
-
-        app.poll_reload();
-
-        assert!(!app.advice_running());
-        assert_eq!(app.status_tone(), StatusTone::Success);
-        assert_eq!(
-            app.status_text(),
-            Some("Advice saved · 2 items · usage 1 calls · 0 limits")
-        );
     }
 
     #[test]
@@ -4016,9 +3403,6 @@ mod tests {
 
         app.handle_key(key(KeyCode::Char('o')));
         assert_eq!(app.page, Page::Overview);
-
-        app.handle_key(key(KeyCode::Char('a')));
-        assert_eq!(app.page, Page::Audit);
     }
 
     #[test]
@@ -4257,16 +3641,9 @@ mod tests {
             rows[7].action,
             copy().config.rows.codex_subscription_limits.action
         );
-        assert_eq!(rows[8].id, "advice_tool");
-        assert_eq!(rows[8].name, copy().config.rows.advice_tool.name);
-        assert_eq!(rows[8].action, copy().config.rows.advice_tool.action);
-        assert!(rows[8].value.contains("Codex"));
-        assert_eq!(rows[9].id, "advice_prompts");
-        assert_eq!(rows[9].name, copy().config.rows.advice_prompts.name);
-        assert_eq!(rows[9].action, copy().config.rows.advice_prompts.action);
-        assert_eq!(rows[10].id, "clear_data");
-        assert_eq!(rows[10].name, copy().config.rows.clear_data.name);
-        assert_eq!(rows[10].action, copy().config.rows.clear_data.action);
+        assert_eq!(rows[8].id, "clear_data");
+        assert_eq!(rows[8].name, copy().config.rows.clear_data.name);
+        assert_eq!(rows[8].action, copy().config.rows.clear_data.action);
     }
 
     #[test]

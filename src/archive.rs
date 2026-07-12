@@ -10,17 +10,13 @@ use color_eyre::{
 };
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
-use crate::advice::{
-    AdviceHistory, AdviceItemInsert, AdviceItemStatus, AdviceItemView, AdviceRunInsert,
-    AdviceRunView, AdviceTool,
-};
 use crate::config::ConfigPaths;
 use crate::ingest::Ingested;
 use crate::tools::{self, LimitSnapshot, ParsedCall, SessionSourceKind, Speed, ToolAdapter};
 
 pub const SYNC_INTERVAL: Duration = crate::ingest_cache::TTL;
 
-const ARCHIVE_SCHEMA_VERSION: u32 = 2;
+const ARCHIVE_SCHEMA_VERSION: u32 = 3;
 
 pub struct Archive {
     conn: Connection,
@@ -135,8 +131,6 @@ impl Archive {
     pub fn reset_database(&mut self) -> Result<()> {
         self.conn.execute_batch(
             "
-            DROP TABLE IF EXISTS advice_items;
-            DROP TABLE IF EXISTS advice_runs;
             DROP TABLE IF EXISTS source_state;
             DROP TABLE IF EXISTS limit_snapshots;
             DROP TABLE IF EXISTS calls;
@@ -253,78 +247,6 @@ impl Archive {
         Ok(inserted)
     }
 
-    pub fn insert_advice_run(
-        &mut self,
-        run: &AdviceRunInsert,
-        usage_sync_status: &str,
-    ) -> Result<i64> {
-        let tx = self.conn.transaction()?;
-        insert_advice_run(&tx, run, usage_sync_status)?;
-        let run_id = tx.last_insert_rowid();
-        for item in &run.items {
-            insert_advice_item(&tx, run_id, item, run.created_at)?;
-        }
-        tx.commit()?;
-        Ok(run_id)
-    }
-
-    pub fn advice_history(&self) -> Result<AdviceHistory> {
-        let mut stmt = self.conn.prepare(
-            "
-            SELECT id, created_at, tool, data_scope, status, summary, raw_output, error
-            FROM advice_runs
-            ORDER BY created_at DESC, id DESC
-            LIMIT 20
-            ",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            let id: i64 = row.get(0)?;
-            let created_at: Option<String> = row.get(1)?;
-            let tool: String = row.get(2)?;
-            Ok(AdviceRunView {
-                id,
-                created_at: parse_datetime(created_at).unwrap_or_else(Utc::now),
-                tool: tool.clone(),
-                tool_label: AdviceTool::from_id(&tool)
-                    .map(|tool| tool.label().to_string())
-                    .unwrap_or(tool),
-                data_scope: row.get(3)?,
-                status: row.get(4)?,
-                summary: row.get(5)?,
-                raw_output: row.get(6)?,
-                error: row.get(7)?,
-                items: Vec::new(),
-            })
-        })?;
-
-        let mut runs = Vec::new();
-        for row in rows {
-            let mut run = row?;
-            run.items = self.load_advice_items(run.id)?;
-            runs.push(run);
-        }
-        Ok(AdviceHistory { runs })
-    }
-
-    pub fn update_advice_item_status(
-        &mut self,
-        item_id: i64,
-        status: AdviceItemStatus,
-        notes: Option<String>,
-    ) -> Result<bool> {
-        let updated = self.conn.execute(
-            "
-            UPDATE advice_items
-            SET status = ?1,
-                notes = COALESCE(?2, notes),
-                updated_at = ?3
-            WHERE id = ?4
-            ",
-            params![status.id(), notes, Utc::now().to_rfc3339(), item_id,],
-        )?;
-        Ok(updated > 0)
-    }
-
     fn migrate(&self) -> Result<()> {
         let version: u32 = self
             .conn
@@ -397,48 +319,15 @@ impl Archive {
             )?;
         }
 
-        if version < 2 {
+        if version < 3 {
+            // v2 added the advice tables; v3 removes the advice engine, so
+            // drop them whether or not the v2 migration ever ran.
             self.conn.execute_batch(
                 "
-                CREATE TABLE IF NOT EXISTS advice_runs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    created_at TEXT NOT NULL,
-                    tool TEXT NOT NULL,
-                    data_scope TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    prompt_digest TEXT NOT NULL,
-                    summary TEXT,
-                    raw_output TEXT NOT NULL,
-                    error TEXT,
-                    usage_sync_status TEXT NOT NULL
-                );
+                DROP TABLE IF EXISTS advice_items;
+                DROP TABLE IF EXISTS advice_runs;
 
-                CREATE INDEX IF NOT EXISTS idx_advice_runs_created_at
-                    ON advice_runs(created_at);
-
-                CREATE TABLE IF NOT EXISTS advice_items (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    run_id INTEGER NOT NULL,
-                    title TEXT NOT NULL,
-                    body TEXT NOT NULL,
-                    category TEXT NOT NULL,
-                    severity TEXT NOT NULL,
-                    confidence REAL NOT NULL,
-                    impact TEXT NOT NULL,
-                    estimated_savings_usd REAL,
-                    evidence_json TEXT NOT NULL,
-                    next_step TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    notes TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    FOREIGN KEY(run_id) REFERENCES advice_runs(id) ON DELETE CASCADE
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_advice_items_run_id
-                    ON advice_items(run_id);
-
-                PRAGMA user_version = 2;
+                PRAGMA user_version = 3;
                 ",
             )?;
         }
@@ -539,111 +428,6 @@ impl Archive {
         }
         Ok(limits)
     }
-
-    fn load_advice_items(&self, run_id: i64) -> Result<Vec<AdviceItemView>> {
-        let mut stmt = self.conn.prepare(
-            "
-            SELECT
-                id, title, body, category, severity, confidence, impact,
-                estimated_savings_usd, evidence_json, next_step, status, notes
-            FROM advice_items
-            WHERE run_id = ?1
-            ORDER BY id ASC
-            ",
-        )?;
-        let rows = stmt.query_map(params![run_id], |row| {
-            let evidence_json: String = row.get(8)?;
-            Ok(AdviceItemView {
-                id: row.get(0)?,
-                run_id,
-                title: row.get(1)?,
-                body: row.get(2)?,
-                category: row.get(3)?,
-                severity: row.get(4)?,
-                confidence: row.get(5)?,
-                impact: row.get(6)?,
-                estimated_savings_usd: row.get(7)?,
-                evidence: serde_json::from_str(&evidence_json).unwrap_or_default(),
-                next_step: row.get(9)?,
-                status: row.get(10)?,
-                notes: row.get(11)?,
-            })
-        })?;
-
-        let mut items = Vec::new();
-        for row in rows {
-            items.push(row?);
-        }
-        Ok(items)
-    }
-}
-
-fn insert_advice_run(
-    tx: &Transaction<'_>,
-    run: &AdviceRunInsert,
-    usage_sync_status: &str,
-) -> Result<()> {
-    tx.execute(
-        "
-        INSERT INTO advice_runs (
-            created_at, tool, data_scope, status, prompt_digest,
-            summary, raw_output, error, usage_sync_status
-        ) VALUES (
-            ?1, ?2, ?3, ?4, ?5,
-            ?6, ?7, ?8, ?9
-        )
-        ",
-        params![
-            run.created_at.to_rfc3339(),
-            run.tool.id(),
-            run.data_scope.id(),
-            run.status.id(),
-            run.prompt_digest.as_str(),
-            run.summary.as_deref(),
-            run.raw_output.as_str(),
-            run.error.as_deref(),
-            usage_sync_status,
-        ],
-    )?;
-    Ok(())
-}
-
-fn insert_advice_item(
-    tx: &Transaction<'_>,
-    run_id: i64,
-    item: &AdviceItemInsert,
-    created_at: DateTime<Utc>,
-) -> Result<()> {
-    let evidence_json = serde_json::to_string(&item.evidence)?;
-    tx.execute(
-        "
-        INSERT INTO advice_items (
-            run_id, title, body, category, severity, confidence, impact,
-            estimated_savings_usd, evidence_json, next_step, status, notes,
-            created_at, updated_at
-        ) VALUES (
-            ?1, ?2, ?3, ?4, ?5, ?6, ?7,
-            ?8, ?9, ?10, ?11, NULL,
-            ?12, ?13
-        )
-        ",
-        params![
-            run_id,
-            item.title.as_str(),
-            item.body.as_str(),
-            item.category.as_str(),
-            item.severity.as_str(),
-            item.confidence,
-            item.impact.as_str(),
-            item.estimated_savings_usd,
-            evidence_json,
-            item.next_step.as_str(),
-            AdviceItemStatus::Open.id(),
-            created_at.to_rfc3339(),
-            created_at.to_rfc3339(),
-        ],
-    )?;
-    Ok(())
 }
 
 fn insert_call(tx: &Transaction<'_>, call: &ParsedCall) -> Result<bool> {
@@ -1108,50 +892,46 @@ mod tests {
     }
 
     #[test]
-    fn advice_runs_and_item_status_roundtrip() {
-        let paths = temp_paths("advice-roundtrip");
-        let mut archive = Archive::open(&paths).unwrap();
-        let run = AdviceRunInsert {
-            created_at: Utc.with_ymd_and_hms(2026, 5, 1, 12, 0, 0).unwrap(),
-            tool: AdviceTool::Codex,
-            data_scope: crate::advice::AdviceDataScope::Redacted,
-            status: crate::advice::AdviceRunStatus::Succeeded,
-            prompt_digest: "digest".into(),
-            summary: Some("Advice summary".into()),
-            raw_output: r#"{"items":[]}"#.into(),
-            error: None,
-            items: vec![AdviceItemInsert {
-                title: "Review cache".into(),
-                body: "Cache hit rate fell.".into(),
-                category: "cache".into(),
-                severity: "warn".into(),
-                confidence: 0.75,
-                impact: "medium".into(),
-                estimated_savings_usd: Some(1.5),
-                evidence: vec!["cache_hit_trend_drop sample=8 confidence=0.75".into()],
-                next_step: "Inspect recent prompts.".into(),
-            }],
-        };
+    fn migrate_v2_archive_drops_advice_tables_and_keeps_calls() {
+        let paths = temp_paths("migrate-v2");
+        {
+            let mut archive = Archive::open(&paths).unwrap();
+            archive
+                .insert_ingested(&Ingested {
+                    calls: vec![sample_call("v2-call")],
+                    limits: Vec::new(),
+                })
+                .unwrap();
+            // Rewind to a v2-shaped archive: advice tables present, version 2.
+            archive
+                .conn
+                .execute_batch(
+                    "
+                    CREATE TABLE advice_runs (id INTEGER PRIMARY KEY);
+                    CREATE TABLE advice_items (id INTEGER PRIMARY KEY);
+                    PRAGMA user_version = 2;
+                    ",
+                )
+                .unwrap();
+        }
 
-        let run_id = archive
-            .insert_advice_run(&run, "0 calls · 0 limits")
+        let archive = Archive::open(&paths).unwrap();
+        let version: u32 = archive
+            .conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        let history = archive.advice_history().unwrap();
-
-        assert_eq!(history.runs.len(), 1);
-        assert_eq!(history.runs[0].id, run_id);
-        assert_eq!(history.runs[0].tool_label, "Codex");
-        assert_eq!(history.runs[0].items.len(), 1);
-        assert_eq!(history.runs[0].items[0].status, "open");
-        assert_eq!(history.runs[0].items[0].evidence, run.items[0].evidence);
-
-        let item_id = history.runs[0].items[0].id;
-        assert!(archive
-            .update_advice_item_status(item_id, AdviceItemStatus::Done, Some("tested".into()))
-            .unwrap());
-        let history = archive.advice_history().unwrap();
-        assert_eq!(history.runs[0].items[0].status, "done");
-        assert_eq!(history.runs[0].items[0].notes.as_deref(), Some("tested"));
+        assert_eq!(version, 3);
+        let advice_tables: u32 = archive
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('advice_runs', 'advice_items')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(advice_tables, 0);
+        let loaded = archive.load().unwrap();
+        assert_eq!(loaded.calls.len(), 1, "calls survive the v3 migration");
         let _ = fs::remove_dir_all(paths.dir);
     }
 
