@@ -3,14 +3,18 @@
   import { Channel } from '@tauri-apps/api/core';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { confirm, open as openDialog } from '@tauri-apps/plugin-dialog';
-  import { Download, FolderOpen, RefreshCw, Search, X } from 'lucide-svelte';
+  import { Download, FolderOpen, Search, X } from 'lucide-svelte';
   import { api } from './api';
   import { count } from './format';
-  import { fadeIn, pill, reveal } from './motion';
+  import { NAV_PAGES, router, type Route } from './lib/router.svelte';
+  import { fadeIn, reveal } from './motion';
+  import PageHeader from './shell/PageHeader.svelte';
+  import Sidebar from './shell/Sidebar.svelte';
+  import StatusBar from './shell/StatusBar.svelte';
   import TrayPopover from './TrayPopover.svelte';
+  import OverviewPage from './routes/OverviewPage.svelte';
   import ConfigView from './views/ConfigView.svelte';
   import DeepDiveView from './views/DeepDiveView.svelte';
-  import OverviewView from './views/OverviewView.svelte';
   import SessionView from './views/SessionView.svelte';
   import UsageView from './views/UsageView.svelte';
   import type {
@@ -18,7 +22,6 @@
     DesktopSnapshot,
     DesktopUpdateDownloadEvent,
     DesktopUpdateMetadata,
-    PageId,
     PeriodId,
     ProjectOption,
     ReportFormatId,
@@ -29,13 +32,7 @@
     ToolId
   } from './types';
 
-  type ModalKind =
-    | 'project'
-    | 'session'
-    | 'currency'
-    | 'report'
-    | 'subscription_cookie'
-    | null;
+  type ModalKind = 'project' | 'session' | 'currency' | 'report' | 'subscription_cookie' | null;
   type SubscriptionProvider = 'claude' | 'codex';
   type DesktopUpdateUiState = {
     checking: boolean;
@@ -46,6 +43,8 @@
     downloaded: number;
     total: number | null;
   };
+
+  const SIDEBAR_COLLAPSED_KEY = 'tokenuse.sidebar.collapsed';
 
   function currentWindowLabel() {
     try {
@@ -68,7 +67,6 @@
   let codexExtraCookies = '';
   let cookieBusy = false;
   let cookieError: string | null = null;
-  let statusExpanded = false;
   let callDetail: SessionDetail | null = null;
   let query = '';
   let reportFormat: ReportFormatId = 'html';
@@ -78,6 +76,7 @@
   let reportRedacted = false;
   let clearingData = false;
   let pollTimer: number | undefined;
+  let sidebarCollapsed = false;
   let desktopUpdate: DesktopUpdateUiState = resetDesktopUpdate();
 
   function resetDesktopUpdate(): DesktopUpdateUiState {
@@ -95,6 +94,7 @@
   onMount(() => {
     if (isTrayPopover) return;
 
+    sidebarCollapsed = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
     void load();
     pollTimer = window.setInterval(() => void loadSilent(), 3000);
     window.addEventListener('keydown', handleKey);
@@ -128,6 +128,41 @@
       error = err instanceof Error ? err.message : String(err);
     } finally {
       busy = false;
+    }
+  }
+
+  function navigate(next: Route) {
+    router.go(next);
+  }
+
+  function toggleSidebar() {
+    sidebarCollapsed = !sidebarCollapsed;
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? '1' : '0');
+  }
+
+  function pageTitle(): string {
+    if (!snapshot) return '';
+    const nav = snapshot.copy.nav;
+    switch (router.route.page) {
+      case 'overview':
+        return nav.overview;
+      case 'analytics':
+        return nav.analytics;
+      case 'tools': {
+        if (router.route.tool) {
+          const tool = snapshot.tools.find((t) => t.value === router.route.tool);
+          if (tool) return tool.label;
+        }
+        return nav.tools;
+      }
+      case 'models':
+        return nav.models;
+      case 'projects':
+        return nav.projects;
+      case 'config':
+        return nav.config;
+      case 'session':
+        return nav.session;
     }
   }
 
@@ -279,12 +314,55 @@
     }
   }
 
+  async function openSession(key: string) {
+    await commit(() => api.openSession(key));
+    navigate({ page: 'session', sessionKey: key });
+  }
+
+  async function closeSession() {
+    await commit(() => api.closeSession());
+    navigate({ page: 'analytics' });
+  }
+
+  /** Client-side navigation keys; everything else falls through to the shared keymap. */
+  function clientNavTarget(event: KeyboardEvent): Route | null {
+    if (event.ctrlKey || event.altKey || event.metaKey) return null;
+    if (event.key === 'Tab') {
+      router.cycle(event.shiftKey ? -1 : 1);
+      return router.route;
+    }
+    switch (event.key) {
+      case 'o':
+        return { page: 'overview' };
+      case 'd':
+        return { page: 'analytics' };
+      case 'u':
+        return { page: 'tools' };
+      case 'c':
+        return { page: 'config' };
+      default:
+        return null;
+    }
+  }
+
   function handleKey(event: KeyboardEvent) {
     const target = event.target as HTMLElement | null;
-    if ((target?.tagName === 'INPUT' || target?.tagName === 'SELECT') && event.key !== 'Escape') {
+    if (
+      (target?.tagName === 'INPUT' || target?.tagName === 'SELECT' || target?.tagName === 'TEXTAREA') &&
+      event.key !== 'Escape'
+    ) {
       return;
     }
     if (!snapshot) return;
+
+    if (!modal && !callDetail && router.route.page !== 'session') {
+      const targetRoute = clientNavTarget(event);
+      if (targetRoute) {
+        event.preventDefault();
+        navigate(targetRoute);
+        return;
+      }
+    }
 
     void commitShortcut(event);
   }
@@ -308,9 +386,9 @@
   function shortcutContext(event: KeyboardEvent) {
     if (callDetail) return 'desktop_call_detail';
     if (modal) return 'desktop_modal';
-    if (snapshot?.page === 'session' && event.key === 'Escape') return 'desktop_session_page';
-    if (snapshot?.page === 'usage') return 'desktop_usage_page';
-    if (snapshot?.page === 'config') return 'desktop_config_page';
+    if (router.route.page === 'session' && event.key === 'Escape') return 'desktop_session_page';
+    if (router.route.page === 'tools') return 'desktop_usage_page';
+    if (router.route.page === 'config') return 'desktop_config_page';
     return 'desktop';
   }
 
@@ -352,6 +430,10 @@
   function setSortFromEvent(event: Event) {
     const value = (event.currentTarget as HTMLSelectElement).value as SortId;
     void commit(() => api.setSort(value));
+  }
+
+  function setPeriod(period: PeriodId) {
+    void commit(() => api.setPeriod(period));
   }
 
   function setOpenAtLoginFromEvent(event: Event) {
@@ -430,57 +512,9 @@
     }
   }
 
-  function activePage() {
-    return snapshot?.page ?? 'overview';
-  }
-
   function activeSortLabel() {
     if (!snapshot) return '';
     return snapshot.sorts.find((sort) => sort.value === snapshot?.sort)?.label ?? '';
-  }
-
-  function isUsagePage() {
-    return activePage() === 'usage';
-  }
-
-  function isConfigPage() {
-    return activePage() === 'config';
-  }
-
-  function isPeriodDisabled(period: PeriodId) {
-    return isConfigPage() || (isUsagePage() && period !== 'today');
-  }
-
-  function isToolDisabled() {
-    return isConfigPage() || isUsagePage();
-  }
-
-  function isSortDisabled() {
-    return isConfigPage() || isUsagePage();
-  }
-
-  function isProjectDisabled() {
-    return isConfigPage() || isUsagePage();
-  }
-
-  function tabsFor(state: DesktopSnapshot): Array<{ value: PageId; label: string }> {
-    return [
-      { value: 'overview', label: state.copy.nav.overview },
-      { value: 'deep-dive', label: state.copy.nav.deep_dive },
-      { value: 'usage', label: state.copy.nav.usage },
-      { value: 'config', label: state.copy.nav.config }
-    ];
-  }
-
-  function modalTitle(kind: Exclude<ModalKind, null>) {
-    if (!snapshot) return kind;
-    if (kind === 'report') return snapshot.copy.reports.modal_title;
-    if (kind === 'subscription_cookie') {
-      return cookieProvider === 'codex'
-        ? snapshot.copy.modals.sync_codex_subscription_limits_title
-        : snapshot.copy.modals.sync_claude_subscription_limits_title;
-    }
-    return snapshot.copy.modals[kind] ?? kind;
   }
 
   function usageTone(tool: string, index: number) {
@@ -772,146 +806,74 @@
 {#if isTrayPopover}
   <TrayPopover />
 {:else if snapshot}
-  <div class="app-shell" class:is-busy={busy}>
-    <header class="topbar">
-      <div class="brand">
-        <svg class="brand-bars" viewBox="0 0 440 560" aria-hidden="true">
-          <defs>
-            <linearGradient id="brand-bar-gradient" x1="0" y1="0" x2="0" y2="560" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#ffc06a" />
-              <stop offset="45%" stop-color="#ff9a4d" />
-              <stop offset="100%" stop-color="#f26a3d" />
-            </linearGradient>
-          </defs>
-          <rect x="0" y="280" width="80" height="280" rx="16" fill="url(#brand-bar-gradient)" />
-          <rect x="120" y="160" width="80" height="400" rx="16" fill="url(#brand-bar-gradient)" />
-          <rect x="240" y="0" width="80" height="560" rx="16" fill="url(#brand-bar-gradient)" />
-          <rect x="360" y="120" width="80" height="440" rx="16" fill="url(#brand-bar-gradient)" />
-        </svg>
-        <span class="brand-title">{snapshot.copy.brand.name}</span>
-      </div>
+  <div class="app-shell" class:is-busy={busy} class:sidebar-collapsed={sidebarCollapsed}>
+    <Sidebar
+      copy={snapshot.copy}
+      route={router.route}
+      tools={snapshot.tools}
+      collapsed={sidebarCollapsed}
+      {navigate}
+      toggleCollapsed={toggleSidebar}
+    />
 
-      <nav class="tabs" aria-label={snapshot.copy.desktop.sections_aria}>
-        {#each tabsFor(snapshot) as tab}
-          <button
-            class:active={activePage() === tab.value}
-            type="button"
-            onclick={() => commit(() => api.setPage(tab.value))}
-          >
-            {tab.label}
-          </button>
-        {/each}
-      </nav>
+    <div class="content">
+      <PageHeader
+        copy={snapshot.copy}
+        title={pageTitle()}
+        {snapshot}
+        showPeriod={router.route.page !== 'config' && router.route.page !== 'session'}
+        showTool={router.route.page === 'overview' || router.route.page === 'analytics'}
+        showSort={router.route.page !== 'config' && router.route.page !== 'session'}
+        showProject={router.route.page === 'overview' || router.route.page === 'analytics' || router.route.page === 'projects'}
+        periodLocked={router.route.page === 'tools' ? 'today' : null}
+        statusMessage={statusMessage()}
+        statusTone={statusTone()}
+        {setPeriod}
+        setTool={setToolFromEvent}
+        setSort={setSortFromEvent}
+        openProjectPicker={() => openModal('project')}
+        refresh={() => commit(() => api.refreshArchive())}
+        openReport={() => openModal('report')}
+      />
 
-      <div class="actions">
-        {#if statusMessage()}
-          {#key statusTone() + (statusMessage() ?? '')}
-            <button
-              class="status-pill"
-              class:error={statusTone() === 'error'}
-              class:success={statusTone() === 'success'}
-              class:warning={statusTone() === 'warning'}
-              class:busy={statusTone() === 'busy'}
-              class:is-expanded={statusExpanded}
-              type="button"
-              use:pill
-              title={statusExpanded ? 'Click to collapse' : statusMessage() ?? ''}
-              onclick={() => (statusExpanded = !statusExpanded)}
-            >
-              <i class="status-dot" aria-hidden="true"></i>
-              <span>{statusMessage()}</span>
-            </button>
-          {/key}
+      <main class="page-scroll">
+        {#if router.route.page === 'overview'}
+          <OverviewPage {snapshot} />
+        {:else if router.route.page === 'analytics'}
+          <DeepDiveView {snapshot} openSessionPicker={() => openModal('session')} />
+        {:else if router.route.page === 'tools'}
+          <UsageView {snapshot} {usageTone} />
+        {:else if router.route.page === 'config'}
+          <ConfigView
+            {snapshot}
+            {configAction}
+            chooseExportDir={chooseReportDir}
+            refreshArchive={() => commit(() => api.refreshArchive())}
+            {desktopUpdate}
+            checkDesktopUpdate={() => void checkDesktopUpdate()}
+            installDesktopUpdate={() => void installDesktopUpdate()}
+            {setOpenAtLoginFromEvent}
+            {setShowDockOrTaskbarIconFromEvent}
+          />
+        {:else if router.route.page === 'session'}
+          <SessionView
+            {snapshot}
+            session={snapshot.session}
+            closeSession={() => void closeSession()}
+            {openCallDetail}
+            {handleCallRowKey}
+          />
         {/if}
-        <button
-          class="icon-button"
-          type="button"
-          title={snapshot.copy.actions.refresh_archive}
-          onclick={() => commit(() => api.refreshArchive())}
-        >
-          <RefreshCw size={16} />
-        </button>
-        <button class="icon-button" type="button" title={snapshot.copy.actions.export_current_view} onclick={() => openModal('report')}>
-          <Download size={16} />
-        </button>
-      </div>
-    </header>
+      </main>
 
-    <section class="filter-strip">
-      <div class="segmented" aria-label={snapshot.copy.desktop.period_aria}>
-        {#each snapshot.periods as period}
-          <button
-            type="button"
-            class:active={snapshot.period === period.value}
-            disabled={isPeriodDisabled(period.value)}
-            onclick={() => commit(() => api.setPeriod(period.value))}
-          >
-            {period.label}
-          </button>
-        {/each}
-      </div>
-
-      <div class="filter-controls">
-        <div class="segmented tool-strip" class:is-disabled={isToolDisabled()} aria-label={snapshot.copy.desktop.tool_aria}>
-          <span>{snapshot.copy.filters.tool}</span>
-          <select aria-label={snapshot.copy.desktop.tool_aria} disabled={isToolDisabled()} onchange={setToolFromEvent}>
-            {#each snapshot.tools as tool}
-              <option value={tool.value} selected={snapshot.tool === tool.value}>{tool.label}</option>
-            {/each}
-          </select>
-        </div>
-
-        <div class="segmented tool-strip sort-strip" class:is-disabled={isSortDisabled()} aria-label={snapshot.copy.desktop.sort_aria}>
-          <span>{snapshot.copy.filters.sort}</span>
-          <select aria-label={snapshot.copy.desktop.sort_aria} disabled={isSortDisabled()} onchange={setSortFromEvent}>
-            {#each snapshot.sorts as sort}
-              <option value={sort.value} selected={snapshot.sort === sort.value}>{sort.label}</option>
-            {/each}
-          </select>
-        </div>
-
-        <button class="segmented tool-strip project-strip" type="button" aria-label={snapshot.copy.desktop.project_aria} disabled={isProjectDisabled()} onclick={() => openModal('project')}>
-          <span>{snapshot.copy.filters.project}</span>
-          <strong>{snapshot.project.label}</strong>
-        </button>
-      </div>
-    </section>
-
-    <main>
-      {#if activePage() === 'overview'}
-        <OverviewView {snapshot} />
-      {:else if activePage() === 'deep-dive'}
-        <DeepDiveView {snapshot} openSessionPicker={() => openModal('session')} />
-      {:else if activePage() === 'usage'}
-        <UsageView {snapshot} {usageTone} />
-      {:else if activePage() === 'config'}
-        <ConfigView
-          {snapshot}
-          {configAction}
-          chooseExportDir={chooseReportDir}
-          refreshArchive={() => commit(() => api.refreshArchive())}
-          {desktopUpdate}
-          checkDesktopUpdate={() => void checkDesktopUpdate()}
-          installDesktopUpdate={() => void installDesktopUpdate()}
-          {setOpenAtLoginFromEvent}
-          {setShowDockOrTaskbarIconFromEvent}
-        />
-      {:else if activePage() === 'session'}
-        <SessionView
-          {snapshot}
-          session={snapshot.session}
-          closeSession={() => commit(() => api.closeSession())}
-          {openCallDetail}
-          {handleCallRowKey}
-        />
-      {/if}
-    </main>
-
-    <footer>
-      {#each snapshot.shortcut_footer as hint}
-        <span><b>{hint.keys}</b> {hint.action === 'cycle_sort' ? `${snapshot.copy.filters.sort} ${activeSortLabel()}` : hint.label}</span>
-      {/each}
-    </footer>
+      <StatusBar
+        copy={snapshot.copy}
+        source={snapshot.source}
+        currency={snapshot.currency}
+        hints={snapshot.shortcut_footer}
+        sortLabel={activeSortLabel()}
+      />
+    </div>
   </div>
 
   {#if modal}
@@ -921,7 +883,13 @@
         <div class="modal-head">
           <div class="modal-title">
             {#if modal !== 'report'}<Search size={16} />{/if}
-            {modalTitle(modal)}
+            {modal === 'report'
+              ? snapshot.copy.reports.modal_title
+              : modal === 'subscription_cookie'
+                ? (cookieProvider === 'codex'
+                    ? snapshot.copy.modals.sync_codex_subscription_limits_title
+                    : snapshot.copy.modals.sync_claude_subscription_limits_title)
+                : snapshot.copy.modals[modal] ?? modal}
           </div>
           <button class="icon-button" type="button" title={snapshot.copy.actions.close} onclick={closeModal}><X size={16} /></button>
         </div>
@@ -944,7 +912,7 @@
           <input bind:value={query} placeholder={snapshot.copy.desktop.filter_sessions} />
           <div class="picker-list">
             {#each filteredSessions() as session}
-              <button type="button" onclick={() => commit(() => api.openSession(session.key)).then(closeModal)}>
+              <button type="button" onclick={() => { closeModal(); void openSession(session.key); }}>
                 <span>{session.project}</span>
                 <small>{session.date} · {session.tool} · {session.cost} · {count(session.calls)} {snapshot.copy.metrics.calls}</small>
               </button>

@@ -26,14 +26,45 @@
   --color-border-soft: #30354c;
   --color-border-row: #292d42;
 
+  /* Provider accents — identify, never decorate (DESIGN.md "Provider identity") */
+  --provider-anthropic: #d97757;
+  --provider-openai: #9fb8ad;
+  --provider-google: #8ab4f8;
+  --provider-github: #8b949e;
+  --provider-cursor: #7a7fee;
+  --provider-xai: #c8cdd8;
+  --provider-other: #a1a7c3;
+
+  /* Charts — every chart color routes through these (no hex in components) */
+  --chart-grid: #292d42;
+  --chart-spend: var(--color-primary);
+  --chart-calls: var(--color-cyan);
+  --chart-peak: var(--color-error);
+  --chart-series-1: var(--color-primary);
+  --chart-series-2: var(--color-cyan);
+  --chart-series-3: var(--color-secondary);
+  --chart-series-4: var(--color-tertiary);
+  --chart-series-5: var(--color-magenta);
+  --chart-series-6: var(--color-warning);
+  --chart-series-7: var(--color-error);
+  --chart-series-8: var(--color-muted);
+
+  /* Sidebar rail */
+  --sidebar-width: 216px;
+  --sidebar-width-collapsed: 64px;
+  --sidebar-item-height: 32px;
+  --sidebar-icon-size: 16px;
+
   /* Typography */
   --font-ui: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace;
 
   --text-label: 11px;
   --text-body: 13px;
   --text-heading: 13px;
   --text-display: 18px;
+  --text-display-lg: 20px;
+  --text-display-xl: 28px;
 
   /* Spacing */
   --space-xs: 2px;
