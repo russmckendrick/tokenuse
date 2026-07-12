@@ -16,6 +16,12 @@ cargo test
 cargo clippy --all-targets --all-features
 ```
 
+Launch the TUI with bundled sample data even when local sessions exist:
+
+```bash
+cargo run -- --sample
+```
+
 List normalized project/tool rows without opening the TUI:
 
 ```bash

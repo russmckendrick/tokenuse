@@ -51,10 +51,19 @@
   {#if analytics}
     <section class="duo-grid">
       <Panel title={snapshot.copy.desktop.daily_by_tool} tone="orange">
-        <StackedBars rows={analytics.daily_by_tool} ariaLabel={snapshot.copy.desktop.daily_by_tool} />
+        <StackedBars
+          rows={analytics.daily_by_tool}
+          ariaLabel={snapshot.copy.desktop.daily_by_tool}
+          emptyLabel={snapshot.copy.empty.no_data}
+        />
       </Panel>
       <Panel title={snapshot.copy.desktop.hour_heatmap} tone="cyan">
-        <Heatmap matrix={analytics.hour_day} dayLabels={weekdays} ariaLabel={snapshot.copy.desktop.hour_heatmap} />
+        <Heatmap
+          matrix={analytics.hour_day}
+          dayLabels={weekdays}
+          ariaLabel={snapshot.copy.desktop.hour_heatmap}
+          emptyLabel={snapshot.copy.empty.no_data}
+        />
       </Panel>
     </section>
 
@@ -65,6 +74,7 @@
           colorBy="provider"
           centerLabel={snapshot.copy.desktop.spend_share}
           ariaLabel={snapshot.copy.desktop.by_provider}
+          emptyLabel={snapshot.copy.empty.no_data}
         />
       </Panel>
       <Panel title={snapshot.copy.desktop.by_tool} tone="green">
@@ -73,37 +83,38 @@
           colorBy="tool"
           centerLabel={snapshot.copy.desktop.spend_share}
           ariaLabel={snapshot.copy.desktop.by_tool}
+          emptyLabel={snapshot.copy.empty.no_data}
         />
       </Panel>
     </section>
   {/if}
 
   <section class="duo-grid">
-    <Panel title={snapshot.copy.panels.by_project} tone="green">
+    <Panel title={snapshot.copy.panels.by_project} tone="green" scrollable>
       <ProjectTable rows={snapshot.dashboard.projects} copy={snapshot.copy} />
     </Panel>
-    <Panel title={snapshot.copy.panels.model_efficiency} tone="magenta">
+    <Panel title={snapshot.copy.panels.model_efficiency} tone="magenta" scrollable>
       <ModelTable rows={snapshot.dashboard.models} copy={snapshot.copy} />
     </Panel>
   </section>
 
-  <Panel title={snapshot.copy.panels.top_sessions} tone="red">
+  <Panel title={snapshot.copy.panels.top_sessions} tone="red" scrollable>
     <button class="panel-command" type="button" onclick={openSessionPicker}>{snapshot.copy.actions.open_session_picker}</button>
     <SessionTable rows={snapshot.dashboard.sessions} copy={snapshot.copy} />
   </Panel>
 
-  <Panel title={snapshot.copy.panels.project_spend_by_tool} tone="yellow">
+  <Panel title={snapshot.copy.panels.project_spend_by_tool} tone="yellow" scrollable>
     <ProjectToolTable rows={snapshot.dashboard.project_tools} copy={snapshot.copy} />
   </Panel>
 
   <section class="trio-grid">
-    <Panel title={snapshot.copy.panels.core_tools} tone="cyan">
+    <Panel title={snapshot.copy.panels.core_tools} tone="cyan" scrollable>
       <CountTable rows={snapshot.dashboard.tools} copy={snapshot.copy} />
     </Panel>
-    <Panel title={snapshot.copy.panels.shell_commands} tone="orange">
+    <Panel title={snapshot.copy.panels.shell_commands} tone="orange" scrollable>
       <CountTable rows={snapshot.dashboard.commands} copy={snapshot.copy} />
     </Panel>
-    <Panel title={snapshot.copy.panels.mcp_servers} tone="magenta">
+    <Panel title={snapshot.copy.panels.mcp_servers} tone="magenta" scrollable>
       <CountTable rows={snapshot.dashboard.mcp_servers} copy={snapshot.copy} />
     </Panel>
   </section>

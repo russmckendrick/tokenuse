@@ -1,53 +1,43 @@
-@media (max-width: 1120px) {
-  .topbar,
-  .filter-strip,
-  .overview-grid,
-  .deep-grid,
-  .usage-grid,
+@media (max-width: 900px) {
+  .utilisation-strip {
+    flex-direction: column;
+  }
+
+  .utilisation-tool,
+  .utilisation-tool:first-child {
+    flex-basis: auto;
+    padding: var(--space-lg) 0;
+    border-top: 1px solid var(--color-border-row);
+    border-left: 0;
+  }
+
+  .utilisation-tool:first-child {
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .utilisation-limits {
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  }
+}
+
+@media (max-width: 1180px) {
+  .page-heading-cluster {
+    gap: var(--space-md);
+  }
+
+  .page-title {
+    min-width: 92px;
+    padding-right: var(--space-md);
+  }
+
+  .period-segmented button {
+    padding-left: 7px;
+    padding-right: 7px;
+  }
+
   .config-grid {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .filter-controls {
-    justify-self: stretch;
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .overview-grid,
-  .deep-grid,
-  .usage-grid,
-  .config-grid {
-    overflow: auto;
-  }
-
-  .overview-grid {
-    grid-template-rows: none;
-    grid-auto-rows: minmax(240px, auto);
-    align-content: start;
-  }
-
-  .deep-grid {
-    grid-template-rows: none;
-    grid-auto-rows: minmax(240px, auto);
-  }
-
-  .deep-span {
-    grid-column: auto;
-  }
-
-  .overview-side-stack,
-  .deep-side-stack {
-    grid-template-rows: none;
-    grid-auto-rows: minmax(220px, auto);
-  }
-
-  .usage-grid {
-    grid-template-rows: none;
-    grid-auto-rows: minmax(260px, auto);
-    align-content: start;
-  }
-
-  .config-grid {
     height: auto;
     align-content: start;
   }
@@ -56,15 +46,50 @@
     max-height: min(420px, calc(100vh - 190px));
   }
 
-  .tabs,
-  .actions {
-    justify-content: flex-start;
-  }
-
   .kpis,
   .session-kpis,
   .detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+}
+
+@media (max-width: 1080px) {
+  .page-header {
+    padding-left: var(--space-xl);
+    padding-right: var(--space-xl);
+  }
+
+  .page-header-row {
+    align-items: flex-start;
+  }
+
+  .page-heading-cluster {
+    flex-wrap: wrap;
+  }
+
+  .page-title {
+    min-height: 30px;
+    display: flex;
+    align-items: center;
+  }
+
+  .period-segmented {
+    order: 2;
+    flex-basis: 100%;
+  }
+
+  .filter-controls,
+  .filter-field {
+    min-width: 0;
+  }
+
+  .page-scroll {
+    padding: var(--space-xl);
+  }
+
+  .duo-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

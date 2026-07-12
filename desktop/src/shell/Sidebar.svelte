@@ -16,16 +16,24 @@
   export let copy: CopyDeck;
   export let route: Route;
   export let tools: OptionItem<ToolId>[];
+  export let usageOrder: string[];
   export let collapsed: boolean;
   export let navigate: (route: Route) => void;
   export let toggleCollapsed: () => void;
 
-  $: toolEntries = tools.filter((tool) => tool.value !== 'all');
-
-  function isActive(page: Route['page'], tool?: RouteToolId) {
-    if (route.page !== page) return false;
-    return tool === undefined || route.tool === tool;
+  function isActive(page: Route['page']) {
+    return route.page === page;
   }
+
+  $: toolEntries = tools
+    .filter((tool) => tool.value !== 'all')
+    .sort((left, right) => {
+      const leftRank = usageOrder.indexOf(left.label);
+      const rightRank = usageOrder.indexOf(right.label);
+      const leftOrder = leftRank === -1 ? Number.MAX_SAFE_INTEGER : leftRank;
+      const rightOrder = rightRank === -1 ? Number.MAX_SAFE_INTEGER : rightRank;
+      return leftOrder - rightOrder || left.label.localeCompare(right.label);
+    });
 </script>
 
 <aside class="sidebar" class:collapsed aria-label={copy.desktop.nav_aria}>
@@ -53,6 +61,7 @@
       type="button"
       class="sidebar-item"
       class:active={isActive('overview')}
+      aria-current={isActive('overview') ? 'page' : undefined}
       title={copy.nav.overview}
       onclick={() => navigate({ page: 'overview' })}
     >
@@ -64,6 +73,7 @@
       type="button"
       class="sidebar-item"
       class:active={isActive('analytics')}
+      aria-current={isActive('analytics') ? 'page' : undefined}
       title={copy.nav.analytics}
       onclick={() => navigate({ page: 'analytics' })}
     >
@@ -75,6 +85,7 @@
       type="button"
       class="sidebar-item"
       class:active={route.page === 'tools' && route.tool === undefined}
+      aria-current={route.page === 'tools' && route.tool === undefined ? 'page' : undefined}
       title={copy.nav.tools}
       onclick={() => navigate({ page: 'tools' })}
     >
@@ -86,6 +97,7 @@
       type="button"
       class="sidebar-item"
       class:active={isActive('models')}
+      aria-current={isActive('models') ? 'page' : undefined}
       title={copy.nav.models}
       onclick={() => navigate({ page: 'models' })}
     >
@@ -97,6 +109,7 @@
       type="button"
       class="sidebar-item"
       class:active={isActive('projects')}
+      aria-current={isActive('projects') ? 'page' : undefined}
       title={copy.nav.projects}
       onclick={() => navigate({ page: 'projects' })}
     >
@@ -104,22 +117,19 @@
       {#if !collapsed}<span>{copy.nav.projects}</span>{/if}
     </button>
 
-    {#if !collapsed}
-      <div class="sidebar-children">
-        {#each toolEntries as tool}
-          <button
-            type="button"
-            class="sidebar-item child"
-            class:active={isActive('tools', tool.value as RouteToolId)}
-            title={tool.label}
-            onclick={() => navigate({ page: 'tools', tool: tool.value as RouteToolId })}
-          >
-            <ProviderIcon id={tool.value} kind="tool" size={14} />
-            <span>{tool.label}</span>
-          </button>
-        {/each}
-      </div>
-    {/if}
+    {#each toolEntries as tool}
+      <button
+        type="button"
+        class="sidebar-item"
+        class:active={route.page === 'tools' && route.tool === tool.value}
+        aria-current={route.page === 'tools' && route.tool === tool.value ? 'page' : undefined}
+        title={tool.label}
+        onclick={() => navigate({ page: 'tools', tool: tool.value as RouteToolId })}
+      >
+        <ProviderIcon id={tool.value} kind="tool" size={16} />
+        {#if !collapsed}<span>{tool.label}</span>{/if}
+      </button>
+    {/each}
   </nav>
 
   <div class="sidebar-foot">
@@ -127,6 +137,7 @@
       type="button"
       class="sidebar-item"
       class:active={isActive('config')}
+      aria-current={isActive('config') ? 'page' : undefined}
       title={copy.nav.config}
       onclick={() => navigate({ page: 'config' })}
     >

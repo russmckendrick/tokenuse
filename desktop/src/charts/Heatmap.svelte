@@ -2,6 +2,7 @@
   export let matrix: number[][] = [];
   export let dayLabels: string[] = [];
   export let ariaLabel = '';
+  export let emptyLabel = '';
 
   const CELL = 18;
   const GAP = 1;
@@ -34,7 +35,8 @@
 </script>
 
 <div class="heatmap" role="img" aria-label={ariaLabel}>
-  <svg viewBox={`0 0 ${width} ${height}`} style={`aspect-ratio: ${width} / ${height};`}>
+  {#if max > 0}
+    <svg viewBox={`0 0 ${width} ${height}`} style={`aspect-ratio: ${width} / ${height};`}>
     {#each matrix as row, dayIdx}
       <text x={LABEL_W - 6} y={LABEL_H + dayIdx * (CELL + GAP) + CELL / 2 + 3} text-anchor="end" class="axis-label">
         {dayLabels[dayIdx] ?? ''}
@@ -65,7 +67,10 @@
         </text>
       {/if}
     {/each}
-  </svg>
+    </svg>
+  {:else}
+    <div class="chart-empty">{emptyLabel}</div>
+  {/if}
 </div>
 
 <style>
@@ -78,6 +83,15 @@
     display: block;
     width: 100%;
     min-width: 420px;
+  }
+
+  .chart-empty {
+    min-height: 147px;
+    display: grid;
+    place-items: center;
+    color: var(--color-muted-2);
+    font-family: var(--font-ui);
+    font-size: 12px;
   }
 
   .axis-label {

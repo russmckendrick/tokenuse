@@ -7,6 +7,7 @@
   export let centerLabel = '';
   export let colorBy: 'provider' | 'tool' | 'series' = 'series';
   export let ariaLabel = '';
+  export let emptyLabel = '';
 
   const SIZE = 132;
   const RADIUS = SIZE / 2;
@@ -28,25 +29,29 @@
 </script>
 
 <div class="donut" role="img" aria-label={ariaLabel}>
-  <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width={SIZE} height={SIZE}>
+  {#if slices.length}
+    <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width={SIZE} height={SIZE}>
     <g transform={`translate(${RADIUS} ${RADIUS})`}>
       {#each slices as slice}
         <path d={shape(slice) ?? ''} fill={color(slice.data, slice.index)} />
       {/each}
     </g>
     <text x={RADIUS} y={RADIUS + 4} text-anchor="middle" class="center-label">{centerLabel}</text>
-  </svg>
+    </svg>
 
-  <div class="legend">
-    {#each rows as row, index}
-      <div class="legend-row">
-        <i style={`background:${color(row, index)}`} aria-hidden="true"></i>
-        <span class="legend-label">{row.label}</span>
-        <span class="mono legend-cost">{row.cost}</span>
-        <span class="mono legend-share">{(row.share / 10).toFixed(row.share >= 100 ? 0 : 1)}%</span>
-      </div>
-    {/each}
-  </div>
+    <div class="legend">
+      {#each rows as row, index}
+        <div class="legend-row">
+          <i style={`background:${color(row, index)}`} aria-hidden="true"></i>
+          <span class="legend-label">{row.label}</span>
+          <span class="mono legend-cost">{row.cost}</span>
+          <span class="mono legend-share">{(row.share / 10).toFixed(row.share >= 100 ? 0 : 1)}%</span>
+        </div>
+      {/each}
+    </div>
+  {:else}
+    <div class="chart-empty">{emptyLabel}</div>
+  {/if}
 </div>
 
 <style>
@@ -55,6 +60,16 @@
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
     gap: var(--space-xl);
+  }
+
+  .chart-empty {
+    grid-column: 1 / -1;
+    min-height: 132px;
+    display: grid;
+    place-items: center;
+    color: var(--color-muted-2);
+    font-family: var(--font-ui);
+    font-size: 12px;
   }
 
   svg {

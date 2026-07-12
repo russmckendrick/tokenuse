@@ -8,6 +8,8 @@ tokenuse
 
 If no local sessions are found, or archive sync fails before any calls are loaded, the app falls back to bundled JSON sample data and shows that status in the title bar.
 
+Launch with `tokenuse --sample` to start with bundled sample data even when local sessions exist. The live snapshot remains cached, so `Shift-D` switches back to it without another startup load.
+
 ## Dashboard
 
 The dashboard shows:
@@ -38,11 +40,13 @@ Deep Dive is the comparison view. The **Activity Trend** panel uses the same chr
 
 Usage is the live capacity view. Each tool gets its own console, and entering the tab switches the visible period selector to 24 Hours. The **24h pulse** line shows hourly relative activity for that tool, followed by totals for calls, tokens, cost, and last seen. Limit rows are gauges from imported plan snapshots when available; model rows are ranked bars for that tool's rolling 24-hour slice. A limit row whose reset time has already passed (or whose snapshot is more than a week old, for windows without a reset) dims and swaps its reset time for an `as of <date> · stale` note; after a further week it drops off the console entirely. Reports and exports keep the full snapshot history.
 
+Tools with no current limits or model activity remain visible with an explicit idle row. Empty ranked panels likewise show an explanatory row instead of an unlabelled blank box.
+
 Activity Pulse and Activity Trend use hourly buckets for 24 Hours and 7 Days. This Month also uses hourly buckets during the first 14 days of the month, then switches to daily buckets from the 15th onward. 30 Days and All Time use daily buckets. The 24 Hours period is rolling from the current time, not a calendar-day midnight cutoff. Graph bars and pulse lines are relative to the visible panel. They are designed for quick comparison inside the terminal, not exact accounting; use the adjacent numeric columns for exact cost, call, token, reset, and plan values.
 
 ## Keyboard
 
-The keyboard reference, footer hints, and shortcut behavior come from the shared embedded keymap used by both the TUI and desktop app.
+The keyboard reference, footer hints, and TUI shortcut behavior come from the embedded keymap. The help overlay uses two columns so the complete reference fits at the supported `120x40` minimum.
 
 | Key | Action |
 | --- | --- |

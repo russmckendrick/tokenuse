@@ -55,7 +55,6 @@ pub struct NavCopy {
     pub config: String,
     pub configuration: String,
     pub session: String,
-    pub dashboard: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -194,12 +193,8 @@ pub struct TableCopy {
     pub cost_plan_spaced: String,
     pub raw_project: String,
     pub agent: String,
-    pub archive: String,
     pub currency: String,
     pub exports: String,
-    pub findings: String,
-    pub severity: String,
-    pub evidence: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -312,7 +307,6 @@ pub struct SessionCopy {
     pub web_search: String,
     pub web: String,
     pub close: String,
-    pub deep_dive: String,
     pub sample_project: String,
     pub sample_date_range: String,
     pub sample_note: String,
@@ -517,11 +511,6 @@ pub struct UpdateCopy {
 pub struct TrayCopy {
     pub summary_aria: String,
     pub hours_24: String,
-    pub activity: String,
-    pub models: String,
-    pub tokens: String,
-    pub high: String,
-    pub no_model_rows: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -632,6 +621,7 @@ pub struct CliCopy {
     pub report_command: String,
     pub help_flag: String,
     pub version_flag: String,
+    pub sample_flag: String,
     pub list_projects_flag: String,
     pub refresh_prices_flag: String,
     pub generate_currency_flag: String,

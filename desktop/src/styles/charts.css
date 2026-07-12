@@ -51,6 +51,7 @@
 .trio-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-items: start;
   gap: var(--space-xl);
   min-width: 0;
 }

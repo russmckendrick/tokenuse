@@ -95,10 +95,12 @@ desktop:
       lineHeight: 1.1
       fontFeatureSettings: "'tnum' 1, 'zero' 1"
   sidebar:
-    width: "216px"
+    width: "200px"
     width-collapsed: "64px"
     item-height: "32px"
     icon-size: "16px"
+  lists:
+    panel-max-height: "480px"
   charts:
     grid: "#292D42"
     axis-label-size: "10px"
@@ -183,7 +185,7 @@ components:
     typography: "{desktop.typography.label}"
     rounded: "{desktop.rounded.none}"
     padding: "{desktop.spacing.xs} {desktop.spacing.lg}"
-  desktop-status-pill:
+  desktop-status-toast:
     backgroundColor: "{colors.neutral}"
     textColor: "{colors.muted}"
     typography: "{desktop.typography.label}"
@@ -304,17 +306,19 @@ Use the `.mono` utility class (or `font-family: var(--font-mono)`) on any cell o
 
 ### Sidebar rail
 
-The primary navigation is a fixed left rail, `desktop.sidebar.width` (216px) expanded and `width-collapsed` (64px) when collapsed; the collapse toggle lives at the rail's foot and the choice persists in desktop settings.
+The primary navigation is a fixed left rail, `desktop.sidebar.width` (200px) expanded and `width-collapsed` (64px) when collapsed; the collapse toggle lives at the rail's foot and the choice persists in local storage for that desktop webview.
 
 - Brand block at top: bars mark + `Token Use` (mark only when collapsed).
 - Primary items — Overview, Analytics, Tools, Models, Projects — each a 32px row: 16px icon, 13px Inter label, `rounded.sm` hover tint, primary-colored active indicator (2px inset bar on the left edge).
-- **Tools expands** to per-tool children (Claude Code, Codex, Copilot, Cursor, Gemini), each with its provider icon at 16px monochrome.
-- Config is pinned at the bottom with the data-source status dot beside it.
+- Claude Code, Cursor, Codex, Copilot, and Gemini are direct peer rows below the primary views. They use 16px monochrome provider/tool marks, are not nested in an accordion subtree, and dynamically order from highest to lowest rolling 24-hour call activity with a stable fallback for ties.
+- Config is pinned at the bottom above the collapse control.
 - The rail is flat: surface background, hairline right border, no elevation, no rounded container.
 
 ### Page anatomy and scrolling
 
 The shell is fixed (sidebar + status bar); each page scrolls vertically on its own. No page may scroll horizontally — wide tables scroll inside their panel.
+
+Data-list panels stay content-sized for short results and cap at 480px for long results. Once capped, the panel body owns vertical scrolling and keeps its table header sticky; grid siblings never stretch merely to match a longer list.
 
 - **Sticky page header** at the top of every page: page title (13px Inter 600), page-scoped filter chips (period, and where relevant tool/sort/project), and page actions (refresh, export). The header keeps the hairline bottom border while content scrolls under it.
 - Grid zones below the header use `desktop.spacing.xl` between sibling panels and `2xl` between unrelated sections; `3xl` is page padding only.
@@ -324,10 +328,10 @@ The shell is fixed (sidebar + status bar); each page scrolls vertically on its o
 
 Six screens. Data pages fetch page-scoped queries from the core (memoized per filter set); the 3-second snapshot poll carries only the shared dashboard, limits, and filter state.
 
-- **Overview** — the daily read. Top: KPI hero band (cost in `display-xl`, calls/sessions/cache-hit/in-out in `display-lg`) with count-up on load. Second: **utilisation strip** — one compact gauge per active tool limit (5h/weekly/credits), the fastest answer to "am I about to hit a wall?". Third: the hero activity chart (spend bars + calls line, full width, hover crosshair). Bottom: top projects and top models tables side by side.
+- **Overview** — the daily read. Top: KPI hero band (cost in `display-xl`, calls/sessions/cache-hit/in-out in `display-lg`) with count-up on load. Second: **utilisation strip** — active primary limits grouped into compact tool modules. Each module has a horizontal identity header with the provider-accented tool mark inside a threshold ring for its most constrained window, followed by a two-column 5h/weekly/credits detail matrix; a single limit spans both columns. Claude Extra Usage and Codex Spark model-specific windows remain on their dedicated tool pages instead of crowding this summary. Modules stay side by side until the narrow layout breakpoint, avoiding both tall limit stacks and full-width form rows. Third: the hero activity chart (spend bars + calls line, full width, hover crosshair). Bottom: top projects and top models tables side by side.
 - **Analytics** — the time explorer (evolves Deep Dive). Hero area+bar combo with period framing, stacked per-tool daily bars, hour×weekday heatmap of activity, cache-efficiency panel, and the ranked tables (projects, sessions, models, commands, MCP servers).
-- **Tools** — one dedicated console per tool, selected from the sidebar's Tools children. Hero numbers for the tool's 24h/period spend, its limit gauges (UsageConsole lineage), its 24-hour pulse, top models (with provider icons), and the projects that used it.
-- **Models** — the unified catalog. Rows grouped by provider (icon + provider label as group headers), each canonical model with cost, calls, tokens, cache-hit, and an expandable per-tool split showing which tools drove the spend. This is the one place the same model's use across Claude Code, Copilot, and Cursor reads as one row.
+- **Tools** — the parent route shows all rolling 24-hour consoles; direct sidebar tool rows open period-aware pages with hero numbers, limit gauges (UsageConsole lineage), top models, projects, and sessions.
+- **Models** — the unified catalog. Rows grouped by provider (icon + provider label as group headers), each canonical model showing cost/calls for all five periods plus active-period cache-hit and an expandable per-tool split. This is the one place the same model's use across Claude Code, Copilot, and Cursor reads as one row.
 - **Projects** — master list of projects with per-project spend and tool mix; selecting a project reveals its sessions; selecting a session opens the call-level detail pane (timestamp, model, tokens, cache rates, prompt) without leaving the page.
 - **Config** — currency, data downloads, limit sidecars and subscription sync, desktop behavior toggles, updates, and clear-data. Quiet page; no charts.
 
@@ -339,8 +343,8 @@ All charts are hand-rolled SVG driven by d3 scales — no chart library. Every f
 - **Stacked bars** — per-tool or per-provider composition over time; segment colors from the series ramp or provider accents, hairline gaps between segments.
 - **Donut** — share-of-total (spend by provider or tool); 3px-radius corner caps, center label in `display-lg`, legend as a right-hand table, never floating labels.
 - **Heatmap** — hour × weekday activity; stepped ramp from `bar-empty` through secondary to primary to error at saturation. Cells square, 1px gaps.
-- **Gauges** — horizontal utilisation bars with threshold tones: tertiary below 60%, warning 60–88%, error above. Track is `bar-empty`; label left, percentage right in mono.
-- **Sparklines** — tick bars + trend line for compact per-tool cadence (tray, tool cards).
+- **Gauges** — horizontal utilisation bars with threshold tones: tertiary below 60%, warning 60–88%, error above. Track is `bar-empty`; label left, percentage right in mono. Overview adds one circular threshold gauge per tool around its mark, representing that tool's most constrained active window; detailed limit values remain horizontal beside it.
+- **Sparklines** — tick bars + trend line for compact per-tool cadence in tool cards and usage consoles.
 - **Rank bars** — 12-segment discrete meters in tables, stepped blue→yellow→red ramp.
 
 Axis and framing rules: gridlines `desktop.charts.grid` hairlines, horizontal only where they aid reading; axis labels 10px muted Inter, no axis titles when the panel title says it; tooltips on `neutral` surface with `popover` elevation, values in mono; legends are text rows, never overlaid on the plot. Series colors are assigned in ramp order and stay stable within a page.
@@ -365,9 +369,9 @@ Built on the `motion` library in `desktop/src/motion.ts`; every animation respec
 - **Sidebar collapse/expand** — 180ms standard width tween; labels fade at 120ms.
 - **Panel reveal** — staggered (25ms stagger, 220ms each) on page mount.
 - **Hero numerics** — `countUp` on Overview KPI band load and data-generation change.
-- **Chart series draw-in** — 280ms slow ease on first render; subsequent data updates tween bars/paths without replaying the entrance.
+- **Charts** — route/panel reveal handles entrance; hover and data updates transition opacity or geometry without replaying a separate chart animation.
 - **Gauges and rank bars** — fill tween 280ms slow.
-- **Status pill** — enter translateY 4→0 + fade 180ms decel; exit fade 120ms accel.
+- **Status toast** — bottom-right event feedback enters translateY 6→0 + fade 180ms, then auto-dismisses with a softer 360ms fade and 6px downward settle; routine refresh state never occupies permanent header space.
 - **Hover lift** — background tint via CSS custom property, 120ms; no JS layout reads.
 
 ### Empty states
@@ -376,7 +380,7 @@ One pattern everywhere: muted 16px icon, one-line explanation from a copy key (`
 
 ### Status bar
 
-A slim 24px bottom status bar replaces the TUI-style footer: left — data-source pill (live/sample), archive status, last refresh; right — contextual keyboard hints for the active page (muted, 11px labels). Keyboard shortcuts stay discoverable on-screen at all times; the full reference stays on `h`/`?`.
+A slim 24px bottom status bar replaces the TUI-style footer: left — data-source pill (live/sample) and currency; right — contextual keyboard hints for the active page (muted, 11px labels). Desktop shortcuts stay discoverable on-screen while the TUI retains its full `h`/`?` reference.
 
 ## Iconography
 

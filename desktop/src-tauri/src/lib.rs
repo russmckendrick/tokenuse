@@ -402,7 +402,7 @@ mod tests {
     use crate::ids::{parse_report_format, parse_tool, report_format_id, tool_id};
     use crate::snapshot::{snapshot, tray_snapshot};
     use tokenuse::{
-        app::{Page, Period, ProjectFilter, SortMode, Tool},
+        app::{Period, ProjectFilter, SortMode, Tool},
         reports::ReportFormat,
     };
 
@@ -439,50 +439,6 @@ mod tests {
         assert_eq!(snapshot.copy.brand.name, copy::copy().brand.name);
         assert_eq!(snapshot.config_rows[0].id, "currency_override");
         assert_eq!(snapshot.config_rows[1].id, "rates_json");
-        assert_eq!(
-            snapshot.shortcut_footer[0].label,
-            copy::copy().footer("desktop")[0].label
-        );
-    }
-
-    #[test]
-    fn desktop_snapshot_uses_page_specific_filter_footers() {
-        let mut app = App::default();
-
-        app.set_page(Page::Usage);
-        let usage = snapshot(&app);
-        assert_eq!(
-            usage.shortcut_footer[0].label,
-            copy::copy().footer("desktop_usage")[0].label
-        );
-
-        app.set_page(Page::Config);
-        let config = snapshot(&app);
-        assert_eq!(
-            config.shortcut_footer[0].label,
-            copy::copy().footer("desktop_config")[0].label
-        );
-    }
-
-    #[test]
-    fn desktop_usage_snapshot_displays_fixed_disabled_filters() {
-        let mut app = App::default();
-        app.tool = Tool::Codex;
-        app.sort = SortMode::Tokens;
-        app.project_filter = ProjectFilter::Selected {
-            identity: "project-id".into(),
-            label: "Project".into(),
-        };
-
-        app.set_page(Page::Usage);
-        let usage = snapshot(&app);
-
-        assert_eq!(usage.tool, "all");
-        assert_eq!(usage.sort, "spend");
-        assert_eq!(usage.project.identity, None);
-        assert_eq!(usage.project.label, copy::copy().tools.all.as_str());
-        assert!(matches!(app.tool, Tool::Codex));
-        assert!(matches!(app.sort, SortMode::Tokens));
     }
 
     #[test]

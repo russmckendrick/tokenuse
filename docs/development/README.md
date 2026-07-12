@@ -8,6 +8,7 @@ This section is for maintainers and contributors working on `tokenuse` itself.
 | --- | --- |
 | `src/` | Rust TUI, ingestion, archive, pricing, currency, reports, and shared runtime |
 | `src/tools/` | Tool adapter registry plus parser implementations |
+| `src/models/` | Shared model identity registry, provider metadata, and fallback naming |
 | `desktop/` | Tauri v2 desktop frontend and desktop Rust commands |
 | `costs/` | Generated embedded cost data and pricing refresh config |
 | `docs/` | Source docs consumed by the website |
@@ -16,6 +17,7 @@ This section is for maintainers and contributors working on `tokenuse` itself.
 ## Read Next
 
 - [Architecture](architecture.md): how calls flow from local files to archive, aggregation, and UI.
+- [Model normalisation](models.md): how raw model ids become canonical model, provider, and family identities.
 - [Pricing and cache rates](pricing.md): provider evidence, cache-read multipliers, parser caveats, and pricing book refresh behavior.
 - [Local development](local-development.md): the commands to run before sending changes.
 - [Source control](source-control.md): branch, generated data, version, and release-note conventions.

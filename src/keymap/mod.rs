@@ -475,6 +475,38 @@ mod tests {
     }
 
     #[test]
+    fn former_insights_key_is_unbound() {
+        let action = keymap().resolve_input(
+            CONTEXT_DASHBOARD,
+            &KeyInput {
+                key: "i".into(),
+                ctrl: false,
+                alt: false,
+                shift: false,
+                meta: false,
+            },
+        );
+
+        assert_eq!(action, None);
+    }
+
+    #[test]
+    fn former_agent_setup_key_is_unbound() {
+        let action = keymap().resolve_input(
+            CONTEXT_DASHBOARD,
+            &KeyInput {
+                key: "a".into(),
+                ctrl: false,
+                alt: false,
+                shift: false,
+                meta: false,
+            },
+        );
+
+        assert_eq!(action, None);
+    }
+
+    #[test]
     fn rejects_duplicate_context_keys() {
         let json = r#"
             {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { fly } from 'svelte/transition';
   import { Channel } from '@tauri-apps/api/core';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { confirm, open as openDialog } from '@tauri-apps/plugin-dialog';
@@ -8,7 +9,7 @@
   import { count } from './format';
   import { router, type Route } from './lib/router.svelte';
   import { resolveShortcut } from './lib/shortcuts';
-  import { fadeIn, reveal } from './motion';
+  import { fadeIn, pageTransition, reveal } from './motion';
   import PageHeader from './shell/PageHeader.svelte';
   import Sidebar from './shell/Sidebar.svelte';
   import StatusBar from './shell/StatusBar.svelte';
@@ -81,7 +82,11 @@
   let reportRedacted = false;
   let clearingData = false;
   let pollTimer: number | undefined;
+  let toastTimer: number | undefined;
   let sidebarCollapsed = false;
+  let toastMessage: string | null = null;
+  let toastTone = 'info';
+  let observedError: string | null = null;
   let desktopUpdate: DesktopUpdateUiState = resetDesktopUpdate();
 
   function resetDesktopUpdate(): DesktopUpdateUiState {
@@ -108,6 +113,9 @@
       if (pollTimer !== undefined) {
         window.clearInterval(pollTimer);
       }
+      if (toastTimer !== undefined) {
+        window.clearTimeout(toastTimer);
+      }
       window.removeEventListener('keydown', handleKey);
     };
   });
@@ -118,7 +126,12 @@
 
   async function loadSilent() {
     try {
-      snapshot = await api.snapshot();
+      const previousStatus = snapshot?.status ?? null;
+      const next = await api.snapshot();
+      snapshot = next;
+      if (next.status && next.status !== previousStatus) {
+        showStatusToast(next.status, next.status_tone);
+      }
     } catch {
       // Keep the last good render during transient backend errors.
     }
@@ -128,7 +141,9 @@
     busy = true;
     error = null;
     try {
-      snapshot = await action();
+      const next = await action();
+      snapshot = next;
+      if (next.status) showStatusToast(next.status, next.status_tone);
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -145,17 +160,17 @@
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? '1' : '0');
   }
 
-  function pageTitle(): string {
-    if (!snapshot) return '';
-    const nav = snapshot.copy.nav;
-    switch (router.route.page) {
+  function pageTitle(route: Route, currentSnapshot: DesktopSnapshot | null): string {
+    if (!currentSnapshot) return '';
+    const nav = currentSnapshot.copy.nav;
+    switch (route.page) {
       case 'overview':
         return nav.overview;
       case 'analytics':
         return nav.analytics;
       case 'tools': {
-        if (router.route.tool) {
-          const tool = snapshot.tools.find((t) => t.value === router.route.tool);
+        if (route.tool) {
+          const tool = currentSnapshot.tools.find((t) => t.value === route.tool);
           if (tool) return tool.label;
         }
         return nav.tools;
@@ -170,6 +185,8 @@
         return nav.session;
     }
   }
+
+  $: currentPageTitle = pageTitle(router.route, snapshot);
 
   function openModal(kind: Exclude<ModalKind, null>) {
     modal = kind;
@@ -391,7 +408,7 @@
 
     if (!action) return;
     const page = router.route.page;
-    const periodLocked = page === 'tools';
+    const periodLocked = page === 'tools' && router.route.tool === undefined;
     const dataFiltersActive = page === 'overview' || page === 'analytics';
 
     switch (action.kind) {
@@ -810,16 +827,26 @@
     return `${amount >= 10 || index === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[index]}`;
   }
 
-  function statusMessage() {
-    if (error) return error;
-    if (clearingData) return snapshot?.copy.status.clearing_data_reimporting ?? null;
-    return snapshot?.status ?? null;
+  function showStatusToast(message: string, tone: string) {
+    if (toastTimer !== undefined) window.clearTimeout(toastTimer);
+    toastMessage = message;
+    toastTone = tone;
+    toastTimer = window.setTimeout(
+      () => {
+        toastMessage = null;
+        toastTimer = undefined;
+      },
+      tone === 'error' ? 8000 : 4200
+    );
   }
 
-  function statusTone() {
-    if (error) return 'error';
-    if (clearingData) return 'busy';
-    return snapshot?.status_tone ?? 'info';
+  $: {
+    if (!error) {
+      observedError = null;
+    } else if (error !== observedError) {
+      observedError = error;
+      showStatusToast(error, 'error');
+    }
   }
 
   function statusHints(): ShortcutHint[] {
@@ -843,6 +870,10 @@
       copy={snapshot.copy}
       route={router.route}
       tools={snapshot.tools}
+      usageOrder={snapshot.usage.sections
+        .slice()
+        .sort((left, right) => right.usage.calls - left.usage.calls || left.tool.localeCompare(right.tool))
+        .map((section) => section.tool)}
       collapsed={sidebarCollapsed}
       {navigate}
       toggleCollapsed={toggleSidebar}
@@ -851,15 +882,12 @@
     <div class="content">
       <PageHeader
         copy={snapshot.copy}
-        title={pageTitle()}
+        title={currentPageTitle}
         {snapshot}
-        showPeriod={router.route.page !== 'config' && router.route.page !== 'session'}
+        showPeriod={router.route.page !== 'config' && router.route.page !== 'session' && (router.route.page !== 'tools' || router.route.tool !== undefined)}
         showTool={router.route.page === 'overview' || router.route.page === 'analytics'}
-        showSort={router.route.page !== 'config' && router.route.page !== 'session'}
+        showSort={router.route.page !== 'config' && router.route.page !== 'session' && router.route.page !== 'models'}
         showProject={router.route.page === 'overview' || router.route.page === 'analytics' || router.route.page === 'projects'}
-        periodLocked={router.route.page === 'tools' ? 'today' : null}
-        statusMessage={statusMessage()}
-        statusTone={statusTone()}
         {setPeriod}
         setTool={setToolFromEvent}
         setSort={setSortFromEvent}
@@ -869,37 +897,42 @@
       />
 
       <main class="page-scroll">
-        {#if router.route.page === 'overview'}
-          <OverviewPage {snapshot} />
-        {:else if router.route.page === 'analytics'}
-          <AnalyticsPage {snapshot} openSessionPicker={() => openModal('session')} />
-        {:else if router.route.page === 'tools'}
-          <ToolsPage {snapshot} tool={router.route.tool} {usageTone} />
-        {:else if router.route.page === 'models'}
-          <ModelsPage {snapshot} />
-        {:else if router.route.page === 'projects'}
-          <ProjectsPage {snapshot} {openCallDetail} {handleCallRowKey} />
-        {:else if router.route.page === 'config'}
-          <ConfigView
-            {snapshot}
-            {configAction}
-            chooseExportDir={chooseReportDir}
-            refreshArchive={() => commit(() => api.refreshArchive())}
-            {desktopUpdate}
-            checkDesktopUpdate={() => void checkDesktopUpdate()}
-            installDesktopUpdate={() => void installDesktopUpdate()}
-            {setOpenAtLoginFromEvent}
-            {setShowDockOrTaskbarIconFromEvent}
-          />
-        {:else if router.route.page === 'session'}
-          <SessionView
-            {snapshot}
-            session={sessionDetail}
-            {closeSession}
-            {openCallDetail}
-            {handleCallRowKey}
-          />
-        {/if}
+        {#key `${router.route.page}:${router.route.tool ?? ''}`}
+          <div class="route-view" use:pageTransition>
+            {#if router.route.page === 'overview'}
+              <OverviewPage {snapshot} />
+            {:else if router.route.page === 'analytics'}
+              <AnalyticsPage {snapshot} openSessionPicker={() => openModal('session')} />
+            {:else if router.route.page === 'tools'}
+              <ToolsPage {snapshot} tool={router.route.tool} {usageTone} />
+            {:else if router.route.page === 'models'}
+              <ModelsPage {snapshot} />
+            {:else if router.route.page === 'projects'}
+              <ProjectsPage {snapshot} {openCallDetail} {handleCallRowKey} />
+            {:else if router.route.page === 'config'}
+              <ConfigView
+                {snapshot}
+                {configAction}
+                chooseExportDir={chooseReportDir}
+                refreshArchive={() => commit(() => api.refreshArchive())}
+                {desktopUpdate}
+                checkDesktopUpdate={() => void checkDesktopUpdate()}
+                installDesktopUpdate={() => void installDesktopUpdate()}
+                toggleSampleData={() => void commit(() => api.toggleDataSource())}
+                {setOpenAtLoginFromEvent}
+                {setShowDockOrTaskbarIconFromEvent}
+              />
+            {:else if router.route.page === 'session'}
+              <SessionView
+                {snapshot}
+                session={sessionDetail}
+                {closeSession}
+                {openCallDetail}
+                {handleCallRowKey}
+              />
+            {/if}
+          </div>
+        {/key}
       </main>
 
       <StatusBar
@@ -910,6 +943,23 @@
         sortLabel={activeSortLabel()}
       />
     </div>
+
+    {#if toastMessage}
+      <div
+        class="status-toast"
+        class:error={toastTone === 'error'}
+        class:success={toastTone === 'success'}
+        class:warning={toastTone === 'warning'}
+        class:busy={toastTone === 'busy'}
+        role="status"
+        aria-live="polite"
+        in:fly={{ y: 6, duration: 180 }}
+        out:fly={{ y: 6, duration: 360 }}
+      >
+        <i class="status-dot" aria-hidden="true"></i>
+        <span>{toastMessage}</span>
+      </div>
+    {/if}
   </div>
 
   {#if modal}
@@ -1149,6 +1199,8 @@
       </section>
     </div>
   {/if}
+{:else if error}
+  <div class="loading startup-error" role="alert">{error}</div>
 {:else}
   <div class="loading" aria-busy="true" use:reveal></div>
 {/if}

@@ -6,17 +6,21 @@
   import ProviderIcon from '../icons/ProviderIcon.svelte';
   import { staggeredReveal } from '../motion';
   import Panel from '../Panel.svelte';
-  import type { DesktopSnapshot, ModelCatalogEntry } from '../types';
+  import type { DesktopSnapshot, ModelCatalogEntry, PeriodId } from '../types';
+
+  type CatalogRow = ModelCatalogEntry & {
+    ranges: Partial<Record<PeriodId, ModelCatalogEntry>>;
+  };
 
   export let snapshot: DesktopSnapshot;
 
   type ProviderGroup = {
     provider: string;
     label: string;
-    entries: ModelCatalogEntry[];
+    entries: CatalogRow[];
   };
 
-  let catalog: ModelCatalogEntry[] = [];
+  let catalog: CatalogRow[] = [];
   let catalogKey = '';
   let expanded: Record<string, boolean> = {};
 
@@ -24,19 +28,52 @@
     const key = [snapshot.period, snapshot.data_generation, snapshot.currency].join('|');
     if (key !== catalogKey) {
       catalogKey = key;
-      void loadCatalog();
+      void loadCatalog(key, snapshot.period);
     }
   }
 
-  async function loadCatalog() {
+  async function loadCatalog(key: string, selectedPeriod: PeriodId) {
     try {
-      catalog = await api.getModelCatalog(snapshot.period);
+      const catalogs = await Promise.all(
+        snapshot.periods.map(async (period) => ({
+          period: period.value,
+          entries: await api.getModelCatalog(period.value)
+        }))
+      );
+      const allTime = catalogs.find((catalog) => catalog.period === 'all-time')?.entries ?? [];
+      const selected = catalogs.find((periodCatalog) => periodCatalog.period === selectedPeriod)?.entries ?? [];
+      const selectedIds = new Set(selected.map((entry) => entry.canonical_id));
+      const orderedEntries = [
+        ...selected,
+        ...allTime.filter((entry) => !selectedIds.has(entry.canonical_id))
+      ];
+      const nextCatalog = orderedEntries.map((entry) => {
+        const ranges: Partial<Record<PeriodId, ModelCatalogEntry>> = {};
+        for (const periodCatalog of catalogs) {
+          const rangeEntry = periodCatalog.entries.find(
+            (candidate) => candidate.canonical_id === entry.canonical_id
+          );
+          if (rangeEntry) ranges[periodCatalog.period] = rangeEntry;
+        }
+        const selectedEntry = ranges[selectedPeriod];
+        return {
+          ...entry,
+          cost: selectedEntry?.cost ?? '-',
+          calls: selectedEntry?.calls ?? 0,
+          tokens: selectedEntry?.tokens ?? '-',
+          cache_hit: selectedEntry?.cache_hit ?? '-',
+          value: selectedEntry?.value ?? 0,
+          per_tool: selectedEntry?.per_tool ?? [],
+          ranges
+        };
+      });
+      if (catalogKey === key) catalog = nextCatalog;
     } catch {
       // Keep the previous catalog on transient errors.
     }
   }
 
-  function groups(entries: ModelCatalogEntry[]): ProviderGroup[] {
+  function groups(entries: CatalogRow[]): ProviderGroup[] {
     const grouped: ProviderGroup[] = [];
     for (const entry of entries) {
       let group = grouped.find((g) => g.provider === entry.provider);
@@ -53,23 +90,37 @@
     expanded = { ...expanded, [id]: !expanded[id] };
   }
 
+  function handleRowKey(event: KeyboardEvent, id: string) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      toggle(id);
+    }
+  }
+
   $: providerGroups = groups(catalog);
 </script>
 
 <section class="page-flow" use:staggeredReveal={{ selector: ':scope > *', y: 5, stagger: 0.03 }}>
   {#each providerGroups as group}
-    <Panel title={group.label} tone="magenta">
+    <Panel title={group.label} tone="magenta" scrollable>
       <svelte:fragment slot="title-icon">
         <ProviderIcon id={group.provider} size={20} variant="brand" />
       </svelte:fragment>
       <table class="data-table catalog-table">
+        <colgroup>
+          <col class="rank-column" />
+          <col class="model-column" />
+          {#each snapshot.periods as _}<col class="range-column" />{/each}
+          <col class="cache-column" />
+          <col class="expander-column" />
+        </colgroup>
         <thead>
           <tr>
             <th></th>
             <th>{snapshot.copy.tables.model}</th>
-            <th>{snapshot.copy.tables.cost}</th>
-            <th>{snapshot.copy.tables.calls}</th>
-            <th>{snapshot.copy.metrics.tokens}</th>
+            {#each snapshot.periods as period}
+              <th class="range-heading">{period.label}</th>
+            {/each}
             <th>{snapshot.copy.tables.cache}</th>
             <th></th>
           </tr>
@@ -79,7 +130,10 @@
             <tr
               class="catalog-row"
               class:expanded={expanded[entry.canonical_id]}
+              tabindex="0"
+              aria-expanded={expanded[entry.canonical_id] ?? false}
               onclick={() => toggle(entry.canonical_id)}
+              onkeydown={(event) => handleRowKey(event, entry.canonical_id)}
             >
               <td><RankBar value={entry.value} ariaLabel={`${entry.name} ${snapshot.copy.desktop.rank}`} /></td>
               <td>
@@ -89,9 +143,16 @@
                   <small class="muted-cell">{entry.family}</small>
                 </span>
               </td>
-              <td class="money">{entry.cost}</td>
-              <td>{count(entry.calls)}</td>
-              <td class="mono">{entry.tokens}</td>
+              {#each snapshot.periods as period}
+                <td class="range-cell">
+                  {#if entry.ranges[period.value]}
+                    <strong class="money">{entry.ranges[period.value]?.cost}</strong>
+                    <small>{count(entry.ranges[period.value]?.calls ?? 0)} {snapshot.copy.metrics.calls}</small>
+                  {:else}
+                    <span class="muted-cell">-</span>
+                  {/if}
+                </td>
+              {/each}
               <td>{entry.cache_hit}</td>
               <td class="expander" aria-hidden="true">
                 <ChevronRight size={13} />
@@ -100,7 +161,7 @@
             {#if expanded[entry.canonical_id]}
               <tr class="catalog-split">
                 <td></td>
-                <td colspan="6">
+                <td colspan="8">
                   <div class="split-rows">
                     <span class="split-title">{snapshot.copy.desktop.per_tool_split}</span>
                     {#each entry.per_tool as split}
@@ -116,13 +177,43 @@
               </tr>
             {/if}
           {/each}
+          {#if group.entries.length === 0}
+            <tr><td colspan="9" class="empty-cell">{snapshot.copy.empty.no_models}</td></tr>
+          {/if}
         </tbody>
       </table>
     </Panel>
+  {:else}
+    <div class="empty-state">{snapshot.copy.empty.no_models}</div>
   {/each}
 </section>
 
 <style>
+  .catalog-table {
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  .rank-column {
+    width: 132px;
+  }
+
+  .model-column {
+    width: auto;
+  }
+
+  .range-column {
+    width: 104px;
+  }
+
+  .cache-column {
+    width: 72px;
+  }
+
+  .expander-column {
+    width: 24px;
+  }
+
   .catalog-row {
     cursor: pointer;
   }
@@ -139,8 +230,31 @@
     text-transform: uppercase;
   }
 
+  .range-heading {
+    width: 104px;
+  }
+
+  .range-cell {
+    width: 104px;
+    white-space: nowrap;
+  }
+
+  .range-cell strong,
+  .range-cell small {
+    display: block;
+  }
+
+  .range-cell small {
+    margin-top: 2px;
+    font-size: 10px;
+    font-family: var(--font-ui);
+  }
+
   .expander {
-    width: 20px;
+    width: 24px;
+    padding-left: 0;
+    padding-right: 0;
+    text-align: center;
     color: var(--color-muted-2);
   }
 

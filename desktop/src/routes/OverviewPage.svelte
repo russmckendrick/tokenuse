@@ -1,6 +1,7 @@
 <script lang="ts">
   import ActivityPulse from '../components/ActivityPulse.svelte';
   import GaugeBar from '../components/GaugeBar.svelte';
+  import ToolGauge from '../components/ToolGauge.svelte';
   import ModelTable from '../components/tables/ModelTable.svelte';
   import ProjectTable from '../components/tables/ProjectTable.svelte';
   import { countUp, staggeredReveal } from '../motion';
@@ -9,25 +10,52 @@
 
   export let snapshot: DesktopSnapshot;
 
-  type UtilisationRow = { tool: string; limit: LimitMetric };
+  type UtilisationTool = {
+    id: string;
+    tool: string;
+    limits: LimitMetric[];
+    peak: number;
+  };
 
-  function utilisationRows(snapshotValue: DesktopSnapshot): UtilisationRow[] {
-    const rows: UtilisationRow[] = [];
+  function canonicalToolId(value: string): string {
+    const normalized = value.toLowerCase();
+    if (normalized.includes('claude')) return 'claude-code';
+    if (normalized.includes('codex')) return 'codex';
+    if (normalized.includes('copilot')) return 'copilot';
+    if (normalized.includes('cursor')) return 'cursor';
+    if (normalized.includes('gemini')) return 'gemini';
+    return normalized;
+  }
+
+  function showOverviewLimit(limit: LimitMetric): boolean {
+    if (limit.stale) return false;
+    const tool = canonicalToolId(limit.tool);
+    const scope = limit.scope.toLowerCase();
+    if (tool === 'claude-code' && scope === 'extra usage') return false;
+    if (tool === 'codex' && scope === 'gpt-5.3-codex-spark') return false;
+    return true;
+  }
+
+  function utilisationTools(snapshotValue: DesktopSnapshot): UtilisationTool[] {
+    const tools: UtilisationTool[] = [];
     for (const section of snapshotValue.usage.sections) {
-      for (const limit of section.limits) {
-        if (!limit.stale) {
-          rows.push({ tool: section.tool, limit });
-        }
-      }
+      const limits = section.limits.filter(showOverviewLimit);
+      if (!limits.length) continue;
+      tools.push({
+        id: canonicalToolId(limits[0]?.tool || section.tool),
+        tool: section.tool,
+        limits,
+        peak: Math.max(...limits.map((limit) => limit.used))
+      });
     }
-    return rows;
+    return tools;
   }
 
   $: summary = snapshot.dashboard.summary;
   $: callsSub = `${summary.input} ${snapshot.copy.metrics.in}`;
   $: cacheSub = `${summary.cached} ${snapshot.copy.metrics.cached}`;
   $: outSub = `${summary.output} ${snapshot.copy.metrics.out}`;
-  $: utilisation = utilisationRows(snapshot);
+  $: utilisation = utilisationTools(snapshot);
 </script>
 
 <section class="page-flow" use:staggeredReveal={{ selector: ':scope > *', y: 5, stagger: 0.035 }}>
@@ -62,18 +90,37 @@
   {#if utilisation.length}
     <Panel title={snapshot.copy.desktop.utilisation} tone="green">
       <div class="utilisation-strip">
-        {#each utilisation as row}
-          <div class="utilisation-card">
-            <div class="utilisation-head">
-              <strong>{row.tool}</strong>
-              <span>{row.limit.scope} {row.limit.window}</span>
+        {#each utilisation as tool}
+          <section class="utilisation-tool" style={`--limit-weight:${Math.max(2, tool.limits.length)}`}>
+            <div class="utilisation-identity">
+              <ToolGauge
+                id={tool.id}
+                used={tool.peak}
+                ariaLabel={tool.tool}
+                usedSuffix={snapshot.copy.usage.used_suffix}
+              />
+              <strong>{tool.tool}</strong>
             </div>
-            <GaugeBar used={row.limit.used} ariaLabel={`${row.tool} ${row.limit.scope}`} />
-            <div class="utilisation-foot">
-              <span class="mono">{row.limit.left}</span>
-              <span class="muted-cell">{row.limit.reset}</span>
+            <div class="utilisation-limits">
+              {#each tool.limits as limit}
+                <div class="utilisation-limit">
+                  <div class="utilisation-head">
+                    <strong>{limit.scope} <span>{limit.window}</span></strong>
+                    <span class="mono">{limit.left}</span>
+                  </div>
+                  <GaugeBar
+                    used={limit.used}
+                    ariaLabel={`${tool.tool} ${limit.scope}`}
+                    usedSuffix={snapshot.copy.usage.used_suffix}
+                  />
+                  <div class="utilisation-foot">
+                    <span class="mono">{Math.round(limit.used)}% {snapshot.copy.usage.used_suffix}</span>
+                    <span class="muted-cell">{snapshot.copy.tables.reset} {limit.reset}</span>
+                  </div>
+                </div>
+              {/each}
             </div>
-          </div>
+          </section>
         {/each}
       </div>
     </Panel>
@@ -84,10 +131,10 @@
   </Panel>
 
   <section class="duo-grid">
-    <Panel title={snapshot.copy.desktop.top_projects} tone="yellow">
+    <Panel title={snapshot.copy.desktop.top_projects} tone="yellow" scrollable>
       <ProjectTable rows={snapshot.dashboard.projects} copy={snapshot.copy} />
     </Panel>
-    <Panel title={snapshot.copy.desktop.top_models} tone="magenta">
+    <Panel title={snapshot.copy.desktop.top_models} tone="magenta" scrollable>
       <ModelTable rows={snapshot.dashboard.models} copy={snapshot.copy} />
     </Panel>
   </section>

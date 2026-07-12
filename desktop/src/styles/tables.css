@@ -10,6 +10,10 @@
   will-change: opacity, transform;
 }
 
+.panel.scrollable {
+  max-height: var(--list-panel-max-height);
+}
+
 .panel h2 {
   margin: 0;
   min-height: 32px;
@@ -641,6 +645,12 @@ th:first-child {
   background: var(--color-surface);
   font-family: var(--font-ui);
   font-weight: 600;
+}
+
+.startup-error {
+  padding: var(--space-3xl);
+  color: var(--color-error);
+  text-align: center;
 }
 
 .session-panel-area {

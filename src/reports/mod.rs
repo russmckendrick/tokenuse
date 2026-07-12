@@ -979,31 +979,45 @@ fn aggregate_report_models(
     calls: &[&ParsedCall],
     currency: &CurrencyFormatter,
 ) -> Vec<ReportModel> {
-    let mut by_model: HashMap<(String, &'static str), Totals> = HashMap::new();
+    #[derive(Default)]
+    struct ModelTotals {
+        display: String,
+        pricing_model: String,
+        totals: Totals,
+    }
+
+    let mut by_model: HashMap<(String, &'static str), ModelTotals> = HashMap::new();
     for call in calls {
-        by_model
-            .entry((call.model.clone(), call.tool))
-            .or_default()
-            .add_call(call);
+        let identity = crate::models::resolve(call.tool, &call.model);
+        let row = by_model
+            .entry((identity.canonical_id, call.tool))
+            .or_insert_with(|| ModelTotals {
+                display: identity.display,
+                pricing_model: call.model.clone(),
+                totals: Totals::default(),
+            });
+        row.totals.add_call(call);
     }
     let mut rows: Vec<_> = by_model.into_iter().collect();
     rows.sort_by(|a, b| {
-        b.1.cost_usd
-            .partial_cmp(&a.1.cost_usd)
+        b.1.totals
+            .cost_usd
+            .partial_cmp(&a.1.totals.cost_usd)
             .unwrap_or(std::cmp::Ordering::Equal)
             .then_with(|| a.0 .0.cmp(&b.0 .0))
     });
     rows.into_iter()
-        .map(|((model, tool), totals)| {
-            let cache_read_rate = pricing::cache_read_rate_label_for(tool, &model, None);
+        .map(|((_, tool), row)| {
+            let cache_read_rate =
+                pricing::cache_read_rate_label_for(tool, &row.pricing_model, None);
             ReportModel {
-                model,
+                model: row.display,
                 tool: tool_short_label(tool).to_string(),
-                cost: currency.format_money(totals.cost_usd),
-                cost_usd: totals.cost_usd,
-                calls: totals.calls,
-                tokens: totals.tokens,
-                cache_read_tokens: totals.cache_read_tokens,
+                cost: currency.format_money(row.totals.cost_usd),
+                cost_usd: row.totals.cost_usd,
+                calls: row.totals.calls,
+                tokens: row.totals.tokens,
+                cache_read_tokens: row.totals.cache_read_tokens,
                 cache_read_rate,
             }
         })
@@ -4030,6 +4044,34 @@ mod tests {
         assert!(!html.contains("Limits Raw"));
         assert!(!html.contains("full prompt text"));
         assert!(!html.contains("<script"));
+    }
+
+    #[test]
+    fn visual_report_uses_registry_model_names() {
+        let mut claude = call("/tmp/a", "s1", "k1", 0);
+        claude.tool = crate::tools::claude_code::config::TOOL_ID;
+        claude.model = "anthropic/claude-fable-5-20260701@pinned".into();
+        let mut copilot = call("/tmp/a", "s2", "k2", 0);
+        copilot.tool = crate::tools::copilot::config::TOOL_ID;
+        copilot.model = "openai-auto".into();
+        let ingested = Ingested {
+            calls: vec![claude, copilot],
+            limits: Vec::new(),
+        };
+        let dataset = build_ingested_dataset(
+            &request(ReportFormat::Html, false),
+            &ingested,
+            &CurrencyFormatter::usd(),
+            "live",
+            "id",
+        );
+
+        let html = build_html_report(&dataset);
+
+        assert!(html.contains("Claude Fable 5"));
+        assert!(html.contains("Copilot OpenAI (auto)"));
+        assert!(!html.contains("claude-fable-5"));
+        assert!(!html.contains("openai-auto"));
     }
 
     #[test]

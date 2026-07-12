@@ -52,12 +52,11 @@ pub trait ToolAdapter: Send + Sync {
     fn parse_limits(&self, source: &SessionSource) -> Result<Vec<LimitSnapshot>> { /* default */ }
     fn source_fingerprint(&self, source: &SessionSource) -> Result<String> { /* default */ }
 
-    fn model_display(&self, model: &str) -> String { /* default */ }
     fn tool_display(&self, tool: &str) -> String { /* default */ }
 }
 ```
 
-`ParsedCall` from `src/tools/types.rs` is the normalized record every adapter emits and every dashboard aggregator consumes. See [architecture.md](../architecture.md) for field meanings and aggregation behavior.
+`ParsedCall` from `src/tools/types.rs` is the normalized record every adapter emits and every dashboard aggregator consumes. Adapters preserve the observed model id; the shared registry resolves display name, canonical id, provider, and family after parsing. See [Model normalisation](../models.md) for that contract and [architecture.md](../architecture.md) for field meanings and aggregation behavior.
 
 ## Pricing
 

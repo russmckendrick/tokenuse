@@ -2,9 +2,11 @@
   import { onMount } from 'svelte';
   import { ExternalLink, RefreshCw, X } from 'lucide-svelte';
   import { api } from './api';
-  import TraySparkline from './components/TraySparkline.svelte';
+  import GaugeBar from './components/GaugeBar.svelte';
   import { reveal, staggeredReveal } from './motion';
-  import type { ActivityMetric, ModelMetric, TraySnapshot } from './types';
+  import type { LimitMetric, TraySnapshot } from './types';
+
+  type UtilisationRow = { tool: string; limit: LimitMetric };
 
   let snapshot: TraySnapshot | null = null;
   let error: string | null = null;
@@ -59,35 +61,19 @@
     await api.hideTrayPopover();
   }
 
-  function count(value: number) {
-    return value.toLocaleString();
+  function utilisationRows(snapshotValue: TraySnapshot): UtilisationRow[] {
+    const rows: UtilisationRow[] = [];
+    for (const section of snapshotValue.usage.sections) {
+      for (const limit of section.limits) {
+        if (!limit.stale) rows.push({ tool: section.tool, limit });
+      }
+    }
+    return rows
+      .sort((a, b) => b.limit.used - a.limit.used || a.tool.localeCompare(b.tool))
+      .slice(0, 4);
   }
 
-  function modelCards(): ModelMetric[] {
-    return snapshot?.dashboard.models.slice(0, 4) ?? [];
-  }
-
-  function activityPoints(): ActivityMetric[] {
-    return snapshot?.dashboard.activity_timeline ?? [];
-  }
-
-  function peakPoint() {
-    const points = activityPoints();
-    return points.reduce<ActivityMetric | null>((best, point) => {
-      if (!best || point.value > best.value) return point;
-      return best;
-    }, null);
-  }
-
-  function latestPoint() {
-    const points = activityPoints();
-    return points.length ? points[points.length - 1] : null;
-  }
-
-  function totalCalls() {
-    return activityPoints().reduce((total, point) => total + point.calls, 0);
-  }
-
+  $: utilisation = snapshot ? utilisationRows(snapshot) : [];
 </script>
 
 <div class="tray-popover" class:is-busy={busy} use:reveal={{ y: 4 }}>
@@ -140,37 +126,27 @@
       </div>
     </div>
 
-    <div class="activity-card">
+    <div class="utilisation-card">
       <div class="card-head">
-        <span>{snapshot.copy.tray.activity}</span>
-        <strong>{latestPoint()?.cost ?? '-'}</strong>
+        <span>{snapshot.copy.desktop.utilisation}</span>
+        <strong>{utilisation[0]?.limit.left ?? '-'}</strong>
       </div>
-      <div class="sparkline" aria-hidden="true">
-        <TraySparkline points={activityPoints()} />
-      </div>
-      <div class="activity-meta">
-        <span>{snapshot.copy.tray.high} {peakPoint()?.label ?? '-'}</span>
-        <span>{count(totalCalls())} {snapshot.copy.metrics.calls}</span>
-      </div>
-    </div>
-
-    <div class="model-card">
-      <div class="card-head">
-        <span>{snapshot.copy.tray.models}</span>
-        <strong>{count(modelCards().reduce((total, model) => total + model.calls, 0))} {snapshot.copy.metrics.calls}</strong>
-      </div>
-      <div class="model-grid" aria-label={snapshot.copy.desktop.model_usage} use:staggeredReveal={{ selector: ':scope > div', y: 3, stagger: 0.02 }}>
-        {#each modelCards() as model}
-          <div>
-            <strong>{model.name}</strong>
-            <p>
-              <span>{model.cost}</span>
-              <small>{count(model.calls)} {snapshot.copy.metrics.calls}</small>
-            </p>
+      <div class="limit-list" aria-label={snapshot.copy.desktop.utilisation} use:staggeredReveal={{ selector: ':scope > div', y: 3, stagger: 0.02 }}>
+        {#each utilisation as row}
+          <div class="limit-row">
+            <div class="limit-head">
+              <strong>{row.tool}</strong>
+              <span>{row.limit.left}</span>
+            </div>
+            <GaugeBar used={row.limit.used} ariaLabel={`${row.tool} ${row.limit.scope}`} />
+            <div class="limit-meta">
+              <span>{row.limit.scope} · {row.limit.window}</span>
+              <small>{snapshot.copy.tables.reset} {row.limit.reset}</small>
+            </div>
           </div>
         {:else}
-          <div class="empty-model">{snapshot.copy.tray.no_model_rows}</div>
-      {/each}
+          <div class="empty-limits">{snapshot.copy.empty.no_data}</div>
+        {/each}
       </div>
     </div>
   {:else}
@@ -212,7 +188,6 @@
   .popover-head,
   .brand-lockup,
   .card-head,
-  .activity-meta,
   .popover-actions {
     min-width: 0;
     display: flex;
@@ -264,8 +239,7 @@
   }
 
   .popover-head span,
-  small,
-  .activity-meta {
+  small {
     color: #a1a7c3;
   }
 
@@ -281,16 +255,16 @@
   .metric-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
+    gap: 4px;
   }
 
   .metric-grid div {
     min-width: 0;
-    min-height: 56px;
+    min-height: 44px;
     display: grid;
     align-content: center;
     gap: 1px;
-    padding: 6px 7px;
+    padding: 4px 6px;
     border: 1px solid #ff8f40;
     border-radius: 3px;
     background: #202438;
@@ -298,19 +272,23 @@
 
   .metric-grid span {
     color: #a1a7c3;
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 800;
     text-transform: uppercase;
   }
 
   .metric-grid strong {
     color: #ffd60a;
-    font-size: 18px;
+    font-size: 16px;
     line-height: 1.08;
   }
 
-  .activity-card,
-  .model-card {
+  .metric-grid small {
+    font-size: 10px;
+    line-height: 1.1;
+  }
+
+  .utilisation-card {
     min-width: 0;
     display: grid;
     gap: 5px;
@@ -319,36 +297,18 @@
     background: #25293d;
   }
 
-  .activity-card {
-    min-height: 86px;
-    padding: 7px;
-    border-color: #4df3e8;
-  }
-
   .card-head span {
     color: #4df3e8;
     font-weight: 800;
   }
 
   .card-head strong,
-  .model-grid span {
+  .limit-head span {
     color: #ffd60a;
     font-weight: 800;
   }
 
-  .sparkline {
-    min-width: 0;
-    height: 36px;
-    overflow: hidden;
-  }
-
-  .activity-meta {
-    justify-content: space-between;
-    gap: 8px;
-    font-size: 11px;
-  }
-
-  .model-card {
+  .utilisation-card {
     flex: 1 1 auto;
     min-height: 0;
     align-content: start;
@@ -356,55 +316,61 @@
     overflow: hidden;
   }
 
-  .model-grid {
+  .limit-list {
     min-height: 0;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-rows: repeat(2, minmax(58px, 1fr));
-    gap: 6px;
-    overflow: hidden;
+    align-content: start;
+    overflow: auto;
+    scrollbar-width: thin;
   }
 
-  .model-grid div {
+  .limit-row {
     min-width: 0;
-    min-height: 58px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 5px;
-    padding: 6px 7px;
-    border: 1px solid #414866;
-    border-radius: 3px;
-    background: #202438;
+    display: grid;
+    gap: 3px;
+    padding: 5px 1px;
+    border-bottom: 1px solid var(--color-border-soft);
   }
 
-  .model-grid strong {
-    color: #cbd4f2;
-    font-size: 12.5px;
-    line-height: 1.2;
+  .limit-row:last-child {
+    border-bottom: 0;
   }
 
-  .model-grid p {
+  .limit-head,
+  .limit-meta {
     min-width: 0;
-    margin: 0;
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
     gap: 8px;
   }
 
-  .model-grid span {
-    font-size: 15px;
+  .limit-head strong {
+    color: var(--color-on-surface);
+    font-size: 11.5px;
+    line-height: 1.2;
+  }
+
+  .limit-head span {
+    font-size: 11.5px;
     line-height: 1.1;
   }
 
-  .model-grid small {
+  .limit-meta {
+    color: var(--color-muted);
     font-size: 10px;
   }
 
-  .model-grid .empty-model {
-    grid-column: 1 / -1;
-    color: #a1a7c3;
+  .limit-meta span,
+  .limit-meta small {
+    font-size: 10px;
+  }
+
+  .limit-list .empty-limits {
+    min-height: 80px;
+    display: grid;
+    place-items: center;
+    color: var(--color-muted);
     text-align: center;
   }
 

@@ -19,6 +19,8 @@ Use a terminal at least `120x40`. Smaller terminals show a resize notice instead
 
 If no local sessions are found, or archive sync fails before any calls are loaded, the app falls back to bundled sample data and shows that status in the title bar. Press `r` to sync sessions created after startup.
 
+To explore the dashboard with bundled sample data even when local sessions exist, launch it with `tokenuse --sample`. Press `Shift-D` to switch back to the cached live data.
+
 Install the Apple Silicon macOS desktop app with Homebrew Cask:
 
 ```bash
@@ -30,7 +32,7 @@ Linux, Windows, and manual desktop downloads are published on GitHub Releases. S
 
 ## Desktop App
 
-The TUI remains the default app, and a Tauri v2 desktop shell lives under `desktop/` for macOS, Windows, and Linux local builds. It shares the same archive, config, currency, pricing, and report logic as the TUI.
+The TUI remains the default app, and a Tauri v2 desktop shell lives under `desktop/` for macOS, Windows, and Linux local builds. It shares the same archive, config, currency, pricing, model registry, and report logic as the TUI. The desktop diverges visually into a sidebar application with Overview, Analytics, Tools, Models, Projects, and Config screens plus direct per-tool pages.
 
 ```bash
 cd desktop
@@ -50,6 +52,8 @@ See [desktop app usage](docs/guides/desktop-usage.md) for shared-data behavior, 
 | GitHub Copilot | `~/.copilot/session-state/` and VS Code Copilot Chat transcripts | Legacy output tokens when present; transcript usage is estimated |
 
 Details for each parser live under [docs/development/tools](docs/development/tools/README.md).
+
+Raw model ids from every parser resolve through the shared [model-normalisation registry](docs/development/models.md), so dated and vendor variants fold into canonical provider and family rows before display.
 
 ## Dashboard
 
@@ -112,6 +116,7 @@ Maintainer snapshot refresh commands are documented in [local development](docs/
 
 - [Documentation index](docs/README.md)
 - [Tool ingestion details](docs/development/tools/README.md)
+- [Model normalisation](docs/development/models.md)
 - [Architecture and data flow](docs/development/architecture.md)
 - [Desktop app usage](docs/guides/desktop-usage.md)
 - [Usage page (rolling 24h utilisation)](docs/guides/tui-usage.md#usage-page)
@@ -124,4 +129,4 @@ cargo fmt --check
 cargo test
 ```
 
-Sample dashboard data lives in `src/data/mod.rs`. Live usage is loaded from the local archive in `src/archive.rs`, which syncs source files through the adapters in `src/tools/`.
+Bundled sample rows live in `src/data/sample_data.json` and are loaded through `src/data/mod.rs`. Live usage is loaded from the local archive in `src/archive.rs`, which syncs source files through the adapters in `src/tools/`.

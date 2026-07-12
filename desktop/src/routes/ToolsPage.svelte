@@ -49,30 +49,32 @@
   </section>
 {:else if toolPage}
   <section class="page-flow" use:staggeredReveal={{ selector: ':scope > *', y: 5, stagger: 0.03 }}>
-    <section class="kpis hero-kpis tool-hero">
+    <section class="tool-hero">
       <div class="tool-hero-mark">
-        <ProviderIcon id={tool} kind="tool" size={28} />
+        <ProviderIcon id={tool} kind="tool" size={38} />
       </div>
-      <div>
-        <span>{snapshot.copy.metrics.cost}</span>
-        <strong class="hero-value" use:countUp={toolPage.dashboard.summary.cost}>{toolPage.dashboard.summary.cost}</strong>
-        <small>{snapshot.currency}</small>
-      </div>
-      <div>
-        <span>{snapshot.copy.metrics.calls}</span>
-        <strong use:countUp={toolPage.dashboard.summary.calls}>{toolPage.dashboard.summary.calls}</strong>
-        <small>{snapshot.copy.metrics.in} {toolPage.dashboard.summary.input}</small>
-      </div>
-      <div>
-        <span>{snapshot.copy.metrics.sessions}</span>
-        <strong use:countUp={toolPage.dashboard.summary.sessions}>{toolPage.dashboard.summary.sessions}</strong>
-        <small>{snapshot.copy.metrics.active_set}</small>
-      </div>
-      <div>
-        <span>{snapshot.copy.metrics.cache_hit}</span>
-        <strong use:countUp={toolPage.dashboard.summary.cache_hit}>{toolPage.dashboard.summary.cache_hit}</strong>
-        <small>{snapshot.copy.metrics.cached} {toolPage.dashboard.summary.cached}</small>
-      </div>
+      <section class="kpis hero-kpis tool-kpis">
+        <div>
+          <span>{snapshot.copy.metrics.cost}</span>
+          <strong class="hero-value" use:countUp={toolPage.dashboard.summary.cost}>{toolPage.dashboard.summary.cost}</strong>
+          <small>{snapshot.currency}</small>
+        </div>
+        <div>
+          <span>{snapshot.copy.metrics.calls}</span>
+          <strong use:countUp={toolPage.dashboard.summary.calls}>{toolPage.dashboard.summary.calls}</strong>
+          <small>{snapshot.copy.metrics.in} {toolPage.dashboard.summary.input}</small>
+        </div>
+        <div>
+          <span>{snapshot.copy.metrics.sessions}</span>
+          <strong use:countUp={toolPage.dashboard.summary.sessions}>{toolPage.dashboard.summary.sessions}</strong>
+          <small>{snapshot.copy.metrics.active_set}</small>
+        </div>
+        <div>
+          <span>{snapshot.copy.metrics.cache_hit}</span>
+          <strong use:countUp={toolPage.dashboard.summary.cache_hit}>{toolPage.dashboard.summary.cache_hit}</strong>
+          <small>{snapshot.copy.metrics.cached} {toolPage.dashboard.summary.cached}</small>
+        </div>
+      </section>
     </section>
 
     {#if section}
@@ -80,15 +82,15 @@
     {/if}
 
     <section class="duo-grid">
-      <Panel title={snapshot.copy.desktop.top_projects} tone="green">
+      <Panel title={snapshot.copy.desktop.top_projects} tone="green" scrollable>
         <ProjectTable rows={toolPage.dashboard.projects} copy={snapshot.copy} />
       </Panel>
-      <Panel title={snapshot.copy.desktop.top_models} tone="magenta">
+      <Panel title={snapshot.copy.desktop.top_models} tone="magenta" scrollable>
         <ModelTable rows={toolPage.dashboard.models} copy={snapshot.copy} />
       </Panel>
     </section>
 
-    <Panel title={snapshot.copy.panels.top_sessions} tone="red">
+    <Panel title={snapshot.copy.panels.top_sessions} tone="red" scrollable>
       <SessionTable rows={toolPage.dashboard.sessions} copy={snapshot.copy} />
     </Panel>
   </section>

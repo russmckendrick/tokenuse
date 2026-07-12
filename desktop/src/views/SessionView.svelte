@@ -14,7 +14,7 @@
 
 <section class="session-page" use:reveal={{ y: 5 }}>
   <div class="session-head">
-    <button type="button" onclick={closeSession}><ArrowLeft size={15} /> {snapshot.copy.nav.deep_dive}</button>
+    <button type="button" onclick={closeSession}><ArrowLeft size={15} /> {snapshot.copy.nav.analytics}</button>
     {#if session}
       <div>
         <strong>{session.project}</strong>

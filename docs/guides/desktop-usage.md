@@ -1,6 +1,6 @@
 # Desktop App Usage
 
-The desktop app is a Tauri v2 + Svelte frontend over the same Rust core as the TUI. It shares the local archive, config, currency, pricing, refresh, session drill-down, and report logic.
+The desktop app is a Tauri v2 and Svelte frontend over the same local Rust core as the TUI. It shares the archive, configuration, currency and pricing books, sample data, refresh worker, session details, quota snapshots, and report generator. It does not send usage telemetry or require provider API keys.
 
 ## Install And Open
 
@@ -11,36 +11,123 @@ brew install --cask russmckendrick/tap/tokenuse-desktop
 open -a "Token Use"
 ```
 
-The macOS desktop app also ships as a signed and notarized Apple Silicon DMG. Linux desktop builds are published as unsigned AppImage, deb, and rpm assets for AMD64 and ARM64. Windows desktop builds are published as unsigned AMD64 NSIS and MSI installers. Verify the matching `.sha256` file before running or installing unsigned assets.
+The macOS app also ships as a signed and notarized Apple Silicon DMG. Linux builds are published as unsigned AppImage, deb, and rpm assets for AMD64 and ARM64. Windows builds are published as unsigned AMD64 NSIS and MSI installers. Verify the matching `.sha256` file before running an unsigned asset.
 
-## Main Tabs
+## Application Shell
 
-- **Overview**: command-center view with KPIs, a chronological Activity Pulse, project/tool spend, model spend, shell commands, and MCP servers.
-- **Deep Dive**: analysis workbench with a larger activity trend, project rankings, top sessions, project/tool spend, model efficiency, core tools, shell commands, and MCP servers.
-- **Session**: per-call session drill-down with clickable rows for full stored prompt, tool, command, and token metadata.
-- **Usage**: per-tool consoles with 24-hour activity pulses, call/token/cost summaries, plan limit gauges when available, and top model bars. Opening this tab automatically selects 24 Hours so the filter row matches the console window.
-- Model tables show observed cache-hit percentage separately from cache-read price rate. Session call details show cache read/write price rates for the call model.
-- **Config**: currency selection, desktop behavior toggles, explicit Windows/Linux desktop update checks, confirmed local downloads for currency and pricing books, Claude/Copilot limit sidecar sync actions, and a confirmed clear-data action that rebuilds the archive.
+The desktop app uses a persistent left sidebar rather than the TUI tab strip. Every primary screen and every supported tool has a direct entry:
 
-The desktop header mirrors the TUI filters: period, tool, sort mode, and project. In-window keyboard shortcuts are resolved through the same embedded keymap as the TUI; sort mode can be changed from the header or with `g`, and cycles between spend, latest date, and token use. `Shift-D` toggles between live and bundled sample data. The app polls snapshots in the background so completed refreshes appear without blocking the UI.
+- Overview
+- Analytics
+- Tools
+- Models
+- Projects
+- Claude Code, Cursor, Codex, Copilot, and Gemini
+- Config
 
-Dashboard sections render the full sorted row set. Sections with more rows than fit in the current window scroll inside the section so the header, filters, and footer remain visible.
+Use **Collapse** at the bottom of the sidebar to reduce it to an icon rail. The choice is remembered locally. The active screen remains highlighted in either state.
 
-## Reading The Dashboard
+The five direct tool rows dynamically order themselves from highest to lowest rolling 24-hour call activity, so the tools currently driving usage stay closest to the main views. Primary screen and Config positions never move.
 
-The **Activity Pulse** and **Activity Trend** panels use D3-backed SVG charts. Orange/red bars show relative spend by bucket, cyan/blue line and area marks show call-volume cadence, and hovering a bucket shows the period label, cost, and call count without changing filters. D3-backed heat strips in ranking tables use stepped blue/yellow/red cells for relative magnitude. The footer summarizes the visible range, peak bucket, latest bucket, and total calls. 24 Hours and 7 Days use hourly buckets so short views do not collapse into one or two bars. This Month stays hourly during the first 14 days of the month, then switches to daily buckets from the 15th onward; 30 Days and All Time use daily buckets. The 24 Hours period is rolling from the current time, not a calendar-day midnight cutoff.
+The header holds the controls that apply to the current screen. Overview and Analytics expose period, tool, sort, and project filters. Dedicated tool pages expose period and sort. Models uses the active period for ranking and details while keeping all five ranges visible in its table. Projects exposes period, sort, and project. The parent Tools screen is a fixed rolling 24-hour capacity view, so its period control is intentionally hidden.
 
-Ranked table bars use the same stepped color ramp as the TUI: blue is lower relative volume, yellow/orange is hotter, and red marks the current high end of the table. These bars are relative to the visible table, not generated report images.
+The footer shows live or sample source, currency, and context-sensitive shortcut hints. Refresh, report, configuration, and sync results appear as temporary bottom-right toasts instead of permanently consuming header space.
 
-Usage consoles switch the visible period to 24 Hours when opened and ignore the project filter because they are rolling 24-hour tool monitors. Empty tools stay visible with compact idle rows so you can still confirm that Codex, Claude Code, Cursor, Copilot, and Gemini were checked. Copilot AI Credits rows pair the gauge with exact used and remaining/total credit counts, reset time, plan, and an additional-usage status. Business/Enterprise seats whose payload hides per-seat credits render an `AI Credits · managed by your organization` row with the plan name instead of an empty section. Limit rows whose reset has passed (or whose snapshot is over a week old, for windows without a reset) dim with an `as of <date> · stale` note and are hidden a week later.
+Long tables and result lists have bounded heights, sticky column headings, and their own scrollbars. Selecting All Time therefore adds scrollable rows without stretching every panel on the page.
 
-## Background Alerts
+## Screens
 
-Closing the desktop window keeps Token Use running in the background. Left-click the tray or menu-bar icon for a compact 24-hour usage popover with a D3 sparkline, then choose **Open** to show the full dashboard. Right-click the icon and choose **Show Token Use** to open the dashboard directly, or choose **Quit Token Use** to stop the app. When the Dock/taskbar icon is visible, the Dock icon or launching Token Use again also restores the window.
+### Overview
 
-While the app is running, the desktop backend keeps polling completed archive refreshes even if the window is hidden. If an automatic refresh imports a significant amount of new usage since the last alert baseline, Token Use sends a native desktop notification. Notifications are driven by all live imported usage, independent of the visible period, tool, project, or sort filters. Manual refreshes reset the alert baseline without sending a notification.
+Overview is the at-a-glance command center. It leads with cost, calls, sessions, cache hit rate, and input/output totals, followed by current utilisation grouped by tool, a chronological activity pulse, top projects, and top models.
 
-Background alert thresholds are configured in the shared `config.json` file:
+Utilisation gauges come from the latest non-stale plan snapshots. Each compact tool module starts with its mark inside a ring showing the most constrained active window, followed by a two-column matrix retaining the exact percentage or credits remaining and reset timing for its primary limits. Claude Extra Usage and Codex Spark model-specific windows stay available on their dedicated tool pages rather than appearing in this summary. A single limit spans both columns, and the modules stack only at narrow window sizes. The section is omitted when no current snapshot exists.
+
+### Analytics
+
+Analytics is the time and distribution workspace. It includes:
+
+- chronological activity for the selected period;
+- daily spend stacked by tool;
+- an hour-by-weekday activity heatmap;
+- provider and tool share donuts;
+- cache efficiency;
+- ranked projects, models, sessions, project/tool rows, core tools, shell commands, and MCP servers.
+
+Charts use the same token-driven colors and relative ranking language as the TUI. Hovered chart values are exact for that bucket; bars, heat intensity, and rank strips are relative to the visible dataset.
+
+### Tools
+
+The parent Tools screen shows one rolling 24-hour console for each supported tool. Every tool stays visible, including idle tools, so it is clear which sources were checked. A console combines recent cost, calls, tokens, last-seen time, plan-limit gauges, and top models.
+
+The direct tool entries open dedicated pages with the selected time range. Each page has larger cost, call, session, and cache summaries, the tool's current utilisation console, top projects, top models, and sessions. Tool marks are displayed without decorative icon boxes so the summary row has more room for data.
+
+Copilot AI Credits rows show exact used and remaining/total credits, reset time, plan, and additional-usage status. Business or Enterprise payloads that hide per-seat credits show an organization-managed row rather than a blank console. A limit whose reset has passed, or whose reset-less snapshot is over a week old, dims as stale and is hidden one week later.
+
+### Models
+
+Models is a provider-grouped catalog across every tool. Each model row carries its canonical display name, family, cache hit rate, and cost/call totals for 24 Hours, 7 Days, 30 Days, This Month, and All Time.
+
+The active header period controls row ranking and the expanded details. Select a row with a click, `Enter`, or `Space` to reveal the per-tool split for that period. Equivalent dated ids and vendor paths fold into one row; automatic routers retain their actual provider attribution, such as **OpenAI (auto)** or **Anthropic (auto)**.
+
+### Projects
+
+Projects is a drill-down from project to session to call. Select a project to list its sessions, then select a session to open its call rows. Call details include the full stored prompt, model, token buckets, pricing rates, tools, reasoning/web-search counts, and shell commands when those fields were available locally.
+
+The project picker can narrow the page to one normalized project identity. Project labels use the shortest unique path suffix, while the archive retains the raw project value for debugging and reports.
+
+### Config
+
+Config groups shared data settings and desktop-only behavior:
+
+- display currency;
+- live/sample **Sample Data** toggle;
+- confirmed currency and pricing-book downloads;
+- Claude Code status-line setup and Claude/Copilot limit sync;
+- optional Claude.ai and ChatGPT quota-cookie sync when the build supports it;
+- clear and rebuild local archive;
+- report folder;
+- open at login and Dock/taskbar visibility;
+- Windows/Linux update checks.
+
+Turning on Sample Data changes only the visible source. Any live snapshot remains cached, background refreshes continue updating it, and turning Sample Data off returns to that live snapshot.
+
+## Keyboard
+
+Desktop navigation is resolved in the Svelte shell; data actions call typed Rust commands directly. Shortcuts are ignored while typing in an input, select, or text area, except for `Esc`.
+
+| Key | Action |
+| --- | --- |
+| `Tab` / `Shift-Tab` | Cycle Overview, Analytics, Tools, Models, Projects, and Config. |
+| `o` | Open Overview. |
+| `d` | Open Analytics. |
+| `u` | Open Tools. |
+| `c` | Open Config. |
+| `1`–`5` | Select 24 Hours, 7 Days, 30 Days, This Month, or All Time where the period is available. |
+| `t` | Cycle tool on Overview or Analytics. |
+| `g` | Cycle spend, latest-date, and token-use sorting where sorting is available. |
+| `p` | Open the project picker on Overview, Analytics, or Projects. |
+| `s` | Open the session picker. |
+| `e` | Open report generation. |
+| `r` | Refresh the archive. |
+| `Shift-D` | Toggle live and sample data. |
+| `Esc` | Close the active detail/modal, or return from Session to Analytics. |
+
+Clickable model, project, session, and call rows also support `Enter` and `Space`.
+
+## Time Ranges And Charts
+
+24 Hours is a rolling window from the current time, not a calendar day. Activity charts use hourly buckets for 24 Hours and 7 Days. This Month is hourly through day 14 and daily from day 15 onward; 30 Days and All Time use daily buckets.
+
+Spend bars use the warm chart series and call cadence uses the cool series. Ranked bars and heat cells show relative magnitude within the visible panel. Use the adjacent numeric values for exact cost, call, token, reset, and plan values.
+
+## Tray And Background Alerts
+
+Closing the main window keeps Token Use running. Left-click the tray or menu-bar icon for Quick View, or use the tray menu when the desktop environment does not support left-click activation. Quick View shows compact 24-hour cost, call, token, and cache totals plus the four most urgent current utilisation windows with percentages or credits remaining and reset times. Choose **Open** to restore the full app; choose **Quit Token Use** from the tray menu to stop it.
+
+The backend continues draining completed archive refreshes while the window is hidden. Automatic refreshes can send native notifications when new live usage crosses a configured cost, token, or call threshold. Manual refreshes reset the alert baseline without notifying. Visible filters and sample mode do not change the all-live-data alert baseline.
+
+Background alert and desktop defaults live in `config.json`:
 
 ```json
 {
@@ -59,51 +146,26 @@ Background alert thresholds are configured in the shared `config.json` file:
 }
 ```
 
-The defaults are conservative: notify after at least `$1.00`, `100k` tokens, or `25` calls of new usage, with a 30-minute cooldown. Linux tray click behavior depends on the desktop environment, so use the tray menu when a left-click does not open the popover. Windows notifications are most reliable from an installed build.
+Windows notifications are most reliable from an installed build. On Windows and Linux, Config can check GitHub Releases for updates. Windows uses the NSIS installer and Linux in-app updates target AppImage installs; deb/rpm users update through their package workflow. macOS updates continue through Homebrew Cask or a new DMG.
 
-## Desktop Settings
+## Refresh, Reports, And Local Data
 
-The Config tab includes desktop-only toggles for opening Token Use at login and showing the Dock/taskbar icon. Open at login is off by default; the Dock/taskbar icon is visible by default so the app keeps normal window-switcher behavior until you opt into a tray-first setup.
+Use the header refresh button or `r` to sync the archive in the background. The previous snapshot remains visible if a refresh fails. Clear Data asks for confirmation, deletes `archive.db`, and immediately reimports existing local history. Configuration, rates, pricing books, limit sidecars, and reports are retained; archive-only history is lost if its original source files no longer exist.
 
-On Windows and Linux, the Config tab also includes an explicit update check against GitHub Releases. Windows updates use the NSIS setup installer. Linux in-app updates target AppImage installs; `.deb` and `.rpm` package users should update manually with the matching GitHub Release asset. macOS desktop updates continue through Homebrew Cask.
-
-## Refresh
-
-Use the refresh button or keyboard shortcut `r` to sync the archive. Refreshes use the same background archive refresher as the TUI and keep the previous data visible if a sync fails.
-
-The Config tab's clear-data action shows a native warning, deletes `archive.db`, and immediately reimports from local tool history. Config, rates, pricing books, legacy pricing snapshots, and reports are kept. Archive-only rows disappear if the original source files are gone, and rebuilt rows use the current configured pricing.
-
-If sample data is selected manually with `Shift-D`, refreshes update the cached live data without switching the visible dashboard back until `Shift-D` is pressed again.
-
-## Project, Session, Currency, And Report Pickers
-
-The desktop app uses native dialogs where that makes sense:
-
-- Project and session pickers include search.
-- Session call rows open a detail modal with `Enter`, `Space`, or a mouse click.
-- Currency selection writes the same `config.json` setting used by the TUI.
-- Report generation writes executive HTML/PDF report decks, one-page SVG/PNG visual summaries, plus raw JSON, Excel, or CSV-folder reports, from a dedicated period and project/all-projects scope. Reports always include all tools; redaction is off by default and can be toggled on before generation.
-- Folder selection uses the Tauri dialog plugin and is runtime-only, matching TUI behavior.
-
-## Shared Local Data
+Report generation has independent period, project/all-projects, format, and redaction controls. It writes executive HTML/PDF decks, SVG/PNG visual summaries, JSON, Excel, or a CSV folder. Reports include all tools for the selected period and project scope. Folder selection uses the native dialog and applies to the running session.
 
 The desktop app and TUI share the platform config directory under `tokenuse`:
 
-| File / directory | Shared purpose |
+| File / directory | Purpose |
 | --- | --- |
-| `config.json` | User overrides, display currency, background alerts, and desktop preferences |
-| `archive.db` | Durable local usage archive |
-| `exchange-rates.json` | Optional local currency snapshot |
-| `rates.json` | Legacy local currency snapshot |
-| `pricing-upstream.json` | Optional local broad pricing book |
-| `pricing-overrides.json` | Optional local official overrides and aliases |
-| `pricing-snapshot.json` | Legacy local pricing snapshot |
-| `limits/claude-code.json` | Optional Claude Code status-line limit sidecar |
-| `limits/copilot.json` | Optional Copilot quota sidecar written by confirmed sync |
-| `reports/` | Fallback report directory |
+| `config.json` | Currency, background alerts, and desktop preferences. |
+| `archive.db` | Durable normalized calls, limits, and source fingerprints. |
+| `exchange-rates.json` / `rates.json` | Current and legacy local currency snapshots. |
+| `pricing-upstream.json` / `pricing-overrides.json` | Optional local pricing books. |
+| `pricing-snapshot.json` | Legacy local pricing snapshot. |
+| `limits/` | Claude Code, Copilot, and optional subscription-quota sidecars. |
+| `reports/` | Fallback report directory. |
 
-Changing currency, refreshing or clearing the archive, downloading local rates/pricing books, or syncing limit sidecars from the desktop app affects the same data the TUI reads.
+Changing currency, refreshing or clearing the archive, downloading books, or syncing limit sidecars affects the same persistent state the TUI reads. The Sample Data toggle is intentionally runtime-only for the current desktop process.
 
-The Config page shows links for the published currency snapshot and both pricing books beside the download rows, so users can inspect the files before downloading them locally. The pricing row also shows the active book source and its latest checked/generated date. The Claude limits row imports an existing local sidecar and shows a setup hint until Claude Code's `statusLine` writes the OS-specific sidecar path. The Copilot limits row asks for confirmation before reading local Copilot credentials and fetching current quota state from GitHub.
-
-The **Claude statusLine** row sits directly above Claude limits and bootstraps the sidecar without touching your visible status line. **Install** writes a wrapper script under `<config>/tokenuse/statusline/claude-code.sh` (or `.ps1` on Windows), backs up `~/.claude/settings.json` to `settings.json.bak.<unix-ts>`, and rewrites `statusLine.command` to point at the wrapper. The wrapper tees Claude Code's stdin into the sidecar JSON file and forwards it through whatever command was previously configured (for example `cship`), so the visible status line is unchanged. If you'd rather edit `settings.json` yourself, the second confirmation dialog offers **Generate wrapper only**, which writes the wrapper without modifying any user config. Re-installing is idempotent; clicking the row again on an installed system offers **Uninstall**, which restores the prior command and deletes the wrapper but leaves the sidecar JSON in place.
+The Claude Code status-line setup creates an OS-specific wrapper under `<config>/tokenuse/statusline/`, backs up `~/.claude/settings.json`, and wraps any existing status-line command so its visible output is unchanged. **Generate wrapper only** leaves user configuration untouched; **Uninstall** restores the prior command and removes the wrapper while retaining the last sidecar JSON.

@@ -18,8 +18,7 @@
     "projects": "Projects",
     "config": "Config",
     "configuration": "Configuration",
-    "session": "Session",
-    "dashboard": "Dashboard"
+    "session": "Session"
   },
   "periods": {
     "today": "24 Hours",
@@ -144,12 +143,8 @@
     "cost_plan_spaced": "Cost / Plan",
     "raw_project": "Raw Project",
     "agent": "Agent",
-    "archive": "Archive",
     "currency": "Currency",
-    "exports": "Reports",
-    "findings": "Findings",
-    "severity": "Severity",
-    "evidence": "Evidence"
+    "exports": "Reports"
   },
   "timeline": {
     "spend": "Spend",
@@ -263,10 +258,9 @@
     "web_search": "Web search",
     "web": "Web",
     "close": "Close",
-    "deep_dive": "Deep Dive",
     "sample_project": "(Sample Data)",
     "sample_date_range": "-",
-    "sample_note": "Aample data does not include per-call records · run with live sessions to drill in"
+    "sample_note": "Sample data does not include per-call records · run with live sessions to drill in"
   },
   "modals": {
     "help_title": "Help · keybindings",
@@ -420,7 +414,7 @@
     "model_usage": "Model usage",
     "loading_label": "Loading Token Use",
     "nav_aria": "Primary navigation",
-    "collapse_sidebar": "Collapse sidebar",
+    "collapse_sidebar": "Collapse",
     "expand_sidebar": "Expand sidebar",
     "utilisation": "Utilisation",
     "by_provider": "By provider",
@@ -454,12 +448,7 @@
   },
   "tray": {
     "summary_aria": "24 hour summary",
-    "hours_24": "24 Hours",
-    "activity": "Activity",
-    "models": "Models",
-    "tokens": "Tokens",
-    "high": "High",
-    "no_model_rows": "No model rows"
+    "hours_24": "24 Hours"
   },
   "empty": {
     "terminal_too_small": "Terminal too small",
@@ -557,6 +546,7 @@
     "report_command": "Start the guided report generator",
     "help_flag": "Print this help message",
     "version_flag": "Print version information",
+    "sample_flag": "Start with bundled sample data",
     "list_projects_flag": "Print the ingested project inventory and exit",
     "refresh_prices_flag": "Refresh embedded pricing books (requires refresh-prices feature)",
     "generate_currency_flag": "Regenerate embedded currency rates (requires refresh-currency feature)",
@@ -655,7 +645,7 @@
         ]
       },
       {
-        "title": "Insights",
+        "title": "Scrolling",
         "items": [
           { "keys": "Up/Down  PgUp/PgDn", "label": "scroll active view", "action": "move_up" }
         ]
@@ -685,7 +675,7 @@
           { "keys": "Up/Down  PgUp/PgDn", "label": "select calls", "action": "move_up" },
           { "keys": "Enter / click", "label": "call details", "action": "confirm" },
           { "keys": "Home/End", "label": "jump to ends", "action": "move_home" },
-          { "keys": "d  Esc", "label": "back to dashboard", "action": "close_session" }
+          { "keys": "d  Esc", "label": "back to Deep Dive", "action": "close_session" }
         ]
       }
     ],
@@ -703,14 +693,14 @@
       ],
       "config": [
         { "keys": "q", "label": "quit", "action": "quit" },
-        { "keys": "Esc", "label": "dashboard", "action": "page_deep_dive" },
+        { "keys": "Esc", "label": "Deep Dive", "action": "page_deep_dive" },
         { "keys": "Up/Down", "label": "move", "action": "move_up" },
         { "keys": "Enter", "label": "select", "action": "confirm" },
         { "keys": "h", "label": "help", "action": "open_help" }
       ],
       "session": [
         { "keys": "q", "label": "quit", "action": "quit" },
-        { "keys": "Esc/d", "label": "dashboard", "action": "close_session" },
+        { "keys": "Esc/d", "label": "Deep Dive", "action": "close_session" },
         { "keys": "Up/Down", "label": "move", "action": "move_up" },
         { "keys": "Enter", "label": "detail", "action": "confirm" },
         { "keys": "s", "label": "pick", "action": "open_session_picker" },
@@ -721,7 +711,7 @@
       "usage": [
         { "keys": "q", "label": "quit", "action": "quit" },
         { "keys": "Tab", "label": "tabs", "action": "next_tab" },
-        { "keys": "o/d", "label": "overview/deep", "action": "page_overview" },
+        { "keys": "o/d", "label": "overview/deep dive", "action": "page_overview" },
         { "keys": "c", "label": "config", "action": "page_config" },
         { "keys": "e", "label": "report", "action": "open_export_picker" },
         { "keys": "g", "label": "sort", "action": "cycle_sort" },

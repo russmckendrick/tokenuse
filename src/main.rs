@@ -15,7 +15,7 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, layout::Rect, Terminal};
 use tokenuse::{
-    app::App,
+    app::{App, DataSource},
     archive,
     config::ConfigPaths,
     copy::{copy, template},
@@ -27,25 +27,25 @@ mod report_cli;
 fn main() -> Result<()> {
     color_eyre::install()?;
 
-    if handle_subcommand()? {
+    let Some(options) = handle_subcommand()? else {
         return Ok(());
-    }
+    };
 
     let startup = runtime::load_startup()?;
 
+    let mut app = App::with_runtime(
+        startup.source,
+        startup.status,
+        startup.settings,
+        startup.paths,
+        startup.currency_table,
+        startup.initial_refresh_delay,
+        startup.refresh_source,
+    );
+    apply_dashboard_options(&mut app, options);
+
     let mut session = TerminalSession::new()?;
-    run(
-        session.terminal(),
-        App::with_runtime(
-            startup.source,
-            startup.status,
-            startup.settings,
-            startup.paths,
-            startup.currency_table,
-            startup.initial_refresh_delay,
-            startup.refresh_source,
-        ),
-    )
+    run(session.terminal(), app)
 }
 
 fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, mut app: App) -> Result<()> {
@@ -77,57 +77,57 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, mut app: App) -> Resul
     Ok(())
 }
 
-fn handle_subcommand() -> Result<bool> {
+fn handle_subcommand() -> Result<Option<DashboardOptions>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
     match cli_action(&args) {
-        CliAction::Dashboard => Ok(false),
+        CliAction::Dashboard(options) => Ok(Some(options)),
         CliAction::Version => {
             println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-            Ok(true)
+            Ok(None)
         }
         CliAction::Help => {
             print_help();
-            Ok(true)
+            Ok(None)
         }
         CliAction::ListProjects => {
             print_project_inventory()?;
-            Ok(true)
+            Ok(None)
         }
         CliAction::RefreshPrices => {
             refresh_prices()?;
-            Ok(true)
+            Ok(None)
         }
         CliAction::GenerateCurrencyJson => {
             refresh_currency()?;
-            Ok(true)
+            Ok(None)
         }
         CliAction::Report => {
             report_cli::run()?;
-            Ok(true)
+            Ok(None)
         }
         CliAction::SetClaudeCookie(value) => {
             set_subscription_cookie(SubscriptionCookie::Claude, &value)?;
-            Ok(true)
+            Ok(None)
         }
         CliAction::ClearClaudeCookie => {
             clear_subscription_cookie(SubscriptionCookie::Claude)?;
-            Ok(true)
+            Ok(None)
         }
         CliAction::SetCodexCookie(value) => {
             set_subscription_cookie(SubscriptionCookie::Codex, &value)?;
-            Ok(true)
+            Ok(None)
         }
         CliAction::ClearCodexCookie => {
             clear_subscription_cookie(SubscriptionCookie::Codex)?;
-            Ok(true)
+            Ok(None)
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum CliAction {
-    Dashboard,
+    Dashboard(DashboardOptions),
     Help,
     Version,
     ListProjects,
@@ -138,6 +138,11 @@ enum CliAction {
     ClearClaudeCookie,
     SetCodexCookie(String),
     ClearCodexCookie,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DashboardOptions {
+    sample: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -203,7 +208,15 @@ fn cli_action(args: &[String]) -> CliAction {
         return CliAction::ClearCodexCookie;
     }
 
-    CliAction::Dashboard
+    CliAction::Dashboard(DashboardOptions {
+        sample: args.iter().any(|arg| arg == "--sample"),
+    })
+}
+
+fn apply_dashboard_options(app: &mut App, options: DashboardOptions) {
+    if options.sample && matches!(&app.source, DataSource::Live(_)) {
+        app.toggle_data_source();
+    }
 }
 
 fn flag_value(args: &[String], flag: &str) -> Option<String> {
@@ -276,6 +289,7 @@ fn print_help() {
 {flags}
     -h, --help                     {help_flag}
     -V, --version                  {version_flag}
+        --sample                   {sample_flag}
         --list-projects            {list_projects_flag}
         --refresh-prices           {refresh_prices_flag}
         --generate-currency-json   {generate_currency_flag}
@@ -290,6 +304,7 @@ fn print_help() {
         report_command = copy.cli.report_command,
         help_flag = copy.cli.help_flag,
         version_flag = copy.cli.version_flag,
+        sample_flag = copy.cli.sample_flag,
         list_projects_flag = copy.cli.list_projects_flag,
         refresh_prices_flag = copy.cli.refresh_prices_flag,
         generate_currency_flag = copy.cli.generate_currency_flag,
@@ -521,6 +536,42 @@ mod tests {
             cli_action(&args(&["--generate-currency-json"])),
             CliAction::GenerateCurrencyJson
         );
-        assert_eq!(cli_action(&[]), CliAction::Dashboard);
+        assert_eq!(
+            cli_action(&[]),
+            CliAction::Dashboard(DashboardOptions { sample: false })
+        );
+    }
+
+    #[test]
+    fn sample_flag_starts_dashboard_in_sample_mode() {
+        assert_eq!(
+            cli_action(&args(&["--sample"])),
+            CliAction::Dashboard(DashboardOptions { sample: true })
+        );
+    }
+
+    #[test]
+    fn sample_dashboard_option_preserves_live_data_for_switching_back() {
+        let mut app = App::with_source(
+            DataSource::Live(ingest::Ingested {
+                calls: Vec::new(),
+                limits: Vec::new(),
+            }),
+            None,
+        );
+
+        apply_dashboard_options(&mut app, DashboardOptions { sample: true });
+        assert!(matches!(app.source, DataSource::Sample));
+
+        app.toggle_data_source();
+        assert!(matches!(app.source, DataSource::Live(_)));
+    }
+
+    #[test]
+    fn subcommands_take_precedence_over_sample_flag() {
+        assert_eq!(
+            cli_action(&args(&["--sample", "--list-projects"])),
+            CliAction::ListProjects
+        );
     }
 }

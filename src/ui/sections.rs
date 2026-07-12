@@ -10,7 +10,7 @@ use crate::{
         App, ClearDataModal, ConfigDownload, CookieAction, CookieField, CookieModalKind,
         FolderPickerEntryKind, Page, Period, StatusTone, SubscriptionCookieModal,
     },
-    copy::{copy, template, CopyKeyHint},
+    copy::{copy, template, CopyHintGroup, CopyKeyHint},
     data::{
         ActivityMetric, CountMetric, ModelMetric, ProjectMetric, ProjectToolMetric, SessionDetail,
         SessionMetric, Summary, ToolLimitSection,
@@ -292,16 +292,22 @@ fn render_timeline_panel(
 
 pub(super) fn render_projects(frame: &mut Frame<'_>, area: Rect, rows: &[ProjectMetric]) {
     let copy = copy();
-    let table_rows = rows.iter().map(|item| {
-        Row::new(vec![
-            graphs::rank_cell(item.value),
-            Cell::from(item.name).style(theme::muted()),
-            Cell::from(item.cost).style(theme::money()),
-            Cell::from(item.avg_per_session).style(theme::money()),
-            Cell::from(item.sessions.to_string()).style(theme::base()),
-            Cell::from(item.tool_mix).style(theme::base().fg(theme::BLUE_SOFT)),
-        ])
-    });
+    let mut table_rows: Vec<Row<'static>> = rows
+        .iter()
+        .map(|item| {
+            Row::new(vec![
+                graphs::rank_cell(item.value),
+                Cell::from(item.name).style(theme::muted()),
+                Cell::from(item.cost).style(theme::money()),
+                Cell::from(item.avg_per_session).style(theme::money()),
+                Cell::from(item.sessions.to_string()).style(theme::base()),
+                Cell::from(item.tool_mix).style(theme::base().fg(theme::BLUE_SOFT)),
+            ])
+        })
+        .collect();
+    if table_rows.is_empty() {
+        table_rows.push(empty_table_row(6, copy.empty.no_project_rows.as_str()));
+    }
 
     let table = Table::new(
         table_rows,
@@ -333,15 +339,21 @@ pub(super) fn render_projects(frame: &mut Frame<'_>, area: Rect, rows: &[Project
 
 pub(super) fn render_sessions(frame: &mut Frame<'_>, area: Rect, rows: &[SessionMetric]) {
     let copy = copy();
-    let table_rows = rows.iter().map(|item| {
-        Row::new(vec![
-            graphs::rank_cell(item.value),
-            Cell::from(item.date).style(theme::muted()),
-            Cell::from(item.project).style(theme::muted()),
-            Cell::from(item.cost).style(theme::money()),
-            Cell::from(item.calls.to_string()).style(theme::base()),
-        ])
-    });
+    let mut table_rows: Vec<Row<'static>> = rows
+        .iter()
+        .map(|item| {
+            Row::new(vec![
+                graphs::rank_cell(item.value),
+                Cell::from(item.date).style(theme::muted()),
+                Cell::from(item.project).style(theme::muted()),
+                Cell::from(item.cost).style(theme::money()),
+                Cell::from(item.calls.to_string()).style(theme::base()),
+            ])
+        })
+        .collect();
+    if table_rows.is_empty() {
+        table_rows.push(empty_table_row(5, copy.empty.no_sessions.as_str()));
+    }
 
     let table = Table::new(
         table_rows,
@@ -371,17 +383,23 @@ pub(super) fn render_sessions(frame: &mut Frame<'_>, area: Rect, rows: &[Session
 
 pub(super) fn render_project_tools(frame: &mut Frame<'_>, area: Rect, rows: &[ProjectToolMetric]) {
     let copy = copy();
-    let table_rows = rows.iter().map(|item| {
-        Row::new(vec![
-            graphs::rank_cell(item.value),
-            Cell::from(item.project).style(theme::muted()),
-            Cell::from(item.tool).style(theme::base().fg(theme::YELLOW_SOFT)),
-            Cell::from(item.cost).style(theme::money()),
-            Cell::from(item.calls.to_string()).style(theme::base()),
-            Cell::from(item.sessions.to_string()).style(theme::base()),
-            Cell::from(item.avg_per_session).style(theme::money()),
-        ])
-    });
+    let mut table_rows: Vec<Row<'static>> = rows
+        .iter()
+        .map(|item| {
+            Row::new(vec![
+                graphs::rank_cell(item.value),
+                Cell::from(item.project).style(theme::muted()),
+                Cell::from(item.tool).style(theme::base().fg(theme::YELLOW_SOFT)),
+                Cell::from(item.cost).style(theme::money()),
+                Cell::from(item.calls.to_string()).style(theme::base()),
+                Cell::from(item.sessions.to_string()).style(theme::base()),
+                Cell::from(item.avg_per_session).style(theme::money()),
+            ])
+        })
+        .collect();
+    if table_rows.is_empty() {
+        table_rows.push(empty_table_row(7, copy.empty.no_project_tool_rows.as_str()));
+    }
 
     let table = Table::new(
         table_rows,
@@ -423,16 +441,22 @@ pub(super) fn render_model_efficiency(frame: &mut Frame<'_>, area: Rect, rows: &
 
 fn render_models_panel(frame: &mut Frame<'_>, area: Rect, title: &str, rows: &[ModelMetric]) {
     let copy = copy();
-    let table_rows = rows.iter().map(|item| {
-        Row::new(vec![
-            graphs::rank_cell(item.value),
-            Cell::from(item.name).style(theme::base()),
-            Cell::from(item.cost).style(theme::money()),
-            Cell::from(item.cache).style(theme::base()),
-            Cell::from(item.cache_rate).style(theme::base()),
-            Cell::from(item.calls.to_string()).style(theme::base()),
-        ])
-    });
+    let mut table_rows: Vec<Row<'static>> = rows
+        .iter()
+        .map(|item| {
+            Row::new(vec![
+                graphs::rank_cell(item.value),
+                Cell::from(item.name).style(theme::base()),
+                Cell::from(item.cost).style(theme::money()),
+                Cell::from(item.cache).style(theme::base()),
+                Cell::from(item.cache_rate).style(theme::base()),
+                Cell::from(item.calls.to_string()).style(theme::base()),
+            ])
+        })
+        .collect();
+    if table_rows.is_empty() {
+        table_rows.push(empty_table_row(6, copy.empty.no_models.as_str()));
+    }
 
     let table = Table::new(
         table_rows,
@@ -467,13 +491,19 @@ pub(super) fn render_counts(
     rows: &[CountMetric],
 ) {
     let copy = copy();
-    let table_rows = rows.iter().map(|item| {
-        Row::new(vec![
-            graphs::rank_cell(item.value),
-            Cell::from(item.name).style(theme::base()),
-            Cell::from(item.calls.to_string()).style(theme::base()),
-        ])
-    });
+    let mut table_rows: Vec<Row<'static>> = rows
+        .iter()
+        .map(|item| {
+            Row::new(vec![
+                graphs::rank_cell(item.value),
+                Cell::from(item.name).style(theme::base()),
+                Cell::from(item.calls.to_string()).style(theme::base()),
+            ])
+        })
+        .collect();
+    if table_rows.is_empty() {
+        table_rows.push(empty_table_row(3, copy.empty.no_rows.as_str()));
+    }
 
     let table = Table::new(
         table_rows,
@@ -492,6 +522,15 @@ pub(super) fn render_counts(
     .block(theme::panel_block(title, color));
 
     frame.render_widget(table, area);
+}
+
+fn empty_table_row(column_count: usize, label: &'static str) -> Row<'static> {
+    let mut cells = (0..column_count)
+        .map(|_| Cell::from(""))
+        .collect::<Vec<_>>();
+    let label_column = usize::from(column_count > 1);
+    cells[label_column] = Cell::from(label).style(theme::dim());
+    Row::new(cells)
 }
 
 pub(super) fn render_limits(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
@@ -710,6 +749,9 @@ fn render_tool_usage_rows(frame: &mut Frame<'_>, area: Rect, section: &ToolLimit
             Cell::from(model.cost).style(theme::money()),
         ])
     }));
+    if rows.is_empty() {
+        rows.push(empty_table_row(6, copy.usage.idle.as_str()));
+    }
 
     let table = Table::new(
         rows,
@@ -775,7 +817,7 @@ pub(super) fn render_config(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
     Paragraph::new(Line::from(vec![
         Span::styled(format!("[ {} ]", copy.nav.configuration), theme::key()),
         Span::raw("    "),
-        Span::styled(copy.nav.dashboard.as_str(), theme::dim()),
+        Span::styled(copy.nav.deep_dive.as_str(), theme::dim()),
     ]))
     .style(theme::base())
     .render(sections[0], frame.buffer_mut());
@@ -939,7 +981,7 @@ fn render_session_header(frame: &mut Frame<'_>, area: Rect, _app: &App) {
     Paragraph::new(Line::from(vec![
         Span::styled(format!("[ {} ]", copy.nav.session), theme::key()),
         Span::raw("    "),
-        Span::styled(copy.nav.dashboard.as_str(), theme::dim()),
+        Span::styled(copy.nav.deep_dive.as_str(), theme::dim()),
         Span::raw("    "),
         Span::styled(copy.nav.config.as_str(), theme::dim()),
     ]))
@@ -1212,7 +1254,7 @@ pub(super) fn render_help_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
         return;
     }
 
-    let width = 80.min(area.width.saturating_sub(4)).max(60);
+    let width = 116.min(area.width.saturating_sub(4)).max(60);
     let height = 38.min(area.height.saturating_sub(4)).max(24);
     let modal_area = centered_rect(width, height, area);
     Clear.render(modal_area, frame.buffer_mut());
@@ -1222,9 +1264,29 @@ pub(super) fn render_help_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
     let inner = block.inner(modal_area);
     block.render(modal_area, frame.buffer_mut());
 
-    let mut lines: Vec<Line> = Vec::new();
-    for (i, group) in copy.keymap.help.iter().enumerate() {
-        if i > 0 {
+    let columns = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(50),
+            Constraint::Length(2),
+            Constraint::Min(1),
+        ])
+        .split(inner);
+    let split_at = copy.keymap.help.len().min(4);
+    let (left_groups, right_groups) = copy.keymap.help.split_at(split_at);
+
+    Paragraph::new(Text::from(help_group_lines(left_groups)))
+        .style(theme::base())
+        .render(columns[0], frame.buffer_mut());
+    Paragraph::new(Text::from(help_group_lines(right_groups)))
+        .style(theme::base())
+        .render(columns[2], frame.buffer_mut());
+}
+
+fn help_group_lines(groups: &[CopyHintGroup]) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+    for (index, group) in groups.iter().enumerate() {
+        if index > 0 {
             lines.push(Line::from(""));
         }
         lines.push(Line::from(vec![Span::styled(
@@ -1239,10 +1301,7 @@ pub(super) fn render_help_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
             ]));
         }
     }
-
-    Paragraph::new(Text::from(lines))
-        .style(theme::base())
-        .render(inner, frame.buffer_mut());
+    lines
 }
 
 pub(super) fn render_export_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {

@@ -49,7 +49,7 @@
 
 <section class="page-flow" use:staggeredReveal={{ selector: ':scope > *', y: 5, stagger: 0.03 }}>
   <section class="duo-grid">
-    <Panel title={snapshot.copy.panels.by_project} tone="green">
+    <Panel title={snapshot.copy.panels.by_project} tone="green" scrollable>
       <table class="data-table project-table">
         <thead>
           <tr>
@@ -89,6 +89,7 @@
         ? `${snapshot.copy.desktop.sessions_for} · ${selectedProject}`
         : snapshot.copy.panels.top_sessions}
       tone="red"
+      scrollable
     >
       <table class="data-table session-table">
         <thead>

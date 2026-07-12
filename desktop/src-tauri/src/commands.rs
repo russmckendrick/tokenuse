@@ -368,10 +368,8 @@ pub(crate) async fn clear_claude_session_cookie(
     state: State<'_, SharedState>,
 ) -> CommandResult<DesktopSnapshot> {
     with_app(state, |app| {
-        tokenuse::secrets::delete(
-            tokenuse::tools::claude_subscription::config::KEYRING_ACCOUNT,
-        )
-        .map_err(|e| CommandError::Tokenuse(e.to_string()))?;
+        tokenuse::secrets::delete(tokenuse::tools::claude_subscription::config::KEYRING_ACCOUNT)
+            .map_err(|e| CommandError::Tokenuse(e.to_string()))?;
         Ok(snapshot(app))
     })
     .await
@@ -406,10 +404,8 @@ pub(crate) async fn clear_codex_session_cookie(
     state: State<'_, SharedState>,
 ) -> CommandResult<DesktopSnapshot> {
     with_app(state, |app| {
-        tokenuse::secrets::delete(
-            tokenuse::tools::codex_subscription::config::KEYRING_ACCOUNT,
-        )
-        .map_err(|e| CommandError::Tokenuse(e.to_string()))?;
+        tokenuse::secrets::delete(tokenuse::tools::codex_subscription::config::KEYRING_ACCOUNT)
+            .map_err(|e| CommandError::Tokenuse(e.to_string()))?;
         Ok(snapshot(app))
     })
     .await
@@ -529,4 +525,3 @@ pub(crate) async fn generate_report(
     })
     .await
 }
-

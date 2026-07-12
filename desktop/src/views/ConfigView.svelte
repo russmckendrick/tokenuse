@@ -21,6 +21,7 @@
   export let desktopUpdate: DesktopUpdateUiState;
   export let checkDesktopUpdate: () => void;
   export let installDesktopUpdate: () => void;
+  export let toggleSampleData: () => void;
   export let setOpenAtLoginFromEvent: (event: Event) => void;
   export let setShowDockOrTaskbarIconFromEvent: (event: Event) => void;
 
@@ -143,8 +144,22 @@
     {/if}
 
     <Panel title={snapshot.copy.panels.local_data} tone="green">
+      <div class="toggle-list">
+        <label class="toggle-row">
+          <span>
+            <strong class="sample-data-label">{snapshot.copy.status.sample_data}</strong>
+            <small>{snapshot.source === 'sample' ? snapshot.copy.desktop.enabled : snapshot.copy.desktop.disabled}</small>
+          </span>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={snapshot.source === 'sample'}
+            onchange={toggleSampleData}
+          />
+          <i aria-hidden="true"></i>
+        </label>
+      </div>
       <div class="config-facts">
-        <div><span>{snapshot.copy.tables.archive}</span><strong>{snapshot.source}</strong></div>
         <div><span>{snapshot.copy.tables.currency}</span><strong>{snapshot.currency}</strong></div>
         <div><span>{snapshot.copy.tables.exports}</span><strong>{snapshot.report_dir}</strong></div>
       </div>
@@ -215,3 +230,9 @@
     {/if}
   </section>
 </section>
+
+<style>
+  .sample-data-label {
+    text-transform: capitalize;
+  }
+</style>

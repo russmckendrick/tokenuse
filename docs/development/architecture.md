@@ -10,7 +10,7 @@ flowchart TD
     B -->|--list-projects| C[sync archive and print inventory]
     B -->|--refresh-prices| D[refresh embedded pricing books]
     B -->|--generate-currency-json| L[generate embedded currency snapshot]
-    B -->|no flag| M[load config.json and exchange-rates.json]
+    B -->|dashboard or --sample| M[load config.json and exchange-rates.json]
     M --> N[open archive.db]
     N --> O{archive has rows?}
     O -->|yes| P[load archive into Ingested]
@@ -21,18 +21,25 @@ flowchart TD
     P --> H{any calls or limits?}
     H -->|yes| I[DataSource::Live]
     H -->|no| J[DataSource::Sample]
-    I --> K[render TUI]
+    I --> U{--sample?}
+    U -->|yes| SF[show Sample; retain cached Live]
+    U -->|no| K[construct App]
     J --> K
-    K --> T[background sync every 15 min and on r]
+    SF --> K
+    K --> V{frontend}
+    V -->|terminal| TUI[ratatui event loop]
+    V -->|desktop| Desk[Tauri managed state + Svelte shell]
+    TUI --> T[background sync every 15 min and on r]
+    Desk --> T
 ```
 
 The durable archive lives at `<config dir>/tokenuse/archive.db`. If it already has rows, startup loads it immediately and queues an incremental background sync so the dashboard opens without reparsing every source. If the archive is empty, startup imports the legacy `~/.cache/tokenuse/ingest-cache.json` snapshot when present, performs one synchronous source sync, then renders from the archive. If the archive cannot be opened or migrated, the app falls back to raw `ingest::load()` for that run.
 
 Both Config pages can also clear local usage data after confirmation. That path deletes `archive.db`, recreates the schema, and immediately syncs local tool sources so per-source fingerprints are rebuilt from scratch. Config files, rates, pricing books, limit sidecars, legacy pricing snapshots, and generated reports are kept; archive-only history is lost if the original source files are no longer present.
 
-The startup loader lives in `src/runtime.rs` so both frontends use the same config, currency, archive, fallback, and background refresh setup. The desktop app stores an `App` instance behind Tauri managed state and exposes narrow commands for filters, session drill-down, config actions, shortcuts, refresh, reports, desktop settings, and the tray popover. It also runs a small backend monitor that continues calling `App::poll_reload()` while the webview is hidden, drains queued background usage alerts, and sends native notifications from Rust. See [Desktop app usage](../guides/desktop-usage.md).
+The startup loader lives in `src/runtime.rs` so both frontends use the same config, currency, archive, fallback, and background refresh setup. `tokenuse --sample` changes the TUI's initial visible source but retains any loaded live snapshot, so `Shift-D` can restore it. The desktop app stores an `App` instance behind Tauri managed state and exposes narrow commands for filters, pure page queries, session lookup, config actions, refresh, reports, desktop settings, and the tray popover. It also runs a small backend monitor that continues calling `App::poll_reload()` while the webview is hidden, drains queued background usage alerts, and sends native notifications from Rust. See [Desktop app usage](../guides/desktop-usage.md).
 
-New sessions written while the dashboard is open are visible after archive sync — press `r` (Dashboard, Usage, or Session pages) to sync on a background thread. The dashboard stays responsive during archive refreshes: the status bar shows `reloading…` while it runs, the next tick of the main loop drains completed results via `App::poll_reload`, and the status flips to `reloaded · N calls`. The refresher runs one sync at a time; if several results complete between UI ticks, the latest result wins. Failures or empty sync results keep the prior data unchanged.
+New sessions written while either frontend is open are visible after archive sync — press `r` to sync on a background thread. The previous snapshot remains visible during refresh. The TUI reports status in its title treatment; the desktop uses transient bottom-right toasts. Each event loop drains completed results through `App::poll_reload`. The refresher runs one sync at a time; if several results complete between UI ticks, the latest result wins. Failures or empty sync results keep the prior data unchanged.
 
 Desktop background alerts use the unfiltered live archive totals as their baseline: cost in USD, activity tokens, and call count across all tools/projects. Automatic refresh deltas accumulate until one configured threshold crosses, then an alert is queued, the baseline resets to the new totals, and the cooldown starts. Manual refreshes reset the baseline without alerting. The thresholds live under `background_alerts` in `config.json`; sample-only startup data does not trigger alerts. Desktop-only startup preferences live under `desktop` in `config.json` and currently control open-at-login plus Dock/taskbar visibility.
 
@@ -55,6 +62,12 @@ Every adapter emits `ParsedCall` from `src/tools/types.rs`. The important fields
 | `tools`, `bash_commands` | Tool call names and split shell commands |
 | `timestamp`, `session_id`, `project` | Aggregation and filtering keys |
 | `dedup_key` | Per-call key used by the shared run-level dedup set |
+
+## Model Identity
+
+Adapters retain the raw or inferred `ParsedCall.model`. Aggregation resolves `(tool, model)` through `src/models/registry.json`, producing a canonical id, display name, provider, and family before rows are grouped. The registry is ordered and first-match wins; tool-scoped automatic-router rules precede general rules. `models::canonical_key` lowercases identifiers and removes vendor paths, `@` pins, and trailing `-YYYYMMDD` dates, so equivalent ids fold into one row.
+
+Unknown ids use provider-aware readable fallbacks rather than appearing raw. The same canonical-key function is shared with pricing, but registry identity and pricing rows remain separate concerns. See [Model normalisation](models.md) for the schema and update workflow.
 
 ## Aggregation
 
@@ -86,9 +99,33 @@ The dashboard panels are built from the filtered call set:
 - Shell Commands: first word of split Bash commands.
 - MCP Servers: tool names shaped like `mcp__server__tool`, grouped by server.
 
-`App::sort` is a runtime-only `SortMode` (`Spend`, `Date`, `Tokens`) and defaults to spend on launch. Aggregators carry cost, activity tokens (`input + output + cache_creation + cache_read`), and latest timestamp until rows are ordered; count-style tables split a call's cost/tokens evenly across the row occurrences they emit while keeping occurrence counts unchanged. Dashboard views serialize as `DashboardData`, while Reports build a separate `ReportDataset` from raw `Ingested` calls and limits.
+`App::sort` is a runtime-only `SortMode` (`Spend`, `Date`, `Tokens`) and defaults to spend on launch. Aggregators carry cost, activity tokens (`input + output + cache_creation + cache_read`), and latest timestamp until rows are ordered; count-style tables split a call's cost/tokens evenly across the row occurrences they emit while keeping occurrence counts unchanged. Dashboard views serialize as `DashboardData`. Desktop-specific pure queries additionally build `AnalyticsData`, the cross-tool `ModelCatalogEntry` list, `ToolPageData`, and `SessionDetailView`. Reports build a separate `ReportDataset` from raw `Ingested` calls and limits.
 
-## Pages And Modals
+### Query Cache And Desktop Polling
+
+`App` owns a `QueryCache` keyed by every input that can affect a result: period, tool, project identity, sort mode, and currency as appropriate. It memoizes dashboard, Usage, model-catalog, and Analytics queries. `data_generation` increments when source data, source selection, currency, pricing, clear-data results, or refresh results change; the next query drops the old generation's entries before rebuilding.
+
+This cache is load-bearing for the desktop. The Svelte shell polls `get_snapshot` every three seconds, but an unchanged filter set reuses the prior aggregate and its leaked `&'static str` display values rather than rebuilding and leaking a new dashboard every poll. Page components request heavier data only when their reactive key changes.
+
+```mermaid
+flowchart LR
+    Poll[3s get_snapshot poll] --> Snap[shared dashboard + usage + filters + copy + data_generation]
+    Route[Svelte client route] --> Q{page query}
+    Q -->|Analytics| A[get_analytics]
+    Q -->|Models| M[get_model_catalog]
+    Q -->|dedicated tool| TP[get_tool_page]
+    Q -->|session| S[get_session_detail]
+    Snap --> Cache[App QueryCache]
+    A --> Cache
+    M --> Cache
+    TP --> Cache
+    Cache --> Ingested[Live Ingested or bundled Sample]
+    S --> Ingested
+    Refresh[refresh / source / currency / pricing change] --> Gen[data_generation++]
+    Gen --> Cache
+```
+
+## Frontends, Pages, And Modals
 
 The TUI is a small state machine over five pages (Overview, Deep Dive, Usage, Config, Session) plus picker, confirmation, detail, and help modals. Overview, Deep Dive, and Usage are reachable through the tab strip via `Tab` / `Shift-Tab` or their direct keys; Config and Session are sub-pages opened from any tab. `g` cycles the global sort mode, and `Shift-D` toggles the visible data source between live and sample data when live data is available. Shortcut definitions, help groups, and footer hints live in `src/keymap/keymap.json`; `src/keymap/mod.rs` validates the embedded JSON and resolves keys to action IDs. `src/app.rs` applies those actions to state, while rendering is dispatched from `src/ui/mod.rs`.
 
@@ -135,9 +172,22 @@ flowchart LR
 - **Report folder picker** (`FolderPickerModal`): directory-only picker rooted at the current report folder. `Use this folder` updates `App::export_dir` for the running session; `Esc` cancels without saving to `config.json`.
 - **Help** (`help_open: bool`): full keybinding reference rendered from the shared keymap, openable from any page with `h` or `?`. Closes with `h`, `?`, or `Esc`.
 
-The modal state is checked in priority order in `App::handle_key`: help, call detail, currency, clear-data confirmation, download confirmation, project, session, report folder picker, then report. The active context is passed to the keymap resolver before `App` applies the returned action. The folder picker is the only nested modal and sits on top of the report picker. The desktop app uses the same resolver through the `handle_shortcut` Tauri command, returning frontend effects for Svelte-owned modals and call-detail state.
+The modal state is checked in priority order in `App::handle_key`: help, call detail, currency, clear-data confirmation, download confirmation, project, session, report folder picker, then report. The active context is passed to the keymap resolver before `App` applies the returned action. The folder picker is the only nested modal and sits on top of the report picker.
 
-Terminal graph primitives live in `src/ui/graphs.rs`. They provide relative block sparklines, ranked bars, and compact gauges for TUI panels without adding another charting dependency. The desktop frontend keeps the same visual language, but renders webview activity charts, tray sparklines, and rank heat strips with D3-backed Svelte SVG components and applies Motion JS actions for panel, modal, gauge, and tray transitions. `DashboardData.activity_timeline` is the chronological graph source for Overview and Deep Dive in both frontends: 24 Hours and 7 Days use hourly buckets, This Month uses hourly buckets until day 15 of the month and daily buckets after that, and 30 Days/All Time use daily buckets. `Period::Today` is a rolling last-24-hours filter based on the current time, not a local calendar-day filter. The desktop tray popover requests a dedicated 24-hour snapshot so opening it does not mutate the main window's selected period, tool, project, or sort. `DashboardData.daily` remains the sort-aware table source.
+### Desktop Router And Screens
+
+Desktop page state is owned by `desktop/src/lib/router.svelte.ts`; it is deliberately not serialized through `App::page`. The persistent sidebar links Overview, Analytics, Tools, Models, Projects, every individual tool, and Config. Direct tool rows sort by the numeric call counts in the rolling 24-hour Usage snapshot, while primary routes stay fixed. `Tab` cycles the six primary sidebar screens. Session is a sub-route opened from Analytics, Projects, or the session picker and returns to Analytics.
+
+- **Overview** uses the shared dashboard query for hero KPIs, current utilisation, activity, projects, and models.
+- **Analytics** combines shared ranked tables with `get_analytics` stacked daily/tool data, hour-by-weekday activity, and provider/tool shares.
+- **Tools** shows all fixed 24-hour consoles at the parent route. A tool sub-route calls `get_tool_page` for period-aware KPIs, utilisation, projects, models, and sessions.
+- **Models** calls `get_model_catalog` for all five periods, groups canonical models by provider, and uses the active period for ranking and expanded per-tool splits.
+- **Projects** uses shared project/session rows and pure `get_session_detail` lookups for project-to-session-to-call drill-down.
+- **Config** operates on the shared `App` plus desktop settings, updater state, and the live/sample toggle.
+
+Desktop navigation and modal shortcuts resolve in `desktop/src/lib/shortcuts.ts` and `App.svelte`; typed data actions invoke narrow Tauri commands directly. The checked-in keymap still owns TUI behavior and the copy deck used for footer hints, but the desktop no longer calls a backend `handle_shortcut` or serializes TUI page state. Route changes use Motion actions, status changes become temporary toasts, and long page panels scroll internally beneath the sticky header.
+
+Terminal graph primitives live in `src/ui/graphs.rs`. They provide relative block sparklines, ranked bars, and compact gauges without another charting dependency. The desktop extends the same language with D3-backed SVG activity, stacked-bar, donut, and heatmap components plus rank strips and gauges. `DashboardData.activity_timeline` is the chronological source for TUI Overview/Deep Dive and desktop Overview/Analytics: 24 Hours and 7 Days use hourly buckets, This Month uses hourly buckets until day 15 and daily buckets afterward, and 30 Days/All Time use daily buckets. `Period::Today` is a rolling last-24-hours filter, not a local calendar day. The tray requests a dedicated 24-hour snapshot and renders compact totals plus urgent utilisation rows without mutating main-window filters. `DashboardData.daily` remains the sort-aware table source.
 
 ## Project Identity
 
@@ -152,7 +202,7 @@ Raw project strings come from each tool's local data. Before display, `tokenuse`
 
 ## Archive And Sync
 
-`src/archive.rs` owns the SQLite archive. It stores full `ParsedCall` rows, append-only limit snapshots, and per-source fingerprints in `source_state`. Calls are unique on `(tool, dedup_key)`, so a changed source can be reparsed safely without duplicating historical calls. Source deletion never removes archive rows; once tokenuse has imported a call, it remains available even if the original tool history is later cleared.
+`src/archive.rs` owns the SQLite archive. Schema v3 stores full `ParsedCall` rows, append-only limit snapshots, and per-source fingerprints in `source_state`; its migration drops the removed advice tables while retaining calls and limits. Older binaries reject a v3 archive rather than opening a newer schema, so downgrading requires deleting `archive.db` and rebuilding from source history. Calls are unique on `(tool, dedup_key)`, so a changed source can be reparsed safely without duplicating historical calls. Source deletion never removes archive rows; once tokenuse has imported a call, it remains available even if the original tool history is later cleared.
 
 The source fingerprint hook defaults to file metadata for file-backed sources and recursive directory metadata for directory-backed sources. Sources are tagged as session or limit sources. Session sources must parse calls successfully before their fingerprint is advanced; limit sidecars must parse limit snapshots successfully before their fingerprint is advanced. When a source fingerprint has not changed, sync skips parsing it. When it changes, sync parses the source, inserts only new call keys, stores any new limit snapshots, and updates the fingerprint.
 
@@ -222,7 +272,7 @@ See [Pricing and cache rates](pricing.md) for provider source quotes, current ca
 
 ## Reports
 
-Press `e` on Dashboard, Usage, or Session pages to open the report picker. Output defaults to the user's Downloads folder, falling back to `~/Downloads` and then `<config dir>/tokenuse/reports/` if the platform does not expose a Downloads directory. Press `f` or `b` inside the report picker to choose another folder for the current TUI session. Report files never overwrite prior runs: every filename is timestamped with `YYYYMMDDTHHMMSS` and slugged with the chosen period and project scope.
+Press `e` on Overview, Deep Dive, Usage, or Session to open the report picker. Output defaults to the user's Downloads folder, falling back to `~/Downloads` and then `<config dir>/tokenuse/reports/` if the platform does not expose a Downloads directory. Press `f` or `b` inside the report picker to choose another folder for the current TUI session. Report files never overwrite prior runs: every filename is timestamped with `YYYYMMDDTHHMMSS` and slugged with the chosen period and project scope.
 
 Reports are built from raw `Ingested` calls and limits through `ReportDataset`, not from the visible dashboard snapshot. Scope is period plus project or all projects; tools are always included together. Redaction is off by default and, when enabled, replaces prompts, shell commands, raw paths, session IDs, and dedup keys with report-local placeholders while preserving totals and costs.
 

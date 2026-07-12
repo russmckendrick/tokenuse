@@ -5,6 +5,7 @@
 
   export let rows: StackedDayMetric[] = [];
   export let ariaLabel = '';
+  export let emptyLabel = '';
 
   const WIDTH = 640;
   const HEIGHT = 150;
@@ -34,7 +35,8 @@
 </script>
 
 <div class="stacked-bars" role="img" aria-label={ariaLabel}>
-  <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} preserveAspectRatio="none">
+  {#if rows.length && maxTotal > 0}
+    <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} preserveAspectRatio="none">
     <line x1="0" x2={WIDTH} y1={PLOT_H} y2={PLOT_H} class="baseline" />
     {#each rows as row, index}
       {#each slices(row, index) as slice}
@@ -63,7 +65,10 @@
         </text>
       {/if}
     {/each}
-  </svg>
+    </svg>
+  {:else}
+    <div class="chart-empty">{emptyLabel}</div>
+  {/if}
 
   {#if hovered !== null && rows[hovered]}
     <div class="chart-tooltip">
@@ -90,6 +95,15 @@
     display: block;
     width: 100%;
     height: 150px;
+  }
+
+  .chart-empty {
+    min-height: 150px;
+    display: grid;
+    place-items: center;
+    color: var(--color-muted-2);
+    font-family: var(--font-ui);
+    font-size: 12px;
   }
 
   .baseline {

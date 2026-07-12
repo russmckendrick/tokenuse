@@ -356,6 +356,60 @@ mod tests {
     }
 
     #[test]
+    fn empty_dashboard_tables_render_explanatory_rows() {
+        let backend = TestBackend::new(170, 80);
+        let mut terminal = Terminal::new(backend).expect("create terminal");
+        let mut app = App::with_source(
+            crate::app::DataSource::Live(crate::ingest::Ingested {
+                calls: Vec::new(),
+                limits: Vec::new(),
+            }),
+            None,
+        );
+        app.page = Page::DeepDive;
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("draw empty dashboard");
+        let rendered = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+
+        assert!(rendered.contains(&copy().empty.no_rows));
+    }
+
+    #[test]
+    fn empty_usage_consoles_render_idle_rows() {
+        let backend = TestBackend::new(170, 80);
+        let mut terminal = Terminal::new(backend).expect("create terminal");
+        let mut app = App::with_source(
+            crate::app::DataSource::Live(crate::ingest::Ingested {
+                calls: Vec::new(),
+                limits: Vec::new(),
+            }),
+            None,
+        );
+        app.page = Page::Usage;
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("draw empty usage consoles");
+        let rendered = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+
+        assert!(rendered.contains(&copy().usage.idle));
+    }
+
+    #[test]
     fn overview_render_smoke_test() {
         let backend = TestBackend::new(170, 80);
         let mut terminal = Terminal::new(backend).expect("create terminal");
@@ -389,7 +443,7 @@ mod tests {
 
     #[test]
     fn h_opens_help_modal_and_h_or_escape_closes_it() {
-        let backend = TestBackend::new(170, 80);
+        let backend = TestBackend::new(120, 40);
         let mut terminal = Terminal::new(backend).expect("create terminal");
         let mut app = App::default();
 
@@ -409,10 +463,18 @@ mod tests {
         let copy = copy();
         assert!(rendered.contains(&copy.modals.help_title));
         assert!(rendered.contains("keybindings"));
-        assert!(rendered.contains(&copy.keymap.help[1].title));
-        assert!(rendered.contains(&copy.keymap.help[6].title));
+        for group in &copy.keymap.help {
+            assert!(rendered.contains(&group.title));
+        }
         let help_item = &copy.keymap.help[0].items[1];
         assert!(rendered.contains(&help_item.label));
+        let last_help_item = copy
+            .keymap
+            .help
+            .last()
+            .and_then(|group| group.items.last())
+            .expect("help deck has a final item");
+        assert!(rendered.contains(&last_help_item.label));
 
         app.handle_key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));
         assert!(!app.help_open);
@@ -475,7 +537,7 @@ mod tests {
         assert!(rendered.contains(crate::config::CURRENCY_RATES_URL));
         assert!(rendered.contains("pricing-upstream.json"));
         assert!(rendered.contains("pricing-overrides.json"));
-        assert!(rendered.contains("Esc dashboard"));
+        assert!(rendered.contains("Esc Deep Dive"));
     }
 
     #[test]

@@ -50,10 +50,13 @@
   --chart-series-8: var(--color-muted);
 
   /* Sidebar rail */
-  --sidebar-width: 216px;
+  --sidebar-width: 200px;
   --sidebar-width-collapsed: 64px;
   --sidebar-item-height: 32px;
   --sidebar-icon-size: 16px;
+
+  /* Bounded result lists */
+  --list-panel-max-height: clamp(260px, calc(100vh - 220px), 480px);
 
   /* Typography */
   --font-ui: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
