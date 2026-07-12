@@ -1,7 +1,7 @@
 ---
-version: "alpha"
+version: "beta"
 name: "Token Use Console"
-description: "A dense dark design system for a token usage analytics dashboard, with a shared root and two tracks: terminal (TUI) and desktop (Tauri + Svelte)."
+description: "A dense dark design system for a token usage analytics dashboard, with a shared root and two deliberately diverged tracks: terminal (TUI) and desktop (Tauri + Svelte)."
 colors:
   primary: "#FF8F40"
   secondary: "#62A6FF"
@@ -15,6 +15,14 @@ colors:
   cyan: "#4DF3E8"
   magenta: "#F05AF2"
   bar-empty: "#292D42"
+  providers:
+    anthropic: "#D97757"
+    openai: "#9FB8AD"
+    google: "#8AB4F8"
+    github: "#8B949E"
+    cursor: "#7A7FEE"
+    xai: "#C8CDD8"
+    other: "#A1A7C3"
 typography:
   display:
     fontFamily: "JetBrains Mono, SFMono-Regular, Menlo, Consolas, monospace"
@@ -74,6 +82,35 @@ desktop:
     numeric:
       fontFamily: "JetBrains Mono, SFMono-Regular, Menlo, Consolas, monospace"
       fontFeatureSettings: "'tnum' 1, 'zero' 1"
+    display-lg:
+      fontFamily: "JetBrains Mono, SFMono-Regular, Menlo, Consolas, monospace"
+      fontSize: "20px"
+      fontWeight: 700
+      lineHeight: 1.15
+      fontFeatureSettings: "'tnum' 1, 'zero' 1"
+    display-xl:
+      fontFamily: "JetBrains Mono, SFMono-Regular, Menlo, Consolas, monospace"
+      fontSize: "28px"
+      fontWeight: 700
+      lineHeight: 1.1
+      fontFeatureSettings: "'tnum' 1, 'zero' 1"
+  sidebar:
+    width: "216px"
+    width-collapsed: "64px"
+    item-height: "32px"
+    icon-size: "16px"
+  charts:
+    grid: "#292D42"
+    axis-label-size: "10px"
+    series:
+      - "{colors.primary}"
+      - "{colors.cyan}"
+      - "{colors.secondary}"
+      - "{colors.tertiary}"
+      - "{colors.magenta}"
+      - "{colors.warning}"
+      - "{colors.error}"
+      - "{colors.muted}"
   rounded:
     none: "0px"
     sm: "3px"
@@ -104,12 +141,6 @@ components:
     typography: "{typography.body}"
     rounded: "{rounded.none}"
     padding: "{spacing.sm}"
-  desktop-topbar:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.primary}"
-    typography: "{desktop.typography.heading}"
-    rounded: "{desktop.rounded.md}"
-    padding: "{desktop.spacing.lg}"
   brand-title:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.primary}"
@@ -122,6 +153,12 @@ components:
     typography: "{typography.body}"
     rounded: "{rounded.sm}"
     padding: "{spacing.md}"
+  desktop-sidebar:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.on-surface}"
+    typography: "{desktop.typography.ui}"
+    rounded: "{desktop.rounded.none}"
+    padding: "{desktop.spacing.md}"
   desktop-panel:
     backgroundColor: "{colors.neutral}"
     textColor: "{colors.on-surface}"
@@ -137,9 +174,15 @@ components:
   desktop-kpi-tile:
     backgroundColor: "{colors.neutral}"
     textColor: "{colors.on-surface}"
-    typography: "{desktop.typography.numeric}"
+    typography: "{desktop.typography.display-xl}"
     rounded: "{desktop.rounded.md}"
     padding: "{desktop.spacing.lg}"
+  desktop-status-bar:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.muted}"
+    typography: "{desktop.typography.label}"
+    rounded: "{desktop.rounded.none}"
+    padding: "{desktop.spacing.xs} {desktop.spacing.lg}"
   desktop-status-pill:
     backgroundColor: "{colors.neutral}"
     textColor: "{colors.muted}"
@@ -198,126 +241,160 @@ components:
 
 ## Overview
 
-Token Use should feel like a compact operator console for people who care about token spend, model behavior, and workflow efficiency. The interface is dark, dense, and calm, with bright terminal accents used as structural signposts rather than decoration. The desired response is quick orientation: the user should be able to scan costs, calls, hot spots, and command hints without leaving the keyboard.
+Token Use is a local-only console for people who care about token spend, model behavior, and rate-limit headroom. The interface is dark, dense, and calm, with bright terminal accents used as structural signposts rather than decoration. The desired response is quick orientation: costs, calls, hot spots, and utilisation readable at a glance.
 
-The brand mark is the orange bars symbol from `desktop/tokenusebars.svg`. Desktop chrome should pair the bars-only mark with the product name `Token Use`; reserve `tokenuse` for command names, package identifiers, URLs, and other literal technical strings.
+The system has a shared root and **two deliberately diverged tracks**:
 
-This system has a shared root and two tracks:
+- **TUI track** — the terminal renderer. A dense single-dashboard operator console: strict monospace, square corners, flat depth, no animation, three tabs (Overview, Deep Dive, Usage) plus Config and Session sub-pages. Everything below this overview that is not explicitly under "Desktop Track" applies to the TUI.
+- **Desktop track** — the Tauri + Svelte app. A modern sidebar-rail analytics application with more screens and more room: Overview, Analytics, Tools, Models, Projects, and Config, each a scrollable page. Graphs and utilisation are the hero; provider icons identify models at a glance. The desktop is not a terminal copy — it shares the palette, the brand mark, and the data-dense table DNA, and diverges everywhere a desktop app earns the space.
 
-- **TUI track** — the terminal renderer. Strict monospace, square corners, flat depth, no animation. Everything below this overview that is not explicitly under "Desktop Track" applies here.
-- **Desktop track** — the Tauri + Svelte app. Inherits the same color palette and brand identity, but allows a sans-serif UI font for chrome and labels, an expanded spacing scale, 8px corners on outer surfaces, and a defined motion vocabulary. See the **Desktop Track** section below.
+The Rust core is the data and query layer both tracks render from. It owns filters, aggregation, the model registry (canonical model names, providers, families), and memoized query results.
 
-The two tracks must stay visually related: same accent colors, same data-dense tables, same brand mark. They diverge only where the desktop surface needs to feel like a calm desktop app instead of a literal terminal copy.
+The brand mark is the orange bars symbol from `desktop/tokenusebars.svg`. Desktop chrome pairs the bars-only mark with the product name `Token Use`; reserve `tokenuse` for command names, package identifiers, URLs, and other literal technical strings.
 
-## Colors
+## Shared Foundation
 
-- **Primary (#FF8F40):** active period/provider states, summary borders, brand title text, and command keys.
-- **Secondary (#62A6FF):** informational panels such as Daily Activity.
+### Colors
+
+- **Primary (#FF8F40):** active states, summary borders, brand title text, command keys, and the spend series.
+- **Secondary (#62A6FF):** informational panels and secondary series.
 - **Tertiary (#4CF2A0):** successful or efficient usage signals.
-- **Warning (#FFD60A):** money, token savings, and metric values that need attention.
-- **Error (#FF5F6D):** risk, high severity optimization items, and Top Sessions.
+- **Warning (#FFD60A):** money values and metrics that need attention.
+- **Error (#FF5F6D):** risk, saturation, and the hot end of heat ramps.
 - **Cyan (#4DF3E8) and Magenta (#F05AF2):** secondary category accents for tools, models, and MCP-like surfaces.
 - **Surface and Neutral:** layered dark blue-gray backgrounds; hierarchy comes from borders and color, not shadows.
-- **Brand bars:** the icon may use a warm orange gradient within the primary family, from pale amber through orange to coral, but this gradient is limited to the app icon and bars mark.
+- **Provider accents** (`colors.providers`): one muted brand-adjacent accent per model provider — Anthropic clay, OpenAI sage, Google blue, GitHub gray, Cursor violet, xAI silver. Tuned to sit quietly on the dark surface; they identify, never decorate. Desktop-only; the TUI keeps its five-color accent set.
+- **Brand bars:** the icon may use a warm orange gradient within the primary family, but this gradient is limited to the app icon and bars mark.
 
-## Typography
+### Data-derived names
 
-The TUI uses a monospace stack everywhere. Labels and values should align cleanly in columns, with bold reserved for the brand title, panel titles, active navigation, and important numeric values. Avoid display-scale type inside the dashboard; the interface should stay compact enough for repeated terminal use.
+Model names, provider names, and family names come from the model registry (`src/models/registry.json`) and are data, not copy. Panel titles, empty states, and every other shipped string live in `src/copy/copy.json`.
 
-The Desktop track splits typography into a sans-serif UI track (Inter) for chrome and prose and a monospace numeric track (JetBrains Mono) for values; see **Desktop Track** below.
+### Density values
 
-## Layout
+Both tracks favor information density over whitespace: right-aligned numerics, left-aligned labels, tabular figures, one-pixel borders. The desktop relaxes density only in hero bands (KPIs, page headers, hero charts) — tables stay tight everywhere.
 
-The layout is a high-density grid with thin gaps, fixed-height summary/nav/footer bands, and proportional two-column content rows. Panels should preserve predictable column alignment at common terminal widths, degrading by truncating long labels before hiding key metrics.
+## TUI Track
 
-Desktop topbars should stay quiet: bars mark, `Token Use`, centered navigation, and compact icon buttons. Do not spend topbar space on version labels, live/source badges, or explanatory copy; put status in the status line and data provenance in Config.
+The terminal experience is unchanged in philosophy: a compact operator console rendered with native TUI widgets.
 
-## Elevation & Depth
-
-In the TUI, depth is flat. Borders, foreground color, and background tone provide hierarchy; shadows do not belong in the terminal implementation. Gradients are reserved for the brand bars asset only; heat bars should use stepped color ramps to imply magnitude.
-
-In the Desktop track, in-flow panels remain flat — no drop-shadow halos. A single subtle elevation token (`desktop.elevation.popover`) is reserved for transient surfaces: dropdowns, popovers, modals, the tray popover. Tiles, tables, status bars, and inline chips stay flat.
-
-## Shapes
-
-TUI panels use square or nearly square corners. Any rounded interpretation should stay at 2-4px in the TUI. The bars inside the brand mark may be softly rounded, but the app icon background stays solid and square-cornered.
-
-In the Desktop track, outer panels and KPI tiles may use 8px corners (`desktop.rounded.md`). Inner chips, badges, pills, and inline controls stay at 3px (`desktop.rounded.sm`). Status pills are fully rounded (`999px`).
-
-## Iconography
-
-Use `desktop/tokenusebars.svg` as the source asset for generated app icons. The full icon keeps its dark square background; in app chrome, use only the four orange bars next to `Token Use` so the header stays compact and recognizable.
-
-## Components
-
-Dashboard panels use one-pixel borders, a colored title, and dense table content. The summary panel uses the primary border and brighter numeric emphasis. Footer commands are inline key/value pairs with orange keys and muted labels.
-
-Desktop topbars use the primary border and surface background. The brand area is a tight horizontal group: bars mark first, `Token Use` second, with no version or source chip beside it.
+- Strict monospace (JetBrains Mono stack), square or nearly square corners (2–4px max), flat depth, no animation, no shadows.
+- Tab strip: **Overview, Deep Dive, Usage**. Config and Session are sub-pages reachable from any tab. Footer command hints stay visible at all times.
+- Panels use one-pixel borders, a colored title, and dense table content. The summary panel uses the primary border and brighter numeric emphasis.
+- Heat bars use stepped color ramps to imply magnitude; gradients are reserved for the brand asset.
+- Bold is reserved for the brand title, panel titles, active navigation, and important numeric values. No display-scale type inside the dashboard.
+- Layout is a high-density grid with thin gaps and fixed-height summary/nav/footer bands; panels preserve predictable column alignment at common terminal widths, truncating long labels before hiding key metrics.
 
 ## Desktop Track
 
-The Desktop track inherits every shared token above and adds the following.
+The desktop track inherits the shared foundation and is otherwise its own application. It must read as a native analytics tool — Linear-calm chrome around chart-forward pages — not as a themed web page and not as a terminal emulator.
 
 ### Typography
 
-A dual-font system. Inter (variable, weights 400/500/600/700) is the UI font; JetBrains Mono is reserved for numbers, IDs, paths, code blocks, and table data cells where column alignment matters.
+Dual-font system. Inter (variable, 400/500/600/700) is the UI font; JetBrains Mono is for numbers, IDs, paths, and table data cells. Both are bundled via `@fontsource` — the app never reaches a font CDN at runtime.
 
-- **`desktop.typography.ui`** — base 13px Inter for nav, panel titles (when not branded as a TUI panel title), button text, dropdown labels, prose.
-- **`desktop.typography.heading`** — 13px Inter 600 for panel titles and section headings on Config and modals.
-- **`desktop.typography.label`** — 11px Inter 600 uppercase with letter-spacing for KPI labels, table headers, status pill text.
+- **`desktop.typography.ui`** — base 13px Inter for nav, buttons, dropdown labels, prose.
+- **`desktop.typography.heading`** — 13px Inter 600 for panel titles and section headings.
+- **`desktop.typography.label`** — 11px Inter 600 uppercase with letter-spacing for KPI labels, table headers, status bar text.
 - **`desktop.typography.body`** — 13px Inter 400 for descriptions and modal copy.
-- **`desktop.typography.numeric`** — JetBrains Mono with `font-variant-numeric: tabular-nums slashed-zero` for KPI values, costs, call counts, token counts, durations, session IDs, file paths, and code blocks.
+- **`desktop.typography.numeric`** — JetBrains Mono with `tabular-nums slashed-zero` for costs, counts, durations, IDs, paths.
+- **`desktop.typography.display-lg` (20px) and `display-xl` (28px)** — JetBrains Mono hero numerics. Reserved for the Overview KPI band and per-page hero numbers. Never inside tables, never for prose.
 
-Use the `.mono` utility class (or set `font-family: var(--font-mono)` directly) on any cell or span containing a number or identifier.
+Use the `.mono` utility class (or `font-family: var(--font-mono)`) on any cell or span containing a number or identifier.
 
-### Spacing
+### Sidebar rail
 
-The desktop spacing scale expands the lower end and adds higher-end tokens for vertical rhythm between groups: `xs 2 / sm 4 / md 8 / lg 12 / xl 16 / 2xl 24 / 3xl 32`. Use `xl` between sibling panels in a grid; use `2xl` between unrelated sections in a page (e.g. between the filter strip and the page content); use `3xl` only for top-level page padding.
+The primary navigation is a fixed left rail, `desktop.sidebar.width` (216px) expanded and `width-collapsed` (64px) when collapsed; the collapse toggle lives at the rail's foot and the choice persists in desktop settings.
 
-### Shapes
+- Brand block at top: bars mark + `Token Use` (mark only when collapsed).
+- Primary items — Overview, Analytics, Tools, Models, Projects — each a 32px row: 16px icon, 13px Inter label, `rounded.sm` hover tint, primary-colored active indicator (2px inset bar on the left edge).
+- **Tools expands** to per-tool children (Claude Code, Codex, Copilot, Cursor, Gemini), each with its provider icon at 16px monochrome.
+- Config is pinned at the bottom with the data-source status dot beside it.
+- The rail is flat: surface background, hairline right border, no elevation, no rounded container.
 
-Outer panels and KPI tiles use `desktop.rounded.md` (8px). Inner chips, badges, segmented controls, and inline pills use `desktop.rounded.sm` (3px). Status pills and inline notice pills use `999px` for full rounding. Tables remain flat — no rounded rows.
+### Page anatomy and scrolling
 
-### Elevation
+The shell is fixed (sidebar + status bar); each page scrolls vertically on its own. No page may scroll horizontally — wide tables scroll inside their panel.
 
-Only transient surfaces (dropdown menus, modals, popovers, tray popover) may use `desktop.elevation.popover`. In-flow panels, KPI tiles, table rows, and the status pill stay flat. Never stack a card inside a card.
+- **Sticky page header** at the top of every page: page title (13px Inter 600), page-scoped filter chips (period, and where relevant tool/sort/project), and page actions (refresh, export). The header keeps the hairline bottom border while content scrolls under it.
+- Grid zones below the header use `desktop.spacing.xl` between sibling panels and `2xl` between unrelated sections; `3xl` is page padding only.
+- Panels are `desktop-panel` (8px corners, hairline border, neutral background, flat). Never stack a card inside a card.
+
+### Screen inventory
+
+Six screens. Data pages fetch page-scoped queries from the core (memoized per filter set); the 3-second snapshot poll carries only the shared dashboard, limits, and filter state.
+
+- **Overview** — the daily read. Top: KPI hero band (cost in `display-xl`, calls/sessions/cache-hit/in-out in `display-lg`) with count-up on load. Second: **utilisation strip** — one compact gauge per active tool limit (5h/weekly/credits), the fastest answer to "am I about to hit a wall?". Third: the hero activity chart (spend bars + calls line, full width, hover crosshair). Bottom: top projects and top models tables side by side.
+- **Analytics** — the time explorer (evolves Deep Dive). Hero area+bar combo with period framing, stacked per-tool daily bars, hour×weekday heatmap of activity, cache-efficiency panel, and the ranked tables (projects, sessions, models, commands, MCP servers).
+- **Tools** — one dedicated console per tool, selected from the sidebar's Tools children. Hero numbers for the tool's 24h/period spend, its limit gauges (UsageConsole lineage), its 24-hour pulse, top models (with provider icons), and the projects that used it.
+- **Models** — the unified catalog. Rows grouped by provider (icon + provider label as group headers), each canonical model with cost, calls, tokens, cache-hit, and an expandable per-tool split showing which tools drove the spend. This is the one place the same model's use across Claude Code, Copilot, and Cursor reads as one row.
+- **Projects** — master list of projects with per-project spend and tool mix; selecting a project reveals its sessions; selecting a session opens the call-level detail pane (timestamp, model, tokens, cache rates, prompt) without leaving the page.
+- **Config** — currency, data downloads, limit sidecars and subscription sync, desktop behavior toggles, updates, and clear-data. Quiet page; no charts.
+
+### Chart vocabulary
+
+All charts are hand-rolled SVG driven by d3 scales — no chart library. Every fill, stroke, and ramp comes from chart tokens (`--chart-*`) or provider tokens; **no hex literals inside components**.
+
+- **Hero area+bar combo** — spend bars (primary) with calls line+area (cyan), monotone curve, rAF-throttled hover crosshair and tooltip. The Overview and Analytics hero.
+- **Stacked bars** — per-tool or per-provider composition over time; segment colors from the series ramp or provider accents, hairline gaps between segments.
+- **Donut** — share-of-total (spend by provider or tool); 3px-radius corner caps, center label in `display-lg`, legend as a right-hand table, never floating labels.
+- **Heatmap** — hour × weekday activity; stepped ramp from `bar-empty` through secondary to primary to error at saturation. Cells square, 1px gaps.
+- **Gauges** — horizontal utilisation bars with threshold tones: tertiary below 60%, warning 60–88%, error above. Track is `bar-empty`; label left, percentage right in mono.
+- **Sparklines** — tick bars + trend line for compact per-tool cadence (tray, tool cards).
+- **Rank bars** — 12-segment discrete meters in tables, stepped blue→yellow→red ramp.
+
+Axis and framing rules: gridlines `desktop.charts.grid` hairlines, horizontal only where they aid reading; axis labels 10px muted Inter, no axis titles when the panel title says it; tooltips on `neutral` surface with `popover` elevation, values in mono; legends are text rows, never overlaid on the plot. Series colors are assigned in ramp order and stay stable within a page.
+
+### Provider identity
+
+Vendored SVG marks (from the MIT-licensed lobehub icon set, attribution in `desktop/LICENSES-THIRD-PARTY.md`) identify providers: Anthropic, OpenAI, Google, GitHub, Cursor, xAI, plus a neutral fallback glyph.
+
+- In tables, the sidebar, and any dense row: **16px, monochrome `currentColor`**, inheriting the row's text color. Never brand-colored inside tables.
+- In page headers, Models group headers, and Tools hero bands: **20px+, provider accent color** (`colors.providers.*`).
+- Icons always pair with a text label at first use; never icon-only identification in data tables.
+
+### Elevation, shapes, depth
+
+Outer panels and KPI tiles use `desktop.rounded.md` (8px) — this is the cap. Inner chips, badges, segmented controls use 3px. Status pills are fully rounded. In-flow surfaces are flat; only transient surfaces (dropdowns, popovers, modals, tray popover) use `desktop.elevation.popover`. No drop-shadow halos, no stacked cards, no decorative gradients — the wow lives in the charts and hero numerics, not the chrome.
 
 ### Motion
 
-The desktop motion vocabulary is built on the existing `motion` library (npm `motion` v12+) in `desktop/src/motion.ts`. All animations must respect `prefers-reduced-motion: reduce` via the helper already in that module.
+Built on the `motion` library in `desktop/src/motion.ts`; every animation respects `prefers-reduced-motion`.
 
-**Durations**
+- **Route change** — 120ms cross-fade between pages.
+- **Sidebar collapse/expand** — 180ms standard width tween; labels fade at 120ms.
+- **Panel reveal** — staggered (25ms stagger, 220ms each) on page mount.
+- **Hero numerics** — `countUp` on Overview KPI band load and data-generation change.
+- **Chart series draw-in** — 280ms slow ease on first render; subsequent data updates tween bars/paths without replaying the entrance.
+- **Gauges and rank bars** — fill tween 280ms slow.
+- **Status pill** — enter translateY 4→0 + fade 180ms decel; exit fade 120ms accel.
+- **Hover lift** — background tint via CSS custom property, 120ms; no JS layout reads.
 
-- `fast 120ms` — hover transitions, focus rings, status pill enter/exit.
-- `base 180ms` — segmented-control indicator slide, panel reveal, modal scrim fade, inline notice enter/exit.
-- `slow 280ms` — bar fills (gauges, rank bars), chart refresh.
+### Empty states
 
-**Easings**
+One pattern everywhere: muted 16px icon, one-line explanation from a copy key (`empty.*`), optional single action. Idle tools keep their console frame with the empty pattern inside, so the user still sees the tool was checked. No illustrations, no oversized art.
 
-- `standard cubic-bezier(.2,.8,.2,1)` — default for most state changes.
-- `accel cubic-bezier(.4,0,1,1)` — exit transitions (modal close, notice dismiss).
-- `decel cubic-bezier(0,0,.2,1)` — entrance transitions (reveal, pill in).
+### Status bar
 
-**Patterns**
+A slim 24px bottom status bar replaces the TUI-style footer: left — data-source pill (live/sample), archive status, last refresh; right — contextual keyboard hints for the active page (muted, 11px labels). Keyboard shortcuts stay discoverable on-screen at all times; the full reference stays on `h`/`?`.
 
-- **Page transition** — cross-fade 120ms between view changes triggered by nav click.
-- **Panel reveal** — staggered (25ms stagger, 220ms each) using `staggeredReveal` on page mount.
-- **Segmented indicator** — a positioned underline `<div>` whose `x`/`width` tween 180ms standard when the active tab changes.
-- **Status pill** — enter (translateY 4 → 0, opacity 0 → 1, 180ms decel) and exit (opacity 1 → 0, 120ms accel).
-- **Hover lift** — subtle background tint tween via a CSS custom property, 120ms standard. No layout reads in JS.
+## Iconography
+
+Use `desktop/tokenusebars.svg` as the source asset for generated app icons. The full icon keeps its dark square background; in app chrome, use only the four orange bars next to `Token Use`. Interface icons are lucide at 16px; provider marks follow the Provider identity rules above.
 
 ## Do's and Don'ts
 
-- Do keep the first screen as the actual dashboard, not a splash or marketing page.
-- Do keep metric values right-aligned and labels left-aligned for fast scanning.
-- Do use color to group panels and severity, but keep the dark surface dominant.
+- Do keep the first screen a working dashboard — never a splash, marketing, or onboarding page.
+- Do keep metric values right-aligned, labels left-aligned, and numerics in mono with `tabular-nums`.
+- Do use color to group panels and encode magnitude, keeping the dark surface dominant.
 - Do use `Token Use` for product-facing desktop labels and `tokenuse` only for literal technical identifiers.
 - Do generate desktop app icons from `desktop/tokenusebars.svg` and use the bars-only mark in app chrome.
 - Do prefer native TUI widgets and layout primitives over custom terminal drawing.
-- Do use Inter for UI chrome on the Desktop track and JetBrains Mono for numbers, IDs, and table data cells with `tabular-nums`.
-- Do bundle Inter via `@fontsource-variable/inter` so the app never reaches a font CDN at runtime.
-- Don't add decorative backgrounds, oversized type, or large empty hero areas.
-- Don't add drop-shadow halos, stacked cards, or rounded card styling that makes the desktop feel like a generic web mockup. The 8px corners on outer Desktop panels are the cap, paired with hairline borders and flat depth.
-- Don't show version numbers or live/source badges in the primary topbar.
-- Don't hide keyboard commands behind help text; keep the footer visible (on Desktop it may be downsized and muted, but it must remain on-screen).
-- Don't introduce a third font family. The Desktop track is strictly Inter + JetBrains Mono; the TUI track is strictly JetBrains Mono.
+- Do bundle Inter and JetBrains Mono via `@fontsource` so the app never reaches a font CDN at runtime.
+- Do route every chart color through chart or provider tokens; a hex literal in a component is a defect.
+- Don't add decorative backgrounds, oversized type outside the hero bands, or large empty hero areas.
+- Don't add drop-shadow halos, stacked cards, or rounded-card styling that makes the desktop feel like a generic web mockup. The 8px corners on outer desktop panels are the cap, paired with hairline borders and flat depth.
+- Don't show version numbers or live/source badges in the sidebar brand block; provenance lives in the status bar and Config.
+- Don't hide keyboard commands behind help text; the status bar keeps them on-screen.
+- Don't introduce a third font family, and don't use brand-colored provider icons inside dense tables.
+- Don't ship a screen that renders raw model identifiers; every model name flows through the registry.
