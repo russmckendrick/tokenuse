@@ -1,16 +1,20 @@
 import { type Channel, invoke } from '@tauri-apps/api/core';
 import type {
+  AnalyticsData,
   DesktopSnapshot,
   DesktopUpdateDownloadEvent,
   DesktopUpdateMetadata,
+  ModelCatalogEntry,
   PageId,
   PeriodId,
   ProjectOption,
   ReportFormatId,
   ReportResponse,
+  SessionDetailView,
   ShortcutInput,
   ShortcutResponse,
   SortId,
+  ToolPageData,
   TraySnapshot,
   ToolId
 } from './types';
@@ -28,6 +32,12 @@ export const api = {
   openSession: (key: string) => invoke<DesktopSnapshot>('open_session', { key }),
   closeSession: () => invoke<DesktopSnapshot>('close_session'),
   setCurrency: (code: string) => invoke<DesktopSnapshot>('set_currency', { code }),
+  getModelCatalog: (period: PeriodId) =>
+    invoke<ModelCatalogEntry[]>('get_model_catalog', { period }),
+  getToolPage: (tool: ToolId) => invoke<ToolPageData>('get_tool_page', { tool }),
+  getAnalytics: (period: PeriodId) => invoke<AnalyticsData>('get_analytics', { period }),
+  getSessionDetail: (key: string) =>
+    invoke<SessionDetailView | null>('get_session_detail', { key }),
   setOpenAtLogin: (enabled: boolean) =>
     invoke<DesktopSnapshot>('set_open_at_login', { enabled }),
   setShowDockOrTaskbarIcon: (enabled: boolean) =>

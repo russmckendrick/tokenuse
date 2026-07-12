@@ -13,8 +13,8 @@
   import StatusBar from './shell/StatusBar.svelte';
   import TrayPopover from './TrayPopover.svelte';
   import OverviewPage from './routes/OverviewPage.svelte';
+  import AnalyticsPage from './routes/AnalyticsPage.svelte';
   import ConfigView from './views/ConfigView.svelte';
-  import DeepDiveView from './views/DeepDiveView.svelte';
   import SessionView from './views/SessionView.svelte';
   import UsageView from './views/UsageView.svelte';
   import type {
@@ -840,7 +840,7 @@
         {#if router.route.page === 'overview'}
           <OverviewPage {snapshot} />
         {:else if router.route.page === 'analytics'}
-          <DeepDiveView {snapshot} openSessionPicker={() => openModal('session')} />
+          <AnalyticsPage {snapshot} openSessionPicker={() => openModal('session')} />
         {:else if router.route.page === 'tools'}
           <UsageView {snapshot} {usageTone} />
         {:else if router.route.page === 'config'}

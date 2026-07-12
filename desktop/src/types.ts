@@ -79,6 +79,56 @@ export type CountMetric = {
   value: number;
 };
 
+export type ModelCatalogEntry = {
+  canonical_id: string;
+  name: string;
+  provider: string;
+  provider_label: string;
+  family: string;
+  cost: string;
+  calls: number;
+  tokens: string;
+  cache_hit: string;
+  value: number;
+  per_tool: ModelToolBreakdown[];
+};
+
+export type ModelToolBreakdown = {
+  tool: string;
+  tool_label: string;
+  cost: string;
+  calls: number;
+  value: number;
+};
+
+export type AnalyticsData = {
+  daily_by_tool: StackedDayMetric[];
+  hour_day: number[][];
+  provider_share: ShareMetric[];
+  tool_share: ShareMetric[];
+};
+
+export type StackedDayMetric = {
+  day: string;
+  total_cost: string;
+  segments: StackSegment[];
+};
+
+export type StackSegment = {
+  tool: string;
+  tool_label: string;
+  cost: string;
+  amount: number;
+};
+
+export type ShareMetric = {
+  key: string;
+  label: string;
+  cost: string;
+  calls: number;
+  share: number;
+};
+
 export type DashboardData = {
   summary: Summary;
   daily: DailyMetric[];
@@ -327,6 +377,11 @@ export type TraySnapshot = {
 export type ReportResponse = {
   path: string;
   snapshot: DesktopSnapshot;
+};
+
+export type ToolPageData = {
+  dashboard: DashboardData;
+  usage: LimitsData;
 };
 
 export type ShortcutResponse = {
