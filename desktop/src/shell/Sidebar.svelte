@@ -1,13 +1,14 @@
 <script lang="ts">
   import {
+    Boxes,
     ChartLine,
     LayoutDashboard,
     PanelLeftClose,
     PanelLeftOpen,
     Settings,
-    Terminal,
     Wrench
   } from 'lucide-svelte';
+  import ProviderIcon from '../icons/ProviderIcon.svelte';
   import type { CopyDeck, OptionItem, ToolId } from '../types';
   import type { Route, RouteToolId } from '../lib/router.svelte';
 
@@ -80,6 +81,17 @@
       {#if !collapsed}<span>{copy.nav.tools}</span>{/if}
     </button>
 
+    <button
+      type="button"
+      class="sidebar-item"
+      class:active={isActive('models')}
+      title={copy.nav.models}
+      onclick={() => navigate({ page: 'models' })}
+    >
+      <Boxes size={16} />
+      {#if !collapsed}<span>{copy.nav.models}</span>{/if}
+    </button>
+
     {#if !collapsed}
       <div class="sidebar-children">
         {#each toolEntries as tool}
@@ -90,7 +102,7 @@
             title={tool.label}
             onclick={() => navigate({ page: 'tools', tool: tool.value as RouteToolId })}
           >
-            <Terminal size={14} />
+            <ProviderIcon id={tool.value} kind="tool" size={14} />
             <span>{tool.label}</span>
           </button>
         {/each}

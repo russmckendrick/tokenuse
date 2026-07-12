@@ -12,11 +12,12 @@
   import Sidebar from './shell/Sidebar.svelte';
   import StatusBar from './shell/StatusBar.svelte';
   import TrayPopover from './TrayPopover.svelte';
+  import ModelsPage from './routes/ModelsPage.svelte';
   import OverviewPage from './routes/OverviewPage.svelte';
+  import ToolsPage from './routes/ToolsPage.svelte';
   import AnalyticsPage from './routes/AnalyticsPage.svelte';
   import ConfigView from './views/ConfigView.svelte';
   import SessionView from './views/SessionView.svelte';
-  import UsageView from './views/UsageView.svelte';
   import type {
     ConfigRow,
     DesktopSnapshot,
@@ -842,7 +843,9 @@
         {:else if router.route.page === 'analytics'}
           <AnalyticsPage {snapshot} openSessionPicker={() => openModal('session')} />
         {:else if router.route.page === 'tools'}
-          <UsageView {snapshot} {usageTone} />
+          <ToolsPage {snapshot} tool={router.route.tool} {usageTone} />
+        {:else if router.route.page === 'models'}
+          <ModelsPage {snapshot} />
         {:else if router.route.page === 'config'}
           <ConfigView
             {snapshot}
