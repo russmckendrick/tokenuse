@@ -150,6 +150,32 @@ pub struct CountMetric {
     pub value: u64,
 }
 
+/// One canonical model aggregated across every tool for a period, with the
+/// per-tool split that produced it. Powers the unified model catalog view.
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelCatalogEntry {
+    pub canonical_id: &'static str,
+    pub name: &'static str,
+    pub provider: &'static str,
+    pub provider_label: &'static str,
+    pub family: &'static str,
+    pub cost: &'static str,
+    pub calls: u64,
+    pub tokens: &'static str,
+    pub cache_hit: &'static str,
+    pub value: u64,
+    pub per_tool: Vec<ModelToolBreakdown>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelToolBreakdown {
+    pub tool: &'static str,
+    pub tool_label: &'static str,
+    pub cost: &'static str,
+    pub calls: u64,
+    pub value: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ProjectOption {
     pub identity: Option<String>,
@@ -363,6 +389,11 @@ struct SampleData {
     thirty_days: DashboardData,
     month: DashboardData,
     all_time: DashboardData,
+    catalog_today: Vec<ModelCatalogEntry>,
+    catalog_week: Vec<ModelCatalogEntry>,
+    catalog_thirty_days: Vec<ModelCatalogEntry>,
+    catalog_month: Vec<ModelCatalogEntry>,
+    catalog_all_time: Vec<ModelCatalogEntry>,
     limits: LimitsData,
 }
 
@@ -397,15 +428,77 @@ fn sample_data() -> &'static SampleData {
 
 impl From<WireSampleData> for SampleData {
     fn from(wire: WireSampleData) -> Self {
+        let catalog_today = sample_catalog(&wire.periods.today.models);
+        let catalog_week = sample_catalog(&wire.periods.week.models);
+        let catalog_thirty_days = sample_catalog(&wire.periods.thirty_days.models);
+        let catalog_month = sample_catalog(&wire.periods.month.models);
+        let catalog_all_time = sample_catalog(&wire.periods.all_time.models);
         Self {
             today: wire.periods.today.into(),
             week: wire.periods.week.into(),
             thirty_days: wire.periods.thirty_days.into(),
             month: wire.periods.month.into(),
             all_time: wire.periods.all_time.into(),
+            catalog_today,
+            catalog_week,
+            catalog_thirty_days,
+            catalog_month,
+            catalog_all_time,
             limits: wire.limits.into(),
         }
     }
+}
+
+/// Sample-mode catalog rows: each sample model row belongs to one tool, so
+/// the per-tool split is that single tool at full width.
+fn sample_catalog(models: &[WireModelMetric]) -> Vec<ModelCatalogEntry> {
+    models
+        .iter()
+        .map(|row| {
+            let identity = crate::models::resolve(&row.tool, &row.id);
+            let tool_label = crate::ingest::projects::tool_short_label(&row.tool);
+            let cost = leak(row.cost.clone());
+            ModelCatalogEntry {
+                canonical_id: leak(identity.canonical_id),
+                name: leak(identity.display),
+                provider: identity.provider.id(),
+                provider_label: identity.provider.label(),
+                family: leak(identity.family),
+                cost,
+                calls: row.calls,
+                tokens: "-",
+                cache_hit: leak(row.cache.clone()),
+                value: row.value,
+                per_tool: vec![ModelToolBreakdown {
+                    tool: leak(row.tool.clone()),
+                    tool_label,
+                    cost,
+                    calls: row.calls,
+                    value: 100,
+                }],
+            }
+        })
+        .collect()
+}
+
+pub fn model_catalog_data(period: Period, currency: &CurrencyFormatter) -> Vec<ModelCatalogEntry> {
+    let samples = sample_data();
+    let mut entries = match period {
+        Period::Today => samples.catalog_today.clone(),
+        Period::Week => samples.catalog_week.clone(),
+        Period::ThirtyDays => samples.catalog_thirty_days.clone(),
+        Period::Month => samples.catalog_month.clone(),
+        Period::AllTime => samples.catalog_all_time.clone(),
+    };
+    if !currency.is_usd() {
+        for entry in &mut entries {
+            entry.cost = convert_money_text(entry.cost, currency, false);
+            for split in &mut entry.per_tool {
+                split.cost = convert_money_text(split.cost, currency, false);
+            }
+        }
+    }
+    entries
 }
 
 impl From<WireDashboardData> for DashboardData {

@@ -24,6 +24,7 @@ pub(crate) struct ProjectState {
 pub(crate) struct DesktopSnapshot {
     pub(crate) version: &'static str,
     pub(crate) copy: &'static CopyDeck,
+    pub(crate) data_generation: u64,
     pub(crate) source: &'static str,
     pub(crate) status: Option<String>,
     pub(crate) status_tone: &'static str,
@@ -109,6 +110,7 @@ pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
     DesktopSnapshot {
         version: env!("CARGO_PKG_VERSION"),
         copy: copy::copy(),
+        data_generation: app.data_generation(),
         source: match app.source {
             DataSource::Live(_) => "live",
             DataSource::Sample => "sample",

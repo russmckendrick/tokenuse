@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
@@ -16,7 +18,8 @@ use crate::config::{ConfigPaths, UserConfig};
 use crate::copy::{self, copy, CopyDeck};
 use crate::currency::{CurrencyFormatter, CurrencyTable};
 use crate::data::{
-    DashboardData, LimitsData, ProjectOption, SessionDetail, SessionDetailView, SessionOption,
+    DashboardData, LimitsData, ModelCatalogEntry, ProjectOption, SessionDetail, SessionDetailView,
+    SessionOption,
 };
 use crate::ingest::Ingested;
 use crate::keymap;
@@ -69,7 +72,7 @@ impl Period {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Tool {
     All,
     ClaudeCode,
@@ -79,7 +82,7 @@ pub enum Tool {
     Gemini,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SortMode {
     Spend,
     Date,
@@ -209,6 +212,10 @@ impl ProjectFilter {
             Self::All => None,
             Self::Selected { identity, .. } => Some(identity),
         }
+    }
+
+    fn identity_key(&self) -> Option<String> {
+        self.identity().map(str::to_string)
     }
 
     fn from_option(option: &ProjectOption) -> Self {
@@ -1050,6 +1057,30 @@ impl Refresher {
     }
 }
 
+/// Memoized results of the pure aggregation queries, keyed by their full
+/// filter inputs. Every rebuild leaks its display strings by design (see
+/// `data::leak`), so the desktop's 3-second snapshot polls must reuse the
+/// previous result instead of recomputing; entries are dropped wholesale
+/// whenever `App::data_generation` moves.
+#[derive(Default)]
+struct QueryCache {
+    generation: u64,
+    dashboard: HashMap<(Period, Tool, Option<String>, SortMode, String), DashboardData>,
+    usage: HashMap<(Tool, SortMode, String), LimitsData>,
+    model_catalog: HashMap<(Period, String), Vec<ModelCatalogEntry>>,
+}
+
+impl QueryCache {
+    fn sync_generation(&mut self, generation: u64) {
+        if self.generation != generation {
+            self.dashboard.clear();
+            self.usage.clear();
+            self.model_catalog.clear();
+            self.generation = generation;
+        }
+    }
+}
+
 pub struct App {
     pub page: Page,
     pub period: Period,
@@ -1085,6 +1116,8 @@ pub struct App {
     background_alerts: Vec<BackgroundUsageAlert>,
     live_source: Option<Ingested>,
     sample_forced: bool,
+    data_generation: u64,
+    query_cache: RefCell<QueryCache>,
     pub status: Option<AppStatus>,
     should_quit: bool,
 }
@@ -1129,6 +1162,8 @@ impl Default for App {
             background_alerts: Vec::new(),
             live_source: None,
             sample_forced: false,
+            data_generation: 0,
+            query_cache: RefCell::new(QueryCache::default()),
             status: None,
             should_quit: false,
         }
@@ -1183,6 +1218,17 @@ impl App {
         self.dashboard_for(self.period, self.tool, &self.project_filter, self.sort)
     }
 
+    pub fn data_generation(&self) -> u64 {
+        self.data_generation
+    }
+
+    /// Mark every cached query stale. Call after anything that changes what
+    /// the aggregations would produce: new ingest results, source toggles,
+    /// pricing or currency-table refreshes, clear-data rebuilds.
+    fn bump_data_generation(&mut self) {
+        self.data_generation = self.data_generation.wrapping_add(1);
+    }
+
     pub fn dashboard_for(
         &self,
         period: Period,
@@ -1190,15 +1236,57 @@ impl App {
         project_filter: &ProjectFilter,
         sort: SortMode,
     ) -> DashboardData {
+        let key = (
+            period,
+            tool,
+            project_filter.identity_key(),
+            sort,
+            self.settings.currency.clone(),
+        );
+        {
+            let mut cache = self.query_cache.borrow_mut();
+            cache.sync_generation(self.data_generation);
+            if let Some(data) = cache.dashboard.get(&key) {
+                return data.clone();
+            }
+        }
+
         let currency = self.currency();
-        match &self.source {
+        let data = match &self.source {
             DataSource::Live(ingested) => {
                 ingested.dashboard(period, tool, project_filter, sort, &currency)
             }
             DataSource::Sample => {
                 crate::data::dashboard_data(period, tool, project_filter, sort, &currency)
             }
+        };
+        self.query_cache
+            .borrow_mut()
+            .dashboard
+            .insert(key, data.clone());
+        data
+    }
+
+    pub fn model_catalog(&self, period: Period) -> Vec<ModelCatalogEntry> {
+        let key = (period, self.settings.currency.clone());
+        {
+            let mut cache = self.query_cache.borrow_mut();
+            cache.sync_generation(self.data_generation);
+            if let Some(data) = cache.model_catalog.get(&key) {
+                return data.clone();
+            }
         }
+
+        let currency = self.currency();
+        let data = match &self.source {
+            DataSource::Live(ingested) => ingested.model_catalog(period, &currency),
+            DataSource::Sample => crate::data::model_catalog_data(period, &currency),
+        };
+        self.query_cache
+            .borrow_mut()
+            .model_catalog
+            .insert(key, data.clone());
+        data
     }
 
     pub fn usage(&self) -> LimitsData {
@@ -1206,11 +1294,25 @@ impl App {
     }
 
     pub fn usage_for(&self, tool: Tool, sort: SortMode) -> LimitsData {
+        let key = (tool, sort, self.settings.currency.clone());
+        {
+            let mut cache = self.query_cache.borrow_mut();
+            cache.sync_generation(self.data_generation);
+            if let Some(data) = cache.usage.get(&key) {
+                return data.clone();
+            }
+        }
+
         let currency = self.currency();
-        match &self.source {
+        let data = match &self.source {
             DataSource::Live(ingested) => ingested.limits(tool, sort, &currency),
             DataSource::Sample => crate::data::limits_data(tool, sort, &currency),
-        }
+        };
+        self.query_cache
+            .borrow_mut()
+            .usage
+            .insert(key, data.clone());
+        data
     }
 
     pub fn currency(&self) -> CurrencyFormatter {
@@ -1253,6 +1355,7 @@ impl App {
     }
 
     pub fn toggle_data_source(&mut self) {
+        self.bump_data_generation();
         match std::mem::replace(&mut self.source, DataSource::Sample) {
             DataSource::Live(ingested) => {
                 self.live_source = Some(ingested);
@@ -1309,6 +1412,7 @@ impl App {
             Ok(ingested) if !ingested.is_empty() => {
                 let n = ingested.calls.len();
                 self.update_background_alerts(outcome.kind, &ingested);
+                self.bump_data_generation();
                 if self.sample_forced {
                     self.live_source = Some(ingested);
                 } else {
@@ -3059,6 +3163,7 @@ impl App {
     fn apply_clear_data_result(&mut self, result: ClearDataResult) {
         match result {
             Ok((ingested, _stats)) => {
+                self.bump_data_generation();
                 let calls = ingested.calls.len();
                 let limits = ingested.limits.len();
                 self.project_filter = ProjectFilter::All;
@@ -3111,6 +3216,7 @@ impl App {
     }
 
     fn apply_synced_archive(&mut self, ingested: Ingested) {
+        self.bump_data_generation();
         self.background_alert_baseline =
             (!ingested.is_empty()).then(|| UsageTotals::from_ingested(&ingested));
         if ingested.is_empty() {
@@ -3134,6 +3240,7 @@ impl App {
         {
             Ok(table) => {
                 self.currency_table = table;
+                self.bump_data_generation();
                 self.set_status(
                     copy::template(
                         &copy().status.rates_refreshed,
@@ -3169,6 +3276,7 @@ impl App {
             .and_then(|_| crate::pricing::PriceTable::reload_configured())
         {
             Ok(()) => {
+                self.bump_data_generation();
                 self.set_status(
                     copy().status.litellm_prices_refreshed.clone(),
                     StatusTone::Success,
@@ -3208,6 +3316,58 @@ mod tests {
 
     fn shift_key(code: KeyCode) -> KeyEvent {
         KeyEvent::new(code, KeyModifiers::SHIFT)
+    }
+
+    #[test]
+    fn repeated_dashboard_queries_reuse_the_cached_result() {
+        let app = App::default();
+
+        let first = app.dashboard();
+        let second = app.dashboard();
+
+        // The cache must hand back the same leaked strings instead of
+        // recomputing (and re-leaking) on every poll.
+        assert!(std::ptr::eq(first.summary.cost, second.summary.cost));
+        if let (Some(a), Some(b)) = (first.models.first(), second.models.first()) {
+            assert!(std::ptr::eq(a.name, b.name));
+        }
+
+        let catalog_first = app.model_catalog(app.period);
+        let catalog_second = app.model_catalog(app.period);
+        if let (Some(a), Some(b)) = (catalog_first.first(), catalog_second.first()) {
+            assert!(std::ptr::eq(a.name, b.name));
+        }
+    }
+
+    #[test]
+    fn data_generation_bump_invalidates_cached_queries() {
+        let mut app = App::default();
+        let _ = app.dashboard();
+        assert_eq!(app.query_cache.borrow().dashboard.len(), 1);
+        assert_eq!(app.data_generation(), 0);
+
+        // Any data-changing event bumps the generation; the next query must
+        // resync the cache (dropping every stale entry) before refilling.
+        app.toggle_data_source();
+        assert!(app.data_generation() > 0);
+        let _ = app.dashboard();
+        let cache = app.query_cache.borrow();
+        assert_eq!(cache.generation, app.data_generation());
+        assert_eq!(cache.dashboard.len(), 1);
+    }
+
+    #[test]
+    fn query_cache_drops_entries_when_generation_moves() {
+        let mut cache = QueryCache::default();
+        cache.usage.insert(
+            (Tool::All, SortMode::Spend, "USD".into()),
+            LimitsData {
+                sections: Vec::new(),
+            },
+        );
+        cache.sync_generation(1);
+        assert!(cache.usage.is_empty());
+        assert_eq!(cache.generation, 1);
     }
 
     fn tempdir(name: &str) -> PathBuf {

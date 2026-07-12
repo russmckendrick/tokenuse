@@ -8,9 +8,10 @@ use crate::app::{Period, ProjectFilter, SortMode, Tool};
 use crate::copy::copy;
 use crate::currency::CurrencyFormatter;
 use crate::data::{
-    ActivityMetric, CountMetric, DailyMetric, DashboardData, LimitMetric, LimitsData, ModelMetric,
-    ProjectMetric, ProjectOption, ProjectToolMetric, RecentModelMetric, RecentUsageMetric,
-    SessionDetail, SessionDetailView, SessionMetric, SessionOption, Summary, ToolLimitSection,
+    ActivityMetric, CountMetric, DailyMetric, DashboardData, LimitMetric, LimitsData,
+    ModelCatalogEntry, ModelMetric, ModelToolBreakdown, ProjectMetric, ProjectOption,
+    ProjectToolMetric, RecentModelMetric, RecentUsageMetric, SessionDetail, SessionDetailView,
+    SessionMetric, SessionOption, Summary, ToolLimitSection,
 };
 use crate::pricing;
 use crate::tools::{self, LimitSnapshot, LimitWindow, ParsedCall};
@@ -101,6 +102,22 @@ impl Ingested {
 
     pub fn limits(&self, tool: Tool, sort: SortMode, currency: &CurrencyFormatter) -> LimitsData {
         self.limits_at(tool, sort, currency, chrono::Utc::now())
+    }
+
+    /// Unified model catalog for a period: every call folds into its
+    /// canonical model row with a per-tool cost/call split.
+    pub fn model_catalog(
+        &self,
+        period: Period,
+        currency: &CurrencyFormatter,
+    ) -> Vec<ModelCatalogEntry> {
+        let now = Local::now();
+        let filtered: Vec<&ParsedCall> = self
+            .calls
+            .iter()
+            .filter(|c| in_period(c, period, now))
+            .collect();
+        build_model_catalog(&filtered, currency)
     }
 
     pub fn limits_at(
@@ -1520,6 +1537,107 @@ fn aggregate_models(
             value: sort_bar_value(&acc.stats, sort, max, idx, total),
         })
         .collect()
+}
+
+fn build_model_catalog(
+    calls: &[&ParsedCall],
+    currency: &CurrencyFormatter,
+) -> Vec<ModelCatalogEntry> {
+    #[derive(Default)]
+    struct ToolSplit {
+        cost: f64,
+        calls: u64,
+    }
+    #[derive(Default)]
+    struct Acc {
+        display: String,
+        provider: &'static str,
+        provider_label: &'static str,
+        family: String,
+        cost: f64,
+        calls: u64,
+        tokens: u64,
+        cache_read: u64,
+        input: u64,
+        per_tool: HashMap<&'static str, ToolSplit>,
+    }
+
+    let mut by_model: HashMap<String, Acc> = HashMap::new();
+    for c in calls {
+        let identity = crate::models::resolve(c.tool, &c.model);
+        let entry = by_model.entry(identity.canonical_id).or_default();
+        if entry.display.is_empty() {
+            entry.display = identity.display;
+            entry.provider = identity.provider.id();
+            entry.provider_label = identity.provider.label();
+            entry.family = identity.family;
+        }
+        entry.cost += c.cost_usd;
+        entry.calls += 1;
+        entry.tokens = entry.tokens.saturating_add(activity_tokens(c));
+        entry.cache_read += c.cache_read_input_tokens;
+        entry.input += c.input_tokens + c.cache_read_input_tokens + c.cache_creation_input_tokens;
+        let split = entry.per_tool.entry(c.tool).or_default();
+        split.cost += c.cost_usd;
+        split.calls += 1;
+    }
+
+    let mut rows: Vec<(String, Acc)> = by_model.into_iter().collect();
+    rows.sort_by(|a, b| {
+        b.1.cost
+            .partial_cmp(&a.1.cost)
+            .unwrap_or(Ordering::Equal)
+            .then_with(|| a.1.display.cmp(&b.1.display))
+    });
+    let max_cost = rows.iter().map(|row| row.1.cost).fold(0.0, f64::max);
+
+    rows.into_iter()
+        .map(|(canonical, acc)| {
+            let mut splits: Vec<(&'static str, ToolSplit)> = acc.per_tool.into_iter().collect();
+            splits.sort_by(|a, b| {
+                b.1.cost
+                    .partial_cmp(&a.1.cost)
+                    .unwrap_or(Ordering::Equal)
+                    .then_with(|| a.0.cmp(b.0))
+            });
+            let split_max = splits.iter().map(|s| s.1.cost).fold(0.0, f64::max);
+            let per_tool = splits
+                .into_iter()
+                .map(|(tool, split)| ModelToolBreakdown {
+                    tool,
+                    tool_label: tool_short_label(tool),
+                    cost: leak(currency.format_money(split.cost)),
+                    calls: split.calls,
+                    value: bar_scale(split.cost, split_max),
+                })
+                .collect();
+            ModelCatalogEntry {
+                canonical_id: leak(canonical),
+                name: leak(acc.display),
+                provider: acc.provider,
+                provider_label: acc.provider_label,
+                family: leak(acc.family),
+                cost: leak(currency.format_money(acc.cost)),
+                calls: acc.calls,
+                tokens: leak(format_compact(acc.tokens)),
+                cache_hit: leak(if acc.input == 0 {
+                    "-".into()
+                } else {
+                    format!("{:.1}%", (acc.cache_read as f64 / acc.input as f64) * 100.0)
+                }),
+                value: bar_scale(acc.cost, max_cost),
+                per_tool,
+            }
+        })
+        .collect()
+}
+
+fn bar_scale(value: f64, max: f64) -> u64 {
+    if max <= 0.0 {
+        0
+    } else {
+        ((value / max) * 100.0).round().clamp(0.0, 100.0) as u64
+    }
 }
 
 fn uniform_rate_label(rates: HashSet<String>) -> String {

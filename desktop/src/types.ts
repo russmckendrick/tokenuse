@@ -280,6 +280,7 @@ export type ShortcutInput = {
 export type DesktopSnapshot = {
   copy: CopyDeck;
   version: string;
+  data_generation: number;
   source: 'live' | 'sample';
   status: string | null;
   status_tone: 'info' | 'busy' | 'success' | 'warning' | 'error';
