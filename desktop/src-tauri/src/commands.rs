@@ -14,7 +14,8 @@ use crate::{
     ids::{parse_page, parse_period, parse_report_format, parse_sort, parse_tool},
     restore_main_window,
     snapshot::{
-        snapshot, tray_snapshot, DesktopSnapshot, ReportResponse, ShortcutResponse, TraySnapshot,
+        snapshot, tray_snapshot, DesktopSnapshot, ReportResponse, ShortcutResponse, ToolPageData,
+        TraySnapshot,
     },
     state::{save_user_settings, with_app, CommandError, CommandResult, SharedState},
     sync_open_at_login,
@@ -140,6 +141,58 @@ pub(crate) async fn set_currency(
         Ok(snapshot(app))
     })
     .await
+}
+
+#[tauri::command]
+pub(crate) async fn get_model_catalog(
+    period: String,
+    state: State<'_, SharedState>,
+) -> CommandResult<Vec<tokenuse::data::ModelCatalogEntry>> {
+    with_app(state, move |app| {
+        let period = parse_period(&period)?;
+        Ok(app.model_catalog(period))
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn get_tool_page(
+    tool: String,
+    state: State<'_, SharedState>,
+) -> CommandResult<ToolPageData> {
+    with_app(state, move |app| {
+        let tool = parse_tool(&tool)?;
+        Ok(ToolPageData {
+            dashboard: app.dashboard_for(
+                app.period,
+                tool,
+                &tokenuse::app::ProjectFilter::All,
+                app.sort,
+            ),
+            usage: app.usage_for(tool, app.sort),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn get_analytics(
+    period: String,
+    state: State<'_, SharedState>,
+) -> CommandResult<tokenuse::data::AnalyticsData> {
+    with_app(state, move |app| {
+        let period = parse_period(&period)?;
+        Ok(app.analytics_for(period, app.tool, &app.project_filter.clone()))
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn get_session_detail(
+    key: String,
+    state: State<'_, SharedState>,
+) -> CommandResult<Option<tokenuse::data::SessionDetailView>> {
+    with_app(state, move |app| Ok(app.session_detail(&key))).await
 }
 
 #[tauri::command]

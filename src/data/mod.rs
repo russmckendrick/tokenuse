@@ -176,6 +176,42 @@ pub struct ModelToolBreakdown {
     pub value: u64,
 }
 
+/// Time-explorer aggregates for the desktop Analytics page.
+#[derive(Debug, Clone, Serialize)]
+pub struct AnalyticsData {
+    pub daily_by_tool: Vec<StackedDayMetric>,
+    /// Activity tokens by weekday (Monday = 0) and local hour of day.
+    pub hour_day: [[u64; 24]; 7],
+    pub provider_share: Vec<ShareMetric>,
+    pub tool_share: Vec<ShareMetric>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StackedDayMetric {
+    pub day: &'static str,
+    pub total_cost: &'static str,
+    pub segments: Vec<StackSegment>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StackSegment {
+    pub tool: &'static str,
+    pub tool_label: &'static str,
+    pub cost: &'static str,
+    /// Stacking magnitude in 1/10000 USD so segments compare across days.
+    pub amount: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ShareMetric {
+    pub key: &'static str,
+    pub label: &'static str,
+    pub cost: &'static str,
+    pub calls: u64,
+    /// Share of the total in permille (0-1000).
+    pub share: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ProjectOption {
     pub identity: Option<String>,
@@ -477,6 +513,135 @@ fn sample_catalog(models: &[WireModelMetric]) -> Vec<ModelCatalogEntry> {
                     value: 100,
                 }],
             }
+        })
+        .collect()
+}
+
+/// Sample-mode analytics: daily totals split across tools by the period's
+/// tool proportions, a plausible work-hours heat pattern, and shares parsed
+/// back out of the sample money strings.
+pub fn analytics_data(
+    period: Period,
+    tool: Tool,
+    project_filter: &ProjectFilter,
+    currency: &CurrencyFormatter,
+) -> AnalyticsData {
+    // Aggregate in USD, then format each derived amount once with the real
+    // currency, so converted sample strings are never parsed and re-converted.
+    let usd = CurrencyFormatter::usd();
+    let data = dashboard_data(period, tool, project_filter, SortMode::Spend, &usd);
+
+    let mut tool_totals: Vec<(&'static str, &'static str, u64, u64)> = Vec::new();
+    for row in &data.project_tools {
+        let amount = parse_money_sort_value(row.cost);
+        match tool_totals
+            .iter_mut()
+            .find(|(label, ..)| *label == row.tool)
+        {
+            Some(entry) => {
+                entry.2 += amount;
+                entry.3 += row.calls;
+            }
+            None => tool_totals.push((row.tool, row.tool, amount, row.calls)),
+        }
+    }
+    tool_totals.sort_by_key(|t| std::cmp::Reverse(t.2));
+    let tool_total_amount: u64 = tool_totals.iter().map(|t| t.2).sum();
+
+    let daily_by_tool = data
+        .daily
+        .iter()
+        .rev()
+        .map(|day| {
+            let day_amount = parse_money_sort_value(day.cost);
+            let segments = tool_totals
+                .iter()
+                .filter(|(_, _, amount, _)| *amount > 0)
+                .map(|(tool_id, label, amount, _)| {
+                    let share = (day_amount * amount)
+                        .checked_div(tool_total_amount)
+                        .unwrap_or(0);
+                    StackSegment {
+                        tool: tool_id,
+                        tool_label: label,
+                        cost: leak(currency.format_money(share as f64 / 10_000.0)),
+                        amount: share,
+                    }
+                })
+                .collect();
+            StackedDayMetric {
+                day: day.day,
+                total_cost: leak(currency.format_money(day_amount as f64 / 10_000.0)),
+                segments,
+            }
+        })
+        .collect();
+
+    let total_calls: u64 = data.daily.iter().map(|d| d.calls).sum();
+    let mut hour_day = [[0u64; 24]; 7];
+    for (weekday, row) in hour_day.iter_mut().enumerate() {
+        let weekday_weight: u64 = if weekday < 5 { 10 } else { 3 };
+        for (hour, cell) in row.iter_mut().enumerate() {
+            let hour_weight: u64 = match hour {
+                9..=11 | 14..=17 => 10,
+                8 | 12 | 13 | 18 | 19 => 6,
+                20..=22 => 3,
+                _ => 1,
+            };
+            *cell = total_calls * weekday_weight * hour_weight / 100;
+        }
+    }
+
+    let provider_share = share_rows(
+        data.models.iter().map(|m| {
+            (
+                m.provider,
+                m.provider_label,
+                parse_money_sort_value(m.cost),
+                m.calls,
+            )
+        }),
+        currency,
+    );
+    let tool_share = share_rows(
+        tool_totals
+            .iter()
+            .map(|(id, label, amount, calls)| (*id, *label, *amount, *calls)),
+        currency,
+    );
+
+    AnalyticsData {
+        daily_by_tool,
+        hour_day,
+        provider_share,
+        tool_share,
+    }
+}
+
+fn share_rows(
+    rows: impl Iterator<Item = (&'static str, &'static str, u64, u64)>,
+    currency: &CurrencyFormatter,
+) -> Vec<ShareMetric> {
+    let mut folded: Vec<(&'static str, &'static str, u64, u64)> = Vec::new();
+    for (key, label, amount, calls) in rows {
+        match folded.iter_mut().find(|(k, ..)| *k == key) {
+            Some(entry) => {
+                entry.2 += amount;
+                entry.3 += calls;
+            }
+            None => folded.push((key, label, amount, calls)),
+        }
+    }
+    folded.sort_by_key(|r| std::cmp::Reverse(r.2));
+    let total: u64 = folded.iter().map(|r| r.2).sum();
+    folded
+        .into_iter()
+        .map(|(key, label, amount, calls)| ShareMetric {
+            key,
+            label,
+            cost: leak(currency.format_money(amount as f64 / 10_000.0)),
+            calls,
+            share: (amount * 1000).checked_div(total).unwrap_or(0),
         })
         .collect()
 }

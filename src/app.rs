@@ -18,8 +18,8 @@ use crate::config::{ConfigPaths, UserConfig};
 use crate::copy::{self, copy, CopyDeck};
 use crate::currency::{CurrencyFormatter, CurrencyTable};
 use crate::data::{
-    DashboardData, LimitsData, ModelCatalogEntry, ProjectOption, SessionDetail, SessionDetailView,
-    SessionOption,
+    AnalyticsData, DashboardData, LimitsData, ModelCatalogEntry, ProjectOption, SessionDetail,
+    SessionDetailView, SessionOption,
 };
 use crate::ingest::Ingested;
 use crate::keymap;
@@ -1068,6 +1068,7 @@ struct QueryCache {
     dashboard: HashMap<(Period, Tool, Option<String>, SortMode, String), DashboardData>,
     usage: HashMap<(Tool, SortMode, String), LimitsData>,
     model_catalog: HashMap<(Period, String), Vec<ModelCatalogEntry>>,
+    analytics: HashMap<(Period, Tool, Option<String>, String), AnalyticsData>,
 }
 
 impl QueryCache {
@@ -1076,6 +1077,7 @@ impl QueryCache {
             self.dashboard.clear();
             self.usage.clear();
             self.model_catalog.clear();
+            self.analytics.clear();
             self.generation = generation;
         }
     }
@@ -1287,6 +1289,52 @@ impl App {
             .model_catalog
             .insert(key, data.clone());
         data
+    }
+
+    pub fn analytics_for(
+        &self,
+        period: Period,
+        tool: Tool,
+        project_filter: &ProjectFilter,
+    ) -> AnalyticsData {
+        let key = (
+            period,
+            tool,
+            project_filter.identity_key(),
+            self.settings.currency.clone(),
+        );
+        {
+            let mut cache = self.query_cache.borrow_mut();
+            cache.sync_generation(self.data_generation);
+            if let Some(data) = cache.analytics.get(&key) {
+                return data.clone();
+            }
+        }
+
+        let currency = self.currency();
+        let data = match &self.source {
+            DataSource::Live(ingested) => {
+                ingested.analytics(period, tool, project_filter, &currency)
+            }
+            DataSource::Sample => {
+                crate::data::analytics_data(period, tool, project_filter, &currency)
+            }
+        };
+        self.query_cache
+            .borrow_mut()
+            .analytics
+            .insert(key, data.clone());
+        data
+    }
+
+    /// Pure session lookup: unlike `enter_session` this does not touch the
+    /// page or session-view state.
+    pub fn session_detail(&self, key: &str) -> Option<SessionDetailView> {
+        let currency = self.currency();
+        match &self.source {
+            DataSource::Live(ingested) => ingested.session_detail(key, self.sort, &currency),
+            DataSource::Sample => crate::data::session_detail(key, self.sort, &currency),
+        }
     }
 
     pub fn usage(&self) -> LimitsData {

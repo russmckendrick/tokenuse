@@ -8,10 +8,11 @@ use crate::app::{Period, ProjectFilter, SortMode, Tool};
 use crate::copy::copy;
 use crate::currency::CurrencyFormatter;
 use crate::data::{
-    ActivityMetric, CountMetric, DailyMetric, DashboardData, LimitMetric, LimitsData,
-    ModelCatalogEntry, ModelMetric, ModelToolBreakdown, ProjectMetric, ProjectOption,
+    ActivityMetric, AnalyticsData, CountMetric, DailyMetric, DashboardData, LimitMetric,
+    LimitsData, ModelCatalogEntry, ModelMetric, ModelToolBreakdown, ProjectMetric, ProjectOption,
     ProjectToolMetric, RecentModelMetric, RecentUsageMetric, SessionDetail, SessionDetailView,
-    SessionMetric, SessionOption, Summary, ToolLimitSection,
+    SessionMetric, SessionOption, ShareMetric, StackSegment, StackedDayMetric, Summary,
+    ToolLimitSection,
 };
 use crate::pricing;
 use crate::tools::{self, LimitSnapshot, LimitWindow, ParsedCall};
@@ -118,6 +119,28 @@ impl Ingested {
             .filter(|c| in_period(c, period, now))
             .collect();
         build_model_catalog(&filtered, currency)
+    }
+
+    /// Time-explorer aggregates: per-day per-tool stacks, an hour-by-weekday
+    /// activity heat grid, and cost shares by provider and tool.
+    pub fn analytics(
+        &self,
+        period: Period,
+        tool: Tool,
+        project_filter: &ProjectFilter,
+        currency: &CurrencyFormatter,
+    ) -> AnalyticsData {
+        let now = Local::now();
+        let filtered: Vec<&ParsedCall> = self
+            .calls
+            .iter()
+            .filter(|c| {
+                matches_tool(c, tool)
+                    && matches_project(c, project_filter)
+                    && in_period(c, period, now)
+            })
+            .collect();
+        build_analytics(&filtered, currency)
     }
 
     pub fn limits_at(
@@ -1630,6 +1653,97 @@ fn build_model_catalog(
             }
         })
         .collect()
+}
+
+fn build_analytics(calls: &[&ParsedCall], currency: &CurrencyFormatter) -> AnalyticsData {
+    #[derive(Default)]
+    struct DayAcc {
+        total: f64,
+        by_tool: HashMap<&'static str, f64>,
+    }
+    #[derive(Default)]
+    struct ShareAcc {
+        label: &'static str,
+        cost: f64,
+        calls: u64,
+    }
+
+    let mut by_day: BTreeMap<NaiveDate, DayAcc> = BTreeMap::new();
+    let mut hour_day = [[0u64; 24]; 7];
+    let mut by_provider: HashMap<&'static str, ShareAcc> = HashMap::new();
+    let mut by_tool: HashMap<&'static str, ShareAcc> = HashMap::new();
+
+    for c in calls {
+        if let Some(ts) = c.timestamp {
+            let local = ts.with_timezone(&Local);
+            let day = by_day.entry(local.date_naive()).or_default();
+            day.total += c.cost_usd;
+            *day.by_tool.entry(c.tool).or_default() += c.cost_usd;
+
+            let weekday = local.weekday().num_days_from_monday() as usize;
+            let hour = local.hour() as usize;
+            hour_day[weekday][hour] =
+                hour_day[weekday][hour].saturating_add(activity_tokens(c).max(1));
+        }
+
+        let identity = crate::models::resolve(c.tool, &c.model);
+        let provider = by_provider.entry(identity.provider.id()).or_default();
+        provider.label = identity.provider.label();
+        provider.cost += c.cost_usd;
+        provider.calls += 1;
+
+        let tool = by_tool.entry(c.tool).or_default();
+        tool.label = tool_short_label(c.tool);
+        tool.cost += c.cost_usd;
+        tool.calls += 1;
+    }
+
+    let daily_by_tool = by_day
+        .into_iter()
+        .map(|(date, acc)| {
+            let mut segments: Vec<(&'static str, f64)> = acc.by_tool.into_iter().collect();
+            segments.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+            StackedDayMetric {
+                day: leak(date.format("%m-%d").to_string()),
+                total_cost: leak(currency.format_money(acc.total)),
+                segments: segments
+                    .into_iter()
+                    .map(|(tool, cost)| StackSegment {
+                        tool,
+                        tool_label: tool_short_label(tool),
+                        cost: leak(currency.format_money(cost)),
+                        amount: (cost * 10_000.0).round().max(0.0) as u64,
+                    })
+                    .collect(),
+            }
+        })
+        .collect();
+
+    let to_rows = |folded: HashMap<&'static str, ShareAcc>| -> Vec<ShareMetric> {
+        let total: f64 = folded.values().map(|acc| acc.cost).sum();
+        let mut rows: Vec<(&'static str, ShareAcc)> = folded.into_iter().collect();
+        rows.sort_by(|a, b| b.1.cost.partial_cmp(&a.1.cost).unwrap_or(Ordering::Equal));
+        rows.into_iter()
+            .map(|(key, acc)| ShareMetric {
+                key,
+                label: acc.label,
+                cost: leak(currency.format_money(acc.cost)),
+                calls: acc.calls,
+                share: if total <= 0.0 {
+                    0
+                } else {
+                    ((acc.cost / total) * 1000.0).round().clamp(0.0, 1000.0) as u64
+                },
+            })
+            .collect()
+    };
+
+    AnalyticsData {
+        daily_by_tool,
+        hour_day,
+        provider_share: to_rows(by_provider),
+        tool_share: to_rows(by_tool),
+    }
 }
 
 fn bar_scale(value: f64, max: f64) -> u64 {

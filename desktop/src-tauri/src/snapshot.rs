@@ -87,6 +87,14 @@ pub(crate) struct ReportResponse {
     pub(crate) snapshot: DesktopSnapshot,
 }
 
+/// Payload for the per-tool desktop page: the tool-filtered dashboard for
+/// the active period plus that tool's limit console.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ToolPageData {
+    pub(crate) dashboard: DashboardData,
+    pub(crate) usage: LimitsData,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct ShortcutResponse {
     pub(crate) handled: bool,
