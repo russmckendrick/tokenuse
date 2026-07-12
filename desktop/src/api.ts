@@ -5,14 +5,11 @@ import type {
   DesktopUpdateDownloadEvent,
   DesktopUpdateMetadata,
   ModelCatalogEntry,
-  PageId,
   PeriodId,
   ProjectOption,
   ReportFormatId,
   ReportResponse,
   SessionDetailView,
-  ShortcutInput,
-  ShortcutResponse,
   SortId,
   ToolPageData,
   TraySnapshot,
@@ -24,13 +21,10 @@ export const api = {
   traySnapshot: () => invoke<TraySnapshot>('get_tray_snapshot'),
   openMainWindow: () => invoke<void>('open_main_window'),
   hideTrayPopover: () => invoke<void>('hide_tray_popover'),
-  setPage: (page: PageId) => invoke<DesktopSnapshot>('set_page', { page }),
   setPeriod: (period: PeriodId) => invoke<DesktopSnapshot>('set_period', { period }),
   setTool: (tool: ToolId) => invoke<DesktopSnapshot>('set_tool', { tool }),
   setSort: (sort: SortId) => invoke<DesktopSnapshot>('set_sort', { sort }),
   setProject: (identity: string | null) => invoke<DesktopSnapshot>('set_project', { identity }),
-  openSession: (key: string) => invoke<DesktopSnapshot>('open_session', { key }),
-  closeSession: () => invoke<DesktopSnapshot>('close_session'),
   setCurrency: (code: string) => invoke<DesktopSnapshot>('set_currency', { code }),
   getModelCatalog: (period: PeriodId) =>
     invoke<ModelCatalogEntry[]>('get_model_catalog', { period }),
@@ -81,6 +75,5 @@ export const api = {
       projectIdentity,
       redacted
     }),
-  handleShortcut: (context: string, input: ShortcutInput) =>
-    invoke<ShortcutResponse>('handle_shortcut', { context, input })
+  toggleDataSource: () => invoke<DesktopSnapshot>('toggle_data_source')
 };

@@ -1,12 +1,12 @@
 use serde::Serialize;
 use tokenuse::{
-    app::{App, ConfigRowView, DataSource, Page, Period, ProjectFilter, SortMode, Tool},
-    copy::{self, CopyDeck, CopyKeyHint},
-    data::{DashboardData, LimitsData, ProjectOption, SessionDetailView, SessionOption},
+    app::{App, ConfigRowView, DataSource, Period, ProjectFilter, SortMode, Tool},
+    copy::{self, CopyDeck},
+    data::{DashboardData, LimitsData, ProjectOption, SessionOption},
     reports::ReportFormat,
 };
 
-use crate::ids::{page_id, period_id, report_format_id, sort_id, status_tone_id, tool_id};
+use crate::ids::{period_id, report_format_id, sort_id, status_tone_id, tool_id};
 
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct OptionItem {
@@ -28,7 +28,6 @@ pub(crate) struct DesktopSnapshot {
     pub(crate) source: &'static str,
     pub(crate) status: Option<String>,
     pub(crate) status_tone: &'static str,
-    pub(crate) page: &'static str,
     pub(crate) period: &'static str,
     pub(crate) periods: Vec<OptionItem>,
     pub(crate) tool: &'static str,
@@ -41,7 +40,6 @@ pub(crate) struct DesktopSnapshot {
     pub(crate) projects: Vec<ProjectOption>,
     pub(crate) report_projects: Vec<ProjectOption>,
     pub(crate) sessions: Vec<SessionOption>,
-    pub(crate) session: Option<SessionDetailView>,
     pub(crate) config_rows: Vec<ConfigRowView>,
     pub(crate) currencies: Vec<String>,
     pub(crate) currency: String,
@@ -49,7 +47,6 @@ pub(crate) struct DesktopSnapshot {
     pub(crate) desktop_updates: DesktopUpdateState,
     pub(crate) report_dir: String,
     pub(crate) report_formats: Vec<OptionItem>,
-    pub(crate) shortcut_footer: Vec<CopyKeyHint>,
     pub(crate) subscription_cookies: SubscriptionCookieState,
 }
 
@@ -95,25 +92,9 @@ pub(crate) struct ToolPageData {
     pub(crate) usage: LimitsData,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct ShortcutResponse {
-    pub(crate) handled: bool,
-    pub(crate) effect: Option<&'static str>,
-    pub(crate) snapshot: DesktopSnapshot,
-}
-
 pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
-    let uses_fixed_usage_filters = app.page == Page::Usage;
-    let tool = if uses_fixed_usage_filters {
-        Tool::All
-    } else {
-        app.tool
-    };
-    let sort = if uses_fixed_usage_filters {
-        SortMode::Spend
-    } else {
-        app.sort
-    };
+    let tool = app.tool;
+    let sort = app.sort;
 
     DesktopSnapshot {
         version: env!("CARGO_PKG_VERSION"),
@@ -125,7 +106,6 @@ pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
         },
         status: app.status_text().map(str::to_string),
         status_tone: status_tone_id(app.status_tone()),
-        page: page_id(app.page),
         period: period_id(app.period),
         periods: Period::ALL
             .into_iter()
@@ -157,29 +137,21 @@ pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
                 label: sort.label(),
             })
             .collect(),
-        project: if uses_fixed_usage_filters {
-            ProjectState {
+        project: match &app.project_filter {
+            ProjectFilter::All => ProjectState {
                 identity: None,
                 label: copy::copy().tools.all.clone(),
-            }
-        } else {
-            match &app.project_filter {
-                ProjectFilter::All => ProjectState {
-                    identity: None,
-                    label: copy::copy().tools.all.clone(),
-                },
-                ProjectFilter::Selected { identity, label } => ProjectState {
-                    identity: Some(identity.clone()),
-                    label: label.clone(),
-                },
-            }
+            },
+            ProjectFilter::Selected { identity, label } => ProjectState {
+                identity: Some(identity.clone()),
+                label: label.clone(),
+            },
         },
         dashboard: app.dashboard(),
         usage: app.usage_for(tool, sort),
         projects: app.project_options(),
         report_projects: app.report_project_options(app.period),
         sessions: app.session_options(),
-        session: app.session_view.clone(),
         config_rows: app.config_rows(),
         currencies: app.currency_table.codes(),
         currency: app.currency().code().to_string(),
@@ -193,7 +165,6 @@ pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
                 label: format.label(),
             })
             .collect(),
-        shortcut_footer: copy::copy().footer(desktop_footer_name(app)).to_vec(),
         subscription_cookies: subscription_cookie_state(),
     }
 }
@@ -219,14 +190,6 @@ fn subscription_cookie_state() -> SubscriptionCookieState {
         supported: false,
         claude_set: false,
         codex_set: false,
-    }
-}
-
-fn desktop_footer_name(app: &App) -> &'static str {
-    match app.page {
-        Page::Usage => "desktop_usage",
-        Page::Config => "desktop_config",
-        _ => "desktop",
     }
 }
 

@@ -6,7 +6,8 @@
   import { Download, FolderOpen, Search, X } from 'lucide-svelte';
   import { api } from './api';
   import { count } from './format';
-  import { NAV_PAGES, router, type Route } from './lib/router.svelte';
+  import { router, type Route } from './lib/router.svelte';
+  import { resolveShortcut } from './lib/shortcuts';
   import { fadeIn, reveal } from './motion';
   import PageHeader from './shell/PageHeader.svelte';
   import Sidebar from './shell/Sidebar.svelte';
@@ -14,6 +15,7 @@
   import TrayPopover from './TrayPopover.svelte';
   import ModelsPage from './routes/ModelsPage.svelte';
   import OverviewPage from './routes/OverviewPage.svelte';
+  import ProjectsPage from './routes/ProjectsPage.svelte';
   import ToolsPage from './routes/ToolsPage.svelte';
   import AnalyticsPage from './routes/AnalyticsPage.svelte';
   import ConfigView from './views/ConfigView.svelte';
@@ -26,10 +28,11 @@
     PeriodId,
     ProjectOption,
     ReportFormatId,
-    ShortcutInput,
-    SortId,
     SessionDetail,
+    SessionDetailView,
     SessionOption,
+    ShortcutHint,
+    SortId,
     ToolId
   } from './types';
 
@@ -69,6 +72,7 @@
   let cookieBusy = false;
   let cookieError: string | null = null;
   let callDetail: SessionDetail | null = null;
+  let sessionDetail: SessionDetailView | null = null;
   let query = '';
   let reportFormat: ReportFormatId = 'html';
   let reportPeriod: PeriodId = 'week';
@@ -316,12 +320,20 @@
   }
 
   async function openSession(key: string) {
-    await commit(() => api.openSession(key));
-    navigate({ page: 'session', sessionKey: key });
+    busy = true;
+    error = null;
+    try {
+      sessionDetail = await api.getSessionDetail(key);
+      navigate({ page: 'session', sessionKey: key });
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    } finally {
+      busy = false;
+    }
   }
 
-  async function closeSession() {
-    await commit(() => api.closeSession());
+  function closeSession() {
+    sessionDetail = null;
     navigate({ page: 'analytics' });
   }
 
@@ -356,7 +368,19 @@
     }
     if (!snapshot) return;
 
-    if (!modal && !callDetail && router.route.page !== 'session') {
+    const action = resolveShortcut(event);
+
+    if (action?.kind === 'escape') {
+      event.preventDefault();
+      if (callDetail) closeCallDetail();
+      else if (modal) closeModal();
+      else if (router.route.page === 'session') closeSession();
+      return;
+    }
+
+    if (modal || callDetail) return;
+
+    if (router.route.page !== 'session') {
       const targetRoute = clientNavTarget(event);
       if (targetRoute) {
         event.preventDefault();
@@ -365,61 +389,56 @@
       }
     }
 
-    void commitShortcut(event);
-  }
+    if (!action) return;
+    const page = router.route.page;
+    const periodLocked = page === 'tools';
+    const dataFiltersActive = page === 'overview' || page === 'analytics';
 
-  async function commitShortcut(event: KeyboardEvent) {
-    busy = true;
-    error = null;
-    try {
-      const response = await api.handleShortcut(shortcutContext(event), shortcutInput(event));
-      if (!response.handled) return;
-      event.preventDefault();
-      snapshot = response.snapshot;
-      applyShortcutEffect(response.effect);
-    } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
-    } finally {
-      busy = false;
-    }
-  }
-
-  function shortcutContext(event: KeyboardEvent) {
-    if (callDetail) return 'desktop_call_detail';
-    if (modal) return 'desktop_modal';
-    if (router.route.page === 'session' && event.key === 'Escape') return 'desktop_session_page';
-    if (router.route.page === 'tools') return 'desktop_usage_page';
-    if (router.route.page === 'config') return 'desktop_config_page';
-    return 'desktop';
-  }
-
-  function shortcutInput(event: KeyboardEvent): ShortcutInput {
-    return {
-      key: event.key,
-      ctrl: event.ctrlKey,
-      alt: event.altKey,
-      shift: event.shiftKey,
-      meta: event.metaKey
-    };
-  }
-
-  function applyShortcutEffect(effect: string | null) {
-    switch (effect) {
-      case 'open_project_picker':
+    switch (action.kind) {
+      case 'period':
+        if (page === 'config' || periodLocked) return;
+        event.preventDefault();
+        setPeriod(action.period);
+        return;
+      case 'cycle-tool': {
+        if (!dataFiltersActive) return;
+        event.preventDefault();
+        const tools = snapshot.tools;
+        const idx = tools.findIndex((tool) => tool.value === snapshot?.tool);
+        const next = tools[(idx + 1 + tools.length) % tools.length];
+        void commit(() => api.setTool(next.value));
+        return;
+      }
+      case 'cycle-sort': {
+        if (page === 'config') return;
+        event.preventDefault();
+        const sorts = snapshot.sorts;
+        const idx = sorts.findIndex((sort) => sort.value === snapshot?.sort);
+        const next = sorts[(idx + 1 + sorts.length) % sorts.length];
+        void commit(() => api.setSort(next.value));
+        return;
+      }
+      case 'toggle-source':
+        event.preventDefault();
+        void commit(() => api.toggleDataSource());
+        return;
+      case 'open-project-picker':
+        if (!dataFiltersActive && page !== 'projects') return;
+        event.preventDefault();
         openModal('project');
-        break;
-      case 'open_session_picker':
+        return;
+      case 'open-session-picker':
+        event.preventDefault();
         openModal('session');
-        break;
-      case 'open_export_picker':
+        return;
+      case 'open-report':
+        event.preventDefault();
         openModal('report');
-        break;
-      case 'close_modal':
-        closeModal();
-        break;
-      case 'close_call_detail':
-        closeCallDetail();
-        break;
+        return;
+      case 'refresh':
+        event.preventDefault();
+        void commit(() => api.refreshArchive());
+        return;
     }
   }
 
@@ -802,6 +821,18 @@
     if (clearingData) return 'busy';
     return snapshot?.status_tone ?? 'info';
   }
+
+  function statusHints(): ShortcutHint[] {
+    if (!snapshot) return [];
+    const footers = snapshot.copy.keymap.footers;
+    const name =
+      router.route.page === 'tools'
+        ? 'desktop_usage'
+        : router.route.page === 'config'
+          ? 'desktop_config'
+          : 'desktop';
+    return footers[name] ?? footers['desktop'] ?? [];
+  }
 </script>
 
 {#if isTrayPopover}
@@ -846,6 +877,8 @@
           <ToolsPage {snapshot} tool={router.route.tool} {usageTone} />
         {:else if router.route.page === 'models'}
           <ModelsPage {snapshot} />
+        {:else if router.route.page === 'projects'}
+          <ProjectsPage {snapshot} {openCallDetail} {handleCallRowKey} />
         {:else if router.route.page === 'config'}
           <ConfigView
             {snapshot}
@@ -861,8 +894,8 @@
         {:else if router.route.page === 'session'}
           <SessionView
             {snapshot}
-            session={snapshot.session}
-            closeSession={() => void closeSession()}
+            session={sessionDetail}
+            {closeSession}
             {openCallDetail}
             {handleCallRowKey}
           />
@@ -873,7 +906,7 @@
         copy={snapshot.copy}
         source={snapshot.source}
         currency={snapshot.currency}
-        hints={snapshot.shortcut_footer}
+        hints={statusHints()}
         sortLabel={activeSortLabel()}
       />
     </div>

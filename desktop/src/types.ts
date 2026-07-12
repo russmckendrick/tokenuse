@@ -1,4 +1,3 @@
-export type PageId = 'overview' | 'deep-dive' | 'usage' | 'config' | 'session';
 export type PeriodId = 'today' | 'week' | 'thirty-days' | 'month' | 'all-time';
 export type ToolId = 'all' | 'claude-code' | 'cursor' | 'codex' | 'copilot' | 'gemini';
 export type SortId = 'spend' | 'date' | 'tokens';
@@ -319,14 +318,6 @@ export type CopyDeck = {
   status: Record<string, string>;
 };
 
-export type ShortcutInput = {
-  key: string;
-  ctrl: boolean;
-  alt: boolean;
-  shift: boolean;
-  meta: boolean;
-};
-
 export type DesktopSnapshot = {
   copy: CopyDeck;
   version: string;
@@ -334,7 +325,6 @@ export type DesktopSnapshot = {
   source: 'live' | 'sample';
   status: string | null;
   status_tone: 'info' | 'busy' | 'success' | 'warning' | 'error';
-  page: PageId;
   period: PeriodId;
   periods: OptionItem<PeriodId>[];
   tool: ToolId;
@@ -347,7 +337,6 @@ export type DesktopSnapshot = {
   projects: ProjectOption[];
   report_projects: ProjectOption[];
   sessions: SessionOption[];
-  session: SessionDetailView | null;
   config_rows: ConfigRow[];
   currencies: string[];
   currency: string;
@@ -355,7 +344,6 @@ export type DesktopSnapshot = {
   desktop_updates: DesktopUpdateState;
   report_dir: string;
   report_formats: OptionItem<ReportFormatId>[];
-  shortcut_footer: ShortcutHint[];
   subscription_cookies: SubscriptionCookieState;
 };
 
@@ -384,8 +372,3 @@ export type ToolPageData = {
   usage: LimitsData;
 };
 
-export type ShortcutResponse = {
-  handled: boolean;
-  effect: 'open_project_picker' | 'open_session_picker' | 'open_export_picker' | 'close_modal' | 'close_call_detail' | null;
-  snapshot: DesktopSnapshot;
-};

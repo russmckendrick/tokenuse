@@ -1,5 +1,5 @@
 use tokenuse::{
-    app::{Page, Period, SortMode, StatusTone, Tool},
+    app::{Period, SortMode, StatusTone, Tool},
     reports::ReportFormat,
 };
 
@@ -12,27 +12,6 @@ pub(crate) fn status_tone_id(tone: StatusTone) -> &'static str {
         StatusTone::Success => "success",
         StatusTone::Warning => "warning",
         StatusTone::Error => "error",
-    }
-}
-
-pub(crate) fn parse_page(value: &str) -> CommandResult<Page> {
-    match value {
-        "overview" => Ok(Page::Overview),
-        "deep-dive" => Ok(Page::DeepDive),
-        "usage" => Ok(Page::Usage),
-        "config" => Ok(Page::Config),
-        "session" => Ok(Page::Session),
-        _ => Err(unknown("page", value)),
-    }
-}
-
-pub(crate) fn page_id(page: Page) -> &'static str {
-    match page {
-        Page::Overview => "overview",
-        Page::DeepDive => "deep-dive",
-        Page::Config => "config",
-        Page::Usage => "usage",
-        Page::Session => "session",
     }
 }
 

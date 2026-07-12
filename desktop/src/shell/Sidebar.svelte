@@ -2,6 +2,7 @@
   import {
     Boxes,
     ChartLine,
+    FolderGit2,
     LayoutDashboard,
     PanelLeftClose,
     PanelLeftOpen,
@@ -90,6 +91,17 @@
     >
       <Boxes size={16} />
       {#if !collapsed}<span>{copy.nav.models}</span>{/if}
+    </button>
+
+    <button
+      type="button"
+      class="sidebar-item"
+      class:active={isActive('projects')}
+      title={copy.nav.projects}
+      onclick={() => navigate({ page: 'projects' })}
+    >
+      <FolderGit2 size={16} />
+      {#if !collapsed}<span>{copy.nav.projects}</span>{/if}
     </button>
 
     {#if !collapsed}

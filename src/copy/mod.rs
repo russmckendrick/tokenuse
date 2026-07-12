@@ -979,28 +979,44 @@ mod tests {
                 include_str!("../../desktop/src/views/ConfigView.svelte"),
             ),
             (
-                "desktop/src/views/DeepDiveView.svelte",
-                include_str!("../../desktop/src/views/DeepDiveView.svelte"),
-            ),
-            (
-                "desktop/src/views/OverviewView.svelte",
-                include_str!("../../desktop/src/views/OverviewView.svelte"),
-            ),
-            (
                 "desktop/src/views/SessionView.svelte",
                 include_str!("../../desktop/src/views/SessionView.svelte"),
             ),
             (
-                "desktop/src/views/UsageView.svelte",
-                include_str!("../../desktop/src/views/UsageView.svelte"),
+                "desktop/src/routes/OverviewPage.svelte",
+                include_str!("../../desktop/src/routes/OverviewPage.svelte"),
+            ),
+            (
+                "desktop/src/routes/AnalyticsPage.svelte",
+                include_str!("../../desktop/src/routes/AnalyticsPage.svelte"),
+            ),
+            (
+                "desktop/src/routes/ToolsPage.svelte",
+                include_str!("../../desktop/src/routes/ToolsPage.svelte"),
+            ),
+            (
+                "desktop/src/routes/ModelsPage.svelte",
+                include_str!("../../desktop/src/routes/ModelsPage.svelte"),
+            ),
+            (
+                "desktop/src/routes/ProjectsPage.svelte",
+                include_str!("../../desktop/src/routes/ProjectsPage.svelte"),
+            ),
+            (
+                "desktop/src/shell/Sidebar.svelte",
+                include_str!("../../desktop/src/shell/Sidebar.svelte"),
+            ),
+            (
+                "desktop/src/shell/PageHeader.svelte",
+                include_str!("../../desktop/src/shell/PageHeader.svelte"),
+            ),
+            (
+                "desktop/src/shell/StatusBar.svelte",
+                include_str!("../../desktop/src/shell/StatusBar.svelte"),
             ),
             (
                 "desktop/src/components/tables/CountTable.svelte",
                 include_str!("../../desktop/src/components/tables/CountTable.svelte"),
-            ),
-            (
-                "desktop/src/components/tables/KpiStrip.svelte",
-                include_str!("../../desktop/src/components/tables/KpiStrip.svelte"),
             ),
             (
                 "desktop/src/components/tables/ModelTable.svelte",

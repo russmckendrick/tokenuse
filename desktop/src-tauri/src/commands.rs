@@ -2,20 +2,18 @@ use std::path::PathBuf;
 
 use tauri::{AppHandle, State};
 use tokenuse::{
-    app::{AppStatus, Page, StatusTone},
+    app::{AppStatus, StatusTone},
     copy,
     data::ProjectOption,
-    keymap::{self, KeyInput},
     reports::{ReportRequest, ReportScope},
 };
 
 use crate::{
     apply_dock_or_taskbar_icon, hide_tray_popover_window,
-    ids::{parse_page, parse_period, parse_report_format, parse_sort, parse_tool},
+    ids::{parse_period, parse_report_format, parse_sort, parse_tool},
     restore_main_window,
     snapshot::{
-        snapshot, tray_snapshot, DesktopSnapshot, ReportResponse, ShortcutResponse, ToolPageData,
-        TraySnapshot,
+        snapshot, tray_snapshot, DesktopSnapshot, ReportResponse, ToolPageData, TraySnapshot,
     },
     state::{save_user_settings, with_app, CommandError, CommandResult, SharedState},
     sync_open_at_login,
@@ -43,23 +41,6 @@ pub(crate) fn open_main_window(app_handle: AppHandle) -> CommandResult<()> {
 #[tauri::command]
 pub(crate) fn hide_tray_popover(app_handle: AppHandle) -> CommandResult<()> {
     hide_tray_popover_window(&app_handle)
-}
-
-#[tauri::command]
-pub(crate) async fn set_page(
-    page: String,
-    state: State<'_, SharedState>,
-) -> CommandResult<DesktopSnapshot> {
-    with_app(state, move |app| {
-        let page = parse_page(&page)?;
-        if page != Page::Session {
-            app.session_view = None;
-            app.session_scroll = 0;
-        }
-        app.set_page(page);
-        Ok(snapshot(app))
-    })
-    .await
 }
 
 #[tauri::command]
@@ -105,27 +86,6 @@ pub(crate) async fn set_project(
 ) -> CommandResult<DesktopSnapshot> {
     with_app(state, move |app| {
         app.set_project_by_identity(identity.as_deref());
-        Ok(snapshot(app))
-    })
-    .await
-}
-
-#[tauri::command]
-pub(crate) async fn open_session(
-    key: String,
-    state: State<'_, SharedState>,
-) -> CommandResult<DesktopSnapshot> {
-    with_app(state, move |app| {
-        app.enter_session(&key);
-        Ok(snapshot(app))
-    })
-    .await
-}
-
-#[tauri::command]
-pub(crate) async fn close_session(state: State<'_, SharedState>) -> CommandResult<DesktopSnapshot> {
-    with_app(state, |app| {
-        app.leave_session();
         Ok(snapshot(app))
     })
     .await
@@ -244,6 +204,17 @@ pub(crate) async fn set_show_dock_or_taskbar_icon(
             ),
             StatusTone::Success,
         ));
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn toggle_data_source(
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    with_app(state, |app| {
+        app.toggle_data_source();
         Ok(snapshot(app))
     })
     .await
@@ -559,46 +530,3 @@ pub(crate) async fn generate_report(
     .await
 }
 
-#[tauri::command]
-pub(crate) async fn handle_shortcut(
-    context: String,
-    input: KeyInput,
-    state: State<'_, SharedState>,
-) -> CommandResult<ShortcutResponse> {
-    let action = keymap::keymap()
-        .resolve_input(&context, &input)
-        .map(str::to_string);
-    with_app(state, move |app| {
-        let mut effect = None;
-        let handled = match action.as_deref() {
-            Some(keymap::ACTION_OPEN_PROJECT_PICKER) => {
-                effect = Some("open_project_picker");
-                true
-            }
-            Some(keymap::ACTION_OPEN_SESSION_PICKER) => {
-                effect = Some("open_session_picker");
-                true
-            }
-            Some(keymap::ACTION_OPEN_EXPORT_PICKER) => {
-                effect = Some("open_export_picker");
-                true
-            }
-            Some(keymap::ACTION_CLOSE_MODAL) => {
-                effect = Some("close_modal");
-                true
-            }
-            Some(keymap::ACTION_CLOSE_CALL_DETAIL) => {
-                effect = Some("close_call_detail");
-                true
-            }
-            Some(action) => app.apply_shortcut_action(action),
-            None => false,
-        };
-        Ok(ShortcutResponse {
-            handled,
-            effect,
-            snapshot: snapshot(app),
-        })
-    })
-    .await
-}
