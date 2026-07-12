@@ -20,8 +20,6 @@ pub(crate) fn parse_page(value: &str) -> CommandResult<Page> {
         "overview" => Ok(Page::Overview),
         "deep-dive" => Ok(Page::DeepDive),
         "usage" => Ok(Page::Usage),
-        "insights" => Ok(Page::Insights),
-        "audit" => Ok(Page::Audit),
         "config" => Ok(Page::Config),
         "session" => Ok(Page::Session),
         _ => Err(unknown("page", value)),

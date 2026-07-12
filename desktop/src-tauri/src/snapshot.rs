@@ -1,11 +1,8 @@
 use serde::Serialize;
 use tokenuse::{
-    advice::{AdviceHistory, AdviceTool},
     app::{App, ConfigRowView, DataSource, Page, Period, ProjectFilter, SortMode, Tool},
     copy::{self, CopyDeck, CopyKeyHint},
     data::{DashboardData, LimitsData, ProjectOption, SessionDetailView, SessionOption},
-    audit::AuditSnapshot,
-    insights::InsightsView,
     reports::ReportFormat,
 };
 
@@ -40,12 +37,6 @@ pub(crate) struct DesktopSnapshot {
     pub(crate) project: ProjectState,
     pub(crate) dashboard: DashboardData,
     pub(crate) usage: LimitsData,
-    pub(crate) insights: InsightsView,
-    pub(crate) advice: AdviceHistory,
-    pub(crate) audit: AuditSnapshot,
-    pub(crate) advice_running: bool,
-    pub(crate) advice_tool: String,
-    pub(crate) advice_tool_options: Vec<OptionItem>,
     pub(crate) projects: Vec<ProjectOption>,
     pub(crate) report_projects: Vec<ProjectOption>,
     pub(crate) sessions: Vec<SessionOption>,
@@ -175,18 +166,6 @@ pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
         },
         dashboard: app.dashboard(),
         usage: app.usage_for(tool, sort),
-        insights: app.insights(),
-        advice: app.advice_history(),
-        audit: app.audit().clone(),
-        advice_running: app.advice_running(),
-        advice_tool: app.settings.insights.advice_tool.clone(),
-        advice_tool_options: AdviceTool::ALL
-            .into_iter()
-            .map(|tool| OptionItem {
-                value: tool.id(),
-                label: tool.label(),
-            })
-            .collect(),
         projects: app.project_options(),
         report_projects: app.report_project_options(app.period),
         sessions: app.session_options(),
@@ -236,8 +215,6 @@ fn subscription_cookie_state() -> SubscriptionCookieState {
 fn desktop_footer_name(app: &App) -> &'static str {
     match app.page {
         Page::Usage => "desktop_usage",
-        Page::Insights => "desktop_insights",
-        Page::Audit => "desktop_audit",
         Page::Config => "desktop_config",
         _ => "desktop",
     }
