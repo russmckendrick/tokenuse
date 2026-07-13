@@ -1,6 +1,6 @@
 {
   "_metadata": {
-    "checked_at": "2026-07-11",
+    "checked_at": "2026-07-13",
     "fields": {
       "cache_read": "USD per cache read token",
       "cache_write": "USD per cache write token",
@@ -1820,6 +1820,13 @@
       "web_search": 0.01
     },
     "jp.anthropic.claude-opus-4-7": {
+      "cache_read": 5.5e-7,
+      "cache_write": 6.875e-6,
+      "input": 5.5e-6,
+      "output": 0.0000275,
+      "web_search": 0.01
+    },
+    "jp.anthropic.claude-opus-4-8": {
       "cache_read": 5.5e-7,
       "cache_write": 6.875e-6,
       "input": 5.5e-6,
