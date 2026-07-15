@@ -73,6 +73,15 @@ pub struct LimitCredits {
     pub additional_usage: Option<bool>,
 }
 
+/// One chunk of AI-generated code attributed to a call: a fenced block in
+/// assistant text, or a Write/Edit-style tool payload counted as code output.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CodeBlock {
+    /// Lowercase fence tag or file extension; "unknown" when neither exists.
+    pub language: String,
+    pub loc: u64,
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ParsedCall {
     pub tool: &'static str,
@@ -93,4 +102,16 @@ pub struct ParsedCall {
     pub user_message: String,
     pub session_id: String,
     pub project: String,
+    /// `false` also when the source has no cancellation signal; the coach's
+    /// per-tool capability table decides which tools enter cancellation rates.
+    pub is_canceled: bool,
+    /// Full prompt length in chars, measured before `user_message` truncation.
+    /// `None` = source lacks the signal (excluded from ratio denominators).
+    pub prompt_chars: Option<u64>,
+    pub response_chars: Option<u64>,
+    /// User-message to final-assistant-message turn latency.
+    pub elapsed_ms: Option<u64>,
+    pub code_blocks: Vec<CodeBlock>,
+    pub edited_files: Vec<String>,
+    pub referenced_files: Vec<String>,
 }

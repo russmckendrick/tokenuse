@@ -1,6 +1,8 @@
 import { type Channel, invoke } from '@tauri-apps/api/core';
 import type {
   AnalyticsData,
+  CoachData,
+  CoachTimelineDay,
   DesktopSnapshot,
   DesktopUpdateDownloadEvent,
   DesktopUpdateMetadata,
@@ -30,6 +32,9 @@ export const api = {
     invoke<ModelCatalogEntry[]>('get_model_catalog', { period }),
   getToolPage: (tool: ToolId) => invoke<ToolPageData>('get_tool_page', { tool }),
   getAnalytics: (period: PeriodId) => invoke<AnalyticsData>('get_analytics', { period }),
+  getCoach: (period: PeriodId) => invoke<CoachData>('get_coach', { period }),
+  getCoachTimeline: (day: string) =>
+    invoke<CoachTimelineDay | null>('get_coach_timeline', { day }),
   getSessionDetail: (key: string) =>
     invoke<SessionDetailView | null>('get_session_detail', { key }),
   setOpenAtLogin: (enabled: boolean) =>

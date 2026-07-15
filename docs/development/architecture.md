@@ -62,6 +62,13 @@ Every adapter emits `ParsedCall` from `src/tools/types.rs`. The important fields
 | `tools`, `bash_commands` | Tool call names and split shell commands |
 | `timestamp`, `session_id`, `project` | Aggregation and filtering keys |
 | `dedup_key` | Per-call key used by the shared run-level dedup set |
+| `is_canceled` | Turn was interrupted, where the source records it (see per-tool signal matrices) |
+| `prompt_chars`, `response_chars` | Full prompt/response lengths; `None` when the source lacks the signal |
+| `elapsed_ms` | User-message to assistant-message turn latency |
+| `code_blocks` | AI code output as `{language, loc}` pairs from fences and Write/Edit-style payloads |
+| `edited_files`, `referenced_files` | File paths touched/read by the turn's tool calls |
+
+The last five rows are the archive v4 "coach enrichment" fields consumed by the desktop Coach page — see [Coach engine](coach.md).
 
 ## Model Identity
 
@@ -176,10 +183,11 @@ The modal state is checked in priority order in `App::handle_key`: help, call de
 
 ### Desktop Router And Screens
 
-Desktop page state is owned by `desktop/src/lib/router.svelte.ts`; it is deliberately not serialized through `App::page`. The persistent sidebar links Overview, Analytics, Tools, Models, Projects, every individual tool, and Config. Direct tool rows sort by the numeric call counts in the rolling 24-hour Usage snapshot, while primary routes stay fixed. `Tab` cycles the six primary sidebar screens. Session is a sub-route opened from Analytics, Projects, or the session picker and returns to Analytics.
+Desktop page state is owned by `desktop/src/lib/router.svelte.ts`; it is deliberately not serialized through `App::page`. The persistent sidebar links Overview, Analytics, Coach, Tools, Models, Projects, every individual tool, and Config. Direct tool rows sort by the numeric call counts in the rolling 24-hour Usage snapshot, while primary routes stay fixed. `Tab` cycles the seven primary sidebar screens. Session is a sub-route opened from Analytics, Projects, or the session picker and returns to Analytics.
 
 - **Overview** uses the shared dashboard query for hero KPIs, current utilisation, activity, projects, and models.
 - **Analytics** combines shared ranked tables with `get_analytics` stacked daily/tool data, hour-by-weekday activity, and provider/tool shares.
+- **Coach** calls `get_coach` for practice scores, findings, flow/pace, AI code output, and the day list, plus `get_coach_timeline` for the selected day's session Gantt. Desktop-only; the TUI has no coach page. See [Coach engine](coach.md).
 - **Tools** shows all fixed 24-hour consoles at the parent route. A tool sub-route calls `get_tool_page` for period-aware KPIs, utilisation, projects, models, and sessions.
 - **Models** calls `get_model_catalog` for all five periods, groups canonical models by provider, and uses the active period for ranking and expanded per-tool splits.
 - **Projects** uses shared project/session rows and pure `get_session_detail` lookups for project-to-session-to-call drill-down.
@@ -202,7 +210,7 @@ Raw project strings come from each tool's local data. Before display, `tokenuse`
 
 ## Archive And Sync
 
-`src/archive.rs` owns the SQLite archive. Schema v3 stores full `ParsedCall` rows, append-only limit snapshots, and per-source fingerprints in `source_state`; its migration drops the removed advice tables while retaining calls and limits. Older binaries reject a v3 archive rather than opening a newer schema, so downgrading requires deleting `archive.db` and rebuilding from source history. Calls are unique on `(tool, dedup_key)`, so a changed source can be reparsed safely without duplicating historical calls. Source deletion never removes archive rows; once tokenuse has imported a call, it remains available even if the original tool history is later cleared.
+`src/archive.rs` owns the SQLite archive. Schema v4 stores full `ParsedCall` rows, append-only limit snapshots, and per-source fingerprints in `source_state`; the v3 migration drops the removed advice tables, and the v4 migration adds the coach enrichment columns (`is_canceled`, `prompt_chars`, `response_chars`, `elapsed_ms`, `code_blocks_json`, `edited_files_json`, `referenced_files_json`) inside a transaction and clears `source_state` once so on-disk history re-parses through the enriched parsers. Re-inserted duplicate rows backfill enrichment exactly once — a later parse never clobbers previously archived enrichment; rows whose source files no longer exist keep `NULL` columns. Older binaries reject a v4 archive rather than opening a newer schema, so downgrading requires deleting `archive.db` and rebuilding from source history. Calls are unique on `(tool, dedup_key)`, so a changed source can be reparsed safely without duplicating historical calls. Source deletion never removes archive rows; once tokenuse has imported a call, it remains available even if the original tool history is later cleared.
 
 The source fingerprint hook defaults to file metadata for file-backed sources and recursive directory metadata for directory-backed sources. Sources are tagged as session or limit sources. Session sources must parse calls successfully before their fingerprint is advanced; limit sidecars must parse limit snapshots successfully before their fingerprint is advanced. When a source fingerprint has not changed, sync skips parsing it. When it changes, sync parses the source, inserts only new call keys, stores any new limit snapshots, and updates the fingerprint.
 

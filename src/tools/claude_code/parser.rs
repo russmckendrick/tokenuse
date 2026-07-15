@@ -8,9 +8,13 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::pricing;
-use crate::tools::{jsonl, ParsedCall, SessionSource, Speed};
+use crate::tools::{jsonl, CodeBlock, ParsedCall, SessionSource, Speed};
 
 use super::config;
+
+/// User lines starting with this marker record an interrupted assistant turn.
+/// Covers both "[Request interrupted by user]" and the "for tool use" variant.
+const INTERRUPT_MARKER: &str = "[Request interrupted by user";
 
 #[derive(Debug, Deserialize)]
 struct JournalEntry {
@@ -66,9 +70,12 @@ pub fn parse_session(
     source: &SessionSource,
     seen: &mut HashSet<String>,
 ) -> Result<Vec<ParsedCall>> {
-    let mut calls = Vec::new();
+    let mut calls: Vec<ParsedCall> = Vec::new();
     for path in collect_jsonl(&source.path) {
         let mut last_user_text = String::new();
+        let mut last_user_chars: Option<u64> = None;
+        let mut last_user_ts: Option<DateTime<Utc>> = None;
+        let file_start_index = calls.len();
         let mut project = source.project.clone();
         let lines = match jsonl::read_lines(&path) {
             Ok(l) => l,
@@ -94,9 +101,30 @@ pub fn parse_session(
                     if let Some(msg) = &entry.message {
                         if msg.role.as_deref() == Some("user") {
                             let text = extract_user_text(msg);
-                            if !text.trim().is_empty() {
-                                last_user_text = truncate(&text, 500);
+                            let trimmed = text.trim();
+                            if trimmed.is_empty() {
+                                continue;
                             }
+                            if trimmed.starts_with(INTERRUPT_MARKER) {
+                                // The interruption belongs to the previous
+                                // call of this session file, if any.
+                                if calls.len() > file_start_index {
+                                    if let Some(last) = calls.last_mut() {
+                                        last.is_canceled = true;
+                                    }
+                                }
+                                continue;
+                            }
+                            if trimmed.starts_with("<command-")
+                                || trimmed.starts_with("<local-command-")
+                            {
+                                // Slash-command wrappers are UI plumbing, not
+                                // a prompt the user wrote.
+                                continue;
+                            }
+                            last_user_chars = Some(text.chars().count() as u64);
+                            last_user_text = jsonl::truncate_chars(&text, 500);
+                            last_user_ts = entry.timestamp.as_deref().and_then(parse_timestamp);
                         }
                     }
                 }
@@ -124,7 +152,13 @@ pub fn parse_session(
                         _ => Speed::Standard,
                     };
 
-                    let (tools, bash_commands) = extract_tools(msg.content.as_ref());
+                    let activity = extract_activity(msg.content.as_ref());
+                    let response_text = extract_response_text(msg.content.as_ref());
+                    let mut code_blocks = jsonl::extract_code_fences(&response_text);
+                    code_blocks.extend(activity.code_blocks);
+
+                    let timestamp = entry.timestamp.as_deref().and_then(parse_timestamp);
+                    let elapsed_ms = jsonl::turn_elapsed_ms(timestamp, last_user_ts);
 
                     let mut call = ParsedCall {
                         tool: config::TOOL_ID,
@@ -139,9 +173,9 @@ pub fn parse_session(
                             .map(|s| s.web_search_requests)
                             .unwrap_or(0),
                         speed,
-                        tools,
-                        bash_commands,
-                        timestamp: entry.timestamp.as_deref().and_then(parse_timestamp),
+                        tools: activity.tools,
+                        bash_commands: activity.bash_commands,
+                        timestamp,
                         dedup_key,
                         user_message: last_user_text.clone(),
                         session_id: entry
@@ -149,6 +183,12 @@ pub fn parse_session(
                             .clone()
                             .unwrap_or_else(|| session_id.clone()),
                         project: project.clone(),
+                        prompt_chars: last_user_chars,
+                        response_chars: Some(response_text.chars().count() as u64),
+                        elapsed_ms,
+                        code_blocks: jsonl::merge_code_blocks(code_blocks),
+                        edited_files: jsonl::dedup_files(activity.edited_files),
+                        referenced_files: jsonl::dedup_files(activity.referenced_files),
                         ..ParsedCall::default()
                     };
 
@@ -219,12 +259,20 @@ fn extract_user_text(msg: &Message) -> String {
     String::new()
 }
 
-fn extract_tools(content: Option<&Value>) -> (Vec<String>, Vec<String>) {
-    let mut tools = Vec::new();
-    let mut bash = Vec::new();
+#[derive(Default)]
+struct ToolActivity {
+    tools: Vec<String>,
+    bash_commands: Vec<String>,
+    edited_files: Vec<String>,
+    referenced_files: Vec<String>,
+    code_blocks: Vec<CodeBlock>,
+}
+
+fn extract_activity(content: Option<&Value>) -> ToolActivity {
+    let mut activity = ToolActivity::default();
 
     let Some(arr) = content.and_then(|v| v.as_array()) else {
-        return (tools, bash);
+        return activity;
     };
 
     for block in arr {
@@ -239,26 +287,96 @@ fn extract_tools(content: Option<&Value>) -> (Vec<String>, Vec<String>) {
         if name.is_empty() {
             continue;
         }
-        if matches!(name.as_str(), "Bash" | "BashOutput") {
-            if let Some(cmd) = block
-                .get("input")
-                .and_then(|i| i.get("command"))
-                .and_then(|c| c.as_str())
-            {
-                bash.extend(jsonl::split_bash_commands(cmd));
+        let input = block.get("input");
+        let input_str = |key: &str| {
+            input
+                .and_then(|i| i.get(key))
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+        };
+
+        match name.as_str() {
+            "Bash" | "BashOutput" => {
+                if let Some(cmd) = input_str("command") {
+                    activity
+                        .bash_commands
+                        .extend(jsonl::split_bash_commands(cmd));
+                }
             }
+            "Write" => {
+                record_edit(&mut activity, input_str("file_path"), input_str("content"));
+            }
+            "Edit" => {
+                record_edit(
+                    &mut activity,
+                    input_str("file_path"),
+                    input_str("new_string"),
+                );
+            }
+            "MultiEdit" => {
+                let path = input_str("file_path");
+                if let Some(edits) = input
+                    .and_then(|i| i.get("edits"))
+                    .and_then(|e| e.as_array())
+                {
+                    for edit in edits {
+                        let payload = edit.get("new_string").and_then(|v| v.as_str());
+                        record_edit(&mut activity, path, payload.filter(|s| !s.is_empty()));
+                    }
+                } else {
+                    record_edit(&mut activity, path, None);
+                }
+            }
+            "NotebookEdit" => {
+                record_edit(
+                    &mut activity,
+                    input_str("notebook_path"),
+                    input_str("new_source"),
+                );
+            }
+            "Read" => {
+                if let Some(path) = input_str("file_path") {
+                    activity.referenced_files.push(path.to_string());
+                }
+            }
+            _ => {}
         }
-        tools.push(name);
+        activity.tools.push(name);
     }
 
-    (tools, bash)
+    activity
 }
 
-fn truncate(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        return s.to_string();
+/// Record a Write/Edit-style payload: the touched file plus its new content
+/// counted as AI code output, attributed to the file's language.
+fn record_edit(activity: &mut ToolActivity, path: Option<&str>, payload: Option<&str>) {
+    if let Some(path) = path {
+        activity.edited_files.push(path.to_string());
     }
-    s.chars().take(max).collect()
+    if let Some(payload) = payload {
+        let language = path
+            .map(jsonl::extension_language)
+            .unwrap_or_else(|| "unknown".to_string());
+        activity.code_blocks.push(CodeBlock {
+            language,
+            loc: payload.lines().count() as u64,
+        });
+    }
+}
+
+fn extract_response_text(content: Option<&Value>) -> String {
+    let Some(arr) = content.and_then(|v| v.as_array()) else {
+        return String::new();
+    };
+    let mut parts = Vec::new();
+    for block in arr {
+        if block.get("type").and_then(|t| t.as_str()) == Some("text") {
+            if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
+                parts.push(text);
+            }
+        }
+    }
+    parts.join("\n")
 }
 
 #[cfg(test)]
@@ -272,8 +390,12 @@ mod tests {
         let mut f = std::fs::File::create(&path).unwrap();
         for line in [
             r#"{"type":"user","timestamp":"2026-04-26T10:00:00Z","sessionId":"s1","message":{"role":"user","content":"refactor the parser"}}"#,
-            r#"{"type":"assistant","timestamp":"2026-04-26T10:00:01Z","sessionId":"s1","message":{"role":"assistant","id":"msg_1","model":"claude-opus-4-7-20250514","usage":{"input_tokens":100,"output_tokens":50,"cache_creation_input_tokens":1000,"cache_read_input_tokens":5000,"speed":"fast"},"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls -la | grep foo"}},{"type":"tool_use","name":"Edit","input":{}}]}}"#,
+            r#"{"type":"assistant","timestamp":"2026-04-26T10:00:01Z","sessionId":"s1","message":{"role":"assistant","id":"msg_1","model":"claude-opus-4-7-20250514","usage":{"input_tokens":100,"output_tokens":50,"cache_creation_input_tokens":1000,"cache_read_input_tokens":5000,"speed":"fast"},"content":[{"type":"text","text":"Here:\n```rust\nfn a() {}\nfn b() {}\n```"},{"type":"tool_use","name":"Bash","input":{"command":"ls -la | grep foo"}},{"type":"tool_use","name":"Edit","input":{"file_path":"src/app.rs","new_string":"let a = 1;\nlet b = 2;"}},{"type":"tool_use","name":"Read","input":{"file_path":"docs/x.md"}}]}}"#,
             r#"{"type":"assistant","timestamp":"2026-04-26T10:00:02Z","sessionId":"s1","message":{"role":"assistant","id":"msg_1","model":"claude-opus-4-7","usage":{"input_tokens":999}}}"#,
+            r#"{"type":"user","timestamp":"2026-04-26T10:00:30Z","sessionId":"s1","message":{"role":"user","content":"[Request interrupted by user]"}}"#,
+            r#"{"type":"user","timestamp":"2026-04-26T10:04:00Z","sessionId":"s1","message":{"role":"user","content":"<command-name>/compact</command-name>"}}"#,
+            r#"{"type":"user","timestamp":"2026-04-26T10:05:00Z","sessionId":"s1","message":{"role":"user","content":"try again with tests"}}"#,
+            r#"{"type":"assistant","timestamp":"2026-04-26T10:05:20Z","sessionId":"s1","message":{"role":"assistant","id":"msg_2","model":"claude-opus-4-7-20250514","usage":{"input_tokens":10,"output_tokens":5},"content":[{"type":"text","text":"done"}]}}"#,
         ] {
             writeln!(f, "{}", line).unwrap();
         }
@@ -287,17 +409,82 @@ mod tests {
             SessionSource::session(dir.path().to_path_buf(), "test/project", config::TOOL_ID);
         let mut seen = HashSet::new();
         let calls = parse_session(&source, &mut seen).unwrap();
-        assert_eq!(calls.len(), 1, "duplicate msg.id should be dropped");
+        assert_eq!(calls.len(), 2, "duplicate msg.id should be dropped");
         let call = &calls[0];
         assert_eq!(call.input_tokens, 100);
         assert_eq!(call.output_tokens, 50);
         assert_eq!(call.cache_creation_input_tokens, 1000);
         assert_eq!(call.cache_read_input_tokens, 5000);
         assert_eq!(call.speed, Speed::Fast);
-        assert_eq!(call.tools, vec!["Bash", "Edit"]);
+        assert_eq!(call.tools, vec!["Bash", "Edit", "Read"]);
         assert_eq!(call.bash_commands, vec!["ls -la", "grep foo"]);
         assert!(call.cost_usd > 0.0);
         assert_eq!(call.user_message, "refactor the parser");
+    }
+
+    #[test]
+    fn enrichment_fields_capture_turn_shape() {
+        let dir = fixture();
+        let source =
+            SessionSource::session(dir.path().to_path_buf(), "test/project", config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source, &mut seen).unwrap();
+        assert_eq!(calls.len(), 2);
+
+        let first = &calls[0];
+        assert_eq!(first.prompt_chars, Some(19));
+        assert_eq!(first.elapsed_ms, Some(1_000));
+        assert_eq!(
+            first.response_chars,
+            Some("Here:\n```rust\nfn a() {}\nfn b() {}\n```".chars().count() as u64)
+        );
+        assert_eq!(
+            first.code_blocks,
+            vec![CodeBlock {
+                language: "rust".into(),
+                loc: 4,
+            }],
+            "fence LoC and Edit payload LoC merge under one language"
+        );
+        assert_eq!(first.edited_files, vec!["src/app.rs"]);
+        assert_eq!(first.referenced_files, vec!["docs/x.md"]);
+        assert!(
+            first.is_canceled,
+            "interrupt marker cancels the previous call"
+        );
+
+        let second = &calls[1];
+        assert_eq!(
+            second.user_message, "try again with tests",
+            "command wrappers and interrupt markers never become prompts"
+        );
+        assert_eq!(second.prompt_chars, Some(20));
+        assert_eq!(second.elapsed_ms, Some(20_000));
+        assert_eq!(second.response_chars, Some(4));
+        assert!(!second.is_canceled);
+        assert!(second.code_blocks.is_empty());
+    }
+
+    #[test]
+    fn interrupt_before_any_call_is_ignored() {
+        let dir = tempfile_lite::TempDir::new();
+        let path = dir.path().join("session.jsonl");
+        let mut f = std::fs::File::create(&path).unwrap();
+        for line in [
+            r#"{"type":"user","timestamp":"2026-04-26T10:00:00Z","sessionId":"s1","message":{"role":"user","content":"[Request interrupted by user]"}}"#,
+            r#"{"type":"assistant","timestamp":"2026-04-26T10:00:01Z","sessionId":"s1","message":{"role":"assistant","id":"msg_9","model":"claude-opus-4-7","usage":{"input_tokens":1,"output_tokens":1}}}"#,
+        ] {
+            writeln!(f, "{}", line).unwrap();
+        }
+
+        let source = SessionSource::session(dir.path().to_path_buf(), "p", config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source, &mut seen).unwrap();
+        assert_eq!(calls.len(), 1);
+        assert!(!calls[0].is_canceled);
+        assert_eq!(calls[0].user_message, "");
+        assert_eq!(calls[0].prompt_chars, None);
+        assert_eq!(calls[0].elapsed_ms, None);
     }
 
     #[test]

@@ -111,6 +111,21 @@ A single Cursor row is one user message *or* one assistant message, and the curr
 
 Cursor does not expose tool-call names in a structured form on the SQLite tables. Transcript `tool_use` blocks do expose tool names; `Shell` is normalized to `Bash`, and `input.command` is copied into `bash_commands` so shell-command panels can include Cursor Agent work.
 
+## Coach signals (archive v4 enrichment)
+
+Cursor populates **none** of the archive v4 enrichment fields. Every emitted `ParsedCall` keeps the defaults — `prompt_chars`/`response_chars`/`elapsed_ms` = `None`, `is_canceled` = `false`, empty `code_blocks`/`edited_files`/`referenced_files` — deliberately:
+
+| `ParsedCall` field | Why it stays default |
+| --- | --- |
+| `prompt_chars` | The parser's internal `input_chars` counter is a chars/4 token-estimate artifact, not a prompt length: it starts from the 500-char-truncated `<user_query>` extract and then accumulates tool/system payload bytes. Wiring it in would poison prompt-size ratios, so it stays `None`. |
+| `response_chars` | Assistant char counts are equally polluted — transcript turns fold serialized `tool_use` inputs into `output_chars`, and Agent KV sessions aggregate a whole request's messages. |
+| `code_blocks` | Bubble `codeBlocks` entries carry only a language with no line counts, and transcript/Agent KV text is an aggregate rather than clean response prose. |
+| `is_canceled` | No Cursor source records an interrupt/abort event. |
+| `elapsed_ms` | Bubble rows are single messages (user and assistant rows are separate calls), Agent KV rows carry no timestamps, and transcript lines are undated — there is never a user→assistant pair to time. |
+| `edited_files` / `referenced_files` | Tool inputs are mined only for project-path hints, not per-file edit attribution. |
+
+Because extraction is unchanged, the `cursor-v2-agent-project-attribution` fingerprint version was not bumped — archived Cursor sessions would reparse into identical rows.
+
 ## Known limitations
 
 - Bubble rows still roll up under a synthetic `cursor-workspace` project when Cursor provides no workspace path, no matching transcript or tracking DB `conversationId`, and no single Agent KV workspace fallback.

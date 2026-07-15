@@ -99,6 +99,21 @@ For `Bash`, the parser reads `args.command` or `args.cmd`, including JSON-encode
 
 If a message id is missing, the parser falls back to session id, timestamp, model, and token counts. Message-level keys let the archive import newly appended messages from an updated session file without duplicating earlier calls.
 
+## Coach signals (archive v4 enrichment)
+
+Gemini session files carry full message text and per-message timestamps, so the parser populates most of the coach enrichment fields.
+
+| `ParsedCall` field | Source | Notes |
+| --- | --- | --- |
+| `prompt_chars` | latest user message `content` text length | Measured **before** the 500-char `user_message` truncation; the same user message keeps covering later Gemini replies in the turn |
+| `response_chars` | Gemini message `content` text length | `0` when the message carries no text; thoughts exist only as token counts, never text, so nothing needs excluding |
+| `code_blocks` | ``` fences in Gemini message `content` | Fence tag → language via `tools::jsonl::normalize_language`; merged per call by language; capped at 32 |
+| `elapsed_ms` | Gemini message `timestamp` − latest user message `timestamp` | Uses the message's own timestamp only — never the session `startTime` fallback, which would time the wrong interval; dropped when either side is missing, non-positive, or ≥ 2 h |
+| `is_canceled` | — | Always `false`: session files record no interrupt/abort events |
+| `edited_files` / `referenced_files` | — | Always empty: `toolCalls[].args` are only read for Bash commands, not mined for file paths |
+
+The adapter prefixes its source fingerprints with `gemini-v2-coach-enrichment`; bumping that constant forces archived sessions back through the parser after an extraction change.
+
 ## Known limitations
 
 - Gemini project names are project hashes unless future session files expose a real working directory.

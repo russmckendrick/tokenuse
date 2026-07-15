@@ -15,6 +15,9 @@ const LIMIT_SOURCE_FINGERPRINT_VERSION: &str = "copilot-limit-schema:3";
 // Bumped when the CLI store parsers change what they emit, so archived
 // stores reparse once (v2: assistant_usage_events supersede estimates).
 const CLI_STORE_FINGERPRINT_VERSION: &str = "copilot-cli-schema:2";
+// Bumped when the legacy-events/VS Code-transcript parsers change what they
+// emit, so archived transcripts reparse once (v2: coach enrichment fields).
+const TRANSCRIPT_FINGERPRINT_VERSION: &str = "copilot-transcript-schema:2";
 
 impl ToolAdapter for Copilot {
     fn id(&self) -> &'static str {
@@ -64,17 +67,20 @@ impl ToolAdapter for Copilot {
             fingerprint.push('|');
             fingerprint.push_str(LIMIT_SOURCE_FINGERPRINT_VERSION);
         }
-        if source.kind == SessionSourceKind::Session
-            && source
+        if source.kind == SessionSourceKind::Session {
+            let is_cli_store = source
                 .path
                 .file_name()
                 .and_then(|name| name.to_str())
                 .is_some_and(|name| {
                     name == config::CLI_SESSION_STORE_FILE || name == config::CLI_DATA_STORE_FILE
-                })
-        {
+                });
             fingerprint.push('|');
-            fingerprint.push_str(CLI_STORE_FINGERPRINT_VERSION);
+            fingerprint.push_str(if is_cli_store {
+                CLI_STORE_FINGERPRINT_VERSION
+            } else {
+                TRANSCRIPT_FINGERPRINT_VERSION
+            });
         }
         Ok(fingerprint)
     }
@@ -87,7 +93,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn limit_fingerprint_version_invalidates_only_archived_limit_sources() {
+    fn fingerprint_versions_are_scoped_by_source_kind() {
         let path = PathBuf::from("/tokenuse-copilot-fingerprint-test-missing");
         let limit = SessionSource::limit(path.clone(), "Copilot", config::TOOL_ID);
         let session = SessionSource::session(path, "Copilot", config::TOOL_ID);
@@ -100,7 +106,8 @@ mod tests {
         );
         assert_eq!(
             Copilot.source_fingerprint(&session).unwrap(),
-            legacy_session_fingerprint
+            format!("{legacy_session_fingerprint}|{TRANSCRIPT_FINGERPRINT_VERSION}"),
+            "non-store session sources carry the transcript parser version"
         );
     }
 

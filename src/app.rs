@@ -18,8 +18,8 @@ use crate::config::{ConfigPaths, UserConfig};
 use crate::copy::{self, copy, CopyDeck};
 use crate::currency::{CurrencyFormatter, CurrencyTable};
 use crate::data::{
-    AnalyticsData, DashboardData, LimitsData, ModelCatalogEntry, ProjectOption, SessionDetail,
-    SessionDetailView, SessionOption,
+    AnalyticsData, CoachTimelineDay, DashboardData, LimitsData, ModelCatalogEntry, ProjectOption,
+    SessionDetail, SessionDetailView, SessionOption,
 };
 use crate::ingest::Ingested;
 use crate::keymap;
@@ -1069,6 +1069,8 @@ struct QueryCache {
     usage: HashMap<(Tool, SortMode, String), LimitsData>,
     model_catalog: HashMap<(Period, String), Vec<ModelCatalogEntry>>,
     analytics: HashMap<(Period, Tool, Option<String>, String), AnalyticsData>,
+    coach: HashMap<(Period, Tool, Option<String>), crate::data::CoachData>,
+    coach_timeline: HashMap<(String, Tool, Option<String>, String), Option<CoachTimelineDay>>,
 }
 
 impl QueryCache {
@@ -1078,6 +1080,8 @@ impl QueryCache {
             self.usage.clear();
             self.model_catalog.clear();
             self.analytics.clear();
+            self.coach.clear();
+            self.coach_timeline.clear();
             self.generation = generation;
         }
     }
@@ -1323,6 +1327,67 @@ impl App {
         self.query_cache
             .borrow_mut()
             .analytics
+            .insert(key, data.clone());
+        data
+    }
+
+    pub fn coach_for(
+        &self,
+        period: Period,
+        tool: Tool,
+        project_filter: &ProjectFilter,
+    ) -> crate::data::CoachData {
+        let key = (period, tool, project_filter.identity_key());
+        {
+            let mut cache = self.query_cache.borrow_mut();
+            cache.sync_generation(self.data_generation);
+            if let Some(data) = cache.coach.get(&key) {
+                return data.clone();
+            }
+        }
+
+        let data = match &self.source {
+            DataSource::Live(ingested) => ingested.coach(period, tool, project_filter),
+            DataSource::Sample => crate::data::coach_sample(),
+        };
+        self.query_cache
+            .borrow_mut()
+            .coach
+            .insert(key, data.clone());
+        data
+    }
+
+    pub fn coach_timeline_for(
+        &self,
+        day: chrono::NaiveDate,
+        tool: Tool,
+        project_filter: &ProjectFilter,
+    ) -> Option<CoachTimelineDay> {
+        let day_key = day.format("%Y-%m-%d").to_string();
+        let key = (
+            day_key.clone(),
+            tool,
+            project_filter.identity_key(),
+            self.settings.currency.clone(),
+        );
+        {
+            let mut cache = self.query_cache.borrow_mut();
+            cache.sync_generation(self.data_generation);
+            if let Some(data) = cache.coach_timeline.get(&key) {
+                return data.clone();
+            }
+        }
+
+        let currency = self.currency();
+        let data = match &self.source {
+            DataSource::Live(ingested) => {
+                ingested.coach_timeline(day, tool, project_filter, &currency)
+            }
+            DataSource::Sample => crate::data::coach_timeline_sample(&day_key),
+        };
+        self.query_cache
+            .borrow_mut()
+            .coach_timeline
             .insert(key, data.clone());
         data
     }

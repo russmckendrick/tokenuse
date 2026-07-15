@@ -156,6 +156,33 @@ pub(crate) async fn get_session_detail(
 }
 
 #[tauri::command]
+pub(crate) async fn get_coach(
+    period: String,
+    state: State<'_, SharedState>,
+) -> CommandResult<tokenuse::data::CoachData> {
+    with_app(state, move |app| {
+        let period = parse_period(&period)?;
+        Ok(app.coach_for(period, app.tool, &app.project_filter.clone()))
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn get_coach_timeline(
+    day: String,
+    state: State<'_, SharedState>,
+) -> CommandResult<Option<tokenuse::data::CoachTimelineDay>> {
+    with_app(state, move |app| {
+        let day = tokenuse::coach::parse_day(&day).ok_or(CommandError::Unknown {
+            kind: "day",
+            value: day.clone(),
+        })?;
+        Ok(app.coach_timeline_for(day, app.tool, &app.project_filter.clone()))
+    })
+    .await
+}
+
+#[tauri::command]
 pub(crate) async fn set_open_at_login(
     enabled: bool,
     app_handle: AppHandle,

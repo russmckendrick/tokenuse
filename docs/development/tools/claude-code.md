@@ -122,6 +122,24 @@ flowchart LR
     E --> F[bash_commands]
 ```
 
+## Coach signals (archive v4 enrichment)
+
+Beyond token accounting, the parser extracts per-call signals for the desktop Coach page. All of them live in the v4 archive columns and default to `NULL`/empty for rows whose source files no longer exist.
+
+| `ParsedCall` field | Source | Notes |
+| --- | --- | --- |
+| `prompt_chars` | user `message.content` text length | Measured **before** the 500-char `user_message` truncation |
+| `is_canceled` | user line starting `[Request interrupted by user` | Marks the **previous** call of the same session file; covers the "for tool use" variant |
+| `elapsed_ms` | assistant `timestamp` − user `timestamp` | Dropped when non-positive or ≥ 2 h (stale carryover guard) |
+| `response_chars` | sum of `content[].type == "text"` lengths | Thinking blocks never count |
+| `code_blocks` | ``` fences in text blocks **plus** Write `content`, Edit `new_string`, MultiEdit `edits[].new_string`, NotebookEdit `new_source` | Fence tag or file extension → language (`tools::jsonl::normalize_language`); merged per call by language; capped at 32 |
+| `edited_files` | `file_path`/`notebook_path` of Write/Edit/MultiEdit/NotebookEdit | Deduped, capped at 64 |
+| `referenced_files` | `file_path` of Read | Deduped, capped at 64 |
+
+User lines that are slash-command wrappers (`<command-...>`, `<local-command-...>`) or interrupt markers never become `user_message`/`prompt_chars` — they are UI plumbing, not prompts.
+
+The adapter prefixes its source fingerprints with `claude-code-v2-coach-enrichment`; bumping that constant forces archived sessions back through the parser after an extraction change.
+
 ## Known limitations
 
 - The user message captured per call is the most recent user turn before the assistant response, truncated to 500 chars. If a user sends multiple messages in rapid succession before any assistant reply, only the last is recorded.

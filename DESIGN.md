@@ -248,7 +248,7 @@ Token Use is a local-only console for people who care about token spend, model b
 The system has a shared root and **two deliberately diverged tracks**:
 
 - **TUI track** — the terminal renderer. A dense single-dashboard operator console: strict monospace, square corners, flat depth, no animation, three tabs (Overview, Deep Dive, Usage) plus Config and Session sub-pages. Everything below this overview that is not explicitly under "Desktop Track" applies to the TUI.
-- **Desktop track** — the Tauri + Svelte app. A modern sidebar-rail analytics application with more screens and more room: Overview, Analytics, Tools, Models, Projects, and Config, each a scrollable page. Graphs and utilisation are the hero; provider icons identify models at a glance. The desktop is not a terminal copy — it shares the palette, the brand mark, and the data-dense table DNA, and diverges everywhere a desktop app earns the space.
+- **Desktop track** — the Tauri + Svelte app. A modern sidebar-rail analytics application with more screens and more room: Overview, Analytics, Coach, Tools, Models, Projects, and Config, each a scrollable page. Graphs and utilisation are the hero; provider icons identify models at a glance. The desktop is not a terminal copy — it shares the palette, the brand mark, and the data-dense table DNA, and diverges everywhere a desktop app earns the space.
 
 The Rust core is the data and query layer both tracks render from. It owns filters, aggregation, the model registry (canonical model names, providers, families), and memoized query results.
 
@@ -309,7 +309,7 @@ Use the `.mono` utility class (or `font-family: var(--font-mono)`) on any cell o
 The primary navigation is a fixed left rail, `desktop.sidebar.width` (200px) expanded and `width-collapsed` (64px) when collapsed; the collapse toggle lives at the rail's foot and the choice persists in local storage for that desktop webview.
 
 - Brand block at top: bars mark + `Token Use` (mark only when collapsed).
-- Primary items — Overview, Analytics, Tools, Models, Projects — each a 32px row: 16px icon, 13px Inter label, `rounded.sm` hover tint, primary-colored active indicator (2px inset bar on the left edge).
+- Primary items — Overview, Analytics, Coach, Tools, Models, Projects — each a 32px row: 16px icon, 13px Inter label, `rounded.sm` hover tint, primary-colored active indicator (2px inset bar on the left edge).
 - Claude Code, Cursor, Codex, Copilot, and Gemini are direct peer rows below the primary views. They use 16px monochrome provider/tool marks, are not nested in an accordion subtree, and dynamically order from highest to lowest rolling 24-hour call activity with a stable fallback for ties.
 - Config is pinned at the bottom above the collapse control.
 - The rail is flat: surface background, hairline right border, no elevation, no rounded container.

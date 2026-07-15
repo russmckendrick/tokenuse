@@ -199,6 +199,23 @@ flowchart LR
     E --> G["bash_commands"]
 ```
 
+## Coach signals (archive v4 enrichment)
+
+Copilot's sources differ sharply in what they expose, so enrichment is populated only where the JSONL event streams carry real message text. All CLI SQLite rows — session-store chars/4 turn estimates, `assistant_usage_events` rows, and `data.db` aggregates — deliberately leave every enrichment field at its default: their text feeds token estimation (or is absent entirely), not per-turn signals.
+
+| `ParsedCall` field | Legacy `events.jsonl` | VS Code transcripts | CLI SQLite stores |
+| --- | --- | --- | --- |
+| `prompt_chars` | latest `user.message` `data.content` length, measured **before** the 500-char `user_message` truncation | same | `None` |
+| `response_chars` | `None` — the legacy path never reads assistant `data.content` | assistant `data.content` length; `data.reasoningText` is excluded, mirroring Claude thinking blocks | `None` |
+| `code_blocks` | empty | ``` fences in assistant `data.content`; merged per call by language, capped at 32 | empty |
+| `is_canceled` | `false` — no Copilot source records an interrupt/abort event | same | same |
+| `elapsed_ms` | `None` — a turn emits one `assistant.message` per tool round-trip and the pending user message is consumed by the first one, so later messages have no user anchor; the signal is left out rather than recorded misleadingly | same | `None` |
+| `edited_files` / `referenced_files` | empty — `toolRequests` arguments are not mined for file paths | same | empty |
+
+The pending user message (and its `prompt_chars`) attaches only to the first `assistant.message` after it; follow-up assistant messages in the same turn carry `prompt_chars: None`.
+
+The adapter appends `copilot-transcript-schema:2` to legacy/transcript session fingerprints; bumping it forces archived transcripts back through the parser after an extraction change. CLI stores keep their separate `copilot-cli-schema` version, which did not change for enrichment because store rows emit none.
+
 ## Known Limitations
 
 - Legacy events without a positive `data.outputTokens` value are skipped.

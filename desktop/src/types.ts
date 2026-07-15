@@ -107,6 +107,101 @@ export type AnalyticsData = {
   tool_share: ShareMetric[];
 };
 
+export type CoachData = {
+  practice_groups: PracticeGroupScore[];
+  findings: CoachFinding[];
+  flow: FlowSummary;
+  pace: PaceSummary;
+  output: OutputSummary;
+  timeline_days: string[];
+};
+
+export type PracticeGroupScore = {
+  id: string;
+  score: number;
+  wow: string;
+  mom: string;
+  triggered: number;
+  total_rules: number;
+  top_rule_id: string;
+};
+
+export type CoachFinding = {
+  rule_id: string;
+  group: string;
+  severity: string;
+  occurrences: number;
+  total: number;
+  pct: string;
+  stat: string;
+  examples: FindingExample[];
+};
+
+export type FindingExample = {
+  text: string;
+  detail: string;
+};
+
+export type FlowSummary = {
+  overall_score: number;
+  label_id: string;
+  avg_followup: string;
+  avg_block: string;
+  deep_days: number;
+  total_days: number;
+  days: FlowDayMetric[];
+};
+
+export type FlowDayMetric = {
+  day: string;
+  score: number;
+  label_id: string;
+  longest_block_min: number;
+  active_min: number;
+  sessions: number;
+};
+
+export type PaceSummary = {
+  current_streak: number;
+  longest_streak: number;
+  late_night_pct: number;
+  weekend_pct: number;
+  risk_id: string;
+  alert_ids: string[];
+};
+
+export type OutputSummary = {
+  total_loc: string;
+  by_language: CountMetric[];
+  by_day: CountMetric[];
+  by_project: CountMetric[];
+  by_model: CountMetric[];
+  uncovered_tools: string;
+};
+
+export type CoachTimelineDay = {
+  day: string;
+  max_concurrent: number;
+  window_start_min: number;
+  window_end_min: number;
+  rows: TimelineSessionRow[];
+};
+
+export type TimelineSessionRow = {
+  session_key: string;
+  project: string;
+  tool: string;
+  tool_label: string;
+  turns: number;
+  cost: string;
+  blocks: TimelineBlock[];
+};
+
+export type TimelineBlock = {
+  start_min: number;
+  end_min: number;
+};
+
 export type StackedDayMetric = {
   day: string;
   total_cost: string;
@@ -283,9 +378,52 @@ export type CopyHintGroup = {
   items: ShortcutHint[];
 };
 
+export type CoachRuleCopy = {
+  name: string;
+  description: string;
+  when_triggered: string;
+  how_to_improve: string;
+};
+
+export type CoachCopy = {
+  groups: Record<string, string>;
+  score: Record<string, string>;
+  findings: {
+    title: string;
+    empty: string;
+    occurrences: string;
+    improve: string;
+    examples: string;
+    severity: Record<string, string>;
+  };
+  flow: {
+    title: string;
+    labels: Record<string, string>;
+    avg_followup: string;
+    avg_block: string;
+    deep_days: string;
+    empty: string;
+  };
+  pace: {
+    title: string;
+    streak: string;
+    longest_streak: string;
+    late_night: string;
+    weekend: string;
+    risk: string;
+    days_suffix: string;
+    risks: Record<string, string>;
+    alerts: Record<string, string>;
+  };
+  timeline: Record<string, string>;
+  output: Record<string, string>;
+  rules: Record<string, CoachRuleCopy>;
+};
+
 export type CopyDeck = {
   brand: Record<string, string>;
   nav: Record<string, string>;
+  coach: CoachCopy;
   periods: Record<string, string>;
   sorts: Record<string, string>;
   tools: Record<string, string>;

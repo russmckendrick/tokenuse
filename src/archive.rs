@@ -16,7 +16,7 @@ use crate::tools::{self, LimitSnapshot, ParsedCall, SessionSourceKind, Speed, To
 
 pub const SYNC_INTERVAL: Duration = crate::ingest_cache::TTL;
 
-const ARCHIVE_SCHEMA_VERSION: u32 = 3;
+const ARCHIVE_SCHEMA_VERSION: u32 = 4;
 
 pub struct Archive {
     conn: Connection,
@@ -331,6 +331,34 @@ impl Archive {
                 ",
             )?;
         }
+
+        if version < 4 {
+            // v4 adds per-call enrichment for the coach engine. Clearing
+            // source_state forces one full re-parse so rows whose source
+            // files still exist get enriched via the insert_call backfill.
+            // ALTER TABLE is not idempotent, so the batch is transactional:
+            // an interrupted migration must not leave half-added columns
+            // behind at user_version 3.
+            self.conn.execute_batch(
+                "
+                BEGIN;
+
+                ALTER TABLE calls ADD COLUMN is_canceled INTEGER NOT NULL DEFAULT 0;
+                ALTER TABLE calls ADD COLUMN prompt_chars INTEGER;
+                ALTER TABLE calls ADD COLUMN response_chars INTEGER;
+                ALTER TABLE calls ADD COLUMN elapsed_ms INTEGER;
+                ALTER TABLE calls ADD COLUMN code_blocks_json TEXT NOT NULL DEFAULT '[]';
+                ALTER TABLE calls ADD COLUMN edited_files_json TEXT NOT NULL DEFAULT '[]';
+                ALTER TABLE calls ADD COLUMN referenced_files_json TEXT NOT NULL DEFAULT '[]';
+
+                DELETE FROM source_state;
+
+                PRAGMA user_version = 4;
+
+                COMMIT;
+                ",
+            )?;
+        }
         Ok(())
     }
 
@@ -353,7 +381,9 @@ impl Archive {
                 cache_creation_input_tokens, cache_read_input_tokens,
                 cached_input_tokens, reasoning_tokens, web_search_requests,
                 cost_usd, tools_json, bash_commands_json, timestamp,
-                speed, dedup_key, user_message, session_id, project
+                speed, dedup_key, user_message, session_id, project,
+                is_canceled, prompt_chars, response_chars, elapsed_ms,
+                code_blocks_json, edited_files_json, referenced_files_json
             FROM calls
             ORDER BY id ASC
             ",
@@ -364,6 +394,9 @@ impl Archive {
             let bash_json: String = row.get(11)?;
             let timestamp: Option<String> = row.get(12)?;
             let speed: String = row.get(13)?;
+            let code_blocks_json: String = row.get(22)?;
+            let edited_files_json: String = row.get(23)?;
+            let referenced_files_json: String = row.get(24)?;
             Ok(ParsedCall {
                 tool: static_tool(tool),
                 model: row.get(1)?,
@@ -383,6 +416,13 @@ impl Archive {
                 user_message: row.get(15)?,
                 session_id: row.get(16)?,
                 project: row.get(17)?,
+                is_canceled: row.get::<_, i64>(18)? != 0,
+                prompt_chars: opt_i64_to_u64(row.get(19)?),
+                response_chars: opt_i64_to_u64(row.get(20)?),
+                elapsed_ms: opt_i64_to_u64(row.get(21)?),
+                code_blocks: serde_json::from_str(&code_blocks_json).unwrap_or_default(),
+                edited_files: serde_json::from_str(&edited_files_json).unwrap_or_default(),
+                referenced_files: serde_json::from_str(&referenced_files_json).unwrap_or_default(),
             })
         })?;
 
@@ -433,6 +473,9 @@ impl Archive {
 fn insert_call(tx: &Transaction<'_>, call: &ParsedCall) -> Result<bool> {
     let tools_json = serde_json::to_string(&call.tools)?;
     let bash_json = serde_json::to_string(&call.bash_commands)?;
+    let code_blocks_json = serde_json::to_string(&call.code_blocks)?;
+    let edited_files_json = serde_json::to_string(&call.edited_files)?;
+    let referenced_files_json = serde_json::to_string(&call.referenced_files)?;
     let inserted = tx.execute(
         "
         INSERT OR IGNORE INTO calls (
@@ -440,12 +483,16 @@ fn insert_call(tx: &Transaction<'_>, call: &ParsedCall) -> Result<bool> {
             cache_creation_input_tokens, cache_read_input_tokens,
             cached_input_tokens, reasoning_tokens, web_search_requests,
             cost_usd, tools_json, bash_commands_json, timestamp, speed,
-            user_message, session_id, project, imported_at
+            user_message, session_id, project, imported_at,
+            is_canceled, prompt_chars, response_chars, elapsed_ms,
+            code_blocks_json, edited_files_json, referenced_files_json
         ) VALUES (
             ?1, ?2, ?3, ?4, ?5,
             ?6, ?7, ?8, ?9, ?10,
             ?11, ?12, ?13, ?14, ?15,
-            ?16, ?17, ?18, ?19
+            ?16, ?17, ?18, ?19,
+            ?20, ?21, ?22, ?23,
+            ?24, ?25, ?26
         )
         ",
         params![
@@ -468,16 +515,83 @@ fn insert_call(tx: &Transaction<'_>, call: &ParsedCall) -> Result<bool> {
             call.session_id,
             call.project,
             Utc::now().to_rfc3339(),
+            call.is_canceled as i64,
+            call.prompt_chars.map(u64_to_i64),
+            call.response_chars.map(u64_to_i64),
+            call.elapsed_ms.map(u64_to_i64),
+            code_blocks_json,
+            edited_files_json,
+            referenced_files_json,
         ],
     )?;
     if inserted == 0 {
         update_existing_cursor_project(tx, call)?;
         update_existing_copilot_cli_totals(tx, call)?;
         update_existing_codex_tool_activity(tx, call, &tools_json, &bash_json)?;
+        update_existing_call_enrichment(
+            tx,
+            call,
+            &code_blocks_json,
+            &edited_files_json,
+            &referenced_files_json,
+        )?;
     } else {
         zero_superseded_copilot_estimates(tx, call)?;
     }
     Ok(inserted > 0)
+}
+
+/// Backfill the v4 enrichment columns onto rows archived before the columns
+/// existed (or before their parser learned to populate them). Fills exactly
+/// once: rows that already carry any enrichment are left alone, so a later
+/// parse can never clobber previously archived enrichment with weaker data.
+fn update_existing_call_enrichment(
+    tx: &Transaction<'_>,
+    call: &ParsedCall,
+    code_blocks_json: &str,
+    edited_files_json: &str,
+    referenced_files_json: &str,
+) -> Result<()> {
+    let has_enrichment = call.is_canceled
+        || call.prompt_chars.is_some()
+        || call.response_chars.is_some()
+        || call.elapsed_ms.is_some()
+        || !call.code_blocks.is_empty()
+        || !call.edited_files.is_empty()
+        || !call.referenced_files.is_empty();
+    if !has_enrichment {
+        return Ok(());
+    }
+
+    tx.execute(
+        "
+        UPDATE calls
+        SET is_canceled = ?1, prompt_chars = ?2, response_chars = ?3,
+            elapsed_ms = ?4, code_blocks_json = ?5, edited_files_json = ?6,
+            referenced_files_json = ?7
+        WHERE tool = ?8
+          AND dedup_key = ?9
+          AND is_canceled = 0
+          AND prompt_chars IS NULL
+          AND response_chars IS NULL
+          AND elapsed_ms IS NULL
+          AND code_blocks_json = '[]'
+          AND edited_files_json = '[]'
+          AND referenced_files_json = '[]'
+        ",
+        params![
+            call.is_canceled as i64,
+            call.prompt_chars.map(u64_to_i64),
+            call.response_chars.map(u64_to_i64),
+            call.elapsed_ms.map(u64_to_i64),
+            code_blocks_json,
+            edited_files_json,
+            referenced_files_json,
+            call.tool,
+            call.dedup_key,
+        ],
+    )?;
+    Ok(())
 }
 
 /// Newly archived per-request Copilot usage rows supersede two kinds of
@@ -530,14 +644,25 @@ fn update_existing_codex_tool_activity(
         return Ok(());
     }
 
+    // user_message is a v1 column set on INSERT, so rows archived before the
+    // parser learned to read Codex `user_message` events carry "" forever
+    // unless filled here. Fill only when empty - never rewrite a stored
+    // prompt.
     tx.execute(
         "
         UPDATE calls
-        SET tools_json = ?1, bash_commands_json = ?2
-        WHERE tool = ?3
-          AND dedup_key = ?4
+        SET tools_json = ?1, bash_commands_json = ?2,
+            user_message = CASE WHEN user_message = '' THEN ?3 ELSE user_message END
+        WHERE tool = ?4
+          AND dedup_key = ?5
         ",
-        params![tools_json, bash_json, call.tool, call.dedup_key],
+        params![
+            tools_json,
+            bash_json,
+            call.user_message,
+            call.tool,
+            call.dedup_key
+        ],
     )?;
     Ok(())
 }
@@ -721,6 +846,10 @@ fn i64_to_u64(value: i64) -> u64 {
     value.max(0) as u64
 }
 
+fn opt_i64_to_u64(value: Option<i64>) -> Option<u64> {
+    value.map(i64_to_u64)
+}
+
 fn static_tool(tool: String) -> &'static str {
     match tool.as_str() {
         crate::tools::claude_code::config::TOOL_ID => crate::tools::claude_code::config::TOOL_ID,
@@ -775,6 +904,29 @@ mod tests {
             user_message: "build the thing".into(),
             session_id: "sess-1".into(),
             project: "/tmp/tokens".into(),
+            is_canceled: true,
+            prompt_chars: Some(2048),
+            response_chars: Some(4096),
+            elapsed_ms: Some(45_000),
+            code_blocks: vec![crate::tools::CodeBlock {
+                language: "rust".into(),
+                loc: 42,
+            }],
+            edited_files: vec!["src/main.rs".into()],
+            referenced_files: vec!["src/lib.rs".into()],
+        }
+    }
+
+    fn bare_call(key: &str) -> ParsedCall {
+        ParsedCall {
+            is_canceled: false,
+            prompt_chars: None,
+            response_chars: None,
+            elapsed_ms: None,
+            code_blocks: Vec::new(),
+            edited_files: Vec::new(),
+            referenced_files: Vec::new(),
+            ..sample_call(key)
         }
     }
 
@@ -891,36 +1043,100 @@ mod tests {
         let _ = fs::remove_dir_all(paths.dir);
     }
 
+    /// Build an archive file with the frozen pre-v4 table shapes (no
+    /// enrichment columns), one legacy call, one source_state row, and
+    /// whatever `extra_sql` the era needs (advice tables, version pragma).
+    fn create_legacy_db(paths: &ConfigPaths, extra_sql: &str) {
+        paths.ensure_dir().unwrap();
+        let conn = Connection::open(&paths.archive_db_file).unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE calls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tool TEXT NOT NULL,
+                dedup_key TEXT NOT NULL,
+                model TEXT NOT NULL,
+                input_tokens INTEGER NOT NULL,
+                output_tokens INTEGER NOT NULL,
+                cache_creation_input_tokens INTEGER NOT NULL,
+                cache_read_input_tokens INTEGER NOT NULL,
+                cached_input_tokens INTEGER NOT NULL,
+                reasoning_tokens INTEGER NOT NULL,
+                web_search_requests INTEGER NOT NULL,
+                cost_usd REAL NOT NULL,
+                tools_json TEXT NOT NULL,
+                bash_commands_json TEXT NOT NULL,
+                timestamp TEXT,
+                speed TEXT NOT NULL,
+                user_message TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                project TEXT NOT NULL,
+                imported_at TEXT NOT NULL,
+                UNIQUE(tool, dedup_key)
+            );
+
+            CREATE TABLE limit_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tool TEXT NOT NULL,
+                limit_id TEXT NOT NULL,
+                limit_name TEXT,
+                plan_type TEXT,
+                observed_at TEXT,
+                primary_json TEXT,
+                secondary_json TEXT,
+                credits_json TEXT,
+                rate_limit_reached_type TEXT,
+                imported_at TEXT NOT NULL,
+                snapshot_key TEXT NOT NULL UNIQUE
+            );
+
+            CREATE TABLE source_state (
+                tool TEXT NOT NULL,
+                path TEXT NOT NULL,
+                fingerprint TEXT NOT NULL,
+                synced_at TEXT NOT NULL,
+                PRIMARY KEY(tool, path)
+            );
+
+            INSERT INTO calls (
+                tool, dedup_key, model, input_tokens, output_tokens,
+                cache_creation_input_tokens, cache_read_input_tokens,
+                cached_input_tokens, reasoning_tokens, web_search_requests,
+                cost_usd, tools_json, bash_commands_json, timestamp, speed,
+                user_message, session_id, project, imported_at
+            ) VALUES (
+                'codex', 'legacy-call', 'gpt-5', 10, 5,
+                0, 0, 0, 0, 0,
+                0.5, '[]', '[]', '2026-04-29T12:00:00Z', 'standard',
+                'legacy row', 'sess-legacy', '/tmp/legacy', '2026-04-29T12:00:00Z'
+            );
+
+            INSERT INTO source_state (tool, path, fingerprint, synced_at)
+            VALUES ('codex', '/tmp/rollout.jsonl', 'fp', '2026-04-29T12:00:00Z');
+            ",
+        )
+        .unwrap();
+        conn.execute_batch(extra_sql).unwrap();
+    }
+
     #[test]
     fn migrate_v2_archive_drops_advice_tables_and_keeps_calls() {
         let paths = temp_paths("migrate-v2");
-        {
-            let mut archive = Archive::open(&paths).unwrap();
-            archive
-                .insert_ingested(&Ingested {
-                    calls: vec![sample_call("v2-call")],
-                    limits: Vec::new(),
-                })
-                .unwrap();
-            // Rewind to a v2-shaped archive: advice tables present, version 2.
-            archive
-                .conn
-                .execute_batch(
-                    "
-                    CREATE TABLE advice_runs (id INTEGER PRIMARY KEY);
-                    CREATE TABLE advice_items (id INTEGER PRIMARY KEY);
-                    PRAGMA user_version = 2;
-                    ",
-                )
-                .unwrap();
-        }
+        create_legacy_db(
+            &paths,
+            "
+            CREATE TABLE advice_runs (id INTEGER PRIMARY KEY);
+            CREATE TABLE advice_items (id INTEGER PRIMARY KEY);
+            PRAGMA user_version = 2;
+            ",
+        );
 
         let archive = Archive::open(&paths).unwrap();
         let version: u32 = archive
             .conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
         let advice_tables: u32 = archive
             .conn
             .query_row(
@@ -931,7 +1147,93 @@ mod tests {
             .unwrap();
         assert_eq!(advice_tables, 0);
         let loaded = archive.load().unwrap();
-        assert_eq!(loaded.calls.len(), 1, "calls survive the v3 migration");
+        assert_eq!(loaded.calls.len(), 1, "calls survive the v3+v4 migrations");
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn migrate_v3_archive_gains_enrichment_columns() {
+        let paths = temp_paths("migrate-v3");
+        create_legacy_db(&paths, "PRAGMA user_version = 3;");
+
+        let archive = Archive::open(&paths).unwrap();
+        let version: u32 = archive
+            .conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 4);
+
+        let loaded = archive.load().unwrap();
+        assert_eq!(loaded.calls.len(), 1, "calls survive the v4 migration");
+        let call = &loaded.calls[0];
+        assert!(!call.is_canceled);
+        assert_eq!(call.prompt_chars, None);
+        assert_eq!(call.response_chars, None);
+        assert_eq!(call.elapsed_ms, None);
+        assert!(call.code_blocks.is_empty());
+        assert!(call.edited_files.is_empty());
+        assert!(call.referenced_files.is_empty());
+
+        let sources: i64 = archive
+            .conn
+            .query_row("SELECT COUNT(*) FROM source_state", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(
+            sources, 0,
+            "v4 clears source_state so history re-parses and enriches"
+        );
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn reinserting_call_backfills_enrichment_once() {
+        let paths = temp_paths("backfill");
+        let mut archive = Archive::open(&paths).unwrap();
+
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![bare_call("k1")],
+                limits: Vec::new(),
+            })
+            .unwrap();
+        assert_eq!(archive.load().unwrap().calls[0].prompt_chars, None);
+
+        // A re-parse of the same source that now carries enrichment fills it.
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![sample_call("k1")],
+                limits: Vec::new(),
+            })
+            .unwrap();
+        let loaded = archive.load().unwrap();
+        let call = &loaded.calls[0];
+        assert!(call.is_canceled);
+        assert_eq!(call.prompt_chars, Some(2048));
+        assert_eq!(call.response_chars, Some(4096));
+        assert_eq!(call.elapsed_ms, Some(45_000));
+        assert_eq!(call.code_blocks.len(), 1);
+        assert_eq!(call.edited_files, vec!["src/main.rs".to_string()]);
+
+        // A later parse with different values must not clobber.
+        let mut changed = sample_call("k1");
+        changed.prompt_chars = Some(9);
+        changed.edited_files = vec!["other.rs".into()];
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![changed],
+                limits: Vec::new(),
+            })
+            .unwrap();
+        let loaded = archive.load().unwrap();
+        assert_eq!(
+            loaded.calls[0].prompt_chars,
+            Some(2048),
+            "enrichment backfill fills once"
+        );
+        assert_eq!(
+            loaded.calls[0].edited_files,
+            vec!["src/main.rs".to_string()]
+        );
         let _ = fs::remove_dir_all(paths.dir);
     }
 
@@ -1004,6 +1306,51 @@ mod tests {
                 loaded.calls[0].cost_usd,
             ),
             (&reparsed.tools, &reparsed.bash_commands, first.cost_usd,)
+        );
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn duplicate_codex_calls_fill_empty_user_message_only() {
+        let paths = temp_paths("codex-prompt-backfill");
+        let mut archive = Archive::open(&paths).unwrap();
+
+        // Row archived before the parser captured Codex prompts.
+        let mut legacy = sample_call("codex-k2");
+        legacy.user_message = String::new();
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![legacy],
+                limits: Vec::new(),
+            })
+            .unwrap();
+
+        // Re-parse now carries the prompt: filled.
+        let mut reparsed = sample_call("codex-k2");
+        reparsed.user_message = "please fix the tests".into();
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![reparsed],
+                limits: Vec::new(),
+            })
+            .unwrap();
+        assert_eq!(
+            archive.load().unwrap().calls[0].user_message,
+            "please fix the tests"
+        );
+
+        // A later parse never rewrites a stored prompt.
+        let mut changed = sample_call("codex-k2");
+        changed.user_message = "different text".into();
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![changed],
+                limits: Vec::new(),
+            })
+            .unwrap();
+        assert_eq!(
+            archive.load().unwrap().calls[0].user_message,
+            "please fix the tests"
         );
         let _ = fs::remove_dir_all(paths.dir);
     }

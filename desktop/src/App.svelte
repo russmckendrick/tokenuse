@@ -14,6 +14,7 @@
   import Sidebar from './shell/Sidebar.svelte';
   import StatusBar from './shell/StatusBar.svelte';
   import TrayPopover from './TrayPopover.svelte';
+  import CoachPage from './routes/CoachPage.svelte';
   import ModelsPage from './routes/ModelsPage.svelte';
   import OverviewPage from './routes/OverviewPage.svelte';
   import ProjectsPage from './routes/ProjectsPage.svelte';
@@ -168,6 +169,8 @@
         return nav.overview;
       case 'analytics':
         return nav.analytics;
+      case 'coach':
+        return nav.coach;
       case 'tools': {
         if (route.tool) {
           const tool = currentSnapshot.tools.find((t) => t.value === route.tool);
@@ -366,6 +369,8 @@
         return { page: 'overview' };
       case 'd':
         return { page: 'analytics' };
+      case 'h':
+        return { page: 'coach' };
       case 'u':
         return { page: 'tools' };
       case 'c':
@@ -885,9 +890,9 @@
         title={currentPageTitle}
         {snapshot}
         showPeriod={router.route.page !== 'config' && router.route.page !== 'session' && (router.route.page !== 'tools' || router.route.tool !== undefined)}
-        showTool={router.route.page === 'overview' || router.route.page === 'analytics'}
-        showSort={router.route.page !== 'config' && router.route.page !== 'session' && router.route.page !== 'models'}
-        showProject={router.route.page === 'overview' || router.route.page === 'analytics' || router.route.page === 'projects'}
+        showTool={router.route.page === 'overview' || router.route.page === 'analytics' || router.route.page === 'coach'}
+        showSort={router.route.page !== 'config' && router.route.page !== 'session' && router.route.page !== 'models' && router.route.page !== 'coach'}
+        showProject={router.route.page === 'overview' || router.route.page === 'analytics' || router.route.page === 'coach' || router.route.page === 'projects'}
         {setPeriod}
         setTool={setToolFromEvent}
         setSort={setSortFromEvent}
@@ -903,6 +908,8 @@
               <OverviewPage {snapshot} />
             {:else if router.route.page === 'analytics'}
               <AnalyticsPage {snapshot} openSessionPicker={() => openModal('session')} />
+            {:else if router.route.page === 'coach'}
+              <CoachPage {snapshot} />
             {:else if router.route.page === 'tools'}
               <ToolsPage {snapshot} tool={router.route.tool} {usageTone} />
             {:else if router.route.page === 'models'}

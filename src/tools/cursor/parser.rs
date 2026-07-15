@@ -1458,6 +1458,19 @@ mod tests {
         assert_eq!(agent.model, "gpt-5");
         assert!(agent.input_tokens > 0);
         assert!(agent.output_tokens > 0);
+
+        for call in &calls {
+            assert_eq!(
+                call.prompt_chars, None,
+                "input_chars is a chars/4 estimate artifact, not a prompt length"
+            );
+            assert_eq!(call.response_chars, None);
+            assert_eq!(call.elapsed_ms, None);
+            assert!(!call.is_canceled);
+            assert!(call.code_blocks.is_empty());
+            assert!(call.edited_files.is_empty());
+            assert!(call.referenced_files.is_empty());
+        }
     }
 
     #[test]
@@ -1573,6 +1586,15 @@ mod tests {
         );
         assert!(call.input_tokens > 0);
         assert!(call.output_tokens > 0);
+        assert_eq!(
+            call.prompt_chars, None,
+            "transcript turns aggregate tool/system payloads into input_chars"
+        );
+        assert_eq!(call.response_chars, None);
+        assert_eq!(call.elapsed_ms, None);
+        assert!(call.code_blocks.is_empty());
+        assert!(call.edited_files.is_empty());
+        assert!(call.referenced_files.is_empty());
 
         let second = parse_transcript_file(&source, &mut seen, Some(&db)).unwrap();
         assert!(second.is_empty());

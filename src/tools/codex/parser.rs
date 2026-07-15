@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use crate::pricing;
 use crate::tools::{
-    jsonl, LimitCredits, LimitSnapshot, LimitWindow, ParsedCall, SessionSource, Speed,
+    jsonl, CodeBlock, LimitCredits, LimitSnapshot, LimitWindow, ParsedCall, SessionSource, Speed,
 };
 
 use super::config;
@@ -59,6 +59,15 @@ struct EventMsg {
     info: Option<TokenInfo>,
     #[serde(default)]
     rate_limits: Option<RateLimits>,
+    /// `user_message` / `agent_message` text.
+    #[serde(default)]
+    message: Option<String>,
+    /// `patch_apply_end` outcome.
+    #[serde(default)]
+    success: Option<bool>,
+    /// `patch_apply_end` per-file changes keyed by absolute path.
+    #[serde(default)]
+    changes: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -172,8 +181,14 @@ pub fn parse_session(
     let mut current_model = String::new();
     let mut pending_tools: Vec<String> = Vec::new();
     let mut pending_bash: Vec<String> = Vec::new();
+    let mut pending_code_blocks: Vec<CodeBlock> = Vec::new();
+    let mut pending_edited: Vec<String> = Vec::new();
+    let mut pending_response_chars: Option<u64> = None;
+    let mut last_user_text = String::new();
+    let mut last_user_chars: Option<u64> = None;
+    let mut last_user_ts: Option<DateTime<Utc>> = None;
     let mut previous_total_usage: Option<TokenUsage> = None;
-    let mut calls = Vec::new();
+    let mut calls: Vec<ParsedCall> = Vec::new();
 
     for line in iter {
         let Ok(entry) = serde_json::from_str::<Entry>(&line) else {
@@ -209,8 +224,45 @@ pub fn parse_session(
                 let Ok(event) = serde_json::from_value::<EventMsg>(payload) else {
                     continue;
                 };
-                if event.kind != "token_count" {
-                    continue;
+                match event.kind.as_str() {
+                    "user_message" => {
+                        let text = event.message.as_deref().map(str::trim).unwrap_or("");
+                        if !text.is_empty() {
+                            last_user_chars = Some(text.chars().count() as u64);
+                            last_user_text = jsonl::truncate_chars(text, 500);
+                            last_user_ts = entry.timestamp.as_deref().and_then(parse_timestamp);
+                        }
+                        continue;
+                    }
+                    // Reasoning text (`agent_reasoning`) is deliberately not
+                    // counted, mirroring how Claude thinking blocks are
+                    // excluded from response_chars.
+                    "agent_message" => {
+                        if let Some(message) = event.message.as_deref() {
+                            *pending_response_chars.get_or_insert(0) +=
+                                message.chars().count() as u64;
+                            pending_code_blocks.extend(jsonl::extract_code_fences(message));
+                        }
+                        continue;
+                    }
+                    "turn_aborted" => {
+                        if let Some(last) = calls.last_mut() {
+                            last.is_canceled = true;
+                        }
+                        continue;
+                    }
+                    "patch_apply_end" => {
+                        if event.success.unwrap_or(false) {
+                            record_patch_changes(
+                                event.changes.as_ref(),
+                                &mut pending_edited,
+                                &mut pending_code_blocks,
+                            );
+                        }
+                        continue;
+                    }
+                    "token_count" => {}
+                    _ => continue,
                 }
                 if let Some(model) = model_hint {
                     current_model = model;
@@ -232,6 +284,9 @@ pub fn parse_session(
                 {
                     pending_tools.clear();
                     pending_bash.clear();
+                    pending_code_blocks.clear();
+                    pending_edited.clear();
+                    pending_response_chars = None;
                     continue;
                 }
 
@@ -246,6 +301,9 @@ pub fn parse_session(
                 if !seen.insert(dedup_key.clone()) {
                     pending_tools.clear();
                     pending_bash.clear();
+                    pending_code_blocks.clear();
+                    pending_edited.clear();
+                    pending_response_chars = None;
                     continue;
                 }
 
@@ -258,6 +316,7 @@ pub fn parse_session(
                 let input_tokens = usage.input_tokens.saturating_sub(usage.cached_input_tokens);
                 let output_tokens = usage.output_tokens + usage.reasoning_output_tokens;
 
+                let timestamp = parse_timestamp(&timestamp_str);
                 let mut call = ParsedCall {
                     tool: config::TOOL_ID,
                     model: model.clone(),
@@ -269,10 +328,16 @@ pub fn parse_session(
                     speed: Speed::Standard,
                     tools: mem::take(&mut pending_tools),
                     bash_commands: mem::take(&mut pending_bash),
-                    timestamp: parse_timestamp(&timestamp_str),
+                    timestamp,
                     dedup_key,
+                    user_message: last_user_text.clone(),
                     session_id: session_id.clone(),
                     project: project.clone(),
+                    prompt_chars: last_user_chars,
+                    response_chars: pending_response_chars.take(),
+                    elapsed_ms: jsonl::turn_elapsed_ms(timestamp, last_user_ts),
+                    code_blocks: jsonl::merge_code_blocks(mem::take(&mut pending_code_blocks)),
+                    edited_files: jsonl::dedup_files(mem::take(&mut pending_edited)),
                     ..ParsedCall::default()
                 };
 
@@ -410,6 +475,39 @@ impl TokenUsage {
                 .saturating_sub(previous.reasoning_output_tokens),
         }
     }
+}
+
+/// Fold a successful `patch_apply_end` into pending enrichment: every touched
+/// file becomes an edited-files entry and its unified diff's added lines count
+/// as AI code output in the file's language.
+fn record_patch_changes(
+    changes: Option<&Value>,
+    pending_edited: &mut Vec<String>,
+    pending_code_blocks: &mut Vec<CodeBlock>,
+) {
+    let Some(changes) = changes.and_then(|c| c.as_object()) else {
+        return;
+    };
+    for (path, change) in changes {
+        pending_edited.push(path.clone());
+        let added = change
+            .get("unified_diff")
+            .and_then(|d| d.as_str())
+            .map(count_added_lines)
+            .unwrap_or(0);
+        if added > 0 {
+            pending_code_blocks.push(CodeBlock {
+                language: jsonl::extension_language(path),
+                loc: added,
+            });
+        }
+    }
+}
+
+fn count_added_lines(diff: &str) -> u64 {
+    diff.lines()
+        .filter(|line| line.starts_with('+') && !line.starts_with("+++"))
+        .count() as u64
 }
 
 fn extract_model(payload: &Value) -> Option<String> {
@@ -711,6 +809,12 @@ mod tests {
     const TOKEN_SECOND: &str = r#"{"timestamp":"2026-03-29T15:05:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":21590,"cached_input_tokens":10624,"output_tokens":375,"reasoning_output_tokens":12,"total_tokens":21965},"total_token_usage":{"input_tokens":39783,"cached_input_tokens":21248,"output_tokens":746,"reasoning_output_tokens":50,"total_tokens":40529}}}}"#;
     const TOKEN_TOTAL_ONLY_FIRST: &str = r#"{"timestamp":"2026-03-29T15:04:10.090Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cache_read_input_tokens":20,"output_tokens":10,"reasoning_output_tokens":1,"total_tokens":111}}}}"#;
     const TOKEN_TOTAL_ONLY_SECOND: &str = r#"{"timestamp":"2026-03-29T15:05:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"model":"gpt-5.4","total_token_usage":{"input_tokens":180,"cache_read_input_tokens":50,"output_tokens":30,"reasoning_output_tokens":4,"total_tokens":214}}}}"#;
+    const USER_MSG: &str = r#"{"timestamp":"2026-03-29T15:04:02.000Z","type":"event_msg","payload":{"type":"user_message","message":"please fix the tests\n","images":[]}}"#;
+    const AGENT_MSG: &str = r#"{"timestamp":"2026-03-29T15:04:08.000Z","type":"event_msg","payload":{"type":"agent_message","message":"Fixing:\n```rust\nassert!(ok);\n```","phase":"commentary"}}"#;
+    const AGENT_REASONING: &str = r#"{"timestamp":"2026-03-29T15:04:07.000Z","type":"event_msg","payload":{"type":"agent_reasoning","text":"thinking about the failing assertion in depth"}}"#;
+    const PATCH_END: &str = r#"{"timestamp":"2026-03-29T15:04:09.000Z","type":"event_msg","payload":{"type":"patch_apply_end","call_id":"c9","success":true,"stdout":"Success.","changes":{"/proj/src/lib.rs":{"type":"update","unified_diff":"+++ b/src/lib.rs\n@@\n+let a = 1;\n+let b = 2;\n-let old = 0;\n"}}}}"#;
+    const PATCH_END_FAILED: &str = r#"{"timestamp":"2026-03-29T15:04:09.500Z","type":"event_msg","payload":{"type":"patch_apply_end","call_id":"c10","success":false,"changes":{"/proj/src/broken.rs":{"type":"update","unified_diff":"+nope\n"}}}}"#;
+    const TURN_ABORTED: &str = r#"{"timestamp":"2026-03-29T15:04:20.000Z","type":"event_msg","payload":{"type":"turn_aborted","turn_id":"t1","reason":"interrupted","duration_ms":13921}}"#;
     const TOKEN_LIMIT_NULL: &str = r#"{"timestamp":"2026-04-29T07:59:08.887Z","type":"event_msg","payload":{"type":"token_count","info":null,"rate_limits":{"limit_id":"codex","limit_name":null,"primary":{"used_percent":17.0,"window_minutes":300,"resets_at":1777477636},"secondary":{"used_percent":6.0,"window_minutes":10080,"resets_at":1777960801},"credits":null,"plan_type":"prolite","rate_limit_reached_type":null}}}"#;
     const TOKEN_LIMIT_MODEL: &str = r#"{"timestamp":"2026-04-29T07:59:28.815Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":18193,"cached_input_tokens":10624,"output_tokens":371,"reasoning_output_tokens":38,"total_tokens":18564},"total_token_usage":{"input_tokens":18193,"cached_input_tokens":10624,"output_tokens":371,"reasoning_output_tokens":38,"total_tokens":18564}},"rate_limits":{"limit_id":"codex_bengalfox","limit_name":"GPT-5.3-Codex-Spark","primary":{"used_percent":0.0,"window_minutes":300,"resets_at":1777487853},"secondary":{"used_percent":0.0,"window_minutes":10080,"resets_at":1778074653},"credits":{"has_credits":false,"unlimited":false,"balance":null},"plan_type":null,"rate_limit_reached_type":null}}}"#;
 
@@ -798,6 +902,52 @@ mod tests {
         assert_eq!(calls.len(), 2);
         assert!(calls[1].tools.is_empty());
         assert!(calls[1].bash_commands.is_empty());
+    }
+
+    #[test]
+    fn enrichment_fields_capture_turn_shape() {
+        let f = write_session(&[
+            META_OK,
+            TURN_GPT5,
+            USER_MSG,
+            EXEC_LS,
+            AGENT_REASONING,
+            AGENT_MSG,
+            PATCH_END,
+            PATCH_END_FAILED,
+            TOKEN_FIRST,
+            TURN_ABORTED,
+        ]);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source_for(f.path().to_path_buf()), &mut seen).unwrap();
+        assert_eq!(calls.len(), 1);
+
+        let call = &calls[0];
+        assert_eq!(call.user_message, "please fix the tests");
+        assert_eq!(call.prompt_chars, Some(20));
+        assert_eq!(
+            call.elapsed_ms,
+            Some(8_090),
+            "token_count at 15:04:10.090 minus user_message at 15:04:02.000"
+        );
+        assert_eq!(
+            call.response_chars,
+            Some("Fixing:\n```rust\nassert!(ok);\n```".chars().count() as u64),
+            "agent_reasoning text must not count"
+        );
+        assert_eq!(
+            call.code_blocks,
+            vec![CodeBlock {
+                language: "rust".into(),
+                loc: 3,
+            }],
+            "one fence line plus two added diff lines; failed patches and +++ headers don't count"
+        );
+        assert_eq!(call.edited_files, vec!["/proj/src/lib.rs"]);
+        assert!(
+            call.is_canceled,
+            "turn_aborted cancels the last emitted call"
+        );
     }
 
     #[test]

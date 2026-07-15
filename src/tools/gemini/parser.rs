@@ -137,13 +137,17 @@ fn parse_session_data(
 ) -> Vec<ParsedCall> {
     let session_start = parse_timestamp(&session.start_time);
     let mut last_user_text = String::new();
+    let mut last_user_chars: Option<u64> = None;
+    let mut last_user_ts: Option<DateTime<Utc>> = None;
     let mut calls = Vec::new();
 
     for message in session.messages {
         if is_user_message(&message) {
             let text = extract_content_text(message.content.as_ref());
             if !text.trim().is_empty() {
+                last_user_chars = Some(text.chars().count() as u64);
                 last_user_text = truncate(&text, 500);
+                last_user_ts = message.timestamp.as_deref().and_then(parse_timestamp);
             }
             continue;
         }
@@ -170,11 +174,9 @@ fn parse_session_data(
         let input_tokens = tokens.input.saturating_sub(tokens.cached);
         let output_tokens = gemini_output_tokens(tokens);
         let (tools, bash_commands) = extract_tools(message.tool_calls.as_deref());
-        let timestamp = message
-            .timestamp
-            .as_deref()
-            .and_then(parse_timestamp)
-            .or(session_start);
+        let response_text = extract_content_text(message.content.as_ref());
+        let message_ts = message.timestamp.as_deref().and_then(parse_timestamp);
+        let timestamp = message_ts.or(session_start);
 
         let mut call = ParsedCall {
             tool: config::TOOL_ID,
@@ -192,6 +194,13 @@ fn parse_session_data(
             user_message: last_user_text.clone(),
             session_id: session.session_id.clone(),
             project: source.project.clone(),
+            prompt_chars: last_user_chars,
+            response_chars: Some(response_text.chars().count() as u64),
+            // The message's own timestamp only - pairing the session
+            // startTime fallback against a user timestamp would time the
+            // wrong interval.
+            elapsed_ms: jsonl::turn_elapsed_ms(message_ts, last_user_ts),
+            code_blocks: jsonl::merge_code_blocks(jsonl::extract_code_fences(&response_text)),
             ..ParsedCall::default()
         };
         call.cost_usd = pricing::cost(&model, &call, Speed::Standard);
@@ -345,6 +354,7 @@ fn truncate(s: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tools::CodeBlock;
     use std::io::Write;
     use std::path::{Path, PathBuf};
 
@@ -397,9 +407,69 @@ mod tests {
         assert_eq!(calls[0].project, "project-hash");
         assert!(calls[0].timestamp.is_some());
         assert!(calls[0].cost_usd > 0.0);
+        assert_eq!(calls[0].prompt_chars, Some(13), "\"run the build\" length");
+        assert_eq!(calls[0].response_chars, Some(4), "\"done\" length");
+        assert_eq!(
+            calls[0].elapsed_ms,
+            Some(1_000),
+            "gemini message ts minus user message ts"
+        );
+        assert!(calls[0].code_blocks.is_empty());
+        assert!(!calls[0].is_canceled);
+        assert!(calls[0].edited_files.is_empty());
+        assert!(calls[0].referenced_files.is_empty());
 
         assert_eq!(calls[1].dedup_key, "gemini:s1:g2");
         assert_eq!(calls[1].tools, vec!["Read"]);
+        assert_eq!(
+            calls[1].prompt_chars,
+            Some(13),
+            "the last user message keeps covering later replies"
+        );
+        assert_eq!(calls[1].response_chars, Some(5));
+        assert_eq!(calls[1].elapsed_ms, Some(2_000));
+    }
+
+    #[test]
+    fn enrichment_measures_full_prompt_and_fenced_code() {
+        let long_prompt = "p".repeat(600);
+        let raw = format!(
+            r#"{{
+              "sessionId": "s9",
+              "projectHash": "hash",
+              "startTime": "2026-05-01T18:34:30.869Z",
+              "messages": [
+                {{ "id": "u1", "type": "user", "content": "{long_prompt}" }},
+                {{ "id": "g1", "type": "gemini", "model": "gemini-2.5-pro",
+                  "content": "Sure:\n```rust\nfn a() {{}}\nfn b() {{}}\n```",
+                  "tokens": {{ "input": 10, "output": 5 }} }}
+              ]
+            }}"#
+        );
+        let file = write_session(&raw, "json");
+        let mut seen = HashSet::new();
+
+        let calls = parse_session(&source_for(file.path().to_path_buf()), &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 1);
+        let call = &calls[0];
+        assert_eq!(
+            call.user_message.chars().count(),
+            500,
+            "display text stays truncated"
+        );
+        assert_eq!(call.prompt_chars, Some(600), "measured before truncation");
+        assert_eq!(
+            call.code_blocks,
+            vec![CodeBlock {
+                language: "rust".into(),
+                loc: 2,
+            }]
+        );
+        assert_eq!(
+            call.elapsed_ms, None,
+            "no message timestamps, so no latency; the startTime fallback must not be used"
+        );
     }
 
     #[test]
@@ -426,6 +496,14 @@ mod tests {
             call.timestamp.unwrap(),
             parse_timestamp("2026-05-01T18:34:30.869Z").unwrap()
         );
+        assert_eq!(call.prompt_chars, Some(12), "\"explain this\" length");
+        assert_eq!(
+            call.response_chars,
+            Some(0),
+            "message without content counts as empty text"
+        );
+        assert_eq!(call.elapsed_ms, None, "JSONL messages carry no timestamps");
+        assert!(call.code_blocks.is_empty());
     }
 
     #[test]

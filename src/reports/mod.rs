@@ -3760,6 +3760,7 @@ mod tests {
             user_message: "full prompt text".into(),
             session_id: session.into(),
             project: project.into(),
+            ..Default::default()
         }
     }
 

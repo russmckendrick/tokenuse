@@ -3,6 +3,7 @@ import type { ToolId } from '../types';
 export type RoutePage =
   | 'overview'
   | 'analytics'
+  | 'coach'
   | 'tools'
   | 'models'
   | 'projects'
@@ -18,7 +19,7 @@ export type Route = {
 };
 
 /** Pages reachable from the sidebar, in nav (and Tab-cycle) order. */
-export const NAV_PAGES: RoutePage[] = ['overview', 'analytics', 'tools', 'models', 'projects', 'config'];
+export const NAV_PAGES: RoutePage[] = ['overview', 'analytics', 'coach', 'tools', 'models', 'projects', 'config'];
 
 let route = $state<Route>({ page: 'overview' });
 

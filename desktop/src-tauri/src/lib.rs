@@ -553,6 +553,8 @@ pub fn run() {
             commands::get_model_catalog,
             commands::get_tool_page,
             commands::get_analytics,
+            commands::get_coach,
+            commands::get_coach_timeline,
             commands::get_session_detail,
             commands::set_open_at_login,
             commands::set_show_dock_or_taskbar_icon,

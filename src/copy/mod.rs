@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 pub struct CopyDeck {
     pub brand: BrandCopy,
     pub nav: NavCopy,
+    pub coach: CoachCopy,
     pub periods: PeriodCopy,
     pub sorts: SortCopy,
     pub tools: ToolCopy,
@@ -45,6 +46,7 @@ pub struct BrandCopy {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct NavCopy {
+    pub coach: String,
     pub overview: String,
     pub deep_dive: String,
     pub usage: String,
@@ -55,6 +57,121 @@ pub struct NavCopy {
     pub config: String,
     pub configuration: String,
     pub session: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CoachCopy {
+    pub groups: CoachGroupsCopy,
+    pub score: CoachScoreCopy,
+    pub findings: CoachFindingsCopy,
+    pub flow: CoachFlowCopy,
+    pub pace: CoachPaceCopy,
+    pub timeline: CoachTimelineCopy,
+    pub output: CoachOutputCopy,
+    pub rules: std::collections::BTreeMap<String, CoachRuleCopy>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CoachGroupsCopy {
+    pub prompt_quality: String,
+    pub session_hygiene: String,
+    pub code_review: String,
+    pub tool_mastery: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CoachScoreCopy {
+    pub wow: String,
+    pub mom: String,
+    pub rules_triggered: String,
+    pub top_issue: String,
+    pub clean: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CoachFindingsCopy {
+    pub title: String,
+    pub empty: String,
+    pub occurrences: String,
+    pub improve: String,
+    pub examples: String,
+    pub severity: CoachSeverityCopy,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CoachSeverityCopy {
+    pub high: String,
+    pub medium: String,
+    pub low: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CoachFlowCopy {
+    pub title: String,
+    pub labels: CoachFlowLabelsCopy,
+    pub avg_followup: String,
+    pub avg_block: String,
+    pub deep_days: String,
+    pub empty: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CoachFlowLabelsCopy {
+    pub deep: String,
+    pub moderate: String,
+    pub shallow: String,
+    pub fragmented: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CoachPaceCopy {
+    pub title: String,
+    pub streak: String,
+    pub longest_streak: String,
+    pub late_night: String,
+    pub weekend: String,
+    pub risk: String,
+    pub days_suffix: String,
+    pub risks: CoachSeverityCopy,
+    pub alerts: CoachPaceAlertsCopy,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CoachPaceAlertsCopy {
+    pub long_streak: String,
+    pub late_night_rising: String,
+    pub weekend_rising: String,
+    pub late_night_heavy: String,
+    pub weekend_heavy: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CoachTimelineCopy {
+    pub title: String,
+    pub day: String,
+    pub overlap: String,
+    pub turns: String,
+    pub empty: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CoachOutputCopy {
+    pub title: String,
+    pub total: String,
+    pub by_language: String,
+    pub by_day: String,
+    pub by_project: String,
+    pub by_model: String,
+    pub coverage_note: String,
+    pub empty: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CoachRuleCopy {
+    pub name: String,
+    pub description: String,
+    pub when_triggered: String,
+    pub how_to_improve: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -3,6 +3,7 @@
     Boxes,
     ChartLine,
     FolderGit2,
+    HeartPulse,
     LayoutDashboard,
     PanelLeftClose,
     PanelLeftOpen,
@@ -79,6 +80,18 @@
     >
       <ChartLine size={16} />
       {#if !collapsed}<span>{copy.nav.analytics}</span>{/if}
+    </button>
+
+    <button
+      type="button"
+      class="sidebar-item"
+      class:active={isActive('coach')}
+      aria-current={isActive('coach') ? 'page' : undefined}
+      title={copy.nav.coach}
+      onclick={() => navigate({ page: 'coach' })}
+    >
+      <HeartPulse size={16} />
+      {#if !collapsed}<span>{copy.nav.coach}</span>{/if}
     </button>
 
     <button

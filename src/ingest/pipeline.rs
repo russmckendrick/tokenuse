@@ -143,6 +143,42 @@ impl Ingested {
         build_analytics(&filtered, currency)
     }
 
+    pub fn coach(
+        &self,
+        period: Period,
+        tool: Tool,
+        project_filter: &ProjectFilter,
+    ) -> crate::data::CoachData {
+        let now = Local::now();
+        let mut filtered: Vec<&ParsedCall> = self
+            .calls
+            .iter()
+            .filter(|c| {
+                matches_tool(c, tool)
+                    && matches_project(c, project_filter)
+                    && in_period(c, period, now)
+            })
+            .collect();
+        filtered.sort_by_key(|c| c.timestamp);
+        crate::coach::coach_data(&filtered, now.date_naive())
+    }
+
+    pub fn coach_timeline(
+        &self,
+        day: chrono::NaiveDate,
+        tool: Tool,
+        project_filter: &ProjectFilter,
+        currency: &CurrencyFormatter,
+    ) -> Option<crate::data::CoachTimelineDay> {
+        let mut filtered: Vec<&ParsedCall> = self
+            .calls
+            .iter()
+            .filter(|c| matches_tool(c, tool) && matches_project(c, project_filter))
+            .collect();
+        filtered.sort_by_key(|c| c.timestamp);
+        crate::coach::coach_timeline(&filtered, day, currency)
+    }
+
     pub fn limits_at(
         &self,
         tool: Tool,
@@ -1837,7 +1873,7 @@ fn top_counts(counts: HashMap<String, CountAcc>, sort: SortMode, limit: usize) -
         .collect()
 }
 
-fn session_key(call: &ParsedCall) -> Option<String> {
+pub(crate) fn session_key(call: &ParsedCall) -> Option<String> {
     if call.session_id.is_empty() {
         None
     } else {

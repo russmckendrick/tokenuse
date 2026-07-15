@@ -186,6 +186,125 @@ pub struct AnalyticsData {
     pub tool_share: Vec<ShareMetric>,
 }
 
+/// Coach page payload: practice scores, findings, flow/pace summaries, AI
+/// code output, and the day list for the timeline selector. All wording is
+/// resolved client-side from copy.json via the ids carried here.
+#[derive(Debug, Clone, Serialize)]
+pub struct CoachData {
+    pub practice_groups: Vec<PracticeGroupScore>,
+    pub findings: Vec<CoachFinding>,
+    pub flow: FlowSummary,
+    pub pace: PaceSummary,
+    pub output: OutputSummary,
+    /// "YYYY-MM-DD" local dates with activity, newest first.
+    pub timeline_days: Vec<&'static str>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PracticeGroupScore {
+    pub id: &'static str,
+    pub score: u64,
+    /// Pre-formatted week-over-week / month-over-month deltas ("+13%", "–").
+    pub wow: &'static str,
+    pub mom: &'static str,
+    pub triggered: u64,
+    pub total_rules: u64,
+    /// Rule id of the heaviest triggered rule; empty when clean.
+    pub top_rule_id: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CoachFinding {
+    pub rule_id: &'static str,
+    pub group: &'static str,
+    pub severity: &'static str,
+    pub occurrences: u64,
+    pub total: u64,
+    /// Pre-formatted percentage ("42%"); empty when not meaningful.
+    pub pct: &'static str,
+    /// Rule-specific stat for the {stat} copy slot; empty when unused.
+    pub stat: &'static str,
+    pub examples: Vec<FindingExample>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FindingExample {
+    pub text: &'static str,
+    pub detail: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FlowSummary {
+    pub overall_score: u64,
+    pub label_id: &'static str,
+    pub avg_followup: &'static str,
+    pub avg_block: &'static str,
+    pub deep_days: u64,
+    pub total_days: u64,
+    pub days: Vec<FlowDayMetric>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FlowDayMetric {
+    pub day: &'static str,
+    pub score: u64,
+    pub label_id: &'static str,
+    pub longest_block_min: u64,
+    pub active_min: u64,
+    pub sessions: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PaceSummary {
+    pub current_streak: u64,
+    pub longest_streak: u64,
+    pub late_night_pct: u64,
+    pub weekend_pct: u64,
+    pub risk_id: &'static str,
+    pub alert_ids: Vec<&'static str>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct OutputSummary {
+    pub total_loc: &'static str,
+    pub by_language: Vec<CountMetric>,
+    /// name = local day, calls = LoC.
+    pub by_day: Vec<CountMetric>,
+    pub by_project: Vec<CountMetric>,
+    pub by_model: Vec<CountMetric>,
+    /// Comma-separated tool labels with no code-output signal; empty when
+    /// every tool contributes.
+    pub uncovered_tools: &'static str,
+}
+
+/// One day's session Gantt for the Coach page timeline panel.
+#[derive(Debug, Clone, Serialize)]
+pub struct CoachTimelineDay {
+    pub day: String,
+    pub max_concurrent: u64,
+    /// Minutes since local midnight bounding the day's activity.
+    pub window_start_min: u64,
+    pub window_end_min: u64,
+    pub rows: Vec<TimelineSessionRow>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TimelineSessionRow {
+    pub session_key: String,
+    pub project: String,
+    pub tool: String,
+    pub tool_label: String,
+    pub turns: u64,
+    pub cost: String,
+    pub blocks: Vec<TimelineBlock>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TimelineBlock {
+    pub start_min: u64,
+    pub end_min: u64,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct StackedDayMetric {
     pub day: &'static str,
@@ -1329,6 +1448,225 @@ fn format_int(n: u64) -> String {
 
 fn leak(s: String) -> &'static str {
     Box::leak(s.into_boxed_str())
+}
+
+/// Hand-authored coach payload for sample mode (Shift+D) so the page renders
+/// deterministic demo content without touching real archives.
+pub fn coach_sample() -> CoachData {
+    CoachData {
+        practice_groups: vec![
+            PracticeGroupScore {
+                id: "prompt_quality",
+                score: 78,
+                wow: "+4%",
+                mom: "+9%",
+                triggered: 2,
+                total_rules: 8,
+                top_rule_id: "lazy-prompting",
+            },
+            PracticeGroupScore {
+                id: "session_hygiene",
+                score: 88,
+                wow: "-2%",
+                mom: "+1%",
+                triggered: 1,
+                total_rules: 9,
+                top_rule_id: "late-night-coding",
+            },
+            PracticeGroupScore {
+                id: "code_review",
+                score: 100,
+                wow: "–",
+                mom: "–",
+                triggered: 0,
+                total_rules: 5,
+                top_rule_id: "",
+            },
+            PracticeGroupScore {
+                id: "tool_mastery",
+                score: 88,
+                wow: "+6%",
+                mom: "–",
+                triggered: 1,
+                total_rules: 5,
+                top_rule_id: "cache-hit-starvation",
+            },
+        ],
+        findings: vec![
+            CoachFinding {
+                rule_id: "lazy-prompting",
+                group: "prompt_quality",
+                severity: "medium",
+                occurrences: 14,
+                total: 42,
+                pct: "33%",
+                stat: "",
+                examples: vec![
+                    FindingExample {
+                        text: "fix bug",
+                        detail: "7 chars",
+                    },
+                    FindingExample {
+                        text: "do it again",
+                        detail: "11 chars",
+                    },
+                ],
+            },
+            CoachFinding {
+                rule_id: "late-night-coding",
+                group: "session_hygiene",
+                severity: "low",
+                occurrences: 12,
+                total: 96,
+                pct: "13%",
+                stat: "",
+                examples: vec![FindingExample {
+                    text: "one more refactor before bed",
+                    detail: "2026-06-11 01:24",
+                }],
+            },
+            CoachFinding {
+                rule_id: "cache-hit-starvation",
+                group: "tool_mastery",
+                severity: "medium",
+                occurrences: 23,
+                total: 23,
+                pct: "",
+                stat: "6.2%",
+                examples: Vec::new(),
+            },
+        ],
+        flow: FlowSummary {
+            overall_score: 64,
+            label_id: "moderate",
+            avg_followup: "38s",
+            avg_block: "52 min",
+            deep_days: 3,
+            total_days: 9,
+            days: vec![
+                FlowDayMetric {
+                    day: "2026-06-12",
+                    score: 74,
+                    label_id: "deep",
+                    longest_block_min: 96,
+                    active_min: 210,
+                    sessions: 3,
+                },
+                FlowDayMetric {
+                    day: "2026-06-11",
+                    score: 41,
+                    label_id: "shallow",
+                    longest_block_min: 22,
+                    active_min: 75,
+                    sessions: 5,
+                },
+            ],
+        },
+        pace: PaceSummary {
+            current_streak: 6,
+            longest_streak: 11,
+            late_night_pct: 9,
+            weekend_pct: 18,
+            risk_id: "low",
+            alert_ids: Vec::new(),
+        },
+        output: OutputSummary {
+            total_loc: "4,812",
+            by_language: vec![
+                CountMetric {
+                    name: "rust",
+                    calls: 2760,
+                    value: 100,
+                },
+                CountMetric {
+                    name: "typescript",
+                    calls: 1240,
+                    value: 45,
+                },
+                CountMetric {
+                    name: "markdown",
+                    calls: 812,
+                    value: 29,
+                },
+            ],
+            by_day: vec![
+                CountMetric {
+                    name: "2026-06-11",
+                    calls: 1980,
+                    value: 100,
+                },
+                CountMetric {
+                    name: "2026-06-12",
+                    calls: 1420,
+                    value: 72,
+                },
+            ],
+            by_project: vec![
+                CountMetric {
+                    name: "tokens",
+                    calls: 3200,
+                    value: 100,
+                },
+                CountMetric {
+                    name: "russ.cloud",
+                    calls: 1612,
+                    value: 50,
+                },
+            ],
+            by_model: vec![CountMetric {
+                name: "claude-opus-4-7",
+                calls: 4812,
+                value: 100,
+            }],
+            uncovered_tools: "Cursor",
+        },
+        timeline_days: vec!["2026-06-12", "2026-06-11"],
+    }
+}
+
+/// Sample timeline day matching `coach_sample`'s newest day.
+pub fn coach_timeline_sample(day: &str) -> Option<CoachTimelineDay> {
+    if !coach_sample().timeline_days.contains(&day) {
+        return None;
+    }
+    Some(CoachTimelineDay {
+        day: day.to_string(),
+        max_concurrent: 2,
+        window_start_min: 9 * 60,
+        window_end_min: 17 * 60 + 30,
+        rows: vec![
+            TimelineSessionRow {
+                session_key: "claude-code:sample-1".into(),
+                project: "tokens".into(),
+                tool: "claude-code".into(),
+                tool_label: "Claude Code".into(),
+                turns: 14,
+                cost: "$12.40".into(),
+                blocks: vec![
+                    TimelineBlock {
+                        start_min: 9 * 60,
+                        end_min: 10 * 60 + 45,
+                    },
+                    TimelineBlock {
+                        start_min: 13 * 60,
+                        end_min: 15 * 60 + 10,
+                    },
+                ],
+            },
+            TimelineSessionRow {
+                session_key: "codex:sample-2".into(),
+                project: "russ.cloud".into(),
+                tool: "codex".into(),
+                tool_label: "Codex".into(),
+                turns: 6,
+                cost: "$3.05".into(),
+                blocks: vec![TimelineBlock {
+                    start_min: 10 * 60,
+                    end_min: 11 * 60 + 20,
+                }],
+            },
+        ],
+    })
 }
 
 #[cfg(test)]

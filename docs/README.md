@@ -12,6 +12,7 @@
 
 - [Development overview](development/README.md): source layout and what to read before changing the project.
 - [Architecture](development/architecture.md): archive, sync, aggregation, pricing, reports, and frontend state flow.
+- [Coach engine](development/coach.md): the desktop Coach page's rule catalog, scoring, flow/pace/timeline/output algorithms, and attribution.
 - [Model normalisation](development/models.md): shared registry schema, resolution order, provider grouping, and contributor workflow.
 - [Pricing and cache rates](development/pricing.md): evidence, provider cache-read rates, parser caveats, and pricing refresh behavior.
 - [Local development](development/local-development.md): commands for Rust, TUI, desktop, pricing, currency, and generated assets.

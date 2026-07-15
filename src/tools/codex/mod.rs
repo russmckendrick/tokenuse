@@ -10,7 +10,7 @@ pub mod parser;
 
 pub struct Codex;
 
-const SOURCE_FINGERPRINT_VERSION: &str = "codex-v2-nested-exec-tools";
+const SOURCE_FINGERPRINT_VERSION: &str = "codex-v4-user-message-backfill";
 
 impl ToolAdapter for Codex {
     fn id(&self) -> &'static str {

@@ -18,7 +18,8 @@ pub mod paths;
 pub mod types;
 
 pub use types::{
-    LimitCredits, LimitSnapshot, LimitWindow, ParsedCall, SessionSource, SessionSourceKind, Speed,
+    CodeBlock, LimitCredits, LimitSnapshot, LimitWindow, ParsedCall, SessionSource,
+    SessionSourceKind, Speed,
 };
 
 pub trait ToolAdapter: Send + Sync {

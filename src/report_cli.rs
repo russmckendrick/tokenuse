@@ -420,6 +420,7 @@ mod tests {
             user_message: "prompt".into(),
             session_id: "s1".into(),
             project: project.into(),
+            ..Default::default()
         }
     }
 

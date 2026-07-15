@@ -8,9 +8,9 @@ use color_eyre::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::ingest::Ingested;
-use crate::tools::{paths, LimitCredits, LimitSnapshot, LimitWindow, ParsedCall, Speed};
+use crate::tools::{paths, CodeBlock, LimitCredits, LimitSnapshot, LimitWindow, ParsedCall, Speed};
 
-const CACHE_VERSION: u32 = 1;
+const CACHE_VERSION: u32 = 2;
 const CACHE_FILE: &str = "ingest-cache.json";
 
 /// Legacy refresh cadence. The durable archive now owns startup data, but the
@@ -48,6 +48,13 @@ struct WireParsedCall {
     user_message: String,
     session_id: String,
     project: String,
+    is_canceled: bool,
+    prompt_chars: Option<u64>,
+    response_chars: Option<u64>,
+    elapsed_ms: Option<u64>,
+    code_blocks: Vec<CodeBlock>,
+    edited_files: Vec<String>,
+    referenced_files: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -88,6 +95,13 @@ impl From<&ParsedCall> for WireParsedCall {
             user_message: c.user_message.clone(),
             session_id: c.session_id.clone(),
             project: c.project.clone(),
+            is_canceled: c.is_canceled,
+            prompt_chars: c.prompt_chars,
+            response_chars: c.response_chars,
+            elapsed_ms: c.elapsed_ms,
+            code_blocks: c.code_blocks.clone(),
+            edited_files: c.edited_files.clone(),
+            referenced_files: c.referenced_files.clone(),
         }
     }
 }
@@ -113,6 +127,13 @@ impl From<WireParsedCall> for ParsedCall {
             user_message: w.user_message,
             session_id: w.session_id,
             project: w.project,
+            is_canceled: w.is_canceled,
+            prompt_chars: w.prompt_chars,
+            response_chars: w.response_chars,
+            elapsed_ms: w.elapsed_ms,
+            code_blocks: w.code_blocks,
+            edited_files: w.edited_files,
+            referenced_files: w.referenced_files,
         }
     }
 }
@@ -239,6 +260,16 @@ mod tests {
             user_message: "hi".into(),
             session_id: "sess-1".into(),
             project: "tokens".into(),
+            is_canceled: true,
+            prompt_chars: Some(640),
+            response_chars: Some(1280),
+            elapsed_ms: Some(12_500),
+            code_blocks: vec![CodeBlock {
+                language: "rust".into(),
+                loc: 7,
+            }],
+            edited_files: vec!["src/app.rs".into()],
+            referenced_files: vec!["src/data/mod.rs".into()],
             ..Default::default()
         }
     }
@@ -283,6 +314,37 @@ mod tests {
         assert_eq!(back.speed, original.speed);
         assert_eq!(back.session_id, original.session_id);
         assert_eq!(back.project, original.project);
+        assert_eq!(back.is_canceled, original.is_canceled);
+        assert_eq!(back.prompt_chars, original.prompt_chars);
+        assert_eq!(back.response_chars, original.response_chars);
+        assert_eq!(back.elapsed_ms, original.elapsed_ms);
+        assert_eq!(back.code_blocks, original.code_blocks);
+        assert_eq!(back.edited_files, original.edited_files);
+        assert_eq!(back.referenced_files, original.referenced_files);
+    }
+
+    #[test]
+    fn cache_from_older_schema_version_is_rejected() {
+        let dir = std::env::temp_dir().join(format!(
+            "tokenuse-ingest-cache-test-{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(CACHE_FILE);
+
+        let stale = CachedIngest {
+            version: CACHE_VERSION - 1,
+            written_at: Utc::now(),
+            calls: vec![WireParsedCall::from(&sample_call("codex"))],
+            limits: Vec::new(),
+        };
+        fs::write(&path, serde_json::to_vec(&stale).unwrap()).unwrap();
+
+        assert!(
+            read_path(&path).is_none(),
+            "pre-v2 caches must be rejected and regenerated"
+        );
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

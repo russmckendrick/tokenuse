@@ -1,5 +1,6 @@
 pub mod app;
 pub mod archive;
+pub mod coach;
 pub mod config;
 pub mod copy;
 pub mod currency;

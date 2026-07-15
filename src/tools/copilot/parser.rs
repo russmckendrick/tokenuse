@@ -94,6 +94,7 @@ fn parse_legacy(
 ) -> Vec<ParsedCall> {
     let mut current_model = String::new();
     let mut pending_user_message = String::new();
+    let mut pending_user_chars: Option<u64> = None;
     let mut calls = Vec::new();
 
     for line in lines {
@@ -112,6 +113,7 @@ fn parse_legacy(
             }
             "user.message" => {
                 if let Some(c) = event.pointer("/data/content").and_then(|v| v.as_str()) {
+                    pending_user_chars = Some(c.chars().count() as u64);
                     pending_user_message = truncate(c, 500);
                 }
             }
@@ -156,6 +158,7 @@ fn parse_legacy(
                     user_message: std::mem::take(&mut pending_user_message),
                     session_id: session_id.to_string(),
                     project: project.to_string(),
+                    prompt_chars: pending_user_chars.take(),
                     ..ParsedCall::default()
                 };
                 call.cost_usd = pricing::cost(&current_model, &call, Speed::Standard);
@@ -208,6 +211,7 @@ fn parse_transcript(
     };
 
     let mut pending_user_message = String::new();
+    let mut pending_user_chars: Option<u64> = None;
     let mut calls = Vec::new();
 
     for event in &events {
@@ -215,6 +219,7 @@ fn parse_transcript(
 
         if kind == "user.message" {
             if let Some(c) = event.pointer("/data/content").and_then(|v| v.as_str()) {
+                pending_user_chars = Some(c.chars().count() as u64);
                 pending_user_message = truncate(c, 500);
             }
             continue;
@@ -282,6 +287,11 @@ fn parse_transcript(
             user_message: std::mem::take(&mut pending_user_message),
             session_id: session_id.to_string(),
             project: project.to_string(),
+            prompt_chars: pending_user_chars.take(),
+            // Reasoning text is deliberately excluded, mirroring how Claude
+            // thinking blocks stay out of response_chars.
+            response_chars: Some(content_text.chars().count() as u64),
+            code_blocks: jsonl::merge_code_blocks(jsonl::extract_code_fences(content_text)),
             ..ParsedCall::default()
         };
         call.cost_usd = pricing::cost(&model, &call, Speed::Standard);
@@ -882,6 +892,7 @@ fn truncate(s: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tools::CodeBlock;
     use std::io::Write;
     use std::path::{Path, PathBuf};
 
@@ -954,6 +965,16 @@ mod tests {
         assert_eq!(call.project, "/Users/me/Code/aicommit");
         assert!(call.cost_usd > 0.0);
         assert_eq!(call.dedup_key, format!("copilot:{}:m1", session_id));
+        assert_eq!(call.prompt_chars, Some(12), "full user text length");
+        assert_eq!(
+            call.response_chars, None,
+            "legacy events never read assistant content"
+        );
+        assert!(call.code_blocks.is_empty());
+        assert!(!call.is_canceled);
+        assert_eq!(call.elapsed_ms, None);
+        assert!(call.edited_files.is_empty());
+        assert!(call.referenced_files.is_empty());
 
         // dedup
         let again = parse_session(&source, &mut seen).unwrap();
@@ -1023,6 +1044,64 @@ mod tests {
         assert!(calls[0].output_tokens > 0);
         assert!(calls[0].reasoning_tokens > 0);
         assert!(calls[0].cost_usd > 0.0);
+        assert_eq!(calls[0].prompt_chars, Some(11), "\"hello world\" length");
+        assert_eq!(
+            calls[0].response_chars,
+            Some(10),
+            "content only; reasoningText excluded"
+        );
+        assert_eq!(
+            calls[1].prompt_chars, None,
+            "the user message attaches only to the first assistant message"
+        );
+        assert_eq!(calls[1].response_chars, Some(2));
+    }
+
+    #[test]
+    fn transcript_enrichment_measures_full_prompt_and_fences() {
+        let dir = TempDir::new();
+        let transcript = dir
+            .path()
+            .join("22222222-3333-4444-5555-666666666666.jsonl");
+        let long_prompt = "p".repeat(600);
+        let user_line =
+            format!(r#"{{"type":"user.message","data":{{"content":"{long_prompt}"}}}}"#);
+        write_lines(
+            &transcript,
+            &[
+                r#"{"type":"session.start","data":{"producer":"copilot-agent","context":{"cwd":"/Users/me/Code/tokens"}}}"#,
+                &user_line,
+                r#"{"type":"assistant.message","data":{"messageId":"m1","content":"Sure:\n```rust\nfn a() {}\nfn b() {}\n```"}}"#,
+            ],
+        );
+
+        let source = SessionSource::session(transcript, "ws", config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source, &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 1);
+        let call = &calls[0];
+        assert_eq!(
+            call.user_message.chars().count(),
+            500,
+            "display text stays truncated"
+        );
+        assert_eq!(call.prompt_chars, Some(600), "measured before truncation");
+        assert_eq!(
+            call.response_chars,
+            Some("Sure:\n```rust\nfn a() {}\nfn b() {}\n```".chars().count() as u64)
+        );
+        assert_eq!(
+            call.code_blocks,
+            vec![CodeBlock {
+                language: "rust".into(),
+                loc: 2,
+            }]
+        );
+        assert!(!call.is_canceled);
+        assert_eq!(call.elapsed_ms, None, "turn latency is not derived");
+        assert!(call.edited_files.is_empty());
+        assert!(call.referenced_files.is_empty());
     }
 
     #[test]
@@ -1085,6 +1164,12 @@ mod tests {
         assert!(calls[0].output_tokens > 0);
         assert!(calls[0].cost_usd > 0.0);
         assert!(calls[0].timestamp.is_some());
+        assert_eq!(
+            calls[0].prompt_chars, None,
+            "chars/4 estimate rows carry no enrichment"
+        );
+        assert_eq!(calls[0].response_chars, None);
+        assert!(calls[0].code_blocks.is_empty());
         assert_eq!(calls[1].project, "russmckendrick/tokens");
         assert!(
             calls[1].timestamp.is_some(),
@@ -1130,6 +1215,11 @@ mod tests {
             call.timestamp.map(|ts| ts.to_rfc3339()),
             Some("2026-07-01T11:00:00+00:00".to_string())
         );
+        assert_eq!(
+            call.prompt_chars, None,
+            "data.db aggregate rows carry no enrichment"
+        );
+        assert_eq!(call.response_chars, None);
     }
 
     #[test]
@@ -1172,6 +1262,11 @@ mod tests {
         assert_eq!(first.project, "/Users/me/Code/tokens");
         assert!(first.cost_usd > 0.0);
         assert!(first.timestamp.is_some());
+        assert_eq!(
+            first.prompt_chars, None,
+            "usage-event rows carry no enrichment"
+        );
+        assert_eq!(first.response_chars, None);
 
         let second = &calls[1];
         assert_eq!(second.dedup_key, "copilot:sess-ev:turn-0:usage-2");

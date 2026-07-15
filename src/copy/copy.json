@@ -9,6 +9,7 @@
     "usage_alert_title": "Token Use usage alert"
   },
   "nav": {
+    "coach": "Coach",
     "overview": "Overview",
     "deep_dive": "Deep Dive",
     "usage": "Usage",
@@ -557,6 +558,248 @@
     "wrote_path": "Wrote   {path}",
     "refresh_prices_requires_feature": "--refresh-prices requires the refresh-prices feature",
     "generate_currency_requires_feature": "--generate-currency-json requires the refresh-currency feature"
+  },
+  "coach": {
+    "groups": {
+      "prompt_quality": "Prompt Quality",
+      "session_hygiene": "Session Hygiene",
+      "code_review": "Code Review",
+      "tool_mastery": "Tool Mastery"
+    },
+    "score": {
+      "wow": "WoW",
+      "mom": "MoM",
+      "rules_triggered": "{count}/{total} rules triggered",
+      "top_issue": "Top issue",
+      "clean": "No issues detected"
+    },
+    "findings": {
+      "title": "Findings",
+      "empty": "No anti-patterns detected in this period.",
+      "occurrences": "{count}×",
+      "improve": "How to improve",
+      "examples": "Examples",
+      "severity": {
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low"
+      }
+    },
+    "flow": {
+      "title": "Flow",
+      "labels": {
+        "deep": "Deep",
+        "moderate": "Moderate",
+        "shallow": "Shallow",
+        "fragmented": "Fragmented"
+      },
+      "avg_followup": "Avg follow-up",
+      "avg_block": "Avg longest block",
+      "deep_days": "Deep-flow days",
+      "empty": "Not enough timestamped sessions to score flow."
+    },
+    "pace": {
+      "title": "Pace",
+      "streak": "Current streak",
+      "longest_streak": "Longest streak",
+      "late_night": "Late-night share",
+      "weekend": "Weekend share",
+      "risk": "Burnout risk",
+      "days_suffix": "days",
+      "risks": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High"
+      },
+      "alerts": {
+        "long_streak": "14+ consecutive active days without a break",
+        "late_night_rising": "Late-night activity is trending up",
+        "weekend_rising": "Weekend activity is trending up",
+        "late_night_heavy": "A heavy share of activity lands after 22:00",
+        "weekend_heavy": "A heavy share of activity lands on weekends"
+      }
+    },
+    "timeline": {
+      "title": "Timeline",
+      "day": "Day",
+      "overlap": "{count} sessions in parallel",
+      "turns": "{count} turns",
+      "empty": "No sessions recorded for this day."
+    },
+    "output": {
+      "title": "AI Code Output",
+      "total": "Total AI LoC",
+      "by_language": "By language",
+      "by_day": "By day",
+      "by_project": "By project",
+      "by_model": "By model",
+      "coverage_note": "No code-output signal from: {tools}",
+      "empty": "No AI code output detected in this period."
+    },
+    "rules": {
+      "lazy-prompting": {
+        "name": "Lazy Prompting",
+        "description": "Very short prompts rarely give the model enough context to produce quality results.",
+        "when_triggered": "{count} prompts ({pct}) are under 30 characters.",
+        "how_to_improve": "Describe the intent, constraints, and expected output instead of one-liners."
+      },
+      "caps-lock": {
+        "name": "Caps Lock Rage",
+        "description": "Messages written almost entirely in capitals signal frustration, not intent.",
+        "when_triggered": "{count} prompts were written mostly in CAPS.",
+        "how_to_improve": "Step away, take a breath, then return with a calm, structured prompt."
+      },
+      "frustration-signals": {
+        "name": "Frustration Signals",
+        "description": "Excessive punctuation or shouting usually means the current approach is not working.",
+        "when_triggered": "{count} prompts show frustration indicators (!!!, ???, ALL CAPS).",
+        "how_to_improve": "Change strategy instead of escalating: start a fresh session, rephrase, or split the problem."
+      },
+      "repeated-prompts": {
+        "name": "Repeated Prompts",
+        "description": "Near-duplicate prompts spend tokens without producing new results.",
+        "when_triggered": "{count} prompts are near-duplicates across {stat} distinct messages.",
+        "how_to_improve": "If a prompt did not work, rephrase it or add context rather than retrying it verbatim."
+      },
+      "low-constraint-usage": {
+        "name": "Low Constraint Usage",
+        "description": "Constraints narrow the output space and produce higher-quality code.",
+        "when_triggered": "Only {pct} of substantial prompts include constraint language ({stat} of {total}).",
+        "how_to_improve": "Add explicit constraints: \"do not touch the public API\", \"only use std\", \"limit to 50 lines\"."
+      },
+      "verbose-output": {
+        "name": "Verbose Model Output",
+        "description": "Huge answers to tiny prompts burn output tokens without proportional value.",
+        "when_triggered": "{count} turns ({pct}) produced 5K+ output tokens from prompts under 200 characters.",
+        "how_to_improve": "Ask for concise answers or set an output format; add output constraints for routine tasks."
+      },
+      "verbose-prompt-no-compression": {
+        "name": "Verbose Prompts",
+        "description": "Long, filler-heavy prompts inflate input tokens on every turn.",
+        "when_triggered": "{count} prompts ({pct}) are 800+ characters with two or more filler words.",
+        "how_to_improve": "Be terse and structured: bullet points beat paragraphs, and pleasantries cost tokens."
+      },
+      "excessive-file-context": {
+        "name": "Excessive File Context",
+        "description": "Bulk-attaching files pays for context the model mostly never reads.",
+        "when_triggered": "{count} turns referenced 30+ files (largest: {stat}).",
+        "how_to_improve": "Attach the 3-5 most relevant files and let the agent search for the rest on demand."
+      },
+      "session-drift": {
+        "name": "Session Drift",
+        "description": "Sessions that mix many task types muddy the context window.",
+        "when_triggered": "{count} sessions cover four or more different work types.",
+        "how_to_improve": "Start a new session when switching task type - focused sessions get better responses."
+      },
+      "late-night-coding": {
+        "name": "Late-Night Coding",
+        "description": "Late-night work correlates with more bugs and lower-quality output.",
+        "when_triggered": "{count} turns happened between midnight and 5am.",
+        "how_to_improve": "Consider healthier working hours; quality drops sharply when fatigued."
+      },
+      "weekend-overwork": {
+        "name": "Weekend Overwork",
+        "description": "A high weekend share may indicate work-life balance issues.",
+        "when_triggered": "{count} turns ({pct}) happened on weekends.",
+        "how_to_improve": "Keep boundaries between work and personal time - sustained overwork leads to burnout."
+      },
+      "mega-sessions": {
+        "name": "Mega Sessions",
+        "description": "Very long sessions degrade context quality and response accuracy.",
+        "when_triggered": "{count} sessions ran to 50+ turns (largest: {stat}).",
+        "how_to_improve": "Start new sessions periodically; break large tasks into focused conversations."
+      },
+      "abandon-sessions": {
+        "name": "Abandoned Sessions",
+        "description": "Single-message sessions leave refinement on the table.",
+        "when_triggered": "{count} sessions ({pct}) ended after a single turn.",
+        "how_to_improve": "Iterate with follow-ups - refining a response beats one-shot prompting."
+      },
+      "high-cancellation": {
+        "name": "Excessive Cancellations",
+        "description": "Frequent interrupts waste quota and usually mean unclear prompting.",
+        "when_triggered": "{count} of {total} turns ({pct}) were interrupted.",
+        "how_to_improve": "Write clearer, more specific prompts, and let responses finish before redirecting."
+      },
+      "broken-flow-state": {
+        "name": "Broken Flow State",
+        "description": "Fragmented days with scattered prompts point to context switches and interruptions.",
+        "when_triggered": "{count} of {total} active days ({pct}) show fragmented flow (avg score {stat}).",
+        "how_to_improve": "Protect 2+ hour blocks, silence notifications, and pre-plan the next prompt while the agent works."
+      },
+      "slow-responses": {
+        "name": "Slow Responses",
+        "description": "Consistently slow turns often mean overly broad prompts.",
+        "when_triggered": "{count} turns took over 5 minutes (avg {stat}s).",
+        "how_to_improve": "Break complex asks into smaller, focused requests."
+      },
+      "runaway-agent-loops": {
+        "name": "Runaway Agent Loops",
+        "description": "Turns with an extreme number of tool calls suggest the agent is spinning on a failing approach.",
+        "when_triggered": "{count} turns used 40+ tool calls each (avg {stat}).",
+        "how_to_improve": "If the agent loops, interrupt and rephrase with clearer constraints or a smaller scope."
+      },
+      "copy-paste-blindness": {
+        "name": "Copy-Paste Blindness",
+        "description": "Large AI output accepted without any follow-up usually means it shipped unreviewed.",
+        "when_triggered": "{count} sessions produced 50+ AI LoC with no refinement afterwards.",
+        "how_to_improve": "Review generated code before accepting - ask follow-ups, test, and adjust."
+      },
+      "speed-accept": {
+        "name": "Speed Accept",
+        "description": "Moving on within seconds of receiving a large diff is not a review.",
+        "when_triggered": "{count} times the next message came within 15s of 20+ lines of AI code (avg {stat}).",
+        "how_to_improve": "Read the code: correctness, security, and edge cases deserve more than a glance."
+      },
+      "vibe-coding": {
+        "name": "Vibe Coding",
+        "description": "High AI output from a handful of vague prompts creates knowledge debt.",
+        "when_triggered": "{count} sessions generated {stat}+ AI LoC from five or fewer unstructured prompts.",
+        "how_to_improve": "Write a small spec first and review output line by line - velocity without understanding is debt."
+      },
+      "tunnel-vision": {
+        "name": "Single-Project Tunnel Vision",
+        "description": "AI assistance concentrated in one project leaves the rest of your workflow unassisted.",
+        "when_triggered": "{pct} of turns ({count}/{total}) are in {stat}.",
+        "how_to_improve": "Use the assistant across other projects too: docs, tests, DevOps, exploration."
+      },
+      "no-language-exploration": {
+        "name": "No Language Exploration",
+        "description": "AI dramatically lowers the cost of trying a new language - unused, that advantage lapses.",
+        "when_triggered": "No new language in {count} weeks ({stat} languages seen overall).",
+        "how_to_improve": "Ask for something small in a language you have never used - the barrier has never been lower."
+      },
+      "mcp-tool-bloat": {
+        "name": "Tool / MCP Bloat",
+        "description": "Very large active toolsets add silent context overhead to every prompt.",
+        "when_triggered": "{count} sessions invoked 40+ distinct tools (largest: {stat}).",
+        "how_to_improve": "Trim rarely-used MCP servers and scope toolsets per project."
+      },
+      "model-overreliance": {
+        "name": "Model Overreliance",
+        "description": "One model for everything means overpaying for simple tasks.",
+        "when_triggered": "{pct} of turns use {stat}.",
+        "how_to_improve": "Route lighter tasks to cheaper models and keep premium models for real reasoning."
+      },
+      "reasoning-effort-overuse": {
+        "name": "Reasoning Effort Overuse",
+        "description": "High or max reasoning effort bills extra thinking tokens even when the task does not need them.",
+        "when_triggered": "{count} of {total} effort-tagged turns ({pct}) ran at high or max effort.",
+        "how_to_improve": "Default to medium effort and escalate only for genuinely hard problems."
+      },
+      "premium-waste": {
+        "name": "Premium Model Waste",
+        "description": "Short lookup-style questions rarely benefit from premium-priced models.",
+        "when_triggered": "{count} trivial or lookup-style turns ran on premium models.",
+        "how_to_improve": "Send quick questions to lighter models; reserve premium models for complex generation."
+      },
+      "cache-hit-starvation": {
+        "name": "Prompt Cache Starvation",
+        "description": "Long prompts that miss the cache pay full price for context the model has already seen.",
+        "when_triggered": "{count} long-prompt turns served only {stat} of input from cache.",
+        "how_to_improve": "Keep prompt prefixes stable: short stable instructions, file references over pasted code, fewer mid-task resets."
+      }
+    }
   },
   "keymap": {
     "actions": {

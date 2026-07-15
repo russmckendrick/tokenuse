@@ -56,6 +56,18 @@ Analytics is the time and distribution workspace. It includes:
 
 Charts use the same token-driven colors and relative ranking language as the TUI. Hovered chart values are exact for that bucket; bars, heat intensity, and rank strips are relative to the visible dataset.
 
+### Coach
+
+Coach turns your local usage history into practice feedback. It is entirely on-device — the analysis is deterministic Rust over the archive, with no network or AI calls (see [Coach engine](../development/coach.md) for the algorithms and attribution).
+
+- **Practice scores**: four cards (Prompt Quality, Session Hygiene, Code Review, Tool Mastery), each 0–100 with week-over-week and month-over-month deltas and the heaviest triggered rule.
+- **Findings**: triggered anti-pattern rules ranked by severity. Expand a finding for what triggered it, how to improve, and up to three real examples from your own sessions.
+- **Flow and Pace**: a flow score per active day (deep/moderate/shallow/fragmented), average follow-up time and longest work block, plus streaks, late-night and weekend shares, and a burnout-risk badge with specific alerts.
+- **Timeline**: a per-day session Gantt with a day selector; a badge calls out days where sessions ran in parallel.
+- **AI Code Output**: lines of AI-generated code by language, day, project, and model, with a note naming tools that provide no code-output signal.
+
+Findings respect the header tool and project filters. Rules only count tools that can actually produce a signal — a tool whose logs lack, say, cancellation events never inflates a cancellation rate. Older archived calls whose source files are gone are excluded from rule denominators rather than counted as clean.
+
 ### Tools
 
 The parent Tools screen shows one rolling 24-hour console for each supported tool. Every tool stays visible, including idle tools, so it is clear which sources were checked. A console combines recent cost, calls, tokens, last-seen time, plan-limit gauges, and top models.
@@ -98,9 +110,10 @@ Desktop navigation is resolved in the Svelte shell; data actions call typed Rust
 
 | Key | Action |
 | --- | --- |
-| `Tab` / `Shift-Tab` | Cycle Overview, Analytics, Tools, Models, Projects, and Config. |
+| `Tab` / `Shift-Tab` | Cycle Overview, Analytics, Coach, Tools, Models, Projects, and Config. |
 | `o` | Open Overview. |
 | `d` | Open Analytics. |
+| `h` | Open Coach. |
 | `u` | Open Tools. |
 | `c` | Open Config. |
 | `1`–`5` | Select 24 Hours, 7 Days, 30 Days, This Month, or All Time where the period is available. |

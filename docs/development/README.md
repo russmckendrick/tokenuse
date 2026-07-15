@@ -17,6 +17,7 @@ This section is for maintainers and contributors working on `tokenuse` itself.
 ## Read Next
 
 - [Architecture](architecture.md): how calls flow from local files to archive, aggregation, and UI.
+- [Coach engine](coach.md): the desktop Coach page's rules, scoring, and analyzers, with per-rule thresholds and attribution.
 - [Model normalisation](models.md): how raw model ids become canonical model, provider, and family identities.
 - [Pricing and cache rates](pricing.md): provider evidence, cache-read multipliers, parser caveats, and pricing book refresh behavior.
 - [Local development](local-development.md): the commands to run before sending changes.

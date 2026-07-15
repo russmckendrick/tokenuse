@@ -149,6 +149,31 @@ flowchart LR
     F --> G
 ```
 
+## Coach signals (archive v4 enrichment)
+
+The parser also consumes four `event_msg` inner types that never produce a `ParsedCall` themselves but enrich the next emitted call (or, for aborts, the previous one):
+
+```jsonc
+{ "type": "event_msg", "payload": { "type": "user_message", "message": "please fix the tests\n" } }
+{ "type": "event_msg", "payload": { "type": "agent_message", "message": "Fixing:\n```rust\n...\n```", "phase": "commentary" } }
+{ "type": "event_msg", "payload": { "type": "turn_aborted", "turn_id": "...", "reason": "interrupted", "duration_ms": 13921 } }
+{ "type": "event_msg", "payload": { "type": "patch_apply_end", "call_id": "...", "success": true,
+    "changes": { "/abs/path/file.rs": { "type": "update", "unified_diff": "@@\n+added line\n-removed\n" } } } }
+```
+
+| `ParsedCall` field | Source | Notes |
+| --- | --- | --- |
+| `user_message` / `prompt_chars` | `user_message.message` (trimmed) | Truncated to 500 chars for display; `prompt_chars` keeps the full length. Codex session details now show prompts |
+| `response_chars` | sum of `agent_message.message` lengths since the last emitted call | `agent_reasoning` text is deliberately excluded, mirroring Claude thinking blocks; `None` for rounds with no agent message |
+| `elapsed_ms` | `token_count` timestamp − `user_message` timestamp | Dropped when non-positive or ≥ 2 h |
+| `is_canceled` | `turn_aborted` | Marks the last **emitted** call of the rollout; an abort before any usage was recorded is lost |
+| `code_blocks` | ``` fences in `agent_message` text **plus** added lines (`+`, excluding `+++` headers) of each successful `patch_apply_end` unified diff | Language from fence tag or file extension; merged per call by language; capped at 32 |
+| `edited_files` | `patch_apply_end.changes` keys, only when `success` | Deduped, capped at 64. Failed patches record nothing |
+
+`apply_patch` function-call arguments are **not** parsed for file paths — `patch_apply_end` carries the authoritative applied result, including files the patch actually touched. Rollouts old enough to lack these events simply leave the enrichment fields `NULL`/empty.
+
+The adapter's fingerprint prefix is `codex-v3-coach-enrichment`; bumping it forces archived rollouts back through the parser after an extraction change.
+
 ## Known limitations
 
 - Files use UTC timestamps with millisecond precision — `chrono::DateTime::parse_from_rfc3339` is sufficient.
