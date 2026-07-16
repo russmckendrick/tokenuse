@@ -87,7 +87,32 @@ pub fn canonical_key(model: &str) -> String {
     if let Some(stripped) = strip_date_suffix(&s) {
         s = stripped;
     }
+    s = normalize_reversed_claude_id(&s);
     s
+}
+
+fn normalize_reversed_claude_id(model: &str) -> String {
+    let Some(rest) = model.strip_prefix("claude-") else {
+        return model.to_string();
+    };
+    let parts = rest.split('-').collect::<Vec<_>>();
+    let Some(family_idx) = parts
+        .iter()
+        .position(|part| matches!(*part, "opus" | "sonnet" | "haiku"))
+    else {
+        return model.to_string();
+    };
+    if family_idx == 0 || !parts[0].chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        return model.to_string();
+    }
+
+    let version = parts[..family_idx].join("-").replace('.', "-");
+    let suffix = parts[family_idx + 1..].join("-");
+    if suffix.is_empty() {
+        format!("claude-{}-{version}", parts[family_idx])
+    } else {
+        format!("claude-{}-{version}-{suffix}", parts[family_idx])
+    }
 }
 
 fn strip_date_suffix(model: &str) -> Option<String> {
@@ -392,7 +417,7 @@ mod tests {
         assert_eq!(cursor_auto.provider, Provider::Cursor);
         assert_eq!(cursor_auto.canonical_id, "cursor-auto");
 
-        assert_eq!(display("cursor", "default"), "Cursor (default)");
+        assert_eq!(display("cursor", "default"), "Cursor (auto)");
 
         // The same raw string resolves per tool, so the folded rows stay
         // distinct across tools.
@@ -427,6 +452,26 @@ mod tests {
         );
         assert_eq!(canonical_key("Claude-Opus-4-5-20250929"), "claude-opus-4-5");
         assert_eq!(canonical_key(" gpt-5 "), "gpt-5");
+        assert_eq!(
+            canonical_key("claude-4.5-sonnet-thinking-high"),
+            "claude-sonnet-4-5-thinking-high"
+        );
+    }
+
+    #[test]
+    fn cursor_preview_and_fast_models_have_stable_identities() {
+        let composer = resolve("cursor", "composer-2.5-fast");
+        assert_eq!(composer.display, "Composer 2.5 Fast");
+        assert_eq!(composer.canonical_id, "cursor-composer-2.5");
+        assert_eq!(composer.provider, Provider::Cursor);
+
+        let grok = resolve("cursor", "grok-4.5-fast-high");
+        assert_eq!(grok.display, "Grok 4.5 Fast");
+        assert_eq!(grok.canonical_id, "cursor-grok-4.5");
+
+        let vega = resolve("cursor", "vega-fast-xhigh");
+        assert_eq!(vega.display, "Vega (Preview)");
+        assert_eq!(vega.canonical_id, "cursor-vega");
     }
 
     #[test]

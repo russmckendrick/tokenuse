@@ -346,6 +346,9 @@ export type SessionDetail = {
   reasoning_tokens: number;
   web_search_requests: number;
   tools: string;
+  interaction_mode: string;
+  token_quality: string;
+  timestamp_quality: string;
   bash_commands: string[];
   prompt: string;
   prompt_full: string;

@@ -1182,6 +1182,9 @@
           <div><span>{snapshot.copy.tables.model}</span><strong>{callDetail.model}</strong></div>
           <div><span>{snapshot.copy.tables.cost}</span><strong class="money">{callDetail.cost}</strong></div>
           <div><span>{snapshot.copy.tables.tools}</span><strong>{callDetail.tools}</strong></div>
+          <div><span>{snapshot.copy.session.interaction_mode}</span><strong>{callDetail.interaction_mode}</strong></div>
+          <div><span>{snapshot.copy.session.token_quality}</span><strong>{callDetail.token_quality}</strong></div>
+          <div><span>{snapshot.copy.session.timestamp_quality}</span><strong>{callDetail.timestamp_quality}</strong></div>
           <div><span>{snapshot.copy.metrics.input}</span><strong>{count(callDetail.input_tokens)}</strong></div>
           <div><span>{snapshot.copy.metrics.output}</span><strong>{count(callDetail.output_tokens)}</strong></div>
           <div><span>{snapshot.copy.metrics.cache_read}</span><strong>{count(callDetail.cache_read)}</strong></div>

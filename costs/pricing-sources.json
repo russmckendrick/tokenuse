@@ -165,6 +165,45 @@
       }
     },
     {
+      "id": "cursor-model-pricing",
+      "name": "Cursor models and pricing",
+      "url": "https://cursor.com/docs/models-and-pricing.md",
+      "kind": "markdown-table",
+      "output": "overrides",
+      "table_heading": "Model pricing",
+      "extract": {
+        "mode": "model-rows",
+        "scope": "tool",
+        "tool": "cursor",
+        "columns": {
+          "model": "Model",
+          "input": "Input",
+          "cache_write": "Cache write",
+          "cache_read": "Cache read",
+          "output": "Output"
+        },
+        "defaults": {
+          "web_search": 0.01
+        },
+        "rows": [
+          { "match": "Composer 2.5", "model": "composer-2.5" },
+          {
+            "match": "Composer 2.5",
+            "model": "composer-2.5-fast",
+            "set": { "input": 0.000003, "cache_write": 0.000003, "cache_read": 0.0000005, "output": 0.000015 },
+            "note": "Cursor's published Composer 2.5 Fast token rates are kept as a distinct tool-scoped row."
+          },
+          { "match": "Grok 4.5", "model": "grok-4.5" },
+          {
+            "match": "Grok 4.5",
+            "model": "grok-4.5-fast",
+            "set": { "input": 0.000004, "cache_write": 0.000004, "cache_read": 0.000001, "output": 0.000018 },
+            "note": "Cursor's published Grok 4.5 Fast token rates are kept as a distinct tool-scoped row."
+          }
+        ]
+      }
+    },
+    {
       "id": "github-copilot-pricing",
       "name": "GitHub Copilot models and pricing",
       "url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md",

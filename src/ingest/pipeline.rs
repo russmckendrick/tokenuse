@@ -1457,6 +1457,9 @@ fn build_session_detail(
                 reasoning_tokens: c.reasoning_tokens,
                 web_search_requests: c.web_search_requests,
                 tools: tools_text,
+                interaction_mode: interaction_mode_label(c.interaction_mode),
+                token_quality: token_quality_label(c.token_quality),
+                timestamp_quality: timestamp_quality_label(c.timestamp_quality),
                 bash_commands: c.bash_commands.clone(),
                 prompt: snippet(&c.user_message, 120),
                 prompt_full: clean_text(&c.user_message),
@@ -1477,6 +1480,36 @@ fn build_session_detail(
         total_cache_read: format_compact(total_cache_read),
         calls: detail_calls,
         note: None,
+    }
+}
+
+fn interaction_mode_label(mode: crate::tools::InteractionMode) -> String {
+    let session = &crate::copy::copy().session;
+    match mode {
+        crate::tools::InteractionMode::Agent => session.mode_agent.clone(),
+        crate::tools::InteractionMode::Chat => session.mode_chat.clone(),
+        crate::tools::InteractionMode::Plan => session.mode_plan.clone(),
+        crate::tools::InteractionMode::Unknown => session.mode_unknown.clone(),
+    }
+}
+
+fn token_quality_label(quality: crate::tools::TokenQuality) -> String {
+    let session = &crate::copy::copy().session;
+    match quality {
+        crate::tools::TokenQuality::Exact => session.quality_exact.clone(),
+        crate::tools::TokenQuality::Estimated => session.quality_estimated.clone(),
+        crate::tools::TokenQuality::Mixed => session.quality_mixed.clone(),
+        crate::tools::TokenQuality::Unknown => session.quality_unknown.clone(),
+    }
+}
+
+fn timestamp_quality_label(quality: crate::tools::TimestampQuality) -> String {
+    let session = &crate::copy::copy().session;
+    match quality {
+        crate::tools::TimestampQuality::Exact => session.quality_exact.clone(),
+        crate::tools::TimestampQuality::Session => session.quality_session.clone(),
+        crate::tools::TimestampQuality::File => session.quality_file.clone(),
+        crate::tools::TimestampQuality::Unknown => session.quality_unknown.clone(),
     }
 }
 

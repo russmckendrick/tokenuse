@@ -1,32 +1,78 @@
-use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+#[cfg(test)]
+use std::fs;
+
 use color_eyre::Result;
+use walkdir::WalkDir;
 
 use crate::tools::{paths, SessionSource};
 
 use super::config;
 
 pub fn discover() -> Result<Vec<SessionSource>> {
-    let mut sources = Vec::new();
-
-    if let Some(db) = config::state_db_path() {
-        if db.exists() {
-            sources.push(SessionSource::session(
-                db,
-                "cursor-workspace",
-                config::TOOL_ID,
-            ));
-        }
+    let files = aggregate_files();
+    if files.is_empty() {
+        return Ok(Vec::new());
     }
 
-    if let Some(projects) = config::agent_projects_dir() {
-        sources.extend(discover_agent_transcripts_in(&projects)?);
-    }
-
-    Ok(sources)
+    let path = config::agent_home()
+        .filter(|path| path.exists())
+        .or_else(config::state_db_path)
+        .unwrap_or_else(|| files[0].clone());
+    Ok(vec![SessionSource::session(
+        path,
+        "cursor-workspace",
+        config::TOOL_ID,
+    )])
 }
 
+pub(crate) fn aggregate_files() -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    if let Some(state) = config::state_db_path().filter(|path| path.exists()) {
+        push_sqlite_files(&state, &mut files);
+    }
+    if let Some(tracking) = config::agent_tracking_db_path().filter(|path| path.exists()) {
+        push_sqlite_files(&tracking, &mut files);
+    }
+    if let Some(projects) = config::agent_projects_dir().filter(|path| path.exists()) {
+        for entry in WalkDir::new(projects)
+            .follow_links(false)
+            .into_iter()
+            .flatten()
+        {
+            if entry.file_type().is_file() && is_transcript_file(entry.path()) {
+                files.push(entry.into_path());
+            }
+        }
+    }
+    if let Some(chats) = config::chats_dir().filter(|path| path.exists()) {
+        for entry in WalkDir::new(chats)
+            .follow_links(false)
+            .into_iter()
+            .flatten()
+        {
+            if entry.file_type().is_file() && entry.file_name().to_str() == Some(config::STORE_DB) {
+                push_sqlite_files(entry.path(), &mut files);
+            }
+        }
+    }
+    files.sort();
+    files.dedup();
+    files
+}
+
+fn push_sqlite_files(path: &Path, files: &mut Vec<PathBuf>) {
+    files.push(path.to_path_buf());
+    for suffix in ["-wal", "-shm"] {
+        let sidecar = PathBuf::from(format!("{}{suffix}", path.display()));
+        if sidecar.exists() {
+            files.push(sidecar);
+        }
+    }
+}
+
+#[cfg(test)]
 fn discover_agent_transcripts_in(projects: &Path) -> Result<Vec<SessionSource>> {
     if !projects.exists() {
         return Ok(Vec::new());
@@ -56,6 +102,7 @@ fn discover_agent_transcripts_in(projects: &Path) -> Result<Vec<SessionSource>> 
     Ok(sources)
 }
 
+#[cfg(test)]
 fn collect_transcript_files(
     dir: &Path,
     project: &str,

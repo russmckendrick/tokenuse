@@ -49,11 +49,11 @@ pub fn rules() -> Vec<RuleDef> {
     ]
 }
 
-fn is_premium_model(model: &str) -> bool {
+fn is_premium_model(tool: &str, model: &str) -> bool {
     let table = crate::pricing::PriceTable::configured()
         .read()
         .expect("pricing table lock");
-    table.lookup(model).output >= PREMIUM_OUTPUT_RATE
+    table.lookup_for(tool, model, None).output >= PREMIUM_OUTPUT_RATE
 }
 
 /// Sessions invoking more than 40 distinct tools, three or more times.
@@ -95,19 +95,24 @@ fn model_overreliance(ctx: &CoachContext) -> Option<RuleHit> {
     const MIN_SAMPLE: u64 = 10;
     const MIN_MODELS: usize = 3;
 
-    let mut by_model: std::collections::HashMap<&str, u64> = std::collections::HashMap::new();
+    let mut by_model: std::collections::HashMap<String, (String, u64)> =
+        std::collections::HashMap::new();
     let mut total = 0u64;
     for turn in ctx.turns() {
         if turn.model.is_empty() {
             continue;
         }
         total += 1;
-        *by_model.entry(turn.model).or_insert(0) += 1;
+        let identity = crate::models::resolve(turn.tool, turn.model);
+        by_model
+            .entry(identity.canonical_id)
+            .and_modify(|(_, count)| *count += 1)
+            .or_insert((identity.display, 1));
     }
     let (top_model, top_count) = by_model
         .iter()
-        .max_by_key(|(_, count)| **count)
-        .map(|(m, c)| (m.to_string(), *c))?;
+        .max_by_key(|(_, (_, count))| *count)
+        .map(|(_, (display, count))| (display.clone(), *count))?;
 
     (total > MIN_SAMPLE
         && by_model.len() < MIN_MODELS
@@ -125,8 +130,10 @@ fn model_overreliance(ctx: &CoachContext) -> Option<RuleHit> {
 /// Reasoning effort inferred from model-name suffixes only, never guessed.
 fn effort_from_model(model: &str) -> Option<&'static str> {
     let lower = model.to_lowercase();
-    let suffix = lower.rsplit(['-', ':']).next().unwrap_or("").trim();
-    match suffix {
+    let effort = lower
+        .rsplit(['-', ':'])
+        .find(|part| matches!(*part, "low" | "medium" | "high" | "xhigh" | "max"))?;
+    match effort {
         "low" => Some("low"),
         "medium" => Some("medium"),
         "high" => Some("high"),
@@ -186,7 +193,7 @@ fn premium_waste(ctx: &CoachContext) -> Option<RuleHit> {
         let lookup = chars < MAX_LOOKUP_PROMPT
             && turn.tool_calls == 0
             && text::is_lookup_question(turn.user_message);
-        if (short_and_simple || lookup) && is_premium_model(turn.model) {
+        if (short_and_simple || lookup) && is_premium_model(turn.tool, turn.model) {
             count += 1;
             if examples.len() < MAX_EXAMPLES {
                 examples.push(example(turn.user_message, turn.model.to_string()));
@@ -263,6 +270,11 @@ mod tests {
         assert_eq!(effort_from_model("claude-opus-4-7-high"), Some("high"));
         assert_eq!(effort_from_model("claude-opus-4.7-xhigh"), Some("max"));
         assert_eq!(effort_from_model("gpt-5.4:low"), Some("low"));
+        assert_eq!(
+            effort_from_model("claude-4.5-sonnet-high-thinking"),
+            Some("high")
+        );
+        assert_eq!(effort_from_model("vega-fast-xhigh"), Some("max"));
         assert_eq!(effort_from_model("claude-opus-4-7"), None);
         assert_eq!(effort_from_model("gpt-5"), None);
     }

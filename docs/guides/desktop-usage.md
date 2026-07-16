@@ -85,7 +85,7 @@ The active header period controls row ranking and the expanded details. Select a
 
 ### Projects
 
-Projects is a drill-down from project to session to call. Select a project to list its sessions, then select a session to open its call rows. Call details include the full stored prompt, model, token buckets, pricing rates, tools, reasoning/web-search counts, and shell commands when those fields were available locally.
+Projects is a drill-down from project to session to call. Select a project to list its sessions, then select a session to open its call rows. Call details include the full stored prompt, model, token buckets, pricing rates, tools, reasoning/web-search counts, shell commands, interaction mode, and exact/estimated timestamp and token quality when those fields were available locally. Modern Cursor Agent sessions appear here as one call per user request rather than separate overlapping bubble, AgentKv, and transcript rows.
 
 The project picker can narrow the page to one normalized project identity. Project labels use the shortest unique path suffix, while the archive retains the raw project value for debugging and reports.
 

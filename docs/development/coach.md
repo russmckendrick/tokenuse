@@ -16,7 +16,9 @@ tokens' parsers emit one `ParsedCall` per assistant API round; the reference eva
 
 User think-time between turns is `think_gap_ms` (next turn start − next turn latency − current turn end), used by flow scoring and speed-accept.
 
-`src/coach/signals.rs` gates rule denominators per tool so "no signal" never reads as "clean" (or as a finding): cancellation, file references, cache reads, and conversational-session shape are currently claude-code + codex only. The per-tool signal matrices live in `docs/development/tools/<name>.md`.
+`src/coach/signals.rs` gates rule denominators per tool so "no signal" never reads as "clean" (or as a finding). Claude Code and Codex support cancellation, file references, cache reads, and conversational sessions. Cursor supports file references and conversational sessions, but remains outside cache-read and cancellation denominators. The per-tool signal matrices live in `docs/development/tools/<name>.md`.
+
+Archive v5 adds interaction, token, and timestamp provenance. Coach accepts only `timestamp_quality == exact` for timing-sensitive analysis: flow, think gaps, slow response, pace, late-night/weekend work, speed-accept, activity blocks/calendar, weekly score buckets, and language-over-time. Cursor store/tracking/transcript session or file timestamps remain available to normal period attribution and call listings, but never create artificial Coach timing. Pre-v5 non-Cursor timestamped rows migrate as exact.
 
 ## Practice scores (`src/coach/score.rs`)
 
@@ -64,7 +66,8 @@ Groups: prompt-quality 8, session-hygiene 9, code-review 5, tool-mastery 5. User
 - **runaway-agent-loops** raises the per-turn tool threshold from 15 to 40: tokens' turns aggregate full agentic CLI loops where 15+ tool calls is routine.
 - **slow-responses** raises the latency threshold from 30s to 5 minutes for the same reason — a turn spans the whole agentic run, and 300s matches the flow score's slowest latency band.
 - **mcp-tool-bloat** implements the documented semantics (distinct tools per session); the reference's DSL referenced a nonexistent field and could never fire.
-- **premium-waste** merges the reference's `premium-waste` and `premium-for-lookup-questions`, and derives "premium" from tokens' own pricing book (output rate ≥ $10/M tokens) instead of a hardcoded model-tier table.
+- **premium-waste** merges the reference's `premium-waste` and `premium-for-lookup-questions`, and derives "premium" from tokens' own tool-aware pricing lookup (output rate ≥ $10/M tokens) instead of a hardcoded model-tier table. Cursor therefore uses Cursor-scoped first-party prices rather than the global fallback.
+- **model-overreliance** groups by the shared canonical model identity. Thinking, effort, and Fast suffixes do not count as separate model diversity; the displayed winning model still uses the registry label.
 - **verbose-prompt-no-compression** drops the "compression skill installed" exemption (no installed-skills signal) and matches filler words on the stored 500-char prompt prefix.
 - Regex patterns are reimplemented as word-boundary phrase matching in `src/coach/text.rs` (no regex dependency); semantics match, including quirks such as `\btest\b` not matching "tests".
 - Content rules run on the 500-char `user_message` prefix; length rules use the full `prompt_chars`.
@@ -87,4 +90,4 @@ Reference rules whose inputs tokens does not ingest (most flagged `requiresIdeCo
 
 `Ingested::coach` / `Ingested::coach_timeline` (`src/ingest/pipeline.rs`) filter by period/tool/project and delegate to `coach::coach_data` / `coach::coach_timeline`, which build the `CoachData` / `CoachTimelineDay` payloads in `src/data/mod.rs`. `App::coach_for` / `App::coach_timeline_for` (`src/app.rs`) memoize per filter key in the generation-keyed `QueryCache` (bounding the `data::leak` growth exactly like Analytics). The desktop exposes `get_coach(period)` and `get_coach_timeline(day)` Tauri commands; after a timeline row is selected, the existing `get_session_detail(key)` command supplies its call-level inspector. The Work Hours view deliberately reuses the memoized `get_analytics(period)` hour×weekday matrix and the dashboard activity timeline rather than introducing a second aggregation with different semantics. The Coach page fetches on the `period|tool|project|data_generation|currency` key. Sample mode (Shift+D) serves `data::coach_sample()`.
 
-The archive v4 enrichment columns that feed all of this are documented in `docs/development/architecture.md` and per-parser in `docs/development/tools/<name>.md`.
+The archive v4 enrichment and v5 provenance columns that feed all of this are documented in `docs/development/architecture.md` and per-parser in `docs/development/tools/<name>.md`.

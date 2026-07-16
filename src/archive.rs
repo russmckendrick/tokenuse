@@ -12,11 +12,14 @@ use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
 use crate::config::ConfigPaths;
 use crate::ingest::Ingested;
-use crate::tools::{self, LimitSnapshot, ParsedCall, SessionSourceKind, Speed, ToolAdapter};
+use crate::tools::{
+    self, InteractionMode, LimitSnapshot, ParsedCall, SessionSourceKind, Speed, TimestampQuality,
+    TokenQuality, ToolAdapter,
+};
 
 pub const SYNC_INTERVAL: Duration = crate::ingest_cache::TTL;
 
-const ARCHIVE_SCHEMA_VERSION: u32 = 4;
+const ARCHIVE_SCHEMA_VERSION: u32 = 5;
 
 pub struct Archive {
     conn: Connection,
@@ -359,6 +362,27 @@ impl Archive {
                 ",
             )?;
         }
+        if version < 5 {
+            self.conn.execute_batch(
+                "
+                BEGIN;
+
+                ALTER TABLE calls ADD COLUMN interaction_mode TEXT NOT NULL DEFAULT 'unknown';
+                ALTER TABLE calls ADD COLUMN token_quality TEXT NOT NULL DEFAULT 'unknown';
+                ALTER TABLE calls ADD COLUMN timestamp_quality TEXT NOT NULL DEFAULT 'unknown';
+
+                UPDATE calls
+                SET timestamp_quality = 'exact'
+                WHERE timestamp IS NOT NULL;
+
+                DELETE FROM source_state;
+
+                PRAGMA user_version = 5;
+
+                COMMIT;
+                ",
+            )?;
+        }
         Ok(())
     }
 
@@ -383,7 +407,8 @@ impl Archive {
                 cost_usd, tools_json, bash_commands_json, timestamp,
                 speed, dedup_key, user_message, session_id, project,
                 is_canceled, prompt_chars, response_chars, elapsed_ms,
-                code_blocks_json, edited_files_json, referenced_files_json
+                code_blocks_json, edited_files_json, referenced_files_json,
+                interaction_mode, token_quality, timestamp_quality
             FROM calls
             ORDER BY id ASC
             ",
@@ -423,6 +448,10 @@ impl Archive {
                 code_blocks: serde_json::from_str(&code_blocks_json).unwrap_or_default(),
                 edited_files: serde_json::from_str(&edited_files_json).unwrap_or_default(),
                 referenced_files: serde_json::from_str(&referenced_files_json).unwrap_or_default(),
+                interaction_mode: InteractionMode::parse(&row.get::<_, String>(25)?),
+                token_quality: TokenQuality::parse(&row.get::<_, String>(26)?),
+                timestamp_quality: TimestampQuality::parse(&row.get::<_, String>(27)?),
+                superseded_dedup_keys: Vec::new(),
             })
         })?;
 
@@ -485,14 +514,16 @@ fn insert_call(tx: &Transaction<'_>, call: &ParsedCall) -> Result<bool> {
             cost_usd, tools_json, bash_commands_json, timestamp, speed,
             user_message, session_id, project, imported_at,
             is_canceled, prompt_chars, response_chars, elapsed_ms,
-            code_blocks_json, edited_files_json, referenced_files_json
+            code_blocks_json, edited_files_json, referenced_files_json,
+            interaction_mode, token_quality, timestamp_quality
         ) VALUES (
             ?1, ?2, ?3, ?4, ?5,
             ?6, ?7, ?8, ?9, ?10,
             ?11, ?12, ?13, ?14, ?15,
             ?16, ?17, ?18, ?19,
             ?20, ?21, ?22, ?23,
-            ?24, ?25, ?26
+            ?24, ?25, ?26,
+            ?27, ?28, ?29
         )
         ",
         params![
@@ -522,6 +553,9 @@ fn insert_call(tx: &Transaction<'_>, call: &ParsedCall) -> Result<bool> {
             code_blocks_json,
             edited_files_json,
             referenced_files_json,
+            call.interaction_mode.as_str(),
+            call.token_quality.as_str(),
+            effective_timestamp_quality(call).as_str(),
         ],
     )?;
     if inserted == 0 {
@@ -538,7 +572,33 @@ fn insert_call(tx: &Transaction<'_>, call: &ParsedCall) -> Result<bool> {
     } else {
         zero_superseded_copilot_estimates(tx, call)?;
     }
+    remove_superseded_cursor_rows(tx, call)?;
     Ok(inserted > 0)
+}
+
+fn effective_timestamp_quality(call: &ParsedCall) -> TimestampQuality {
+    if call.timestamp_quality == TimestampQuality::Unknown && call.timestamp.is_some() {
+        TimestampQuality::Exact
+    } else {
+        call.timestamp_quality
+    }
+}
+
+fn remove_superseded_cursor_rows(tx: &Transaction<'_>, call: &ParsedCall) -> Result<()> {
+    if call.tool != crate::tools::cursor::config::TOOL_ID || call.superseded_dedup_keys.is_empty() {
+        return Ok(());
+    }
+
+    for dedup_key in &call.superseded_dedup_keys {
+        if dedup_key == &call.dedup_key {
+            continue;
+        }
+        tx.execute(
+            "DELETE FROM calls WHERE tool = ?1 AND dedup_key = ?2",
+            params![call.tool, dedup_key],
+        )?;
+    }
+    Ok(())
 }
 
 /// Backfill the v4 enrichment columns onto rows archived before the columns
@@ -552,6 +612,23 @@ fn update_existing_call_enrichment(
     edited_files_json: &str,
     referenced_files_json: &str,
 ) -> Result<()> {
+    tx.execute(
+        "
+        UPDATE calls
+        SET interaction_mode = CASE WHEN interaction_mode = 'unknown' THEN ?1 ELSE interaction_mode END,
+            token_quality = CASE WHEN token_quality = 'unknown' THEN ?2 ELSE token_quality END,
+            timestamp_quality = CASE WHEN timestamp_quality = 'unknown' THEN ?3 ELSE timestamp_quality END
+        WHERE tool = ?4 AND dedup_key = ?5
+        ",
+        params![
+            call.interaction_mode.as_str(),
+            call.token_quality.as_str(),
+            effective_timestamp_quality(call).as_str(),
+            call.tool,
+            call.dedup_key,
+        ],
+    )?;
+
     let has_enrichment = call.is_canceled
         || call.prompt_chars.is_some()
         || call.response_chars.is_some()
@@ -914,6 +991,10 @@ mod tests {
             }],
             edited_files: vec!["src/main.rs".into()],
             referenced_files: vec!["src/lib.rs".into()],
+            interaction_mode: crate::tools::InteractionMode::Agent,
+            token_quality: crate::tools::TokenQuality::Exact,
+            timestamp_quality: crate::tools::TimestampQuality::Exact,
+            superseded_dedup_keys: Vec::new(),
         }
     }
 
@@ -1136,7 +1217,7 @@ mod tests {
             .conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
         let advice_tables: u32 = archive
             .conn
             .query_row(
@@ -1161,7 +1242,7 @@ mod tests {
             .conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
 
         let loaded = archive.load().unwrap();
         assert_eq!(loaded.calls.len(), 1, "calls survive the v4 migration");
@@ -1173,6 +1254,11 @@ mod tests {
         assert!(call.code_blocks.is_empty());
         assert!(call.edited_files.is_empty());
         assert!(call.referenced_files.is_empty());
+        assert_eq!(
+            call.timestamp_quality,
+            crate::tools::TimestampQuality::Exact
+        );
+        assert_eq!(call.token_quality, crate::tools::TokenQuality::Unknown);
 
         let sources: i64 = archive
             .conn
@@ -1182,6 +1268,45 @@ mod tests {
             sources, 0,
             "v4 clears source_state so history re-parses and enriches"
         );
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn canonical_cursor_call_removes_only_listed_legacy_rows() {
+        let paths = temp_paths("cursor-safe-supersede");
+        let mut archive = Archive::open(&paths).unwrap();
+
+        let mut replace = sample_call("cursor:unknown:one");
+        replace.tool = crate::tools::cursor::config::TOOL_ID;
+        let mut preserve = sample_call("cursor:unknown:two");
+        preserve.tool = crate::tools::cursor::config::TOOL_ID;
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![replace, preserve],
+                limits: Vec::new(),
+            })
+            .unwrap();
+
+        let mut canonical = sample_call("cursor:composer:composer-1:request-1");
+        canonical.tool = crate::tools::cursor::config::TOOL_ID;
+        canonical.superseded_dedup_keys = vec!["cursor:unknown:one".into()];
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![canonical],
+                limits: Vec::new(),
+            })
+            .unwrap();
+
+        let keys = archive
+            .load()
+            .unwrap()
+            .calls
+            .into_iter()
+            .map(|call| call.dedup_key)
+            .collect::<Vec<_>>();
+        assert!(!keys.contains(&"cursor:unknown:one".to_string()));
+        assert!(keys.contains(&"cursor:unknown:two".to_string()));
+        assert!(keys.contains(&"cursor:composer:composer-1:request-1".to_string()));
         let _ = fs::remove_dir_all(paths.dir);
     }
 

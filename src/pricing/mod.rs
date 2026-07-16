@@ -694,6 +694,24 @@ mod tests {
     }
 
     #[test]
+    fn cursor_first_party_models_use_cursor_scoped_rates() {
+        let table = PriceTable::embedded();
+        let composer = table.lookup_for("cursor", "composer-2.5", None);
+        assert!((composer.input * 1e6 - 0.5).abs() < 0.001);
+        assert!((composer.cache_read * 1e6 - 0.2).abs() < 0.001);
+        assert!((composer.output * 1e6 - 2.5).abs() < 0.001);
+
+        let composer_fast = table.lookup_for("cursor", "composer-2.5-fast", None);
+        assert!((composer_fast.input * 1e6 - 3.0).abs() < 0.001);
+        assert!((composer_fast.output * 1e6 - 15.0).abs() < 0.001);
+
+        let grok_fast = table.lookup_for("cursor", "grok-4.5-fast", None);
+        assert!((grok_fast.input * 1e6 - 4.0).abs() < 0.001);
+        assert!((grok_fast.cache_read * 1e6 - 1.0).abs() < 0.001);
+        assert!((grok_fast.output * 1e6 - 18.0).abs() < 0.001);
+    }
+
+    #[test]
     fn gemini_pro_cache_read_is_ten_percent() {
         let table = PriceTable::embedded();
 

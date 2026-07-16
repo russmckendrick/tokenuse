@@ -60,7 +60,11 @@ pub fn daily_turn_counts(
     let mut days: std::collections::BTreeMap<NaiveDate, u64> = std::collections::BTreeMap::new();
     for session in sessions {
         for turn in &session.turns {
-            let Some(ts) = turn.calls.iter().find_map(|call| call.timestamp) else {
+            let Some(ts) = turn
+                .calls
+                .iter()
+                .find_map(|call| super::exact_timestamp(call))
+            else {
                 continue;
             };
             *days
@@ -97,7 +101,9 @@ pub fn timeline_day(sessions: &[CoachSession<'_>], day: NaiveDate) -> Option<Tim
         for turn in &session.turns {
             let mut turn_on_day = false;
             for call in &turn.calls {
-                if let Some(min) = call.timestamp.and_then(|ts| minute_of_day(ts, day)) {
+                if let Some(min) =
+                    super::exact_timestamp(call).and_then(|ts| minute_of_day(ts, day))
+                {
                     minutes.push(min);
                     turn_on_day = true;
                     cost += call.cost_usd;

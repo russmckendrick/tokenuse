@@ -1197,6 +1197,16 @@ fn call_detail_lines(call: &SessionDetail) -> Vec<Line<'static>> {
             Span::styled(format!("{} ", copy.tables.tools), theme::dim()),
             Span::styled(call.tools.clone(), theme::base().fg(theme::BLUE_SOFT)),
         ]),
+        Line::from(vec![
+            Span::styled(format!("{} ", copy.session.interaction_mode), theme::dim()),
+            Span::styled(call.interaction_mode.clone(), theme::muted()),
+            Span::raw("   "),
+            Span::styled(format!("{} ", copy.session.token_quality), theme::dim()),
+            Span::styled(call.token_quality.clone(), theme::muted()),
+            Span::raw("   "),
+            Span::styled(format!("{} ", copy.session.timestamp_quality), theme::dim()),
+            Span::styled(call.timestamp_quality.clone(), theme::muted()),
+        ]),
     ];
 
     if !call.bash_commands.is_empty() {

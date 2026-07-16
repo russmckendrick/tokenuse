@@ -444,9 +444,14 @@ mod tests {
         }
         assert!(triggered_ids(&calls).contains(&"excessive-file-context"));
 
-        // Same shape on a tool without the signal must not trigger.
         for c in &mut calls {
             c.tool = crate::tools::cursor::config::TOOL_ID;
+        }
+        assert!(triggered_ids(&calls).contains(&"excessive-file-context"));
+
+        // Same shape on a tool without the signal must not trigger.
+        for c in &mut calls {
+            c.tool = crate::tools::copilot::config::TOOL_ID;
         }
         assert!(!triggered_ids(&calls).contains(&"excessive-file-context"));
     }

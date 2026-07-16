@@ -8,9 +8,12 @@ use color_eyre::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::ingest::Ingested;
-use crate::tools::{paths, CodeBlock, LimitCredits, LimitSnapshot, LimitWindow, ParsedCall, Speed};
+use crate::tools::{
+    paths, CodeBlock, InteractionMode, LimitCredits, LimitSnapshot, LimitWindow, ParsedCall, Speed,
+    TimestampQuality, TokenQuality,
+};
 
-const CACHE_VERSION: u32 = 2;
+const CACHE_VERSION: u32 = 3;
 const CACHE_FILE: &str = "ingest-cache.json";
 
 /// Legacy refresh cadence. The durable archive now owns startup data, but the
@@ -55,6 +58,9 @@ struct WireParsedCall {
     code_blocks: Vec<CodeBlock>,
     edited_files: Vec<String>,
     referenced_files: Vec<String>,
+    interaction_mode: InteractionMode,
+    token_quality: TokenQuality,
+    timestamp_quality: TimestampQuality,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -102,6 +108,9 @@ impl From<&ParsedCall> for WireParsedCall {
             code_blocks: c.code_blocks.clone(),
             edited_files: c.edited_files.clone(),
             referenced_files: c.referenced_files.clone(),
+            interaction_mode: c.interaction_mode,
+            token_quality: c.token_quality,
+            timestamp_quality: c.timestamp_quality,
         }
     }
 }
@@ -134,6 +143,10 @@ impl From<WireParsedCall> for ParsedCall {
             code_blocks: w.code_blocks,
             edited_files: w.edited_files,
             referenced_files: w.referenced_files,
+            interaction_mode: w.interaction_mode,
+            token_quality: w.token_quality,
+            timestamp_quality: w.timestamp_quality,
+            superseded_dedup_keys: Vec::new(),
         }
     }
 }

@@ -13,8 +13,13 @@ pub const AGENT_TRANSCRIPTS_DIR: &str = "agent-transcripts";
 pub const AGENT_SUBAGENTS_DIR: &str = "subagents";
 pub const AGENT_TRACKING_DB: &str = "ai-code-tracking.db";
 pub const AGENT_TRACKING_DIR: &str = "ai-tracking";
+pub const CHATS_DIR: &str = "chats";
+pub const STORE_DB: &str = "store.db";
 
 pub fn state_db_path() -> Option<PathBuf> {
+    if let Some(root) = paths::env_path(AGENT_HOME_ENV) {
+        return Some(root.join(STATE_DB));
+    }
     let home = paths::home()?;
     let base = if cfg!(target_os = "macos") {
         home.join("Library/Application Support/Cursor/User/globalStorage")
@@ -42,7 +47,71 @@ pub fn agent_tracking_db_path() -> Option<PathBuf> {
     agent_home().map(|h| h.join(AGENT_TRACKING_DIR).join(AGENT_TRACKING_DB))
 }
 
-pub const BUBBLE_QUERY: &str = "SELECT key, value FROM cursorDiskKV WHERE key LIKE 'bubbleId:%'";
+pub fn chats_dir() -> Option<PathBuf> {
+    agent_home().map(|h| h.join(CHATS_DIR))
+}
 
-pub const AGENT_KV_QUERY: &str =
-    "SELECT key, value FROM cursorDiskKV WHERE key LIKE 'agentKv:blob:%'";
+pub const VALIDATE_STATE_QUERY: &str = "SELECT COUNT(*) FROM cursorDiskKV LIMIT 1";
+
+pub const STATE_BUBBLE_QUERY: &str = r#"
+SELECT key,
+       json_extract(value, '$.bubbleId'), json_extract(value, '$.requestId'),
+       json_extract(value, '$.type'), json_extract(value, '$.text'),
+       json_extract(value, '$.createdAt'),
+       json_extract(value, '$.tokenCount.inputTokens'),
+       json_extract(value, '$.tokenCount.outputTokens'),
+       json_extract(value, '$.modelInfo.modelName'),
+       json_extract(value, '$.turnDurationMs'), json_extract(value, '$.unifiedMode'),
+       json_extract(value, '$.isAgentic'), json_extract(value, '$.isPlanExecution'),
+       json_extract(value, '$.conversationId'),
+       json_extract(value, '$.toolFormerData.name'),
+       json_extract(value, '$.toolFormerData.status'),
+       json_extract(value, '$.toolFormerData.params'),
+       json_extract(value, '$.toolFormerData.rawArgs'),
+       json_extract(value, '$.attachedFileCodeChunksUris'),
+       json_extract(value, '$.attachedFileCodeChunksMetadataOnly'),
+       json_extract(value, '$.attachedCodeChunks'), json_extract(value, '$.deletedFiles'),
+       json_extract(value, '$.diffsSinceLastApply'),
+       json_extract(value, '$.fileDiffTrajectories')
+FROM cursorDiskKV WHERE key LIKE 'bubbleId:%' ORDER BY rowid
+"#;
+
+pub const STATE_COMPOSER_QUERY: &str = r#"
+SELECT key, json_extract(value, '$.composerId'),
+       json_extract(value, '$.fullConversationHeadersOnly'),
+       json_extract(value, '$.modelConfig.modelName'),
+       json_extract(value, '$.forceMode'), json_extract(value, '$.unifiedMode'),
+       json_extract(value, '$.isAgentic'), json_extract(value, '$.status')
+FROM cursorDiskKV WHERE key LIKE 'composerData:%' ORDER BY rowid
+"#;
+
+pub const STATE_CONTEXT_QUERY: &str = r#"
+SELECT key, json_extract(value, '$.attachedFileCodeChunksMetadataOnly'),
+       json_extract(value, '$.deletedFiles'), json_extract(value, '$.diffsSinceLastApply'),
+       json_extract(value, '$.currentFileLocationData')
+FROM cursorDiskKV WHERE key LIKE 'messageRequestContext:%' ORDER BY rowid
+"#;
+
+pub const STATE_AGENT_QUERY: &str = r#"
+SELECT json_extract(value, '$.role'),
+       CASE WHEN json_extract(value, '$.role') IN ('user', 'assistant')
+            THEN json_extract(value, '$.content') END,
+       json_extract(value, '$.providerOptions.cursor.requestId'),
+       json_extract(value, '$.providerOptions.cursor.highLevelToolCallResult.output.success.executionTime'),
+       json_extract(value, '$.providerOptions.cursor.highLevelToolCallResult.output.success.localExecutionTimeMs')
+FROM cursorDiskKV
+WHERE key LIKE 'agentKv:blob:%' AND json_valid(value)
+  AND json_extract(value, '$.role') IN ('user', 'assistant', 'tool')
+ORDER BY rowid
+"#;
+
+pub const TRACKING_SUMMARY_QUERY: &str =
+    "SELECT conversationId, model, mode, updatedAt FROM conversation_summaries";
+pub const TRACKING_HASH_QUERY: &str = r#"
+SELECT conversationId, model, COALESCE(timestamp, createdAt), fileName
+FROM ai_code_hashes
+WHERE conversationId IS NOT NULL AND conversationId != ''
+ORDER BY COALESCE(timestamp, createdAt)
+"#;
+pub const STORE_META_QUERY: &str = "SELECT value FROM meta WHERE key = '0'";
+pub const STORE_BLOB_QUERY: &str = "SELECT data FROM blobs WHERE id = ?1";

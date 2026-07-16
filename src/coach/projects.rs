@@ -116,7 +116,7 @@ fn session_active_minutes(session: &CoachSession<'_>) -> u64 {
         .turns
         .iter()
         .flat_map(|turn| turn.calls.iter())
-        .filter_map(|call| call.timestamp.map(|ts| ts.timestamp() / 60))
+        .filter_map(|call| super::exact_timestamp(call).map(|ts| ts.timestamp() / 60))
         .collect();
     if minutes.is_empty() {
         return 0;

@@ -92,6 +92,7 @@ pub fn group_sessions<'a>(calls: &[&'a ParsedCall]) -> Vec<CoachSession<'a>> {
 }
 
 fn push_call<'a>(session: &mut CoachSession<'a>, call: &'a ParsedCall) {
+    let exact_timestamp = crate::coach::exact_timestamp(call);
     let starts_new_turn = match session.turns.last() {
         None => true,
         Some(turn) => {
@@ -106,8 +107,8 @@ fn push_call<'a>(session: &mut CoachSession<'a>, call: &'a ParsedCall) {
             model: &call.model,
             user_message: &call.user_message,
             prompt_chars: call.prompt_chars,
-            timestamp: call.timestamp,
-            end_timestamp: call.timestamp,
+            timestamp: exact_timestamp,
+            end_timestamp: exact_timestamp,
             elapsed_ms: None,
             output_tokens: 0,
             full_prompt_tokens: 0,
@@ -125,12 +126,15 @@ fn push_call<'a>(session: &mut CoachSession<'a>, call: &'a ParsedCall) {
     let turn = session.turns.last_mut().expect("turn just ensured");
     turn.calls.push(call);
     if turn.timestamp.is_none() {
-        turn.timestamp = call.timestamp;
+        turn.timestamp = exact_timestamp;
     }
-    if call.timestamp.is_some() {
-        turn.end_timestamp = call.timestamp;
+    if exact_timestamp.is_some() {
+        turn.end_timestamp = exact_timestamp;
     }
-    if let Some(elapsed) = call.elapsed_ms {
+    if let Some(elapsed) = crate::coach::has_exact_timing(call)
+        .then_some(call.elapsed_ms)
+        .flatten()
+    {
         turn.elapsed_ms = Some(turn.elapsed_ms.unwrap_or(0).max(elapsed));
     }
     turn.output_tokens += call.output_tokens;
@@ -183,6 +187,7 @@ mod tests {
             project: "/tmp/p".into(),
             user_message: msg.into(),
             prompt_chars,
+            timestamp_quality: crate::tools::TimestampQuality::Exact,
             ..ParsedCall::default()
         }
     }
@@ -228,5 +233,17 @@ mod tests {
         let turns = &sessions[0].turns;
         // 5 minutes between rounds minus 1 minute of turn latency = 4 minutes.
         assert_eq!(think_gap_ms(&turns[0], &turns[1]), Some(240_000));
+    }
+
+    #[test]
+    fn cursor_session_quality_timestamps_do_not_enter_timing_analysis() {
+        let mut cursor = call("s1", "one", 0, Some(3));
+        cursor.tool = crate::tools::cursor::config::TOOL_ID;
+        cursor.timestamp_quality = crate::tools::TimestampQuality::Session;
+        cursor.elapsed_ms = Some(60_000);
+        let refs = vec![&cursor];
+        let sessions = group_sessions(&refs);
+        assert_eq!(sessions[0].turns[0].timestamp, None);
+        assert_eq!(sessions[0].turns[0].elapsed_ms, None);
     }
 }

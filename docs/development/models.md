@@ -28,6 +28,35 @@ The returned identity has four fields:
 
 Tool-scoped rules must appear before broader rules. For example, Copilot's `openai-auto`, `anthropic-auto`, and `auto` routers resolve to OpenAI, Anthropic, and GitHub identities respectively, while Cursor's `auto` and `default` remain Cursor identities.
 
+## Cursor raw ids and precedence
+
+Cursor records a model at several layers. Its adapter preserves the strongest observed id in this order: AgentKv assistant `providerOptions.cursor.modelName`, bubble `modelInfo.modelName`, composer `modelConfig.modelName`, tracking summary/hash model, `store.db` `lastUsedModel`, then `cursor-auto`.
+
+Observed Cursor families include:
+
+| Raw family | Canonical behavior | Pricing |
+| --- | --- | --- |
+| `claude-4.5-sonnet-thinking`, `claude-4.5-sonnet-high-thinking`, normal `claude-sonnet-4-5-*` | reversed version/family ids normalize to `claude-sonnet-4-5-*`; thinking and effort suffixes resolve to the same Sonnet identity | matching Claude row |
+| `composer-1*` | `cursor-composer-1` | global fallback unless an official row is present |
+| `composer-2.5*` / `composer-2-5*` | `cursor-composer-2.5`; Fast keeps a distinct display/rate but the same model-overreliance identity | official Cursor-scoped Composer 2.5 or Fast row |
+| `grok-4.5*` / `grok-4-5*` | `cursor-grok-4.5`; Fast/effort suffixes share the identity | official Cursor-scoped Grok 4.5 or Fast row |
+| GPT/Codex ids such as `gpt-5.1-codex-max` and newer registry-unknown variants | shared GPT fallback naming retains the full variant and OpenAI provider | matching global GPT row or fallback |
+| `vega*`, including Fast/reasoning/effort variants | `cursor-vega`, displayed as `Vega (Preview)` | observed-only; documented unknown-model fallback until Cursor publishes a rate |
+| `auto`, `default`, `cursor-auto`, `cursor-default` | `cursor-auto` | official Cursor Auto row |
+
+Reasoning markers (`thinking`, `low`, `medium`, `high`, `xhigh`, `max`) and speed markers may occur in either order. The Coach effort parser searches the suffix components rather than assuming effort is the final word. Registry identities intentionally fold those suffixes for diversity analysis, while pricing still receives the raw normalized key so Fast variants can use distinct rates.
+
+Official Cursor first-party rates are refreshed from [Cursor Models & Pricing](https://cursor.com/docs/models-and-pricing) into tool-scoped override rows:
+
+| Model | Input / MTok | Cache read / MTok | Output / MTok |
+| --- | ---: | ---: | ---: |
+| Composer 2.5 | $0.50 | $0.20 | $2.50 |
+| Composer 2.5 Fast | $3.00 | $0.50 | $15.00 |
+| Grok 4.5 | $2.00 | $0.50 | $6.00 |
+| Grok 4.5 Fast | $4.00 | $1.00 | $18.00 |
+
+Cursor Auto remains $1.25 input/cache-write, $0.25 cache-read, and $6 output per MTok. The Teams/Enterprise Cursor Token Rate is not applied because local records do not identify an applicable billing plan.
+
 ## Registry Schema
 
 Each entry in `registry.json` supports:

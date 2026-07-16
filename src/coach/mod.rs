@@ -27,6 +27,14 @@ pub struct CoachContext<'a> {
     pub sessions: Vec<CoachSession<'a>>,
 }
 
+pub(crate) fn exact_timestamp(call: &ParsedCall) -> Option<DateTime<chrono::Utc>> {
+    has_exact_timing(call).then_some(call.timestamp).flatten()
+}
+
+pub(crate) fn has_exact_timing(call: &ParsedCall) -> bool {
+    call.timestamp_quality == crate::tools::TimestampQuality::Exact
+}
+
 impl<'a> CoachContext<'a> {
     /// Build the evaluation context from timestamp-sorted calls.
     pub fn new(calls: &[&'a ParsedCall]) -> Self {
@@ -394,6 +402,7 @@ pub(crate) mod testutil {
             prompt_chars: Some(prompt.chars().count() as u64).filter(|c| *c > 0),
             response_chars: Some(400),
             elapsed_ms: Some(5_000),
+            timestamp_quality: crate::tools::TimestampQuality::Exact,
             ..ParsedCall::default()
         }
     }

@@ -10,6 +10,96 @@ pub enum Speed {
     Fast,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum InteractionMode {
+    Agent,
+    Chat,
+    Plan,
+    #[default]
+    Unknown,
+}
+
+impl InteractionMode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Agent => "agent",
+            Self::Chat => "chat",
+            Self::Plan => "plan",
+            Self::Unknown => "unknown",
+        }
+    }
+
+    pub fn parse(raw: &str) -> Self {
+        match raw {
+            "agent" => Self::Agent,
+            "chat" => Self::Chat,
+            "plan" => Self::Plan,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TokenQuality {
+    Exact,
+    Estimated,
+    Mixed,
+    #[default]
+    Unknown,
+}
+
+impl TokenQuality {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Exact => "exact",
+            Self::Estimated => "estimated",
+            Self::Mixed => "mixed",
+            Self::Unknown => "unknown",
+        }
+    }
+
+    pub fn parse(raw: &str) -> Self {
+        match raw {
+            "exact" => Self::Exact,
+            "estimated" => Self::Estimated,
+            "mixed" => Self::Mixed,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TimestampQuality {
+    Exact,
+    Session,
+    File,
+    #[default]
+    Unknown,
+}
+
+impl TimestampQuality {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Exact => "exact",
+            Self::Session => "session",
+            Self::File => "file",
+            Self::Unknown => "unknown",
+        }
+    }
+
+    pub fn parse(raw: &str) -> Self {
+        match raw {
+            "exact" => Self::Exact,
+            "session" => Self::Session,
+            "file" => Self::File,
+            _ => Self::Unknown,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SessionSource {
     pub path: PathBuf,
@@ -114,4 +204,10 @@ pub struct ParsedCall {
     pub code_blocks: Vec<CodeBlock>,
     pub edited_files: Vec<String>,
     pub referenced_files: Vec<String>,
+    pub interaction_mode: InteractionMode,
+    pub token_quality: TokenQuality,
+    pub timestamp_quality: TimestampQuality,
+    /// Archive-only replacement hints. These keys are never persisted with
+    /// the canonical row and are acted on only after that row is accepted.
+    pub superseded_dedup_keys: Vec<String>,
 }

@@ -53,7 +53,9 @@ pub fn weekly_group_scores(calls: &[&ParsedCall]) -> Vec<[u64; 4]> {
     let mut buckets: std::collections::BTreeMap<i64, Vec<&ParsedCall>> =
         std::collections::BTreeMap::new();
     for call in calls {
-        let Some(ts) = call.timestamp else { continue };
+        let Some(ts) = super::exact_timestamp(call) else {
+            continue;
+        };
         let iso = ts.with_timezone(&Local).iso_week();
         let key = i64::from(iso.year()) * 53 + i64::from(iso.week());
         buckets.entry(key).or_default().push(call);

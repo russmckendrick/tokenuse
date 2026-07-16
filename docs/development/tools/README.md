@@ -9,7 +9,7 @@ The UI calls these sources **tools**. Internally each one is implemented as a `T
 | Tool | Status | Source format | Token quality | Doc |
 | --- | --- | --- | --- | --- |
 | Claude Code | implemented | JSONL session files under `~/.claude/projects/`, Claude Desktop agent sessions, optional status-line limits sidecar | exact usage, cache reads/writes, tool calls, file-backed 5h/weekly limit snapshots | [claude-code.md](claude-code.md) |
-| Cursor | implemented | SQLite `state.vscdb` and `~/.cursor/projects/**/agent-transcripts` | exact when `tokenCount` exists; estimated fallback otherwise | [cursor.md](cursor.md) |
+| Cursor | implemented | unified `state.vscdb`, AgentKv/request context, `~/.cursor/chats/**/store.db`, transcripts, and AI tracking | one canonical user turn; exact/mixed/estimated provenance; tools, files, code, timing and modes | [cursor.md](cursor.md) |
 | Codex | implemented | JSONL rollouts under `~/.codex/sessions/` | exact per-turn token-count deltas | [codex.md](codex.md) |
 | GitHub Copilot | implemented | JSONL events from legacy CLI, VS Code Copilot Chat transcripts, optional quota sidecar | legacy output exact when present; transcripts estimated; quota snapshots from confirmed local sync | [copilot.md](copilot.md) |
 | Gemini | implemented | JSON/JSONL chat sessions under `~/.gemini/tmp/<project_hash>/chats/` | exact usage, cache reads, thoughts, tool calls | [gemini.md](gemini.md) |
@@ -34,6 +34,8 @@ flowchart LR
 ```
 
 The same `seen: &mut HashSet<String>` is shared across every tool adapter during one sync, so re-reading the same local record only contributes once. The archive also enforces uniqueness on `(tool, dedup_key)`, which lets changed sources be reparsed without duplicating historical calls.
+
+`ParsedCall` also carries archive v5 interaction/token/timestamp quality. Its transient `superseded_dedup_keys` is used only by Cursor's unified reconstruction: exact legacy rows are removed transactionally after their canonical turn is accepted and the list itself is never persisted.
 
 ## Internal Adapter Contract
 

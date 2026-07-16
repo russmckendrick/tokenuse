@@ -279,6 +279,9 @@ mod tests {
                 reasoning_tokens: 25,
                 web_search_requests: 1,
                 tools: "shell & read".into(),
+                interaction_mode: "Agent".into(),
+                token_quality: "Exact".into(),
+                timestamp_quality: "Exact".into(),
                 bash_commands: vec![
                     "echo \"<hi>\" & exit".into(),
                     "printf 'a deliberately long command with flags and quoted values' -- --format json --project tokenuse".into(),
