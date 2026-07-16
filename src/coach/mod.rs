@@ -94,9 +94,10 @@ fn count_rows(rows: Vec<(String, u64)>, cap: usize) -> Vec<crate::data::CountMet
 
 /// Build the full Coach page payload. `calls` is period-filtered and drives
 /// every panel except the activity calendar; `calendar_calls` carries the
-/// same tool/project filters but ignores the period, so the calendar always
-/// shows the trailing year (matching the per-day Gantt, which is also
-/// period-independent).
+/// same tool/project filters but ignores the period, because the calendar
+/// window is wider than the period: scoped periods render a trailing
+/// context window ([`timeline::grid_window_days`]) with out-of-period days
+/// flagged via `in_period`, and All Time renders the trailing year.
 pub fn coach_data(
     calls: &[&ParsedCall],
     calendar_calls: &[&ParsedCall],
@@ -104,6 +105,10 @@ pub fn coach_data(
     now: DateTime<Local>,
 ) -> crate::data::CoachData {
     let ctx = CoachContext::new(calls);
+    // Dashboard-consistent short labels: the same period-filtered peer set
+    // `build_dashboard` uses, so names join across pages.
+    let project_labels =
+        crate::ingest::projects::project_label_lookup(calls.iter().map(|c| c.project.as_str()));
     let outcomes = rules::run_rules(&ctx);
     let weekly = score::weekly_group_scores(calls);
     let groups = score::group_scores(&outcomes, &weekly);
@@ -226,7 +231,12 @@ pub fn coach_data(
             output_stats
                 .by_project
                 .into_iter()
-                .map(|(project, loc)| (crate::ingest::projects::raw_project_display(&project), loc))
+                .map(|(project, loc)| {
+                    (
+                        crate::ingest::projects::project_label(&project_labels, &project),
+                        loc,
+                    )
+                })
                 .collect(),
             MAX_LIST_ROWS,
         ),
@@ -239,13 +249,20 @@ pub fn coach_data(
     };
 
     let calendar_ctx = CoachContext::new(calendar_calls);
-    let timeline_grid = timeline::daily_turn_counts(&calendar_ctx.sessions)
-        .into_iter()
-        .map(|(day, turns)| crate::data::TimelineGridDay {
-            day: leak(day.format("%Y-%m-%d").to_string()),
-            turns,
-        })
-        .collect();
+    let today = now.date_naive();
+    let (period_start, period_end) = period.day_bounds(today);
+    let timeline_grid = timeline::daily_turn_counts(
+        &calendar_ctx.sessions,
+        timeline::grid_window_days(period),
+        today,
+    )
+    .into_iter()
+    .map(|(day, turns)| crate::data::TimelineGridDay {
+        day: leak(day.format("%Y-%m-%d").to_string()),
+        turns,
+        in_period: period_start.is_none_or(|start| day >= start) && day <= period_end,
+    })
+    .collect();
 
     crate::data::CoachData {
         overall,
@@ -258,25 +275,34 @@ pub fn coach_data(
     }
 }
 
-/// Build one day's Gantt rows from tool/project-filtered calls.
+/// Build one day's session-table rows from tool/project-filtered calls.
+/// Project names use the dashboard-consistent short labels, built over the
+/// full filtered call set so the same project reads the same on every day.
 pub fn coach_timeline(
     calls: &[&ParsedCall],
     day: NaiveDate,
     currency: &crate::currency::CurrencyFormatter,
 ) -> Option<crate::data::CoachTimelineDay> {
+    let labels =
+        crate::ingest::projects::project_label_lookup(calls.iter().map(|c| c.project.as_str()));
     let ctx = CoachContext::new(calls);
     let day_data = timeline::timeline_day(&ctx.sessions, day)?;
+    let total_cost: f64 = day_data.rows.iter().map(|row| row.cost_usd).sum();
     Some(crate::data::CoachTimelineDay {
         day: day_data.day.format("%Y-%m-%d").to_string(),
         max_concurrent: day_data.max_concurrent,
         window_start_min: day_data.window_start_min,
         window_end_min: day_data.window_end_min,
+        total_cost: currency.format_money(total_cost),
         rows: day_data
             .rows
             .into_iter()
             .map(|row| crate::data::TimelineSessionRow {
                 session_key: row.session_key,
-                project: crate::ingest::projects::raw_project_display(&row.project),
+                project: crate::ingest::projects::project_label(
+                    &labels,
+                    &crate::ingest::projects::project_identity(&row.project),
+                ),
                 tool: row.tool.to_string(),
                 tool_label: crate::ingest::projects::tool_short_label(row.tool).to_string(),
                 turns: row.turns,
@@ -346,5 +372,78 @@ pub(crate) mod testutil {
 
     pub fn ctx_calls(calls: &[ParsedCall]) -> Vec<&ParsedCall> {
         calls.iter().collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::testutil::{call, ctx_calls, with_code};
+    use super::*;
+
+    /// Local timestamp of the newest synthetic call — a deterministic `now`
+    /// anchor regardless of the host timezone.
+    fn last_local_time(calls: &[ParsedCall]) -> DateTime<Local> {
+        calls
+            .iter()
+            .filter_map(|c| c.timestamp)
+            .max()
+            .expect("synthetic calls carry timestamps")
+            .with_timezone(&Local)
+    }
+
+    #[test]
+    fn calendar_days_outside_the_period_are_flagged_as_context() {
+        // Activity on two days ten days apart under a Week period: both stay
+        // on the calendar (context window), only the newest is in-period.
+        let calls = vec![
+            call("a", 0, "an early day of work"),
+            call("b", 10 * 24 * 60, "a later day of work"),
+        ];
+        let refs = ctx_calls(&calls);
+        let now = last_local_time(&calls);
+
+        let data = coach_data(&refs, &refs, Period::Week, now);
+        assert_eq!(data.timeline_grid.len(), 2);
+        assert!(!data.timeline_grid[0].in_period, "ten-day-old context day");
+        assert!(data.timeline_grid[1].in_period);
+
+        let all_time = coach_data(&refs, &refs, Period::AllTime, now);
+        assert!(all_time.timeline_grid.iter().all(|d| d.in_period));
+    }
+
+    #[test]
+    fn output_by_project_uses_short_labels() {
+        // testutil calls live in "/tmp/proj" — the ranking must show the
+        // dashboard-style short label, not the raw path.
+        let calls = vec![with_code(
+            call("s", 0, "write a parser for the config"),
+            "rust",
+            12,
+        )];
+        let refs = ctx_calls(&calls);
+        let now = last_local_time(&calls);
+
+        let data = coach_data(&refs, &refs, Period::AllTime, now);
+        assert_eq!(data.output.by_project.len(), 1);
+        assert_eq!(data.output.by_project[0].name, "proj");
+    }
+
+    #[test]
+    fn timeline_rows_use_short_labels() {
+        let calls = vec![
+            call("s", 0, "start the morning session"),
+            call("s", 20, "keep the session going"),
+        ];
+        let refs = ctx_calls(&calls);
+        let day = last_local_time(&calls).date_naive();
+
+        let timeline = coach_timeline(&refs, day, &crate::currency::CurrencyFormatter::usd())
+            .expect("synthetic day has rows");
+        assert_eq!(timeline.rows.len(), 1);
+        assert_eq!(timeline.rows[0].project, "proj");
+        assert!(
+            !timeline.total_cost.is_empty(),
+            "day summary carries a formatted spend total"
+        );
     }
 }

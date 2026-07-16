@@ -29,13 +29,34 @@ pub struct TimelineRow {
     pub blocks: Vec<(u64, u64)>,
 }
 
-/// Trailing window of the timeline activity calendar, in days (53 weeks —
-/// a GitHub-style full year).
+/// Widest trailing window of the timeline activity calendar, in days
+/// (53 weeks — a GitHub-style full year, used for All Time).
 const GRID_MAX_DAYS: i64 = 371;
 
+/// Trailing context window for period-scoped calendars, in days (9
+/// Monday-first weeks — short periods keep enough surrounding history that
+/// the grid never collapses to a sliver).
+const GRID_CONTEXT_DAYS: i64 = 63;
+
+/// Calendar window for a period: All Time keeps the full trailing year,
+/// every scoped period gets the trailing context window (each spans at most
+/// 31 days, well inside [`GRID_CONTEXT_DAYS`]).
+pub fn grid_window_days(period: crate::app::Period) -> i64 {
+    match period {
+        crate::app::Period::AllTime => GRID_MAX_DAYS,
+        _ => GRID_CONTEXT_DAYS,
+    }
+}
+
 /// Turns per local day (a turn lands on its first timestamped call's day),
-/// ascending, capped to the trailing [`GRID_MAX_DAYS`] days of activity.
-pub fn daily_turn_counts(sessions: &[CoachSession<'_>]) -> Vec<(NaiveDate, u64)> {
+/// ascending, capped to the trailing `window_days` anchored at `today` — so
+/// the shipped grid always lines up with the rendered calendar window, and
+/// history older than the window drops even when nothing newer exists.
+pub fn daily_turn_counts(
+    sessions: &[CoachSession<'_>],
+    window_days: i64,
+    today: NaiveDate,
+) -> Vec<(NaiveDate, u64)> {
     let mut days: std::collections::BTreeMap<NaiveDate, u64> = std::collections::BTreeMap::new();
     for session in sessions {
         for turn in &session.turns {
@@ -47,11 +68,10 @@ pub fn daily_turn_counts(sessions: &[CoachSession<'_>]) -> Vec<(NaiveDate, u64)>
                 .or_default() += 1;
         }
     }
-    let Some(&last) = days.keys().next_back() else {
-        return Vec::new();
-    };
-    let cutoff = last - chrono::Duration::days(GRID_MAX_DAYS - 1);
-    days.into_iter().filter(|(day, _)| *day >= cutoff).collect()
+    let cutoff = today - chrono::Duration::days(window_days - 1);
+    days.into_iter()
+        .filter(|(day, _)| *day >= cutoff && *day <= today)
+        .collect()
 }
 
 fn minute_of_day(ts: DateTime<Utc>, day: NaiveDate) -> Option<u64> {
@@ -162,8 +182,22 @@ pub fn timeline_day(sessions: &[CoachSession<'_>], day: NaiveDate) -> Option<Tim
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::Period;
     use crate::coach::testutil::{call, ctx_calls};
     use crate::coach::CoachContext;
+
+    /// Newest local day across the synthetic sessions — a deterministic
+    /// `today` anchor regardless of the host timezone.
+    fn last_local_day(sessions: &[CoachSession<'_>]) -> NaiveDate {
+        sessions
+            .iter()
+            .flat_map(|s| s.turns.iter())
+            .flat_map(|t| t.calls.iter())
+            .filter_map(|c| c.timestamp)
+            .map(|ts| ts.with_timezone(&Local).date_naive())
+            .max()
+            .expect("synthetic calls carry timestamps")
+    }
 
     #[test]
     fn overlapping_sessions_raise_max_concurrency() {
@@ -177,7 +211,8 @@ mod tests {
         }
         let refs = ctx_calls(&calls);
         let ctx = CoachContext::new(&refs);
-        let days = daily_turn_counts(&ctx.sessions);
+        let today = last_local_day(&ctx.sessions);
+        let days = daily_turn_counts(&ctx.sessions, GRID_MAX_DAYS, today);
         assert_eq!(days.len(), 1);
         let day = timeline_day(&ctx.sessions, days[0].0).unwrap();
         assert_eq!(day.rows.len(), 2);
@@ -194,7 +229,8 @@ mod tests {
         ];
         let refs = ctx_calls(&calls);
         let ctx = CoachContext::new(&refs);
-        let days = daily_turn_counts(&ctx.sessions);
+        let today = last_local_day(&ctx.sessions);
+        let days = daily_turn_counts(&ctx.sessions, GRID_MAX_DAYS, today);
         let day = timeline_day(&ctx.sessions, days[0].0).unwrap();
         assert_eq!(day.rows.len(), 1);
         assert_eq!(day.rows[0].blocks.len(), 2, "a 115-minute gap splits");
@@ -213,8 +249,9 @@ mod tests {
         ];
         let refs = ctx_calls(&calls);
         let ctx = CoachContext::new(&refs);
+        let today = last_local_day(&ctx.sessions);
 
-        let counts = daily_turn_counts(&ctx.sessions);
+        let counts = daily_turn_counts(&ctx.sessions, GRID_MAX_DAYS, today);
         assert_eq!(counts.len(), 1, "early day dropped by the cap");
         assert_eq!(counts[0].1, 1);
 
@@ -224,9 +261,56 @@ mod tests {
         ];
         let refs = ctx_calls(&early_only);
         let ctx = CoachContext::new(&refs);
-        let counts = daily_turn_counts(&ctx.sessions);
+        let today = last_local_day(&ctx.sessions);
+        let counts = daily_turn_counts(&ctx.sessions, GRID_MAX_DAYS, today);
         assert_eq!(counts.len(), 1);
         assert_eq!(counts[0].1, 2, "both turns on the same day");
+    }
+
+    #[test]
+    fn context_window_trims_to_the_trailing_days() {
+        // Two active days 100 days apart: the 63-day context window keeps
+        // only the newest, the 371-day window keeps both.
+        let far = 100 * 24 * 60;
+        let calls = vec![
+            call("a", 0, "an early day of work"),
+            call("b", far, "a much later day of work"),
+        ];
+        let refs = ctx_calls(&calls);
+        let ctx = CoachContext::new(&refs);
+        let today = last_local_day(&ctx.sessions);
+
+        let scoped = daily_turn_counts(&ctx.sessions, GRID_CONTEXT_DAYS, today);
+        assert_eq!(scoped.len(), 1, "early day outside the context window");
+        assert_eq!(scoped[0].0, today);
+        assert_eq!(
+            daily_turn_counts(&ctx.sessions, GRID_MAX_DAYS, today).len(),
+            2
+        );
+    }
+
+    #[test]
+    fn window_anchors_at_today_not_the_newest_data() {
+        // Data whose newest day is older than the window ships nothing:
+        // the window trails today, not the last active day.
+        let calls = vec![call("a", 0, "a stale archive of work")];
+        let refs = ctx_calls(&calls);
+        let ctx = CoachContext::new(&refs);
+        let today = last_local_day(&ctx.sessions) + chrono::Duration::days(400);
+        assert!(daily_turn_counts(&ctx.sessions, GRID_MAX_DAYS, today).is_empty());
+    }
+
+    #[test]
+    fn grid_window_days_by_period() {
+        assert_eq!(grid_window_days(Period::AllTime), GRID_MAX_DAYS);
+        for period in [
+            Period::Today,
+            Period::Week,
+            Period::ThirtyDays,
+            Period::Month,
+        ] {
+            assert_eq!(grid_window_days(period), GRID_CONTEXT_DAYS);
+        }
     }
 
     #[test]

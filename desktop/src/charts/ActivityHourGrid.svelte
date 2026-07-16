@@ -3,6 +3,8 @@
   export let dayLabels: string[] = [];
   export let ariaLabel = '';
   export let emptyLabel = '';
+  export let lessLabel = '';
+  export let moreLabel = '';
 
   const CELL_W = 34;
   const CELL_H = 29;
@@ -15,19 +17,22 @@
   $: height = LABEL_H + matrix.length * (CELL_H + GAP);
   $: max = matrix.reduce((outer, row) => Math.max(outer, ...row), 0);
 
-  function cellColor(value: number): string {
-    if (!value || !max) return 'var(--color-bar-empty)';
-    const ratio = value / max;
-    if (ratio < 0.25) return 'var(--chart-series-6)';
-    if (ratio < 0.5) return 'var(--chart-series-5)';
-    if (ratio < 0.75) return 'var(--color-primary)';
-    return 'var(--color-warning)';
-  }
+  /* Single-hue intensity ramp on the panel accent, matching CommitGrid. */
+  const RAMP = [
+    'var(--color-bar-empty)',
+    'color-mix(in srgb, var(--color-primary) 28%, var(--color-neutral))',
+    'color-mix(in srgb, var(--color-primary) 52%, var(--color-neutral))',
+    'color-mix(in srgb, var(--color-primary) 76%, var(--color-neutral))',
+    'var(--color-primary)'
+  ];
 
-  function compactCount(value: number): string {
-    if (value >= 1_000_000) return `${Math.round(value / 100_000) / 10}M`;
-    if (value >= 1_000) return `${Math.round(value / 100) / 10}K`;
-    return String(value);
+  function level(value: number): number {
+    if (!value || !max) return 0;
+    const ratio = value / max;
+    if (ratio <= 0.25) return 1;
+    if (ratio <= 0.5) return 2;
+    if (ratio <= 0.75) return 3;
+    return 4;
   }
 </script>
 
@@ -40,15 +45,19 @@
       {#each matrix as row, day}
         <text class="day-label" x={LABEL_W - 8} y={LABEL_H + day * (CELL_H + GAP) + CELL_H / 2 + 4} text-anchor="end">{dayLabels[day] ?? ''}</text>
         {#each row as value, hour}
-          <rect x={LABEL_W + hour * (CELL_W + GAP)} y={LABEL_H + day * (CELL_H + GAP)} width={CELL_W} height={CELL_H} rx="3" fill={cellColor(value)}>
+          <rect x={LABEL_W + hour * (CELL_W + GAP)} y={LABEL_H + day * (CELL_H + GAP)} width={CELL_W} height={CELL_H} rx="3" fill={RAMP[level(value)]}>
             <title>{`${dayLabels[day] ?? ''} ${String(hour).padStart(2, '0')}:00 · ${value.toLocaleString()}`}</title>
           </rect>
-          {#if value > 0}
-            <text class="cell-value" x={LABEL_W + hour * (CELL_W + GAP) + CELL_W / 2} y={LABEL_H + day * (CELL_H + GAP) + CELL_H / 2 + 4} text-anchor="middle">{compactCount(value)}</text>
-          {/if}
         {/each}
       {/each}
     </svg>
+    <div class="legend" aria-hidden="true">
+      <span>{lessLabel}</span>
+      {#each RAMP as fill (fill)}
+        <i style={`background: ${fill}`}></i>
+      {/each}
+      <span>{moreLabel}</span>
+    </div>
   {:else}
     <div class="chart-empty">{emptyLabel}</div>
   {/if}
@@ -73,11 +82,27 @@
     font-size: 10px;
   }
 
-  .cell-value {
-    fill: var(--color-on-surface);
-    font-family: var(--font-mono);
-    font-size: 9px;
-    pointer-events: none;
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
+
+  .legend i {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex: 0 0 auto;
+  }
+
+  .legend span {
+    font-family: var(--font-ui);
+    font-size: 10px;
+    color: var(--color-muted-2);
+    margin: 0 4px;
+    white-space: nowrap;
   }
 
   .chart-empty {

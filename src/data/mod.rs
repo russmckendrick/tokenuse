@@ -199,8 +199,9 @@ pub struct CoachData {
     pub pace: PaceSummary,
     pub output: OutputSummary,
     /// Turns per active day for the activity calendar, oldest first, spanning
-    /// the trailing year regardless of the period filter; days without
-    /// activity are omitted and rendered empty client-side.
+    /// the period's calendar window (a trailing ~9-week context for scoped
+    /// periods, the trailing year for All Time); days without activity are
+    /// omitted and rendered empty client-side.
     pub timeline_grid: Vec<TimelineGridDay>,
 }
 
@@ -208,6 +209,8 @@ pub struct CoachData {
 pub struct TimelineGridDay {
     pub day: &'static str,
     pub turns: u64,
+    /// False for context days outside the selected period (rendered dimmed).
+    pub in_period: bool,
 }
 
 /// Composite report-card grade: rules-weighted mean of the group scores.
@@ -311,6 +314,8 @@ pub struct CoachTimelineDay {
     /// Minutes since local midnight bounding the day's activity.
     pub window_start_min: u64,
     pub window_end_min: u64,
+    /// Formatted spend across the day's sessions.
+    pub total_cost: String,
     pub rows: Vec<TimelineSessionRow>,
 }
 
@@ -1714,7 +1719,7 @@ pub fn coach_sample(period: Period) -> CoachData {
             }],
             uncovered_tools: "Cursor",
         },
-        timeline_grid: sample_timeline_grid(),
+        timeline_grid: sample_timeline_grid(period),
     }
 }
 
@@ -1766,9 +1771,11 @@ fn sample_output_trend(period: Period) -> Vec<CountMetric> {
                     let timestamp = end - Duration::hours(i64::from(index));
                     let day_index = (end_day - timestamp.date()).num_days() as usize;
                     let total = DAILY_TOTALS[day_index];
+                    // `then`, not `then_some`: the subtraction must stay lazy
+                    // or pre-9am hours underflow.
                     let active_index = (9..17)
                         .contains(&timestamp.hour())
-                        .then_some(timestamp.hour() - 9);
+                        .then(|| timestamp.hour() - 9);
                     let calls = active_index
                         .map(|slot| total / 8 + u64::from(slot < total as u32 % 8))
                         .unwrap_or(0);
@@ -1806,17 +1813,20 @@ fn sample_output_trend(period: Period) -> Vec<CountMetric> {
         .collect()
 }
 
-/// Deterministic pseudo-random year of activity for the sample calendar:
-/// most weekdays active, sparser weekends, turn counts cycling 1-28.
-fn sample_timeline_grid() -> Vec<TimelineGridDay> {
+/// Deterministic pseudo-random activity for the sample calendar: most
+/// weekdays active, sparser weekends, turn counts cycling 1-28, windowed
+/// and period-flagged like the live grid (anchored at the sample end day).
+fn sample_timeline_grid(period: Period) -> Vec<TimelineGridDay> {
     let end = NaiveDate::from_ymd_opt(2026, 6, 12).expect("valid sample end day");
-    let start = end - Duration::days(363);
+    let window = crate::coach::timeline::grid_window_days(period);
+    let start = end - Duration::days(window.min(364) - 1);
+    let (period_start, period_end) = period.day_bounds(end);
     let mut grid = Vec::new();
     let mut day = start;
     let mut i: u64 = 0;
     while day <= end {
         // The offset keeps the newest sample day active so the calendar's
-        // default selection always has Gantt rows.
+        // default selection always has session rows.
         let pulse = (i * 37 + 13) % 29;
         let weekend = day.weekday().num_days_from_monday() >= 5;
         let active = if weekend {
@@ -1828,6 +1838,7 @@ fn sample_timeline_grid() -> Vec<TimelineGridDay> {
             grid.push(TimelineGridDay {
                 day: Box::leak(day.format("%Y-%m-%d").to_string().into_boxed_str()),
                 turns: 1 + pulse % 28,
+                in_period: period_start.is_none_or(|s| day >= s) && day <= period_end,
             });
         }
         i += 1;
@@ -1838,7 +1849,10 @@ fn sample_timeline_grid() -> Vec<TimelineGridDay> {
 
 /// Sample timeline day for any active day on the sample calendar.
 pub fn coach_timeline_sample(day: &str) -> Option<CoachTimelineDay> {
-    if !sample_timeline_grid().iter().any(|d| d.day == day) {
+    if !sample_timeline_grid(Period::AllTime)
+        .iter()
+        .any(|d| d.day == day)
+    {
         return None;
     }
     Some(CoachTimelineDay {
@@ -1846,6 +1860,7 @@ pub fn coach_timeline_sample(day: &str) -> Option<CoachTimelineDay> {
         max_concurrent: 2,
         window_start_min: 9 * 60,
         window_end_min: 17 * 60 + 30,
+        total_cost: "$15.45".into(),
         rows: vec![
             TimelineSessionRow {
                 session_key: "claude-code:sample-1".into(),
@@ -1959,6 +1974,20 @@ mod tests {
         assert!(timeline_labels
             .last()
             .is_some_and(|label| label.starts_with(spend_days[spend_days.len() - 1])));
+    }
+
+    #[test]
+    fn sample_calendar_windows_and_flags_follow_the_period() {
+        let scoped = coach_sample(Period::Week).timeline_grid;
+        assert!(!scoped.is_empty());
+        assert!(
+            scoped.iter().any(|d| !d.in_period) && scoped.iter().any(|d| d.in_period),
+            "a scoped sample mixes context and in-period days"
+        );
+
+        let year = coach_sample(Period::AllTime).timeline_grid;
+        assert!(year.iter().all(|d| d.in_period));
+        assert!(year.len() > scoped.len(), "All Time spans the wider window");
     }
 
     #[test]

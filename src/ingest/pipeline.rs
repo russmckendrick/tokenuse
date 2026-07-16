@@ -150,8 +150,10 @@ impl Ingested {
         project_filter: &ProjectFilter,
     ) -> crate::data::CoachData {
         let now = Local::now();
-        // The activity calendar ignores the period filter (like the per-day
-        // Gantt) so it always shows the trailing year.
+        // The activity calendar needs calls beyond the period filter: its
+        // window is a trailing context (~9 weeks for scoped periods, the
+        // full year for All Time) with out-of-period days flagged, so the
+        // grid is built from the unscoped set and windowed in coach_data.
         let mut calendar: Vec<&ParsedCall> = self
             .calls
             .iter()

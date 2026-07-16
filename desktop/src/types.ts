@@ -120,6 +120,8 @@ export type CoachData = {
 export type TimelineGridDay = {
   day: string;
   turns: number;
+  /** False for context days outside the selected period (rendered dimmed). */
+  in_period: boolean;
 };
 
 export type CoachOverall = {
@@ -199,6 +201,8 @@ export type CoachTimelineDay = {
   max_concurrent: number;
   window_start_min: number;
   window_end_min: number;
+  /** Formatted spend across the day's sessions. */
+  total_cost: string;
   rows: TimelineSessionRow[];
 };
 

@@ -3,8 +3,8 @@
   import { api } from '../api';
   import ActivityHourGrid from '../charts/ActivityHourGrid.svelte';
   import ActivityProfile from '../charts/ActivityProfile.svelte';
-  import CommitGrid from '../charts/CommitGrid.svelte';
-  import GanttRows from '../charts/GanttRows.svelte';
+  import CalendarBars from '../charts/CalendarBars.svelte';
+  import SessionTimeline from '../charts/SessionTimeline.svelte';
   import OutputTrend from '../charts/OutputTrend.svelte';
   import ActivityPulse from '../components/ActivityPulse.svelte';
   import Badge from '../components/Badge.svelte';
@@ -31,6 +31,8 @@
   let coach: CoachData | null = null;
   let analytics: AnalyticsData | null = null;
   let coachKey = '';
+  let coachPeriod = '';
+  let snapToPeriod = false;
   let timeline: CoachTimelineDay | null = null;
   let selectedDay = '';
   let loadedDay = '';
@@ -57,6 +59,12 @@
     ].join('|');
     if (key !== coachKey) {
       coachKey = key;
+      // A period switch re-anchors the selected day; other reloads (background
+      // refresh, currency) keep an explicitly chosen context day.
+      if (snapshot.period !== coachPeriod) {
+        coachPeriod = snapshot.period;
+        snapToPeriod = true;
+      }
       void loadCoach();
       void loadAnalytics();
     }
@@ -85,13 +93,17 @@
       const data = await api.getCoach(snapshot.period);
       coach = data;
       const gridDays = data.timeline_grid;
-      if (!gridDays.some((d) => d.day === selectedDay)) {
-        selectedDay = gridDays[gridDays.length - 1]?.day ?? '';
+      const current = gridDays.find((d) => d.day === selectedDay);
+      if (!current || (snapToPeriod && !current.in_period)) {
+        // Prefer the newest in-period day; fall back to the newest context day.
+        const inPeriod = gridDays.filter((d) => d.in_period);
+        selectedDay = (inPeriod[inPeriod.length - 1] ?? gridDays[gridDays.length - 1])?.day ?? '';
         loadedDay = '';
         timeline = null;
       } else {
         loadedDay = '';
       }
+      snapToPeriod = false;
     } catch {
       // Keep the previous render on transient errors.
     }
@@ -203,6 +215,12 @@
     if (mode === 'model') return data.output.by_model;
     if (mode === 'project') return data.output.by_project;
     return data.output.by_language;
+  }
+
+  function dayWeekday(day: string): string {
+    const [y, m, d] = day.split('-').map(Number);
+    if (!y || !m || !d) return '';
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'long' });
   }
 
   function shortTime(timestamp: string): string {
@@ -600,7 +618,7 @@
       {#if activityView === 'hours'}
         <Panel title={coachCopy.timeline.patterns_title} tone="orange">
           {#if analytics}
-            <ActivityHourGrid matrix={analytics.hour_day} dayLabels={weekdays} ariaLabel={coachCopy.timeline.patterns_title} emptyLabel={snapshot.copy.empty.no_data} />
+            <ActivityHourGrid matrix={analytics.hour_day} dayLabels={weekdays} ariaLabel={coachCopy.timeline.patterns_title} emptyLabel={snapshot.copy.empty.no_data} lessLabel={coachCopy.timeline.less} moreLabel={coachCopy.timeline.more} />
           {:else}
             <p class="coach-empty">{coachCopy.timeline.loading_patterns}</p>
           {/if}
@@ -645,17 +663,17 @@
             <p class="coach-empty">{coachCopy.timeline.empty}</p>
           {:else}
             <div class="timeline-overview">
-              <CommitGrid days={coach.timeline_grid} selected={selectedDay} ariaLabel={coachCopy.timeline.calendar} lessLabel={coachCopy.timeline.less} moreLabel={coachCopy.timeline.more} detailLabel={(day, turns) => `${day} · ${tpl(coachCopy.timeline.turns, { count: count(turns) })}`} onSelect={(day) => (selectedDay = day)} />
+              <CalendarBars days={coach.timeline_grid} selected={selectedDay} ariaLabel={coachCopy.timeline.calendar} emptyLabel={coachCopy.timeline.empty} barsLabel={coachCopy.timeline.bars_label} averageLabel={coachCopy.timeline.average_label} detailLabel={(day, turns) => `${day} · ${tpl(coachCopy.timeline.turns, { count: count(turns) })}`} onSelect={(day) => (selectedDay = day)} />
               <div class="day-summary">
-                <span class="stat-label">{coachCopy.timeline.day}</span><strong class="mono day-value">{selectedDay}</strong>
-                {#if timeline}<div class="day-facts mono"><span>{tpl(coachCopy.timeline.sessions, { count: timeline.rows.length })}</span><span>{tpl(coachCopy.timeline.turns, { count: count(timeline.rows.reduce((sum, row) => sum + row.turns, 0)) })}</span>{#if timeline.max_concurrent > 1}<span class="overlap-badge">{tpl(coachCopy.timeline.overlap, { count: timeline.max_concurrent })}</span>{/if}</div>{/if}
+                <span class="stat-label">{coachCopy.timeline.day}</span><strong class="mono day-value">{selectedDay}</strong><span class="day-weekday">{dayWeekday(selectedDay)}</span>
+                {#if timeline}<div class="day-facts mono"><span>{tpl(coachCopy.timeline.sessions, { count: timeline.rows.length })}</span><span>{tpl(coachCopy.timeline.turns, { count: count(timeline.rows.reduce((sum, row) => sum + row.turns, 0)) })}</span>{#if timeline.total_cost}<span class="day-cost">{timeline.total_cost}</span>{/if}{#if timeline.max_concurrent > 1}<span class="overlap-badge">{tpl(coachCopy.timeline.overlap, { count: timeline.max_concurrent })}</span>{/if}</div>{/if}
                 <p>{coachCopy.timeline.calendar_hint}</p>
               </div>
             </div>
             {#if timeline}
               <section class="session-lanes calendar-session-lanes">
                 <div class="section-heading"><div><h3>{coachCopy.timeline.session_activity}</h3><p>{coachCopy.timeline.session_hint}</p></div></div>
-                <GanttRows rows={timeline.rows} windowStartMin={timeline.window_start_min} windowEndMin={timeline.window_end_min} ariaLabel={coachCopy.timeline.title} emptyLabel={coachCopy.timeline.empty} turnsLabel={(n) => tpl(coachCopy.timeline.turns, { count: n })} selectedKey={selectedSessionKey} onSelect={selectSession} />
+                <SessionTimeline rows={timeline.rows} windowStartMin={timeline.window_start_min} windowEndMin={timeline.window_end_min} headers={{ time: snapshot.copy.tables.time, project: snapshot.copy.tables.project, tool: snapshot.copy.tables.tool, turns: coachCopy.timeline.turns_header, cost: snapshot.copy.tables.cost }} ariaLabel={coachCopy.timeline.title} emptyLabel={coachCopy.timeline.empty} selectedKey={selectedSessionKey} onSelect={selectSession} />
               </section>
               {#if sessionDetail}
                 <section class="calendar-session-detail">
@@ -1352,12 +1370,11 @@
 
   .timeline-overview {
     display: grid;
-    grid-template-columns: minmax(720px, max-content) minmax(220px, 1fr);
+    grid-template-columns: minmax(480px, 1fr) minmax(220px, 300px);
     gap: var(--space-2xl);
     align-items: start;
     padding-bottom: var(--space-xl);
     border-bottom: 1px solid var(--color-border-row);
-    overflow-x: auto;
   }
 
   .day-summary {
@@ -1371,6 +1388,15 @@
   .day-value {
     font-size: var(--text-display-lg);
     font-weight: 600;
+  }
+
+  .day-weekday {
+    font-size: var(--text-label);
+    color: var(--color-muted-2);
+  }
+
+  .day-cost {
+    color: var(--color-warning);
   }
 
   .day-facts {

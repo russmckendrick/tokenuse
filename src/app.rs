@@ -6,7 +6,7 @@ use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 use std::time::Duration;
 
-use chrono::{DateTime, Datelike, Local, Utc};
+use chrono::{DateTime, Datelike, Local, NaiveDate, Utc};
 use color_eyre::Result;
 use crossterm::event::{
     KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
@@ -69,6 +69,21 @@ impl Period {
     pub fn uses_hourly_activity_timeline(self, now: DateTime<Local>) -> bool {
         matches!(self, Self::Today | Self::Week)
             || (self == Self::Month && now.day() < Self::MONTH_DAILY_START_DAY)
+    }
+
+    /// Day-granularity bounds of the period, inclusive; a `None` start means
+    /// unbounded (All Time). Mirrors the call-level `in_period` filter, so
+    /// `Today` spans yesterday and today (its rolling 24-hour window always
+    /// touches the previous calendar day).
+    pub fn day_bounds(self, today: NaiveDate) -> (Option<NaiveDate>, NaiveDate) {
+        let start = match self {
+            Self::Today => Some(today - chrono::Duration::days(1)),
+            Self::Week => Some(today - chrono::Duration::days(6)),
+            Self::ThirtyDays => Some(today - chrono::Duration::days(29)),
+            Self::Month => Some(today.with_day(1).unwrap_or(today)),
+            Self::AllTime => None,
+        };
+        (start, today)
     }
 }
 
@@ -3429,6 +3444,31 @@ mod tests {
 
     fn shift_key(code: KeyCode) -> KeyEvent {
         KeyEvent::new(code, KeyModifiers::SHIFT)
+    }
+
+    #[test]
+    fn period_day_bounds_match_the_call_filter_semantics() {
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 12).unwrap();
+        let day = |y, m, d| chrono::NaiveDate::from_ymd_opt(y, m, d).unwrap();
+
+        // Today's rolling 24h window touches yesterday at day granularity.
+        assert_eq!(
+            Period::Today.day_bounds(today),
+            (Some(day(2026, 6, 11)), today)
+        );
+        assert_eq!(
+            Period::Week.day_bounds(today),
+            (Some(day(2026, 6, 6)), today)
+        );
+        assert_eq!(
+            Period::ThirtyDays.day_bounds(today),
+            (Some(day(2026, 5, 14)), today)
+        );
+        assert_eq!(
+            Period::Month.day_bounds(today),
+            (Some(day(2026, 6, 1)), today)
+        );
+        assert_eq!(Period::AllTime.day_bounds(today), (None, today));
     }
 
     #[test]
