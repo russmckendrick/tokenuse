@@ -3,7 +3,7 @@ use std::mem;
 
 use chrono::{DateTime, Utc};
 use color_eyre::Result;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
 use crate::pricing;
@@ -57,8 +57,6 @@ struct EventMsg {
     kind: String,
     #[serde(default)]
     info: Option<TokenInfo>,
-    #[serde(default)]
-    rate_limits: Option<RateLimits>,
     /// `user_message` / `agent_message` text.
     #[serde(default)]
     message: Option<String>,
@@ -68,6 +66,14 @@ struct EventMsg {
     /// `patch_apply_end` per-file changes keyed by absolute path.
     #[serde(default)]
     changes: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RateLimitEvent {
+    #[serde(default, rename = "type")]
+    kind: String,
+    #[serde(default)]
+    rate_limits: Option<RateLimits>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -124,8 +130,20 @@ struct RateLimitCredits {
     has_credits: bool,
     #[serde(default)]
     unlimited: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_optional_f64")]
     balance: Option<f64>,
+}
+
+fn deserialize_optional_f64<'de, D>(deserializer: D) -> std::result::Result<Option<f64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<Value>::deserialize(deserializer)?;
+    Ok(value.and_then(|value| match value {
+        Value::Number(number) => number.as_f64(),
+        Value::String(number) => number.trim().parse::<f64>().ok(),
+        _ => None,
+    }))
 }
 
 #[derive(Debug, Deserialize)]
@@ -393,7 +411,7 @@ pub fn parse_session_limits(source: &SessionSource) -> Result<Vec<LimitSnapshot>
         let Some(payload) = entry.payload else {
             continue;
         };
-        let Ok(event) = serde_json::from_value::<EventMsg>(payload) else {
+        let Ok(event) = serde_json::from_value::<RateLimitEvent>(payload) else {
             continue;
         };
         if event.kind != "token_count" {
@@ -817,6 +835,7 @@ mod tests {
     const TURN_ABORTED: &str = r#"{"timestamp":"2026-03-29T15:04:20.000Z","type":"event_msg","payload":{"type":"turn_aborted","turn_id":"t1","reason":"interrupted","duration_ms":13921}}"#;
     const TOKEN_LIMIT_NULL: &str = r#"{"timestamp":"2026-04-29T07:59:08.887Z","type":"event_msg","payload":{"type":"token_count","info":null,"rate_limits":{"limit_id":"codex","limit_name":null,"primary":{"used_percent":17.0,"window_minutes":300,"resets_at":1777477636},"secondary":{"used_percent":6.0,"window_minutes":10080,"resets_at":1777960801},"credits":null,"plan_type":"prolite","rate_limit_reached_type":null}}}"#;
     const TOKEN_LIMIT_MODEL: &str = r#"{"timestamp":"2026-04-29T07:59:28.815Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":18193,"cached_input_tokens":10624,"output_tokens":371,"reasoning_output_tokens":38,"total_tokens":18564},"total_token_usage":{"input_tokens":18193,"cached_input_tokens":10624,"output_tokens":371,"reasoning_output_tokens":38,"total_tokens":18564}},"rate_limits":{"limit_id":"codex_bengalfox","limit_name":"GPT-5.3-Codex-Spark","primary":{"used_percent":0.0,"window_minutes":300,"resets_at":1777487853},"secondary":{"used_percent":0.0,"window_minutes":10080,"resets_at":1778074653},"credits":{"has_credits":false,"unlimited":false,"balance":null},"plan_type":null,"rate_limit_reached_type":null}}}"#;
+    const TOKEN_LIMIT_STRING_BALANCE: &str = r#"{"timestamp":"2026-07-16T16:05:42.263Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":19737,"cached_input_tokens":3840,"output_tokens":179,"reasoning_output_tokens":57,"total_tokens":19916},"total_token_usage":{"input_tokens":19737,"cached_input_tokens":3840,"output_tokens":179,"reasoning_output_tokens":57,"total_tokens":19916}},"rate_limits":{"limit_id":"codex","limit_name":null,"primary":{"used_percent":10.0,"window_minutes":10080,"resets_at":1784793140},"secondary":null,"credits":{"has_credits":false,"unlimited":false,"balance":"0"},"individual_limit":null,"plan_type":"prolite","rate_limit_reached_type":null}}}"#;
 
     #[test]
     fn parses_basic_session() {
@@ -1033,6 +1052,67 @@ mod tests {
         let mut seen = HashSet::new();
         let calls = parse_session(&source_for(f.path().to_path_buf()), &mut seen).unwrap();
         assert_eq!(calls.len(), 1, "normal call parsing must stay unchanged");
+    }
+
+    #[test]
+    fn string_credit_balance_is_parsed_from_new_desktop_shape() {
+        let f = write_session(&[META_OK, TURN_GPT5, TOKEN_LIMIT_STRING_BALANCE]);
+
+        let limits = parse_session_limits(&source_for(f.path().to_path_buf())).unwrap();
+        let limit = &limits[0];
+
+        assert_eq!(
+            (
+                limits.len(),
+                limit.primary.as_ref().map(|window| window.window_minutes),
+                limit.secondary.is_none(),
+                limit.credits.as_ref().and_then(|credits| credits.balance),
+            ),
+            (1, Some(10_080), true, Some(0.0))
+        );
+    }
+
+    #[test]
+    fn numeric_credit_balance_remains_supported() {
+        let credits: RateLimitCredits =
+            serde_json::from_str(r#"{"has_credits":true,"balance":12.5}"#).unwrap();
+
+        assert_eq!(credits.balance, Some(12.5));
+    }
+
+    #[test]
+    fn null_credit_balance_remains_supported() {
+        let credits: RateLimitCredits =
+            serde_json::from_str(r#"{"has_credits":false,"balance":null}"#).unwrap();
+
+        assert_eq!(credits.balance, None);
+    }
+
+    #[test]
+    fn malformed_credit_balance_does_not_suppress_usage() {
+        let malformed = TOKEN_LIMIT_STRING_BALANCE.replace("\"0\"", "\"not-a-number\"");
+        let f = write_session(&[META_OK, TURN_GPT5, &malformed]);
+        let mut seen = HashSet::new();
+
+        let calls = parse_session(&source_for(f.path().to_path_buf()), &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 1);
+    }
+
+    #[test]
+    fn malformed_credit_balance_is_ignored_in_limit_snapshot() {
+        let malformed = TOKEN_LIMIT_STRING_BALANCE.replace("\"0\"", "\"not-a-number\"");
+        let f = write_session(&[META_OK, TURN_GPT5, &malformed]);
+
+        let limits = parse_session_limits(&source_for(f.path().to_path_buf())).unwrap();
+
+        assert_eq!(
+            limits[0]
+                .credits
+                .as_ref()
+                .and_then(|credits| credits.balance),
+            None
+        );
     }
 
     #[test]

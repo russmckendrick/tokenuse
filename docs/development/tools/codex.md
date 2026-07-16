@@ -74,17 +74,18 @@ A rollout is heterogeneous JSONL. The interesting types:
                "rate_limits": {
                  "limit_id": "codex",
                  "limit_name": null,
-                 "primary": { "used_percent": 17.0, "window_minutes": 300,
-                              "resets_at": 1777477636 },
-                 "secondary": { "used_percent": 6.0, "window_minutes": 10080,
-                                "resets_at": 1777960801 },
-                 "credits": null,
+                 "primary": { "used_percent": 10.0, "window_minutes": 10080,
+                              "resets_at": 1784793140 },
+                 "secondary": null,
+                 "credits": { "has_credits": false, "unlimited": false,
+                              "balance": "0" },
+                 "individual_limit": null,
                  "plan_type": "prolite",
                  "rate_limit_reached_type": null
                } } }
 ```
 
-`rate_limits` is parsed even when `info` is null. The Limits page keeps the latest observed snapshot per `(tool, limit_id)` and displays its primary and secondary windows separately, for example `5h` and `weekly`.
+`rate_limits` is parsed even when `info` is null. The Limits page keeps the latest observed snapshot per `(tool, limit_id)` and displays its primary and secondary windows separately, for example `5h` and `weekly`. Codex may encode `credits.balance` as a JSON number, a numeric string such as `"0"`, or `null`; all three forms are accepted, while a non-numeric value is treated as an absent balance.
 
 `response_item` names map to canonical tool labels:
 
@@ -103,6 +104,8 @@ Newer Codex Desktop builds wrap tool orchestration in a `custom_tool_call` named
 ## Token & cost mapping
 
 One `ParsedCall` is emitted per `event_msg/token_count` whose usage is non-null and non-zero. Prefer cumulative `info.total_token_usage` when present: the parser subtracts the previous cumulative total in the same rollout and uses the delta. This avoids double-counting duplicate token-count snapshots that repeat the same cumulative total with a different timestamp. If Codex only writes `info.last_token_usage`, the parser uses that as a fallback.
+
+Token usage and optional rate-limit metadata are deserialized independently. A malformed or newly changed `rate_limits` field therefore cannot suppress the call, session, token, or cost data carried by the same event.
 
 | `ParsedCall` field | Source |
 | --- | --- |
@@ -172,7 +175,7 @@ The parser also consumes four `event_msg` inner types that never produce a `Pars
 
 `apply_patch` function-call arguments are **not** parsed for file paths — `patch_apply_end` carries the authoritative applied result, including files the patch actually touched. Rollouts old enough to lack these events simply leave the enrichment fields `NULL`/empty.
 
-The adapter's fingerprint prefix is `codex-v3-coach-enrichment`; bumping it forces archived rollouts back through the parser after an extraction change.
+The adapter's fingerprint prefix is `codex-v5-string-credit-balance`; bumping it forces archived rollouts back through the parser after an extraction change. Version 5 specifically reprocesses sessions that the string credit-balance schema caused earlier builds to mark as processed without recording their calls.
 
 ## Known limitations
 

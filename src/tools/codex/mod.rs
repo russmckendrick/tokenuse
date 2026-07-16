@@ -10,7 +10,7 @@ pub mod parser;
 
 pub struct Codex;
 
-const SOURCE_FINGERPRINT_VERSION: &str = "codex-v4-user-message-backfill";
+const SOURCE_FINGERPRINT_VERSION: &str = "codex-v5-string-credit-balance";
 
 impl ToolAdapter for Codex {
     fn id(&self) -> &'static str {
