@@ -29,19 +29,29 @@ pub struct TimelineRow {
     pub blocks: Vec<(u64, u64)>,
 }
 
-/// Local dates with at least one timestamped call, newest first.
-pub fn active_days(sessions: &[CoachSession<'_>]) -> Vec<NaiveDate> {
-    let mut days: std::collections::BTreeSet<NaiveDate> = std::collections::BTreeSet::new();
+/// Trailing window of the timeline activity calendar, in days (53 weeks —
+/// a GitHub-style full year).
+const GRID_MAX_DAYS: i64 = 371;
+
+/// Turns per local day (a turn lands on its first timestamped call's day),
+/// ascending, capped to the trailing [`GRID_MAX_DAYS`] days of activity.
+pub fn daily_turn_counts(sessions: &[CoachSession<'_>]) -> Vec<(NaiveDate, u64)> {
+    let mut days: std::collections::BTreeMap<NaiveDate, u64> = std::collections::BTreeMap::new();
     for session in sessions {
         for turn in &session.turns {
-            for call in &turn.calls {
-                if let Some(ts) = call.timestamp {
-                    days.insert(ts.with_timezone(&Local).date_naive());
-                }
-            }
+            let Some(ts) = turn.calls.iter().find_map(|call| call.timestamp) else {
+                continue;
+            };
+            *days
+                .entry(ts.with_timezone(&Local).date_naive())
+                .or_default() += 1;
         }
     }
-    days.into_iter().rev().collect()
+    let Some(&last) = days.keys().next_back() else {
+        return Vec::new();
+    };
+    let cutoff = last - chrono::Duration::days(GRID_MAX_DAYS - 1);
+    days.into_iter().filter(|(day, _)| *day >= cutoff).collect()
 }
 
 fn minute_of_day(ts: DateTime<Utc>, day: NaiveDate) -> Option<u64> {
@@ -167,9 +177,9 @@ mod tests {
         }
         let refs = ctx_calls(&calls);
         let ctx = CoachContext::new(&refs);
-        let days = active_days(&ctx.sessions);
+        let days = daily_turn_counts(&ctx.sessions);
         assert_eq!(days.len(), 1);
-        let day = timeline_day(&ctx.sessions, days[0]).unwrap();
+        let day = timeline_day(&ctx.sessions, days[0].0).unwrap();
         assert_eq!(day.rows.len(), 2);
         assert_eq!(day.max_concurrent, 2);
         assert!(day.window_end_min > day.window_start_min);
@@ -184,11 +194,39 @@ mod tests {
         ];
         let refs = ctx_calls(&calls);
         let ctx = CoachContext::new(&refs);
-        let days = active_days(&ctx.sessions);
-        let day = timeline_day(&ctx.sessions, days[0]).unwrap();
+        let days = daily_turn_counts(&ctx.sessions);
+        let day = timeline_day(&ctx.sessions, days[0].0).unwrap();
         assert_eq!(day.rows.len(), 1);
         assert_eq!(day.rows[0].blocks.len(), 2, "a 115-minute gap splits");
         assert_eq!(day.rows[0].turns, 3);
+    }
+
+    #[test]
+    fn daily_turn_counts_bucket_by_day_and_cap_the_window() {
+        // Two turns on one day, one turn ~400 days later: the old day falls
+        // outside the trailing 371-day window and is dropped.
+        let far = 400 * 24 * 60;
+        let calls = vec![
+            call("a", 0, "first turn of the early day"),
+            call("a", 120, "second turn after a long gap"),
+            call("b", far, "a much later day of work"),
+        ];
+        let refs = ctx_calls(&calls);
+        let ctx = CoachContext::new(&refs);
+
+        let counts = daily_turn_counts(&ctx.sessions);
+        assert_eq!(counts.len(), 1, "early day dropped by the cap");
+        assert_eq!(counts[0].1, 1);
+
+        let early_only = vec![
+            call("a", 0, "first turn of the early day"),
+            call("a", 120, "second turn after a long gap"),
+        ];
+        let refs = ctx_calls(&early_only);
+        let ctx = CoachContext::new(&refs);
+        let counts = daily_turn_counts(&ctx.sessions);
+        assert_eq!(counts.len(), 1);
+        assert_eq!(counts[0].1, 2, "both turns on the same day");
     }
 
     #[test]

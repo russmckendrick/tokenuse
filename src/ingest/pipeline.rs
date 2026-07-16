@@ -150,17 +150,20 @@ impl Ingested {
         project_filter: &ProjectFilter,
     ) -> crate::data::CoachData {
         let now = Local::now();
-        let mut filtered: Vec<&ParsedCall> = self
+        // The activity calendar ignores the period filter (like the per-day
+        // Gantt) so it always shows the trailing year.
+        let mut calendar: Vec<&ParsedCall> = self
             .calls
             .iter()
-            .filter(|c| {
-                matches_tool(c, tool)
-                    && matches_project(c, project_filter)
-                    && in_period(c, period, now)
-            })
+            .filter(|c| matches_tool(c, tool) && matches_project(c, project_filter))
             .collect();
-        filtered.sort_by_key(|c| c.timestamp);
-        crate::coach::coach_data(&filtered, now.date_naive())
+        calendar.sort_by_key(|c| c.timestamp);
+        let filtered: Vec<&ParsedCall> = calendar
+            .iter()
+            .copied()
+            .filter(|c| in_period(c, period, now))
+            .collect();
+        crate::coach::coach_data(&filtered, &calendar, period, now)
     }
 
     pub fn coach_timeline(

@@ -108,19 +108,32 @@ export type AnalyticsData = {
 };
 
 export type CoachData = {
+  overall: CoachOverall;
   practice_groups: PracticeGroupScore[];
   findings: CoachFinding[];
   flow: FlowSummary;
   pace: PaceSummary;
   output: OutputSummary;
-  timeline_days: string[];
+  timeline_grid: TimelineGridDay[];
+};
+
+export type TimelineGridDay = {
+  day: string;
+  turns: number;
+};
+
+export type CoachOverall = {
+  score: number;
+  grade_id: string;
 };
 
 export type PracticeGroupScore = {
   id: string;
   score: number;
+  grade_id: string;
   wow: string;
   mom: string;
+  trend: number[];
   triggered: number;
   total_rules: number;
   top_rule_id: string;
@@ -148,6 +161,7 @@ export type FlowSummary = {
   avg_followup: string;
   avg_block: string;
   deep_days: number;
+  fragmented_days: number;
   total_days: number;
   days: FlowDayMetric[];
 };
@@ -174,6 +188,7 @@ export type OutputSummary = {
   total_loc: string;
   by_language: CountMetric[];
   by_day: CountMetric[];
+  trend: CountMetric[];
   by_project: CountMetric[];
   by_model: CountMetric[];
   uncovered_tools: string;
@@ -386,14 +401,50 @@ export type CoachRuleCopy = {
 };
 
 export type CoachCopy = {
+  report: {
+    overall: string;
+    grade_labels: Record<string, string>;
+  };
+  hero: {
+    rules_clean: string;
+    findings: string;
+    high_severity: string;
+    streak: string;
+    total_loc: string;
+  };
+  tips: {
+    title: string;
+  };
+  tabs: {
+    label: string;
+    report: string;
+    findings: string;
+    output: string;
+    activity: string;
+  };
   groups: Record<string, string>;
   score: Record<string, string>;
   findings: {
     title: string;
+    priority: string;
+    all: string;
+    high: string;
+    medium: string;
+    affected_practices: string;
+    total_occurrences: string;
     empty: string;
     occurrences: string;
     improve: string;
     examples: string;
+    more_examples: string;
+    filter_label: string;
+    selected: string;
+    occurrences_label: string;
+    sample_size: string;
+    trigger_rate: string;
+    evidence_count: string;
+    why_it_matters: string;
+    no_examples: string;
     severity: Record<string, string>;
   };
   flow: {
@@ -402,6 +453,10 @@ export type CoachCopy = {
     avg_followup: string;
     avg_block: string;
     deep_days: string;
+    fragmented_days: string;
+    trend: string;
+    chart_aria: string;
+    day_detail: string;
     empty: string;
   };
   pace: {
@@ -509,4 +564,3 @@ export type ToolPageData = {
   dashboard: DashboardData;
   usage: LimitsData;
 };
-

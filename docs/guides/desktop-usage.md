@@ -29,7 +29,7 @@ Use **Collapse** at the bottom of the sidebar to reduce it to an icon rail. The 
 
 The five direct tool rows dynamically order themselves from highest to lowest rolling 24-hour call activity, so the tools currently driving usage stay closest to the main views. Primary screen and Config positions never move.
 
-The header holds the controls that apply to the current screen. Overview and Analytics expose period, tool, sort, and project filters. Dedicated tool pages expose period and sort. Models uses the active period for ranking and details while keeping all five ranges visible in its table. Projects exposes period, sort, and project. The parent Tools screen is a fixed rolling 24-hour capacity view, so its period control is intentionally hidden.
+The header holds the controls that apply to the current screen in one toolbar: title, period, contextual tool/project/sort filters, refresh, then report. At compact window widths the filter labels collapse to icons while their current values remain visible. Overview and Analytics expose period, tool, sort, and project filters. Dedicated tool pages expose period and sort. Models uses the active period for ranking and details while keeping all five ranges visible in its table. Projects exposes period, sort, and project. The parent Tools screen is a fixed rolling 24-hour capacity view, so its period control is intentionally hidden.
 
 The footer shows live or sample source, currency, and context-sensitive shortcut hints. Refresh, report, configuration, and sync results appear as temporary bottom-right toasts instead of permanently consuming header space.
 
@@ -58,13 +58,14 @@ Charts use the same token-driven colors and relative ranking language as the TUI
 
 ### Coach
 
-Coach turns your local usage history into practice feedback. It is entirely on-device — the analysis is deterministic Rust over the archive, with no network or AI calls (see [Coach engine](../development/coach.md) for the algorithms and attribution).
+Coach turns your local usage history into a practice report card. It is entirely on-device — the analysis is deterministic Rust over the archive, with no network or AI calls (see [Coach engine](../development/coach.md) for the algorithms and attribution).
 
-- **Practice scores**: four cards (Prompt Quality, Session Hygiene, Code Review, Tool Mastery), each 0–100 with week-over-week and month-over-month deltas and the heaviest triggered rule.
-- **Findings**: triggered anti-pattern rules ranked by severity. Expand a finding for what triggered it, how to improve, and up to three real examples from your own sessions.
-- **Flow and Pace**: a flow score per active day (deep/moderate/shallow/fragmented), average follow-up time and longest work block, plus streaks, late-night and weekend shares, and a burnout-risk badge with specific alerts.
-- **Timeline**: a per-day session Gantt with a day selector; a badge calls out days where sessions ran in parallel.
-- **AI Code Output**: lines of AI-generated code by language, day, project, and model, with a note naming tools that provide no code-output signal.
+- **Report card**: a full-width row of document-style tabs switches between Report, Findings, AI Output, and Activity. Report opens with your overall letter grade (the rules-weighted mean of the four practice scores) in a radial gauge, alongside rules-clean, findings, day-streak, and code-output tiles. These large summary rows stay out of the deeper analysis tabs so those views can use the full window.
+- **Practice scores**: four cards (Prompt Quality, Session Hygiene, Code Review, Tool Mastery), each 0–100 with a letter-grade badge, a weekly trend sparkline, week-over-week and month-over-month deltas, and the heaviest triggered rule.
+- **Report tab**: the highest-penalty findings surface first as advice cards; selecting one opens that rule directly in the Findings evidence detail. Equal-depth Flow and Pace panels follow. Flow uses a score, four practical KPIs, and a recent sparkline; Pace shows streaks, late-night and weekend gauges, and a burnout-risk badge with specific alerts.
+- **Findings tab**: severity and occurrence KPIs sit above a filterable master/detail explorer. Pick a finding to inspect why the rule matters, its denominator and trigger rate, the suggested next move, and every representative example captured for that signal.
+- **AI Output tab**: total output, active days, daily average, peak day, top language, and top model appear first as comparable KPIs. A full-width chart uses 30-minute buckets for 24 Hours, hourly buckets for 7 Days, and daily buckets for longer ranges, combining generated-code bars with a matching three-bucket moving average and selectable interval details. The language/model/project ranking remains directly below it.
+- **Activity tab**: Work Hours shows the hour×weekday intensity grid, weekday/weekend hourly profile, and period trend. Calendar uses a trailing-year grid (tool/project filters apply, period does not) to pick a day, then exposes session lanes and the fixed call inspector. Projects ranks the active projects with spend, calls, sessions, AI LoC, and tool coverage.
 
 Findings respect the header tool and project filters. Rules only count tools that can actually produce a signal — a tool whose logs lack, say, cancellation events never inflates a cancellation rate. Older archived calls whose source files are gone are excluded from rule denominators rather than counted as clean.
 

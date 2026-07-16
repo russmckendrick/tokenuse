@@ -22,7 +22,8 @@ User think-time between turns is `think_gap_ms` (next turn start − next turn l
 
 - Severity penalties: high = 12, medium = 7, low = 3, applied once per **triggered** rule — occurrence counts do not move the score.
 - `score = max(0, round(100 · (1 − penalty / (rules_in_group × 12))))` per group.
-- Weekly series: calls bucketed by local ISO week, the full rule set re-run per bucket. WoW compares the last two weekly scores; MoM compares the mean of the last 4 weeks against weeks 5–8 back. Fewer buckets → "–".
+- Weekly series: calls bucketed by local ISO week, the full rule set re-run per bucket. WoW compares the last two weekly scores; MoM compares the mean of the last 4 weeks against weeks 5–8 back. Fewer buckets → "–". The trailing 12 weekly scores per group ship in the payload as `trend` for the report-card sparklines.
+- Composite grade: `composite_score` is the rules-weighted mean of the group scores — `round(Σ(score·rules_in_group) / 27)` — so a group carries the share of the overall grade its rules hold in the catalog. `grade_id` maps any 0–100 score to a letter id: A+ ≥ 97, A ≥ 90, B+ ≥ 85, B ≥ 80, C ≥ 70, D ≥ 60, else F (copy maps ids to letters via `coach.report.grade_labels`). The composite plus its grade ship as `CoachData.overall`; each group also carries its own `grade_id`.
 
 ## Rule catalog (27 rules, `src/coach/rules/`)
 
@@ -74,13 +75,15 @@ Reference rules whose inputs tokens does not ingest (most flagged `requiresIdeCo
 
 ## Flow, pace, timeline, output
 
-- **Flow** (`flow.rs`): per session (≥3 timestamped turns) `score = 0.40·rapid-follow-up rate (≤30s) + 0.30·median-gap band + 0.15·duration band + 0.15·density band`; labels deep ≥70 / moderate ≥45 / shallow ≥25 / else fragmented. Days merge session spans into work blocks split at >15 min gaps.
+- **Flow** (`flow.rs`): per session (≥3 timestamped turns) `score = 0.40·rapid-follow-up rate (≤30s) + 0.30·median-gap band + 0.15·duration band + 0.15·density band`; labels deep ≥70 / moderate ≥45 / shallow ≥25 / else fragmented. Days merge session spans into work blocks split at >15 min gaps. The summary counts deep (≥70) and fragmented (<25) days; both counts and the daily scores ship in the payload for the KPI panel and recent-flow sparkline.
 - **Pace** (`pace.rs`): late-night = local hour ≥22 or <5; weekend = Sat/Sun; streak = consecutive active days; alerts on streak ≥14, rising 3-week trends (+20% band), late-night rate >0.15, weekend rate >0.25; risk high at 3+ alerts or (streak ≥14 ∧ late-night rising).
 - **Timeline** (`timeline.rs`): per local day, one row per session, blocks split at >15 min gaps, max concurrency via a start/end event sweep.
 - **Output** (`output.rs`): folds per-call `code_blocks` (fences + Write/Edit payloads, merged by language) into LoC by language/day/project/model, and names tools contributing no code-output signal.
 
 ## Wiring
 
-`Ingested::coach` / `Ingested::coach_timeline` (`src/ingest/pipeline.rs`) filter by period/tool/project and delegate to `coach::coach_data` / `coach::coach_timeline`, which build the `CoachData` / `CoachTimelineDay` payloads in `src/data/mod.rs`. `App::coach_for` / `App::coach_timeline_for` (`src/app.rs`) memoize per filter key in the generation-keyed `QueryCache` (bounding the `data::leak` growth exactly like Analytics). The desktop exposes `get_coach(period)` and `get_coach_timeline(day)` Tauri commands; the Coach page fetches on the `period|tool|project|data_generation|currency` key. Sample mode (Shift+D) serves `data::coach_sample()`.
+`timeline::daily_turn_counts` buckets turns by local day (a turn lands on its first timestamped call's day), capped to the trailing 53 weeks; the counts ship as `timeline_grid` and drive the activity-calendar day picker above the Gantt. The calendar is built from tool/project-filtered calls that ignore the period filter — same scope as `coach_timeline` — so it always shows the trailing year.
+
+`Ingested::coach` / `Ingested::coach_timeline` (`src/ingest/pipeline.rs`) filter by period/tool/project and delegate to `coach::coach_data` / `coach::coach_timeline`, which build the `CoachData` / `CoachTimelineDay` payloads in `src/data/mod.rs`. `App::coach_for` / `App::coach_timeline_for` (`src/app.rs`) memoize per filter key in the generation-keyed `QueryCache` (bounding the `data::leak` growth exactly like Analytics). The desktop exposes `get_coach(period)` and `get_coach_timeline(day)` Tauri commands; after a timeline row is selected, the existing `get_session_detail(key)` command supplies its call-level inspector. The Work Hours view deliberately reuses the memoized `get_analytics(period)` hour×weekday matrix and the dashboard activity timeline rather than introducing a second aggregation with different semantics. The Coach page fetches on the `period|tool|project|data_generation|currency` key. Sample mode (Shift+D) serves `data::coach_sample()`.
 
 The archive v4 enrichment columns that feed all of this are documented in `docs/development/architecture.md` and per-parser in `docs/development/tools/<name>.md`.

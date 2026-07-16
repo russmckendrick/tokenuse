@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use chrono::{Datelike, Duration, Local, NaiveDate};
+use chrono::{Datelike, Duration, Local, NaiveDate, Timelike};
 use serde::{Deserialize, Serialize};
 
 use crate::currency::CurrencyFormatter;
@@ -186,27 +186,49 @@ pub struct AnalyticsData {
     pub tool_share: Vec<ShareMetric>,
 }
 
-/// Coach page payload: practice scores, findings, flow/pace summaries, AI
-/// code output, and the day list for the timeline selector. All wording is
-/// resolved client-side from copy.json via the ids carried here.
+/// Coach page payload: overall grade, practice scores, findings, flow/pace
+/// summaries, AI code output, and the activity calendar behind the timeline
+/// day picker. All wording is resolved client-side from copy.json via the
+/// ids carried here.
 #[derive(Debug, Clone, Serialize)]
 pub struct CoachData {
+    pub overall: CoachOverall,
     pub practice_groups: Vec<PracticeGroupScore>,
     pub findings: Vec<CoachFinding>,
     pub flow: FlowSummary,
     pub pace: PaceSummary,
     pub output: OutputSummary,
-    /// "YYYY-MM-DD" local dates with activity, newest first.
-    pub timeline_days: Vec<&'static str>,
+    /// Turns per active day for the activity calendar, oldest first, spanning
+    /// the trailing year regardless of the period filter; days without
+    /// activity are omitted and rendered empty client-side.
+    pub timeline_grid: Vec<TimelineGridDay>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TimelineGridDay {
+    pub day: &'static str,
+    pub turns: u64,
+}
+
+/// Composite report-card grade: rules-weighted mean of the group scores.
+#[derive(Debug, Clone, Serialize)]
+pub struct CoachOverall {
+    pub score: u64,
+    /// Grade id ("a_plus".."f"); copy maps ids to letters.
+    pub grade_id: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PracticeGroupScore {
     pub id: &'static str,
     pub score: u64,
+    /// Grade id ("a_plus".."f"); copy maps ids to letters.
+    pub grade_id: &'static str,
     /// Pre-formatted week-over-week / month-over-month deltas ("+13%", "–").
     pub wow: &'static str,
     pub mom: &'static str,
+    /// Weekly score series, oldest-first, for the trend sparkline.
+    pub trend: Vec<u64>,
     pub triggered: u64,
     pub total_rules: u64,
     /// Rule id of the heaviest triggered rule; empty when clean.
@@ -240,6 +262,7 @@ pub struct FlowSummary {
     pub avg_followup: &'static str,
     pub avg_block: &'static str,
     pub deep_days: u64,
+    pub fragmented_days: u64,
     pub total_days: u64,
     pub days: Vec<FlowDayMetric>,
 }
@@ -270,6 +293,9 @@ pub struct OutputSummary {
     pub by_language: Vec<CountMetric>,
     /// name = local day, calls = LoC.
     pub by_day: Vec<CountMetric>,
+    /// Period-aware output trend: half-hourly for 24 hours, hourly for seven
+    /// days, and daily for longer ranges. Newest bucket first.
+    pub trend: Vec<CountMetric>,
     pub by_project: Vec<CountMetric>,
     pub by_model: Vec<CountMetric>,
     /// Comma-separated tool labels with no code-output signal; empty when
@@ -1452,14 +1478,21 @@ fn leak(s: String) -> &'static str {
 
 /// Hand-authored coach payload for sample mode (Shift+D) so the page renders
 /// deterministic demo content without touching real archives.
-pub fn coach_sample() -> CoachData {
+pub fn coach_sample(period: Period) -> CoachData {
     CoachData {
+        // Rules-weighted mean of the group scores below: 2356/27 -> 87.
+        overall: CoachOverall {
+            score: 87,
+            grade_id: "b_plus",
+        },
         practice_groups: vec![
             PracticeGroupScore {
                 id: "prompt_quality",
                 score: 78,
+                grade_id: "c",
                 wow: "+4%",
                 mom: "+9%",
+                trend: vec![64, 66, 69, 65, 70, 68, 71, 72, 75, 78],
                 triggered: 2,
                 total_rules: 8,
                 top_rule_id: "lazy-prompting",
@@ -1467,8 +1500,10 @@ pub fn coach_sample() -> CoachData {
             PracticeGroupScore {
                 id: "session_hygiene",
                 score: 88,
+                grade_id: "b_plus",
                 wow: "-2%",
                 mom: "+1%",
+                trend: vec![82, 85, 84, 87, 86, 89, 91, 90, 90, 88],
                 triggered: 1,
                 total_rules: 9,
                 top_rule_id: "late-night-coding",
@@ -1476,8 +1511,10 @@ pub fn coach_sample() -> CoachData {
             PracticeGroupScore {
                 id: "code_review",
                 score: 100,
+                grade_id: "a_plus",
                 wow: "–",
                 mom: "–",
+                trend: vec![100, 100, 100, 100, 100, 100, 100, 100],
                 triggered: 0,
                 total_rules: 5,
                 top_rule_id: "",
@@ -1485,8 +1522,10 @@ pub fn coach_sample() -> CoachData {
             PracticeGroupScore {
                 id: "tool_mastery",
                 score: 88,
+                grade_id: "b_plus",
                 wow: "+6%",
                 mom: "–",
+                trend: vec![72, 75, 74, 78, 80, 79, 82, 83, 88],
                 triggered: 1,
                 total_rules: 5,
                 top_rule_id: "cache-hit-starvation",
@@ -1542,7 +1581,8 @@ pub fn coach_sample() -> CoachData {
             avg_followup: "38s",
             avg_block: "52 min",
             deep_days: 3,
-            total_days: 9,
+            fragmented_days: 2,
+            total_days: 10,
             days: vec![
                 FlowDayMetric {
                     day: "2026-06-12",
@@ -1558,6 +1598,70 @@ pub fn coach_sample() -> CoachData {
                     label_id: "shallow",
                     longest_block_min: 22,
                     active_min: 75,
+                    sessions: 5,
+                },
+                FlowDayMetric {
+                    day: "2026-06-10",
+                    score: 82,
+                    label_id: "deep",
+                    longest_block_min: 118,
+                    active_min: 260,
+                    sessions: 2,
+                },
+                FlowDayMetric {
+                    day: "2026-06-09",
+                    score: 57,
+                    label_id: "moderate",
+                    longest_block_min: 44,
+                    active_min: 150,
+                    sessions: 4,
+                },
+                FlowDayMetric {
+                    day: "2026-06-08",
+                    score: 22,
+                    label_id: "fragmented",
+                    longest_block_min: 12,
+                    active_min: 48,
+                    sessions: 6,
+                },
+                FlowDayMetric {
+                    day: "2026-06-07",
+                    score: 68,
+                    label_id: "moderate",
+                    longest_block_min: 61,
+                    active_min: 190,
+                    sessions: 3,
+                },
+                FlowDayMetric {
+                    day: "2026-06-06",
+                    score: 75,
+                    label_id: "deep",
+                    longest_block_min: 102,
+                    active_min: 240,
+                    sessions: 2,
+                },
+                FlowDayMetric {
+                    day: "2026-06-05",
+                    score: 49,
+                    label_id: "moderate",
+                    longest_block_min: 35,
+                    active_min: 120,
+                    sessions: 4,
+                },
+                FlowDayMetric {
+                    day: "2026-06-04",
+                    score: 18,
+                    label_id: "fragmented",
+                    longest_block_min: 9,
+                    active_min: 40,
+                    sessions: 7,
+                },
+                FlowDayMetric {
+                    day: "2026-06-03",
+                    score: 33,
+                    label_id: "shallow",
+                    longest_block_min: 20,
+                    active_min: 88,
                     sessions: 5,
                 },
             ],
@@ -1589,18 +1693,8 @@ pub fn coach_sample() -> CoachData {
                     value: 29,
                 },
             ],
-            by_day: vec![
-                CountMetric {
-                    name: "2026-06-11",
-                    calls: 1980,
-                    value: 100,
-                },
-                CountMetric {
-                    name: "2026-06-12",
-                    calls: 1420,
-                    value: 72,
-                },
-            ],
+            by_day: sample_output_days(),
+            trend: sample_output_trend(period),
             by_project: vec![
                 CountMetric {
                     name: "tokens",
@@ -1620,13 +1714,118 @@ pub fn coach_sample() -> CoachData {
             }],
             uncovered_tools: "Cursor",
         },
-        timeline_days: vec!["2026-06-12", "2026-06-11"],
+        timeline_grid: sample_timeline_grid(),
     }
 }
 
-/// Sample timeline day matching `coach_sample`'s newest day.
+fn sample_output_days() -> Vec<CountMetric> {
+    [
+        ("2026-06-12", 1420, 72),
+        ("2026-06-11", 1980, 100),
+        ("2026-06-10", 1610, 81),
+        ("2026-06-09", 880, 44),
+        ("2026-06-08", 240, 12),
+        ("2026-06-07", 1120, 57),
+        ("2026-06-06", 1540, 78),
+    ]
+    .into_iter()
+    .map(|(name, calls, value)| CountMetric { name, calls, value })
+    .collect()
+}
+
+fn sample_output_trend(period: Period) -> Vec<CountMetric> {
+    const DAILY_TOTALS: [u64; 7] = [1420, 1980, 1610, 880, 240, 1120, 1540];
+    let end_day = NaiveDate::from_ymd_opt(2026, 6, 12).expect("valid sample output day");
+
+    let raw: Vec<(String, u64)> = match period {
+        Period::Today => {
+            let end = end_day
+                .and_hms_opt(23, 30, 0)
+                .expect("valid sample half-hour");
+            (0..48)
+                .map(|index| {
+                    let timestamp = end - Duration::minutes(i64::from(index) * 30);
+                    let active_index = if (8..18).contains(&timestamp.hour()) {
+                        Some((timestamp.hour() - 8) * 2 + timestamp.minute() / 30)
+                    } else {
+                        None
+                    };
+                    let calls = active_index
+                        .map(|slot| {
+                            DAILY_TOTALS[0] / 20 + u64::from(slot < DAILY_TOTALS[0] as u32 % 20)
+                        })
+                        .unwrap_or(0);
+                    (timestamp.format("%Y-%m-%d %H:%M").to_string(), calls)
+                })
+                .collect()
+        }
+        Period::Week => {
+            let end = end_day.and_hms_opt(23, 0, 0).expect("valid sample hour");
+            (0..168)
+                .map(|index| {
+                    let timestamp = end - Duration::hours(i64::from(index));
+                    let day_index = (end_day - timestamp.date()).num_days() as usize;
+                    let total = DAILY_TOTALS[day_index];
+                    let active_index = (9..17)
+                        .contains(&timestamp.hour())
+                        .then_some(timestamp.hour() - 9);
+                    let calls = active_index
+                        .map(|slot| total / 8 + u64::from(slot < total as u32 % 8))
+                        .unwrap_or(0);
+                    (timestamp.format("%Y-%m-%d %H:%M").to_string(), calls)
+                })
+                .collect()
+        }
+        Period::ThirtyDays | Period::Month | Period::AllTime => return sample_output_days(),
+    };
+
+    let max = raw.iter().map(|(_, calls)| *calls).max().unwrap_or(0);
+    raw.into_iter()
+        .map(|(name, calls)| CountMetric {
+            name: leak(name),
+            calls,
+            value: if calls == 0 || max == 0 {
+                0
+            } else {
+                (calls * 100 / max).clamp(1, 100)
+            },
+        })
+        .collect()
+}
+
+/// Deterministic pseudo-random year of activity for the sample calendar:
+/// most weekdays active, sparser weekends, turn counts cycling 1-28.
+fn sample_timeline_grid() -> Vec<TimelineGridDay> {
+    let end = NaiveDate::from_ymd_opt(2026, 6, 12).expect("valid sample end day");
+    let start = end - Duration::days(363);
+    let mut grid = Vec::new();
+    let mut day = start;
+    let mut i: u64 = 0;
+    while day <= end {
+        // The offset keeps the newest sample day active so the calendar's
+        // default selection always has Gantt rows.
+        let pulse = (i * 37 + 13) % 29;
+        let weekend = day.weekday().num_days_from_monday() >= 5;
+        let active = if weekend {
+            pulse.is_multiple_of(3)
+        } else {
+            !pulse.is_multiple_of(5)
+        };
+        if active {
+            grid.push(TimelineGridDay {
+                day: Box::leak(day.format("%Y-%m-%d").to_string().into_boxed_str()),
+                turns: 1 + pulse % 28,
+            });
+        }
+        i += 1;
+        day += Duration::days(1);
+    }
+    grid
+}
+
+/// Sample timeline day for any active day on the sample calendar.
 pub fn coach_timeline_sample(day: &str) -> Option<CoachTimelineDay> {
-    if !coach_sample().timeline_days.contains(&day) {
+    if !sample_timeline_grid().iter().any(|d| d.day == day) {
         return None;
     }
     Some(CoachTimelineDay {

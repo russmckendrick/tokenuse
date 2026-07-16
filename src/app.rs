@@ -1348,7 +1348,7 @@ impl App {
 
         let data = match &self.source {
             DataSource::Live(ingested) => ingested.coach(period, tool, project_filter),
-            DataSource::Sample => crate::data::coach_sample(),
+            DataSource::Sample => crate::data::coach_sample(period),
         };
         self.query_cache
             .borrow_mut()

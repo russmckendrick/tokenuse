@@ -14,6 +14,9 @@ use super::rules::{self, RuleGroup, RuleOutcome};
 use super::CoachContext;
 use crate::tools::ParsedCall;
 
+/// Weekly trend points kept per group for the report-card sparkline.
+const MAX_TREND_WEEKS: usize = 12;
+
 #[derive(Debug, Clone)]
 pub struct GroupScore {
     pub group: RuleGroup,
@@ -24,6 +27,9 @@ pub struct GroupScore {
     pub total_rules: u64,
     /// Highest-penalty triggered rule, for the "top issue" line.
     pub top_rule: Option<&'static str>,
+    /// Weekly score series, oldest-first, capped to the trailing
+    /// [`MAX_TREND_WEEKS`] entries.
+    pub trend: Vec<u64>,
 }
 
 pub fn score_for(outcomes: &[&RuleOutcome], group: RuleGroup) -> u64 {
@@ -67,6 +73,31 @@ pub fn weekly_group_scores(calls: &[&ParsedCall]) -> Vec<[u64; 4]> {
             ]
         })
         .collect()
+}
+
+/// Rules-weighted mean of the group scores: a group carries the share of the
+/// overall grade that its rules hold in the catalog, matching the penalty
+/// model (max penalty = rules × 12).
+pub fn composite_score(groups: &[GroupScore]) -> u64 {
+    let total_rules: u64 = groups.iter().map(|g| g.total_rules).sum();
+    if total_rules == 0 {
+        return 100;
+    }
+    let weighted: u64 = groups.iter().map(|g| g.score * g.total_rules).sum();
+    ((weighted as f64) / (total_rules as f64)).round() as u64
+}
+
+/// Report-card grade id for a 0-100 score; copy maps ids to letters.
+pub fn grade_id(score: u64) -> &'static str {
+    match score {
+        s if s >= 97 => "a_plus",
+        s if s >= 90 => "a",
+        s if s >= 85 => "b_plus",
+        s if s >= 80 => "b",
+        s if s >= 70 => "c",
+        s if s >= 60 => "d",
+        _ => "f",
+    }
 }
 
 fn pct_change(current: f64, previous: f64) -> Option<i64> {
@@ -119,6 +150,8 @@ pub fn group_scores(outcomes: &[RuleOutcome], weekly: &[[u64; 4]]) -> Vec<GroupS
                 None
             };
 
+            let trend = series[series.len().saturating_sub(MAX_TREND_WEEKS)..].to_vec();
+
             GroupScore {
                 group,
                 score,
@@ -127,6 +160,7 @@ pub fn group_scores(outcomes: &[RuleOutcome], weekly: &[[u64; 4]]) -> Vec<GroupS
                 triggered: triggered.len() as u64,
                 total_rules: rules::rules_per_group(group),
                 top_rule,
+                trend,
             }
         })
         .collect()
@@ -179,5 +213,65 @@ mod tests {
         assert_eq!(pq.mom_pct, None, "needs 8 weekly buckets");
         assert_eq!(pq.score, 100);
         assert_eq!(pq.triggered, 0);
+        assert_eq!(pq.trend, vec![80, 90], "weekly series kept oldest-first");
+    }
+
+    #[test]
+    fn trend_caps_at_trailing_twelve_weeks() {
+        let outcomes: Vec<RuleOutcome> = Vec::new();
+        let weekly: Vec<[u64; 4]> = (0..15).map(|i| [60 + i, 100, 100, 100]).collect();
+        let scores = group_scores(&outcomes, &weekly);
+        let pq = &scores[0];
+        assert_eq!(pq.trend.len(), MAX_TREND_WEEKS);
+        assert_eq!(pq.trend[0], 63, "oldest retained week first");
+        assert_eq!(*pq.trend.last().unwrap(), 74, "newest week last");
+    }
+
+    fn weighted(group: RuleGroup, score: u64, total_rules: u64) -> GroupScore {
+        GroupScore {
+            group,
+            score,
+            wow_pct: None,
+            mom_pct: None,
+            triggered: 0,
+            total_rules,
+            top_rule: None,
+            trend: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn composite_weights_groups_by_rule_count() {
+        let groups = [
+            weighted(RuleGroup::PromptQuality, 78, 8),
+            weighted(RuleGroup::SessionHygiene, 88, 9),
+            weighted(RuleGroup::CodeReview, 100, 5),
+            weighted(RuleGroup::ToolMastery, 88, 5),
+        ];
+        // (78*8 + 88*9 + 100*5 + 88*5) / 27 = 2356/27 = 87.26 -> 87
+        assert_eq!(composite_score(&groups), 87);
+        assert_eq!(composite_score(&[]), 100, "no groups -> clean slate");
+    }
+
+    #[test]
+    fn grade_boundaries_match_scale() {
+        for (score, id) in [
+            (100, "a_plus"),
+            (97, "a_plus"),
+            (96, "a"),
+            (90, "a"),
+            (89, "b_plus"),
+            (85, "b_plus"),
+            (84, "b"),
+            (80, "b"),
+            (79, "c"),
+            (70, "c"),
+            (69, "d"),
+            (60, "d"),
+            (59, "f"),
+            (0, "f"),
+        ] {
+            assert_eq!(grade_id(score), id, "score {score}");
+        }
     }
 }

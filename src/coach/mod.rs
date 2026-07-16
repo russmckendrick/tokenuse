@@ -16,8 +16,9 @@ pub mod signals;
 pub mod text;
 pub mod timeline;
 
-use chrono::NaiveDate;
+use chrono::{DateTime, Local, NaiveDate};
 
+use crate::app::Period;
 use crate::tools::ParsedCall;
 use sessions::{CoachSession, Turn};
 
@@ -59,7 +60,6 @@ impl<'a> CoachContext<'a> {
 }
 
 const MAX_FLOW_DAYS: usize = 14;
-const MAX_TIMELINE_DAYS: usize = 60;
 const MAX_LIST_ROWS: usize = 12;
 
 fn leak(s: String) -> &'static str {
@@ -92,20 +92,37 @@ fn count_rows(rows: Vec<(String, u64)>, cap: usize) -> Vec<crate::data::CountMet
         .collect()
 }
 
-/// Build the full Coach page payload from period-filtered calls.
-pub fn coach_data(calls: &[&ParsedCall], today: NaiveDate) -> crate::data::CoachData {
+/// Build the full Coach page payload. `calls` is period-filtered and drives
+/// every panel except the activity calendar; `calendar_calls` carries the
+/// same tool/project filters but ignores the period, so the calendar always
+/// shows the trailing year (matching the per-day Gantt, which is also
+/// period-independent).
+pub fn coach_data(
+    calls: &[&ParsedCall],
+    calendar_calls: &[&ParsedCall],
+    period: Period,
+    now: DateTime<Local>,
+) -> crate::data::CoachData {
     let ctx = CoachContext::new(calls);
     let outcomes = rules::run_rules(&ctx);
     let weekly = score::weekly_group_scores(calls);
     let groups = score::group_scores(&outcomes, &weekly);
+
+    let overall_score = score::composite_score(&groups);
+    let overall = crate::data::CoachOverall {
+        score: overall_score,
+        grade_id: score::grade_id(overall_score),
+    };
 
     let practice_groups = groups
         .into_iter()
         .map(|g| crate::data::PracticeGroupScore {
             id: g.group.id(),
             score: g.score,
+            grade_id: score::grade_id(g.score),
             wow: fmt_delta(g.wow_pct),
             mom: fmt_delta(g.mom_pct),
+            trend: g.trend,
             triggered: g.triggered,
             total_rules: g.total_rules,
             top_rule_id: g.top_rule.unwrap_or(""),
@@ -153,6 +170,7 @@ pub fn coach_data(calls: &[&ParsedCall], today: NaiveDate) -> crate::data::Coach
             .unwrap_or("–"),
         avg_block: leak(format!("{} min", flow_stats.avg_longest_block_min)),
         deep_days: flow_stats.deep_days,
+        fragmented_days: flow_stats.fragmented_days,
         total_days: flow_days.len() as u64,
         days: flow_days
             .into_iter()
@@ -168,7 +186,7 @@ pub fn coach_data(calls: &[&ParsedCall], today: NaiveDate) -> crate::data::Coach
             .collect(),
     };
 
-    let pace_stats = pace::pace_stats(&ctx, today);
+    let pace_stats = pace::pace_stats(&ctx, now.date_naive());
     let pace = crate::data::PaceSummary {
         current_streak: pace_stats.current_streak,
         longest_streak: pace_stats.longest_streak,
@@ -179,6 +197,19 @@ pub fn coach_data(calls: &[&ParsedCall], today: NaiveDate) -> crate::data::Coach
     };
 
     let output_stats = output::output_stats(&ctx);
+    let trend_cap = if matches!(period, Period::Today | Period::Week) {
+        usize::MAX
+    } else {
+        MAX_LIST_ROWS
+    };
+    let trend = count_rows(
+        output::trend_rows(&output_stats, period, now)
+            .into_iter()
+            .rev()
+            .take(trend_cap)
+            .collect(),
+        trend_cap,
+    );
     let uncovered: Vec<&'static str> = output_stats
         .uncovered_tools
         .iter()
@@ -197,6 +228,7 @@ pub fn coach_data(calls: &[&ParsedCall], today: NaiveDate) -> crate::data::Coach
                 .collect(),
             MAX_LIST_ROWS,
         ),
+        trend,
         by_project: count_rows(
             output_stats
                 .by_project
@@ -213,19 +245,23 @@ pub fn coach_data(calls: &[&ParsedCall], today: NaiveDate) -> crate::data::Coach
         },
     };
 
-    let timeline_days = timeline::active_days(&ctx.sessions)
+    let calendar_ctx = CoachContext::new(calendar_calls);
+    let timeline_grid = timeline::daily_turn_counts(&calendar_ctx.sessions)
         .into_iter()
-        .take(MAX_TIMELINE_DAYS)
-        .map(|d| leak(d.format("%Y-%m-%d").to_string()))
+        .map(|(day, turns)| crate::data::TimelineGridDay {
+            day: leak(day.format("%Y-%m-%d").to_string()),
+            turns,
+        })
         .collect();
 
     crate::data::CoachData {
+        overall,
         practice_groups,
         findings,
         flow,
         pace,
         output,
-        timeline_days,
+        timeline_grid,
     }
 }
 

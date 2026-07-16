@@ -61,6 +61,10 @@ pub struct NavCopy {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CoachCopy {
+    pub report: CoachReportCopy,
+    pub hero: CoachHeroCopy,
+    pub tips: CoachTipsCopy,
+    pub tabs: CoachTabsCopy,
     pub groups: CoachGroupsCopy,
     pub score: CoachScoreCopy,
     pub findings: CoachFindingsCopy,
@@ -69,6 +73,36 @@ pub struct CoachCopy {
     pub timeline: CoachTimelineCopy,
     pub output: CoachOutputCopy,
     pub rules: std::collections::BTreeMap<String, CoachRuleCopy>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CoachReportCopy {
+    pub overall: String,
+    /// Grade id ("a_plus".."f") -> display letter ("A+".."F").
+    pub grade_labels: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CoachHeroCopy {
+    pub rules_clean: String,
+    pub findings: String,
+    pub high_severity: String,
+    pub streak: String,
+    pub total_loc: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CoachTipsCopy {
+    pub title: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CoachTabsCopy {
+    pub label: String,
+    pub report: String,
+    pub findings: String,
+    pub output: String,
+    pub activity: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -86,15 +120,31 @@ pub struct CoachScoreCopy {
     pub rules_triggered: String,
     pub top_issue: String,
     pub clean: String,
+    pub trend: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CoachFindingsCopy {
     pub title: String,
+    pub priority: String,
+    pub all: String,
+    pub high: String,
+    pub medium: String,
+    pub affected_practices: String,
+    pub total_occurrences: String,
     pub empty: String,
     pub occurrences: String,
     pub improve: String,
     pub examples: String,
+    pub more_examples: String,
+    pub filter_label: String,
+    pub selected: String,
+    pub occurrences_label: String,
+    pub sample_size: String,
+    pub trigger_rate: String,
+    pub evidence_count: String,
+    pub why_it_matters: String,
+    pub no_examples: String,
     pub severity: CoachSeverityCopy,
 }
 
@@ -112,6 +162,10 @@ pub struct CoachFlowCopy {
     pub avg_followup: String,
     pub avg_block: String,
     pub deep_days: String,
+    pub fragmented_days: String,
+    pub trend: String,
+    pub chart_aria: String,
+    pub day_detail: String,
     pub empty: String,
 }
 
@@ -148,9 +202,32 @@ pub struct CoachPaceAlertsCopy {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CoachTimelineCopy {
     pub title: String,
+    pub views_label: String,
+    pub work_hours: String,
+    pub calendar_view: String,
+    pub projects_view: String,
+    pub patterns_title: String,
+    pub hourly_profile: String,
+    pub period_trend: String,
+    pub weekdays: String,
+    pub weekends: String,
+    pub loading_patterns: String,
+    pub projects_title: String,
+    pub ai_loc: String,
+    pub no_projects: String,
     pub day: String,
+    pub calendar: String,
+    pub less: String,
+    pub more: String,
     pub overlap: String,
+    pub sessions: String,
     pub turns: String,
+    pub calendar_hint: String,
+    pub session_activity: String,
+    pub session_hint: String,
+    pub selected_call: String,
+    pub no_tools: String,
+    pub loading: String,
     pub empty: String,
 }
 
@@ -158,6 +235,29 @@ pub struct CoachTimelineCopy {
 pub struct CoachOutputCopy {
     pub title: String,
     pub total: String,
+    pub active_days: String,
+    pub daily_average: String,
+    pub peak_day: String,
+    pub top_language: String,
+    pub top_model: String,
+    pub share: String,
+    pub languages: String,
+    pub models: String,
+    pub projects: String,
+    pub breakdown: String,
+    pub selected: String,
+    pub daily_hint: String,
+    pub daily_output: String,
+    pub moving_average: String,
+    pub day_detail: String,
+    pub by_half_hour: String,
+    pub half_hour_hint: String,
+    pub half_hour_output: String,
+    pub half_hour_average: String,
+    pub by_hour: String,
+    pub hourly_hint: String,
+    pub hourly_output: String,
+    pub hourly_average: String,
     pub by_language: String,
     pub by_day: String,
     pub by_project: String,
@@ -885,6 +985,16 @@ impl CopyDeck {
         ensure_unique_table_labels(self)?;
         ensure_unique_footer_labels(self)?;
         ensure_template(&self.status.reloaded_calls, &["calls"])?;
+        ensure_template(&self.coach.hero.high_severity, &["count"])?;
+        ensure_template(
+            &self.coach.flow.day_detail,
+            &["score", "sessions", "active", "block"],
+        )?;
+        for grade in ["a_plus", "a", "b_plus", "b", "c", "d", "f"] {
+            if !self.coach.report.grade_labels.contains_key(grade) {
+                return Err(format!("coach.report.grade_labels missing {grade:?}"));
+            }
+        }
         ensure_template(&self.status.exported, &["format", "path"])?;
         ensure_template(&self.status.report_generated, &["format", "path"])?;
         ensure_template(&self.status.report_failed, &["error"])?;

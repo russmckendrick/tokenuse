@@ -8,6 +8,8 @@
   export let ariaLabel = '';
   export let emptyLabel = '';
   export let turnsLabel = (count: number) => `${count}`;
+  export let selectedKey = '';
+  export let onSelect: (key: string) => void = () => {};
 
   const rowHeight = 22;
   const barHeight = 10;
@@ -47,10 +49,17 @@
   <div class="gantt" role="img" aria-label={ariaLabel}>
     <div class="gantt-labels" style={`--row-height: ${rowHeight}px`}>
       {#each rows as row (row.session_key)}
-        <div class="gantt-label" title={row.project}>
+        <button
+          type="button"
+          class="gantt-label"
+          class:selected={row.session_key === selectedKey}
+          title={row.project}
+          aria-pressed={row.session_key === selectedKey}
+          onclick={() => onSelect(row.session_key)}
+        >
           <span class="gantt-project">{row.project}</span>
           <span class="gantt-meta mono">{row.tool_label} · {turnsLabel(row.turns)} · {row.cost}</span>
-        </div>
+        </button>
       {/each}
     </div>
     <svg
@@ -104,10 +113,32 @@
     justify-content: center;
     min-width: 0;
     border-bottom: 1px solid var(--color-border-row);
+    border-top: 0;
+    border-left: 2px solid transparent;
+    border-right: 0;
+    background: transparent;
+    padding: 0 6px;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--motion-fast) var(--ease-standard);
   }
 
   .gantt-label:last-child {
     border-bottom: none;
+  }
+
+  .gantt-label:hover {
+    background: color-mix(in srgb, var(--color-on-surface) 5%, transparent);
+  }
+
+  .gantt-label.selected {
+    border-left-color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  }
+
+  .gantt-label:focus-visible {
+    outline: 1px solid var(--color-secondary);
+    outline-offset: -1px;
   }
 
   .gantt-project {
@@ -151,5 +182,11 @@
     color: var(--color-muted);
     font-size: 12px;
     margin: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .gantt-label {
+      transition: none;
+    }
   }
 </style>

@@ -61,11 +61,13 @@
   }
 
   .page-header-row {
-    align-items: flex-start;
+    align-items: center;
+    flex-wrap: nowrap;
   }
 
   .page-heading-cluster {
-    flex-wrap: wrap;
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
   }
 
   .page-title {
@@ -75,8 +77,47 @@
   }
 
   .period-segmented {
-    order: 2;
-    flex-basis: 100%;
+    flex-basis: auto;
+    overflow-x: auto;
+  }
+
+  .page-actions {
+    flex: 0 1 auto;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+    margin-left: auto;
+  }
+
+  .filter-controls {
+    flex-wrap: nowrap;
+    gap: var(--space-sm);
+  }
+
+  .filter-field {
+    gap: var(--space-sm);
+    padding-left: 7px;
+  }
+
+  .filter-label svg {
+    display: block;
+  }
+
+  .filter-label-text {
+    display: none;
+  }
+
+  .filter-field select {
+    min-width: 0;
+    max-width: 74px;
+    padding-right: 20px;
+  }
+
+  .project-filter strong {
+    max-width: 74px;
+  }
+
+  .page-action-buttons.with-filters {
+    padding-left: var(--space-sm);
   }
 
   .filter-controls,
@@ -90,6 +131,21 @@
 
   .duo-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .page-header-row {
+    flex-wrap: wrap;
+  }
+
+  .page-heading-cluster,
+  .page-actions {
+    flex: 1 1 100%;
+  }
+
+  .page-actions {
+    margin-left: 0;
   }
 }
 

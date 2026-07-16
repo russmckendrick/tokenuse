@@ -155,7 +155,6 @@
 .page-header {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
   padding: 10px var(--space-2xl);
   border-bottom: 1px solid var(--color-border-soft);
   background: var(--color-surface);
@@ -193,23 +192,28 @@
 .page-actions {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--space-md);
   min-width: 0;
-}
-
-.page-filters {
-  display: flex;
-  align-items: center;
-  min-height: 34px;
-  padding-top: var(--space-md);
-  border-top: 1px solid var(--color-border-soft);
+  margin-left: auto;
 }
 
 .filter-controls {
   display: flex;
   align-items: center;
-  gap: var(--space-lg);
-  flex-wrap: wrap;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.page-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex: 0 0 auto;
+}
+
+.page-action-buttons.with-filters {
+  padding-left: var(--space-md);
+  border-left: 1px solid var(--color-border-soft);
 }
 
 .page-scroll {
@@ -525,7 +529,10 @@
   border-radius: var(--radius-sm);
 }
 
-.filter-field span {
+.filter-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
   font-family: var(--font-ui);
   font-size: 11px;
   font-weight: 600;
@@ -533,6 +540,11 @@
   text-transform: uppercase;
   color: var(--color-muted-2);
   white-space: nowrap;
+}
+
+.filter-label svg {
+  display: none;
+  flex: 0 0 auto;
 }
 
 .filter-field::after {
@@ -567,6 +579,12 @@
   min-height: 30px;
   color: var(--color-primary);
   justify-content: flex-start;
+}
+
+.project-filter strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .project-filter:hover {
