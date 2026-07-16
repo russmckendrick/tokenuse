@@ -20,6 +20,7 @@
   import type {
     AnalyticsData,
     CoachData,
+    CoachProjectActivity,
     CoachTimelineDay,
     CountMetric,
     DesktopSnapshot,
@@ -322,9 +323,18 @@
         const tools = snapshot.dashboard.project_tools.filter((row) => row.project === project.name);
         const calls = tools.reduce((sum, row) => sum + row.calls, 0);
         const output = coach?.output.by_project.find((row) => row.name === project.name)?.calls ?? 0;
-        return { ...project, calls, output, tools: tools.slice(0, 4) };
+        const detail = coach?.projects.find((row) => row.name === project.name) ?? null;
+        return { ...project, calls, output, tools: tools.slice(0, 4), detail };
       })
     : [];
+
+  function patternLabel(detail: CoachProjectActivity | null): string {
+    if (!detail?.days_id) return '';
+    const days = coachCopy.timeline[`pattern_${detail.days_id}`] ?? detail.days_id;
+    if (!detail.time_id) return days;
+    const time = coachCopy.timeline[`pattern_${detail.time_id}`] ?? detail.time_id;
+    return tpl(coachCopy.timeline.pattern_combo, { days, time });
+  }
 </script>
 
 <section class="page-flow" use:staggeredReveal={{ selector: ':scope > *', y: 5, stagger: 0.035 }}>
@@ -642,11 +652,30 @@
                   <div class="activity-project-head"><strong>{project.name}</strong><span class="mono">{project.cost}</span></div>
                   <RankBar value={project.value} ariaLabel={project.name} />
                   <div class="activity-project-kpis">
+                    <span><b class="mono">{project.detail?.active_hours ?? '–'}</b>{coachCopy.timeline.est_hours}</span>
                     <span><b class="mono">{count(project.calls)}</b>{snapshot.copy.metrics.calls}</span>
                     <span><b class="mono">{project.sessions}</b>{snapshot.copy.metrics.sessions}</span>
                     <span><b class="mono">{count(project.output)}</b>{coachCopy.timeline.ai_loc}</span>
                     <span><b class="mono">{project.avg_per_session}</b>{snapshot.copy.tables.avg_per_session}</span>
                   </div>
+                  {#if project.detail && (project.detail.languages.length || patternLabel(project.detail))}
+                    <div class="project-stack">
+                      {#each project.detail.languages as lang (`${project.name}-${lang.name}`)}
+                        <span class="stack-chip" title={`${count(lang.calls)} ${coachCopy.timeline.ai_loc}`}>{lang.name}</span>
+                      {/each}
+                      {#if patternLabel(project.detail)}
+                        <span class="pattern-chip">{patternLabel(project.detail)}</span>
+                      {/if}
+                    </div>
+                  {/if}
+                  {#if project.detail?.hot_files.length}
+                    <div class="project-hot-files">
+                      <span class="stat-label">{coachCopy.timeline.hot_files}</span>
+                      {#each project.detail.hot_files as file (`${project.name}-${file}`)}
+                        <span class="mono">{file}</span>
+                      {/each}
+                    </div>
+                  {/if}
                   {#if project.tools.length}
                     <div class="project-tools">{#each project.tools as tool (`${project.name}-${tool.tool}`)}<span>{tool.tool}</span>{/each}</div>
                   {/if}
@@ -1713,7 +1742,7 @@
 
   .activity-project-kpis {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: var(--space-xl);
   }
 
@@ -1743,6 +1772,40 @@
     border-radius: var(--radius-pill);
     color: var(--color-muted);
     font-size: var(--text-label);
+  }
+
+  .project-stack {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .project-stack span {
+    padding: 2px 8px;
+    border: 1px solid var(--color-border-soft);
+    border-radius: var(--radius-pill);
+    font-size: var(--text-label);
+  }
+
+  .stack-chip {
+    color: var(--color-secondary);
+  }
+
+  .pattern-chip {
+    color: var(--color-primary);
+    border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
+  }
+
+  .project-hot-files {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-lg);
+    flex-wrap: wrap;
+    font-size: var(--text-label);
+  }
+
+  .project-hot-files .mono {
+    color: var(--color-muted);
   }
 
   .output-list li {

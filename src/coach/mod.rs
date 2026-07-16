@@ -9,6 +9,7 @@
 pub mod flow;
 pub mod output;
 pub mod pace;
+pub mod projects;
 pub mod rules;
 pub mod score;
 pub mod sessions;
@@ -61,6 +62,8 @@ impl<'a> CoachContext<'a> {
 
 const MAX_FLOW_DAYS: usize = 14;
 const MAX_LIST_ROWS: usize = 12;
+const MAX_PROJECT_LANGUAGES: usize = 6;
+const MAX_PROJECT_HOT_FILES: usize = 3;
 
 fn leak(s: String) -> &'static str {
     Box::leak(s.into_boxed_str())
@@ -248,6 +251,27 @@ pub fn coach_data(
         },
     };
 
+    let project_rows = projects::project_activity(&ctx)
+        .into_iter()
+        .map(|row| crate::data::CoachProjectActivity {
+            name: leak(crate::ingest::projects::project_label(
+                &project_labels,
+                &row.identity,
+            )),
+            active_hours: leak(format_hours(row.active_minutes)),
+            turns: row.turns,
+            languages: count_rows(row.languages, MAX_PROJECT_LANGUAGES),
+            hot_files: row
+                .hot_files
+                .into_iter()
+                .take(MAX_PROJECT_HOT_FILES)
+                .map(|(path, _)| leak(path))
+                .collect(),
+            days_id: row.days_id,
+            time_id: row.time_id,
+        })
+        .collect();
+
     let calendar_ctx = CoachContext::new(calendar_calls);
     let today = now.date_naive();
     let (period_start, period_end) = period.day_bounds(today);
@@ -272,6 +296,7 @@ pub fn coach_data(
         pace,
         output,
         timeline_grid,
+        projects: project_rows,
     }
 }
 
@@ -320,6 +345,17 @@ pub fn coach_timeline(
 /// Parse a "YYYY-MM-DD" day string (the desktop crate has no chrono dep).
 pub fn parse_day(day: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(day, "%Y-%m-%d").ok()
+}
+
+/// Compact duration for the project cards: minutes under an hour, otherwise
+/// hours with one decimal (trimmed when whole).
+fn format_hours(minutes: u64) -> String {
+    if minutes < 60 {
+        return format!("{minutes}m");
+    }
+    let hours = format!("{:.1}", minutes as f64 / 60.0);
+    let hours = hours.strip_suffix(".0").unwrap_or(&hours);
+    format!("{hours}h")
 }
 
 fn format_count(value: u64) -> String {
@@ -426,6 +462,20 @@ mod tests {
         let data = coach_data(&refs, &refs, Period::AllTime, now);
         assert_eq!(data.output.by_project.len(), 1);
         assert_eq!(data.output.by_project[0].name, "proj");
+        assert_eq!(data.projects.len(), 1);
+        assert_eq!(data.projects[0].name, "proj");
+        assert_eq!(data.projects[0].turns, 1);
+        assert_eq!(data.projects[0].active_hours, "1m");
+        assert_eq!(data.projects[0].languages[0].name, "rust");
+    }
+
+    #[test]
+    fn hours_format_is_compact() {
+        assert_eq!(format_hours(0), "0m");
+        assert_eq!(format_hours(45), "45m");
+        assert_eq!(format_hours(60), "1h");
+        assert_eq!(format_hours(126), "2.1h");
+        assert_eq!(format_hours(4344), "72.4h");
     }
 
     #[test]

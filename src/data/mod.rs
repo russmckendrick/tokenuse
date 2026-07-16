@@ -203,6 +203,30 @@ pub struct CoachData {
     /// periods, the trailing year for All Time); days without activity are
     /// omitted and rendered empty client-side.
     pub timeline_grid: Vec<TimelineGridDay>,
+    /// Per-project activity detail for the Activity Projects view; joined
+    /// client-side onto the dashboard project rows by short label.
+    pub projects: Vec<CoachProjectActivity>,
+}
+
+/// One project's activity profile: estimated active time, request turns,
+/// tech stack, most-edited files, and a coarse work-pattern classification.
+#[derive(Debug, Clone, Serialize)]
+pub struct CoachProjectActivity {
+    /// Dashboard-consistent short label (joins `DashboardData::projects`).
+    pub name: &'static str,
+    /// Formatted block-based active time ("14.2h", "45m").
+    pub active_hours: &'static str,
+    pub turns: u64,
+    /// Code-output languages by LoC, descending - the observed tech stack.
+    pub languages: Vec<CountMetric>,
+    /// Most-edited file paths, descending by edit count.
+    pub hot_files: Vec<&'static str>,
+    /// Copy id for the weekday/weekend mix ("mostly_weekdays" |
+    /// "mostly_weekends" | "mixed_days"); empty without timestamps.
+    pub days_id: &'static str,
+    /// Copy id for the dominant daypart ("mornings" | "afternoons" |
+    /// "evenings" | "late_nights"); empty when none dominates.
+    pub time_id: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1720,6 +1744,70 @@ pub fn coach_sample(period: Period) -> CoachData {
             uncovered_tools: "Cursor",
         },
         timeline_grid: sample_timeline_grid(period),
+        projects: vec![
+            CoachProjectActivity {
+                name: "acme/atlas-dashboard",
+                active_hours: "14.2h",
+                turns: 96,
+                languages: vec![
+                    CountMetric {
+                        name: "rust",
+                        calls: 2140,
+                        value: 100,
+                    },
+                    CountMetric {
+                        name: "typescript",
+                        calls: 660,
+                        value: 31,
+                    },
+                    CountMetric {
+                        name: "css",
+                        calls: 210,
+                        value: 10,
+                    },
+                ],
+                hot_files: vec![
+                    "src/app.rs",
+                    "src/routes/overview.svelte",
+                    "src/data/mod.rs",
+                ],
+                days_id: "mixed_days",
+                time_id: "mornings",
+            },
+            CoachProjectActivity {
+                name: "northstar/cli",
+                active_hours: "6.8h",
+                turns: 41,
+                languages: vec![
+                    CountMetric {
+                        name: "rust",
+                        calls: 620,
+                        value: 100,
+                    },
+                    CountMetric {
+                        name: "markdown",
+                        calls: 150,
+                        value: 24,
+                    },
+                ],
+                hot_files: vec!["src/main.rs", "docs/usage.md"],
+                days_id: "mostly_weekdays",
+                time_id: "evenings",
+            },
+            CoachProjectActivity {
+                name: "brightlane/docs",
+                active_hours: "2.4h",
+                turns: 18,
+                languages: vec![CountMetric {
+                    name: "markdown",
+                    calls: 480,
+                    value: 100,
+                }],
+                hot_files: vec!["guides/getting-started.md"],
+                days_id: "mostly_weekends",
+                time_id: "",
+            },
+        ],
     }
 }
 

@@ -9,7 +9,7 @@ use chrono::{DateTime, Local, NaiveDate, Utc};
 
 use super::sessions::CoachSession;
 
-const BLOCK_GAP_MIN: i64 = 15;
+pub(super) const BLOCK_GAP_MIN: i64 = 15;
 
 pub struct TimelineDay {
     pub day: NaiveDate,

@@ -79,6 +79,7 @@ Reference rules whose inputs tokens does not ingest (most flagged `requiresIdeCo
 - **Pace** (`pace.rs`): late-night = local hour ≥22 or <5; weekend = Sat/Sun; streak = consecutive active days; alerts on streak ≥14, rising 3-week trends (+20% band), late-night rate >0.15, weekend rate >0.25; risk high at 3+ alerts or (streak ≥14 ∧ late-night rising).
 - **Timeline** (`timeline.rs`): per local day, one row per session, blocks split at >15 min gaps, max concurrency via a start/end event sweep.
 - **Output** (`output.rs`): folds per-call `code_blocks` (fences + Write/Edit payloads, merged by language) into LoC by language/day/project/model, and names tools contributing no code-output signal.
+- **Projects** (`projects.rs`): per-project detail for the Activity → Projects cards. Estimated active time reuses the timeline block model (call timestamps split at >15 min gaps, each block spanning at least one minute, summed per session). Languages fold turn `code_blocks` by LoC; hot files count per-call `edited_files` (paths shown project-relative, else the trailing two segments) and ship the top 3. The work-pattern chip is a display heuristic of this port, not an upstream rule: weekend share of timestamped turns ≥60% reads "mostly weekends", ≤20% "mostly weekdays", else "weekends + weekdays"; a daypart (mornings 05–11, afternoons 12–16, evenings 17–21, late nights 22–04, matching the pace module's late-night window) is appended when it carries ≥40% of timestamped turns. All labels resolve through `coach.timeline.pattern_*` copy ids.
 
 ## Wiring
 

@@ -115,6 +115,23 @@ export type CoachData = {
   pace: PaceSummary;
   output: OutputSummary;
   timeline_grid: TimelineGridDay[];
+  projects: CoachProjectActivity[];
+};
+
+export type CoachProjectActivity = {
+  /** Dashboard-consistent short label (joins DashboardData.projects). */
+  name: string;
+  /** Formatted block-based active time ("14.2h", "45m"). */
+  active_hours: string;
+  turns: number;
+  /** Code-output languages by LoC, descending - the observed tech stack. */
+  languages: CountMetric[];
+  /** Most-edited file paths, descending by edit count. */
+  hot_files: string[];
+  /** Copy id for the weekday/weekend mix; empty without timestamps. */
+  days_id: string;
+  /** Copy id for the dominant daypart; empty when none dominates. */
+  time_id: string;
 };
 
 export type TimelineGridDay = {
