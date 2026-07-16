@@ -156,6 +156,8 @@ pub(crate) async fn get_session_detail(
 }
 
 #[tauri::command]
+/// Return the period-aware Coach payload, including the output trend at the
+/// resolution selected by the core for the requested range.
 pub(crate) async fn get_coach(
     period: String,
     state: State<'_, SharedState>,

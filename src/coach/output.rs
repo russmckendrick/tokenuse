@@ -108,12 +108,62 @@ pub fn trend_rows(stats: &OutputStats, period: Period, now: DateTime<Local>) -> 
                 60,
             )
         }
-        Period::ThirtyDays | Period::Month | Period::AllTime => stats
-            .by_day
-            .iter()
-            .map(|(day, loc)| (day.format("%Y-%m-%d").to_string(), *loc))
-            .collect(),
+        Period::ThirtyDays => dense_daily_rows(
+            &stats.by_day,
+            now.date_naive() - Duration::days(29),
+            now.date_naive(),
+        ),
+        Period::Month => {
+            let today = now.date_naive();
+            let start = NaiveDate::from_ymd_opt(today.year(), today.month(), 1).unwrap_or(today);
+            dense_daily_rows(&stats.by_day, start, today)
+        }
+        Period::AllTime => monthly_rows(&stats.by_day, now.date_naive()),
     }
+}
+
+fn dense_daily_rows(
+    values: &[(NaiveDate, u64)],
+    start: NaiveDate,
+    end: NaiveDate,
+) -> Vec<(String, u64)> {
+    let mut totals: std::collections::BTreeMap<NaiveDate, u64> = values.iter().copied().collect();
+    let mut rows = Vec::new();
+    let mut day = start;
+    while day <= end {
+        rows.push((
+            day.format("%Y-%m-%d").to_string(),
+            totals.remove(&day).unwrap_or(0),
+        ));
+        day += Duration::days(1);
+    }
+    rows
+}
+
+fn monthly_rows(values: &[(NaiveDate, u64)], today: NaiveDate) -> Vec<(String, u64)> {
+    let Some((first_day, _)) = values.first() else {
+        return Vec::new();
+    };
+    let mut totals = std::collections::BTreeMap::new();
+    for (day, loc) in values {
+        *totals.entry((day.year(), day.month())).or_insert(0u64) += *loc;
+    }
+
+    let end = (today.year(), today.month());
+    let mut current = (first_day.year(), first_day.month());
+    let mut rows = Vec::new();
+    while current <= end {
+        rows.push((
+            format!("{:04}-{:02}", current.0, current.1),
+            totals.remove(&current).unwrap_or(0),
+        ));
+        current = if current.1 == 12 {
+            (current.0 + 1, 1)
+        } else {
+            (current.0, current.1 + 1)
+        };
+    }
+    rows
 }
 
 fn floor_to_interval(timestamp: DateTime<Local>, minutes: u32) -> DateTime<Local> {
@@ -195,9 +245,15 @@ mod tests {
             .single()
             .expect("unambiguous local time");
         let stats = OutputStats {
-            total_loc: 50,
+            total_loc: 120,
             by_language: Vec::new(),
-            by_day: vec![(now.date_naive(), 50)],
+            by_day: vec![
+                (
+                    NaiveDate::from_ymd_opt(2026, 4, 10).expect("valid older day"),
+                    70,
+                ),
+                (now.date_naive(), 50),
+            ],
             timestamped: vec![
                 (now - Duration::minutes(5), 30),
                 (now - Duration::minutes(35), 20),
@@ -222,5 +278,14 @@ mod tests {
             hours.first().map(|row| row.0.as_str()),
             Some("2026-07-10 00:00")
         );
+
+        let days = trend_rows(&stats, Period::ThirtyDays, now);
+        assert_eq!(days.len(), 30);
+        assert_eq!(days.iter().map(|row| row.1).sum::<u64>(), 50);
+
+        let months = trend_rows(&stats, Period::AllTime, now);
+        assert_eq!(months.len(), 4);
+        assert_eq!(months.iter().map(|row| row.1).sum::<u64>(), 120);
+        assert_eq!(months.first().map(|row| row.0.as_str()), Some("2026-04"));
     }
 }

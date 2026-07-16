@@ -324,6 +324,87 @@ Data-list panels stay content-sized for short results and cap at 480px for long 
 - Grid zones below the header use `desktop.spacing.xl` between sibling panels and `2xl` between unrelated sections; `3xl` is page padding only.
 - Panels are `desktop-panel` (8px corners, hairline border, neutral background, flat). Never stack a card inside a card.
 
+### Expanding an analytical page
+
+More available data should produce better information architecture, not a taller pile of cards. The Coach workspace is the reference: it keeps one shared filter context, gives distinct analytical jobs their own views, leads each view with orientation, and keeps evidence visible beside the selected item. These rules apply whenever an existing desktop page gains substantial new detail.
+
+#### Choose the smallest structure that fits
+
+Use this escalation order. Move to the next level only when the current level would mix different user questions or make the primary view cramped.
+
+1. **Extend the existing panel** when the new value answers the same question, uses the same filters and grain, and can be read without another heading.
+2. **Add a full-width section** when the material is a distinct comparison or trend but still belongs to the same task. A section gets one heading, an optional one-line hint, and one dominant visual or explorer.
+3. **Add a local subview** when one analysis has mutually exclusive representations of the same measure, such as language/model/project or hours/calendar/projects. Use a compact segmented control inside the owning section.
+4. **Add a page-level tab** when the content is a stable workflow with its own summary, analysis, and detail state. Tabs receive the full content width; they do not squeeze independent workspaces into columns merely to avoid navigation.
+5. **Add a route** only when the content has a different primary entity, navigation identity, or filter model and should be directly reachable from the sidebar.
+
+Page-level tabs are for durable jobs, not two small display toggles. Prefer four or fewer; five is the practical maximum before the information architecture needs another pass. Local subviews never masquerade as page tabs. Do not use accordions or expanding cards for primary analytics, evidence, timelines, or ranked data; expansion changes surrounding geometry, hides comparison context, and makes scanning unpredictable. Accordions are reserved for optional explanatory or configuration help.
+
+#### Layer detailed views consistently
+
+An expanded page follows this reading order:
+
+1. **Shared toolbar** — page title and authoritative period/tool/project/sort controls, followed by refresh and export.
+2. **View navigation** — full-width page tabs when the page owns multiple workflows.
+3. **Orientation** — four to six comparable KPIs or one clear hero summary. Do not repeat a large page-wide hero on every analytical tab.
+4. **Primary analysis** — the trend, comparison, or explorer that answers the tab's main question. Give it the full width when labels, time, or selection matter.
+5. **Detail and evidence** — a persistent inspector, master/detail workspace, or selected-interval summary that explains the primary analysis without opening an overlay.
+6. **Secondary breakdowns** — ranked lists and alternate dimensions below the primary analysis, not competing beside it for hero space.
+
+Each section must have one clear question. If its title, hint, KPIs, and chart describe different grains or entities, split it. A page may be long when the sequence is coherent; it may not be cramped. Vertical scrolling is preferable to shrinking charts, truncating evidence, or fitting three unrelated panels across one row.
+
+#### Summary and KPI guardrails
+
+- Reuse the shared KPI band/tile patterns. Do not invent a new card treatment for each page.
+- Keep a KPI row to four to six measures with comparable visual weight. A metric needs a short label, a prominent value, and at most one qualifying line.
+- KPIs orient the analysis below them: total, active population, average, peak, and dominant dimensions are a useful sequence. Avoid vanity metrics that have no corresponding detail.
+- A KPI must be computed from the complete filtered dataset. Never derive totals, active counts, averages, or peaks from a display-capped `Top N` array.
+- If a list is capped for rendering, label it as ranked/Top N and keep its cap separate from the summary and chart data contracts.
+- Equal-height sibling panels are appropriate only when they are semantic peers, as with Flow and Pace. Do not stretch unrelated panels or data lists to manufacture symmetry.
+
+#### Filters, time, and data integrity
+
+- The sticky page toolbar is the single source of truth for period, tool, project, and page sort. Contextual controls sit before refresh/export and collapse to icon + current value at compact widths. Do not repeat global filters inside a tab.
+- Local controls may change representation or selection, but never silently override the shared filter context. Their scope must be obvious from placement inside the owning section.
+- Every page-scoped query key includes every global input that changes its data, including data generation and currency where relevant. A filter change must produce a new payload and a visibly appropriate chart domain.
+- Backend payloads carry the complete data required by summaries and trends. Frontend display limits are for ranked lists only; they must never truncate a time range or become an accidental analytics boundary.
+- Time charts preserve the selected range, including zero-activity buckets, so sparse data does not collapse into uniformly spaced active points. The first and last buckets must frame the actual filter period.
+- Resolution should produce a readable timeline rather than a fixed number of recent active rows. Use finer buckets for short periods and aggregate long history to a coarser grain. Coach AI Output is the canonical mapping: 30-minute/24 Hours, hourly/7 Days, daily/30 Days and This Month, monthly/All Time.
+- Titles, legends, rolling windows, axis labels, selected details, and accessibility labels all change with the grain. A monthly chart cannot retain “By day” or “3-day average” copy.
+- All Time begins with the oldest available signal for that measure, not the oldest row from an unrelated dataset. If a parser or tool cannot provide the signal historically, state that limitation rather than implying zero.
+- On payload change, preserve a selected item only when the same identity still exists. Otherwise select the newest interval or first ranked item. Never leave a detail pane describing data outside the active filter.
+
+#### Drill-down and exploration
+
+- Summaries that name an actionable item should navigate to its exact detail, not merely open the destination tab. Priority Findings demonstrates the pattern: clear incompatible local filters, select the rule, then activate Findings.
+- Master/detail is the default for evidence-rich collections. Keep the stable list visible, select rows without expanding them, and use the adjacent inspector for rationale, metrics, actions, and samples.
+- Use real buttons for selectable cards, chart marks, rows, and tabs. Provide hover, active, focus-visible, keyboard, and `aria-selected`/`aria-pressed` states as appropriate.
+- A click should reveal more precision, not merely repeat the visible label in a modal. Overlays are for transient actions; analytical detail stays in the page whenever space permits.
+- Selection is a view state, not a layout mode. Selecting an item must not resize neighboring rows, move controls, or collapse the comparison set.
+
+#### Responsive behavior for expanded pages
+
+- Preserve the information hierarchy as width decreases. Collapse toolbar labels before removing context; reduce columns before hiding metrics.
+- KPI bands step down predictably (for example six→three→two columns). Values and labels remain aligned and readable; they do not become horizontally scrolling cards.
+- Full-width page tabs remain one coherent tab rail. If labels no longer fit, shorten copy or use the established icon + label treatment; do not wrap the rail into a button cluster.
+- Master/detail explorers become a narrower split or a list followed by detail at the narrow breakpoint. They do not turn every list row into an accordion.
+- Charts keep their plot width and reduce tick frequency responsively. Dense labels are sampled; the underlying buckets and selectable data remain complete.
+- The page itself never scrolls horizontally. Wide tables, code, or timelines own their local overflow.
+
+#### Expanded-page acceptance checklist
+
+Before an expanded section is complete, verify:
+
+- every period produces the correct range, grain, title, legend, KPIs, and selected detail;
+- tool and project filters affect summaries, charts, rankings, and evidence consistently;
+- complete-range totals reconcile with chart buckets, allowing only documented no-signal rows;
+- empty, one-point, sparse, dense, and long-history datasets remain legible;
+- switching filters cannot leave a stale selection or reuse a capped previous series;
+- the primary workflow works without expanding cards or opening a modal;
+- tabs, rows, cards, and chart marks are keyboard reachable with visible focus;
+- compact-width layouts preserve context without page-level horizontal scrolling;
+- all wording comes from `src/copy/copy.json`, all colors from tokens, and all shipped behavior is covered in the unreleased notes.
+
 ### Screen inventory
 
 Seven screens. Data pages fetch page-scoped queries from the core (memoized per filter set); the 3-second snapshot poll carries only the shared dashboard, limits, and filter state.
@@ -347,7 +428,7 @@ All charts are hand-rolled SVG driven by d3 scales — no chart library. Every f
 - **Activity calendar** — GitHub-style week × weekday commit grid, period-independent, always rendering the full trailing 53-week year ending today (sparse histories read as an emptier year, never a smaller grid). Fixed 13px cells at 3px radius, single-hue stepped intensity ramp on the panel accent (`bar-empty` through primary mixes to full primary), weekday/month labels in 10px muted Inter, Less→More legend under the grid. Cells are buttons — clicking one picks the day for the Coach session lanes; a flat selected-day summary (day in `display-lg` mono, session/turn facts) sits beside the grid, and selecting a lane drives the request inspector.
 - **Gauges** — horizontal utilisation bars with threshold tones: tertiary below 60%, warning 60–88%, error above. Track is `bar-empty`; label left, percentage right in mono. Overview adds one circular threshold gauge per tool around its mark, representing that tool's most constrained active window; detailed limit values remain horizontal beside it. Coach inverts the tones for its radial grade gauge and grade badges, and grades on a curve — green is earned by A-tier only (tertiary ≥90, warning ≥70, error below) — with the letter grade centered in `display-xl` mono.
 - **Sparklines** — tick bars + trend line for compact per-tool cadence in tool cards and usage consoles. Coach uses a plain line+area sparkline (fixed 0–100 domain, stroke toned by the latest value) for weekly practice-score trends; a one-point period renders as a horizontal score state with a centred latest-point marker.
-- **Output trend** — Coach's code-output chart gets a full plot with horizontal gridlines, exact bucket selection, bars, and a same-scale three-bucket moving-average line. Resolution follows the selected period: 30-minute buckets with a 90-minute average for 24 Hours, hourly buckets with a three-hour average for 7 Days, and daily buckets with a three-day average for longer ranges. The selected interval remains summarized under the chart. Flow uses the more compact score sparkline.
+- **Output trend** — Coach's code-output chart gets a full plot with horizontal gridlines, exact bucket selection, bars, and a same-scale three-bucket moving-average line. Resolution follows the selected period: 30-minute buckets with a 90-minute average for 24 Hours, hourly buckets with a three-hour average for 7 Days, complete daily timelines for 30 Days and This Month, and monthly buckets across the full history for All Time. The selected interval remains summarized under the chart. Flow uses the more compact score sparkline.
 - **Rank bars** — 12-segment discrete meters in tables, stepped blue→yellow→red ramp.
 
 Axis and framing rules: gridlines `desktop.charts.grid` hairlines, horizontal only where they aid reading; axis labels 10px muted Inter, no axis titles when the panel title says it; tooltips on `neutral` surface with `popover` elevation, values in mono; legends are text rows, never overlaid on the plot. Series colors are assigned in ramp order and stay stable within a page.
@@ -399,8 +480,13 @@ Use `desktop/tokenusebars.svg` as the source asset for generated app icons. The 
 - Do prefer native TUI widgets and layout primitives over custom terminal drawing.
 - Do bundle Inter and JetBrains Mono via `@fontsource` so the app never reaches a font CDN at runtime.
 - Do route every chart color through chart or provider tokens; a hex literal in a component is a defect.
+- Do give a substantial new analytical workflow its own full-width section or page tab instead of compressing it into the existing grid.
+- Do connect actionable summaries to the exact matching detail and preserve the surrounding comparison context.
+- Do keep summary calculations and time-series payloads independent from ranked-list display caps.
 - Don't add decorative backgrounds, oversized type outside the hero bands, or large empty hero areas.
 - Don't add drop-shadow halos, stacked cards, or rounded-card styling that makes the desktop feel like a generic web mockup. The 8px corners on outer desktop panels are the cap, paired with hairline borders and flat depth.
+- Don't use accordions or expanding cards for primary analytics, timelines, findings, or evidence.
+- Don't reuse a fixed recent slice for multiple periods; the chart domain and aggregation grain must reflect the active filter.
 - Don't show version numbers or live/source badges in the sidebar brand block; provenance lives in the status bar and Config.
 - Don't hide keyboard commands behind help text; the status bar keeps them on-screen.
 - Don't introduce a third font family, and don't use brand-colored provider icons inside dense tables.

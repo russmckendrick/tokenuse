@@ -25,7 +25,7 @@
   $: plotWidth = WIDTH - LEFT - RIGHT;
   $: plotHeight = HEIGHT - TOP - BOTTOM;
   $: slot = points.length ? plotWidth / points.length : plotWidth;
-  $: barWidth = Math.max(5, Math.min(42, slot * 0.58));
+  $: barWidth = Math.max(2, Math.min(42, slot * 0.58));
   $: y = scaleLinear().domain([0, max]).nice(4).range([TOP + plotHeight, TOP]);
   $: ticks = y.ticks(4);
   $: rolling = points.map((row, index) => {

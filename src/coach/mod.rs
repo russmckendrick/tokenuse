@@ -197,18 +197,12 @@ pub fn coach_data(
     };
 
     let output_stats = output::output_stats(&ctx);
-    let trend_cap = if matches!(period, Period::Today | Period::Week) {
-        usize::MAX
-    } else {
-        MAX_LIST_ROWS
-    };
     let trend = count_rows(
         output::trend_rows(&output_stats, period, now)
             .into_iter()
             .rev()
-            .take(trend_cap)
             .collect(),
-        trend_cap,
+        usize::MAX,
     );
     let uncovered: Vec<&'static str> = output_stats
         .uncovered_tools
@@ -223,10 +217,9 @@ pub fn coach_data(
                 .by_day
                 .into_iter()
                 .rev()
-                .take(MAX_LIST_ROWS)
                 .map(|(day, loc)| (day.format("%Y-%m-%d").to_string(), loc))
                 .collect(),
-            MAX_LIST_ROWS,
+            usize::MAX,
         ),
         trend,
         by_project: count_rows(

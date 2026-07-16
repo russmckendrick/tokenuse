@@ -1776,7 +1776,20 @@ fn sample_output_trend(period: Period) -> Vec<CountMetric> {
                 })
                 .collect()
         }
-        Period::ThirtyDays | Period::Month | Period::AllTime => return sample_output_days(),
+        Period::ThirtyDays | Period::Month => return sample_output_days(),
+        Period::AllTime => {
+            return [
+                ("2026-06", 4812, 100),
+                ("2026-05", 3920, 81),
+                ("2026-04", 2780, 58),
+                ("2026-03", 3410, 71),
+                ("2026-02", 2240, 47),
+                ("2026-01", 1680, 35),
+            ]
+            .into_iter()
+            .map(|(name, calls, value)| CountMetric { name, calls, value })
+            .collect();
+        }
     };
 
     let max = raw.iter().map(|(_, calls)| *calls).max().unwrap_or(0);

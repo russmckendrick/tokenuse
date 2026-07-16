@@ -216,6 +216,7 @@
   function outputTickLabel(name: string): string {
     if (snapshot.period === 'today') return name.slice(11);
     if (snapshot.period === 'week') return `${name.slice(5, 10)} ${name.slice(11, 13)}h`;
+    if (snapshot.period === 'all-time') return name;
     return name.slice(5);
   }
 
@@ -256,22 +257,30 @@
     ? coachCopy.output.by_half_hour
     : snapshot.period === 'week'
       ? coachCopy.output.by_hour
-      : coachCopy.output.by_day;
+      : snapshot.period === 'all-time'
+        ? coachCopy.output.by_month
+        : coachCopy.output.by_day;
   $: outputTrendHint = snapshot.period === 'today'
     ? coachCopy.output.half_hour_hint
     : snapshot.period === 'week'
       ? coachCopy.output.hourly_hint
-      : coachCopy.output.daily_hint;
+      : snapshot.period === 'all-time'
+        ? coachCopy.output.monthly_hint
+        : coachCopy.output.daily_hint;
   $: outputBarsLabel = snapshot.period === 'today'
     ? coachCopy.output.half_hour_output
     : snapshot.period === 'week'
       ? coachCopy.output.hourly_output
-      : coachCopy.output.daily_output;
+      : snapshot.period === 'all-time'
+        ? coachCopy.output.monthly_output
+        : coachCopy.output.daily_output;
   $: outputAverageLabel = snapshot.period === 'today'
     ? coachCopy.output.half_hour_average
     : snapshot.period === 'week'
       ? coachCopy.output.hourly_average
-      : coachCopy.output.moving_average;
+      : snapshot.period === 'all-time'
+        ? coachCopy.output.monthly_average
+        : coachCopy.output.moving_average;
   $: outputDailyAverage = outputDays.length
     ? Math.round(outputDays.reduce((sum, row) => sum + row.calls, 0) / outputDays.length)
     : 0;
