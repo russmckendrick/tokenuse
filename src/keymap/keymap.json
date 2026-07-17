@@ -73,6 +73,9 @@
       "id": "page_usage"
     },
     {
+      "id": "page_coach"
+    },
+    {
       "id": "page_config"
     },
     {
@@ -246,6 +249,13 @@
     {
       "context": "dashboard",
       "keys": [
+        "k"
+      ],
+      "action": "page_coach"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
         "r"
       ],
       "action": "reload"
@@ -371,6 +381,13 @@
         "c"
       ],
       "action": "page_config"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
+        "k"
+      ],
+      "action": "page_coach"
     },
     {
       "context": "usage_page",

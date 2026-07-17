@@ -1,3 +1,4 @@
+mod coach;
 mod components;
 mod graphs;
 mod sections;
@@ -46,6 +47,7 @@ pub fn render(frame: &mut Frame<'_>, app: &App) {
         Page::DeepDive => render_dashboard(frame, area, root, app),
         Page::Config => render_config(frame, area, root, app),
         Page::Usage => render_limits(frame, area, root, app),
+        Page::Coach => coach::render_coach(frame, area, root, app),
         Page::Session => render_session_page(frame, area, root, app),
     }
 
@@ -110,23 +112,7 @@ fn render_overview(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
 
 fn render_dashboard(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
     let data = app.dashboard();
-    let heights = deep_dive_panel_heights(area.height, &data);
-    let sections = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Length(1),
-            Constraint::Length(heights[0]),
-            Constraint::Length(1),
-            Constraint::Length(heights[1]),
-            Constraint::Length(1),
-            Constraint::Length(heights[2]),
-            Constraint::Length(1),
-            Constraint::Length(heights[3]),
-            Constraint::Fill(1),
-            Constraint::Length(3),
-        ])
-        .split(area);
+    let sections = deep_dive_sections(area, &data);
 
     render_title_bar(frame, sections[0], app);
 
@@ -189,6 +175,54 @@ fn render_dashboard(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
     render_session_modal(frame, root, app);
     render_export_modal(frame, root, app);
     render_export_dir_picker_modal(frame, root, app);
+}
+
+fn deep_dive_sections(area: Rect, data: &DashboardData) -> std::rc::Rc<[Rect]> {
+    let heights = deep_dive_panel_heights(area.height, data);
+    Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Length(1),
+            Constraint::Length(heights[0]),
+            Constraint::Length(1),
+            Constraint::Length(heights[1]),
+            Constraint::Length(1),
+            Constraint::Length(heights[2]),
+            Constraint::Length(1),
+            Constraint::Length(heights[3]),
+            Constraint::Fill(1),
+            Constraint::Length(3),
+        ])
+        .split(area)
+}
+
+/// Screen rect of the Deep Dive "Top Sessions" panel, for mouse hit-testing.
+/// Mirrors `render`'s small-terminal guard and margin so the rect matches
+/// exactly what `render_dashboard` drew; `None` when the panel is not shown.
+pub fn deep_dive_sessions_area(terminal_area: Rect, data: &DashboardData) -> Option<Rect> {
+    if terminal_area.width < 120 || terminal_area.height < 40 {
+        return None;
+    }
+    let area = terminal_area.inner(Margin {
+        horizontal: 1,
+        vertical: 1,
+    });
+    Some(deep_dive_sections(area, data)[4])
+}
+
+/// Screen rect of the Deep Dive "By Project" panel, for mouse hit-testing.
+/// Same guarantees as [`deep_dive_sessions_area`].
+pub fn deep_dive_projects_area(terminal_area: Rect, data: &DashboardData) -> Option<Rect> {
+    if terminal_area.width < 120 || terminal_area.height < 40 {
+        return None;
+    }
+    let area = terminal_area.inner(Margin {
+        horizontal: 1,
+        vertical: 1,
+    });
+    let top = weighted_columns(deep_dive_sections(area, data)[2], 35);
+    Some(top[1])
 }
 
 fn deep_dive_panel_heights(area_height: u16, data: &DashboardData) -> [u16; 4] {
@@ -348,6 +382,34 @@ mod tests {
         assert!(!rendered.contains("switch"));
         assert!(!rendered.contains("optimize"));
         assert!(!rendered.contains("compare"));
+    }
+
+    #[test]
+    fn coach_page_render_smoke_test() {
+        let backend = TestBackend::new(170, 80);
+        let mut terminal = Terminal::new(backend).expect("create terminal");
+        let mut app = App::default();
+        app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
+        assert_eq!(app.page, Page::Coach);
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("draw coach page");
+
+        let rendered = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+
+        let copy = copy();
+        assert!(rendered.contains(&copy.nav.coach));
+        assert!(rendered.contains(&copy.coach.report.overall));
+        assert!(rendered.contains(&copy.coach.findings.title));
+        assert!(rendered.contains(&copy.coach.groups.prompt_quality));
+        assert!(rendered.contains(&copy.coach.groups.session_hygiene));
     }
 
     #[test]

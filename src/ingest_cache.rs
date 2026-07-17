@@ -148,6 +148,7 @@ impl From<WireParsedCall> for ParsedCall {
             token_quality: w.token_quality,
             timestamp_quality: w.timestamp_quality,
             superseded_dedup_keys: Vec::new(),
+            merge_activity: false,
         }
     }
 }

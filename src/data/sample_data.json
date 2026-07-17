@@ -402,7 +402,8 @@
         "models": [
           { "id": "gpt-5", "tool": "codex", "calls": 24, "tokens": "820K", "cost": "$3.91", "value": 100 },
           { "id": "gpt-5.3-codex-spark", "tool": "codex", "calls": 17, "tokens": "380K", "cost": "$1.47", "value": 46 }
-        ]
+        ],
+        "plan_value": { "price": "$20.00", "month_cost": "$96.40", "multiple": "4.8×" }
       },
       {
         "tool": "Claude Code",
@@ -417,7 +418,8 @@
         "models": [
           { "id": "claude-opus-4-7", "tool": "claude-code", "calls": 51, "tokens": "4.9M", "cost": "$10.70", "value": 100 },
           { "id": "claude-haiku-4-5", "tool": "claude-code", "calls": 22, "tokens": "900K", "cost": "$0.72", "value": 18 }
-        ]
+        ],
+        "plan_value": { "price": "$200.00", "month_cost": "$412.80", "multiple": "2.1×" }
       },
       {
         "tool": "Cursor",

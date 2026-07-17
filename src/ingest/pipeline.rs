@@ -9,13 +9,24 @@ use crate::copy::copy;
 use crate::currency::CurrencyFormatter;
 use crate::data::{
     ActivityMetric, AnalyticsData, CountMetric, DailyMetric, DashboardData, LimitMetric,
-    LimitsData, ModelCatalogEntry, ModelMetric, ModelToolBreakdown, ProjectMetric, ProjectOption,
-    ProjectToolMetric, RecentModelMetric, RecentUsageMetric, SessionDetail, SessionDetailView,
-    SessionMetric, SessionOption, ShareMetric, StackSegment, StackedDayMetric, Summary,
-    ToolLimitSection,
+    LimitsData, ModelCatalogEntry, ModelMetric, ModelToolBreakdown, PlanValueMetric,
+    ProjectIndexRow, ProjectMetric, ProjectOption, ProjectToolMetric, ProjectToolSplit,
+    RecentModelMetric, RecentUsageMetric, SessionDetail, SessionDetailView, SessionMetric,
+    SessionOption, ShareMetric, StackSegment, StackedDayMetric, Summary, ToolLimitSection,
 };
 use crate::pricing;
 use crate::tools::{self, LimitSnapshot, LimitWindow, ParsedCall};
+
+/// Tool ids and display labels for the Usage-page limit sections, in fixed
+/// display order. Shared with the desktop plan-price settings so price
+/// configuration lists exactly the tools that grow a Usage console.
+pub const LIMIT_SECTION_TOOLS: [(&str, &str); 5] = [
+    ("codex", "Codex"),
+    ("claude-code", "Claude Code"),
+    ("cursor", "Cursor"),
+    ("copilot", "Copilot"),
+    ("gemini", "Gemini"),
+];
 
 #[cfg(test)]
 use super::projects::path_to_project_string;
@@ -30,8 +41,10 @@ pub struct Ingested {
     pub limits: Vec<LimitSnapshot>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ProjectInventoryRow {
+    /// Normalized project identity, the key the project drill-down routes on.
+    pub identity: String,
     pub project: String,
     pub tool: &'static str,
     pub raw_project: String,
@@ -149,8 +162,14 @@ impl Ingested {
         build_project_options(&filtered, sort, currency)
     }
 
-    pub fn limits(&self, tool: Tool, sort: SortMode, currency: &CurrencyFormatter) -> LimitsData {
-        self.limits_at(tool, sort, currency, chrono::Utc::now())
+    pub fn limits(
+        &self,
+        tool: Tool,
+        sort: SortMode,
+        currency: &CurrencyFormatter,
+        plan_prices: &BTreeMap<String, f64>,
+    ) -> LimitsData {
+        self.limits_at(tool, sort, currency, plan_prices, chrono::Utc::now())
     }
 
     /// Unified model catalog for a period: every call folds into its
@@ -188,7 +207,7 @@ impl Ingested {
                     && in_period(c, period, now)
             })
             .collect();
-        build_analytics(&filtered, currency)
+        build_analytics(&filtered, currency, period == Period::Today)
     }
 
     pub fn coach(
@@ -240,9 +259,18 @@ impl Ingested {
         tool: Tool,
         sort: SortMode,
         currency: &CurrencyFormatter,
+        plan_prices: &BTreeMap<String, f64>,
         now: DateTime<Utc>,
     ) -> LimitsData {
-        build_limits_data(&self.limits, &self.calls, tool, sort, currency, now)
+        build_limits_data(
+            &self.limits,
+            &self.calls,
+            tool,
+            sort,
+            currency,
+            plan_prices,
+            now,
+        )
     }
 
     pub fn session_options(
@@ -318,12 +346,143 @@ impl Ingested {
                 let label = project_label(&labels, &project);
                 let currency = CurrencyFormatter::usd();
                 ProjectInventoryRow {
+                    identity: project,
                     project: label,
                     tool: tool_short_label(tool),
                     raw_project,
                     calls: acc.calls,
                     sessions: acc.sessions.len() as u64,
                     cost: currency.format_money(acc.cost),
+                }
+            })
+            .collect()
+    }
+
+    /// Per-tool split of one project's activity, with numeric magnitudes for
+    /// chart proportions. Sorted by spend, descending.
+    pub fn project_tool_split(
+        &self,
+        period: Period,
+        project_filter: &ProjectFilter,
+        currency: &CurrencyFormatter,
+    ) -> Vec<ProjectToolSplit> {
+        #[derive(Default)]
+        struct Acc {
+            cost: f64,
+            calls: u64,
+            sessions: HashSet<String>,
+        }
+
+        let now = Local::now();
+        let mut by_tool: HashMap<&'static str, Acc> = HashMap::new();
+        for c in self
+            .calls
+            .iter()
+            .filter(|c| matches_project(c, project_filter) && in_period(c, period, now))
+        {
+            let entry = by_tool.entry(c.tool).or_default();
+            entry.cost += c.cost_usd;
+            entry.calls += 1;
+            if let Some(key) = session_key(c) {
+                entry.sessions.insert(key);
+            }
+        }
+
+        let mut rows: Vec<(&'static str, Acc)> = by_tool.into_iter().collect();
+        rows.sort_by(|a, b| b.1.cost.total_cmp(&a.1.cost).then_with(|| a.0.cmp(b.0)));
+
+        rows.into_iter()
+            .map(|(tool, acc)| {
+                let sessions = acc.sessions.len() as u64;
+                let avg_value = acc.cost / sessions.max(1) as f64;
+                ProjectToolSplit {
+                    key: tool,
+                    label: tool_short_label(tool),
+                    cost: currency.format_money(acc.cost),
+                    avg_per_session: currency.format_money(avg_value),
+                    calls: acc.calls,
+                    sessions,
+                    cost_value: acc.cost,
+                    avg_value,
+                }
+            })
+            .collect()
+    }
+
+    /// Full Projects index: every project in scope, uncapped, with the
+    /// normalized identity retained for the per-project drill-down route.
+    pub fn project_index(
+        &self,
+        period: Period,
+        tool: Tool,
+        project_filter: &ProjectFilter,
+        sort: SortMode,
+        currency: &CurrencyFormatter,
+    ) -> Vec<ProjectIndexRow> {
+        #[derive(Default)]
+        struct Acc {
+            cost: f64,
+            calls: u64,
+            sessions: HashSet<String>,
+            tools: HashMap<&'static str, f64>,
+            last: Option<NaiveDate>,
+            stats: SortStats,
+        }
+
+        let now = Local::now();
+        let filtered: Vec<&ParsedCall> = self
+            .calls
+            .iter()
+            .filter(|c| {
+                matches_tool(c, tool)
+                    && matches_project(c, project_filter)
+                    && in_period(c, period, now)
+            })
+            .collect();
+        let labels = project_label_lookup(filtered.iter().map(|call| call.project.as_str()));
+
+        let mut by_project: HashMap<String, Acc> = HashMap::new();
+        for c in &filtered {
+            let entry = by_project.entry(project_identity(&c.project)).or_default();
+            entry.cost += c.cost_usd;
+            entry.calls += 1;
+            entry.stats.add_call(c);
+            if let Some(key) = session_key(c) {
+                entry.sessions.insert(key);
+            }
+            *entry.tools.entry(c.tool).or_default() += c.cost_usd;
+            if let Some(ts) = c.timestamp {
+                let d = ts.with_timezone(&Local).date_naive();
+                entry.last = Some(entry.last.map(|prev| prev.max(d)).unwrap_or(d));
+            }
+        }
+
+        let mut rows: Vec<(String, Acc)> = by_project.into_iter().collect();
+        rows.sort_by(|a, b| {
+            let a_label = project_label(&labels, &a.0);
+            let b_label = project_label(&labels, &b.0);
+            compare_labeled_stats(&a.1.stats, &b.1.stats, &a_label, &b_label, sort)
+        });
+        let max = max_primary_value(rows.iter().map(|row| &row.1.stats), sort);
+        let total = rows.len();
+
+        rows.into_iter()
+            .enumerate()
+            .map(|(idx, (identity, acc))| {
+                let session_count = acc.sessions.len().max(1) as u64;
+                ProjectIndexRow {
+                    name: project_label(&labels, &identity),
+                    identity,
+                    cost: currency.format_money(acc.cost),
+                    avg_per_session: currency.format_money(acc.cost / session_count as f64),
+                    sessions: session_count,
+                    calls: acc.calls,
+                    last_active: acc
+                        .last
+                        .map(|d| d.format("%Y-%m-%d").to_string())
+                        .unwrap_or_else(|| "-".into()),
+                    tool_mix: format_tool_mix(&acc.tools, currency),
+                    value: sort_bar_value(&acc.stats, sort, max, idx, total),
                 }
             })
             .collect()
@@ -371,6 +530,7 @@ fn build_limits_data(
     _tool: Tool,
     sort: SortMode,
     currency: &CurrencyFormatter,
+    plan_prices: &BTreeMap<String, f64>,
     now: DateTime<Utc>,
 ) -> LimitsData {
     let mut latest: HashMap<(&'static str, String), &LimitSnapshot> = HashMap::new();
@@ -382,6 +542,24 @@ fn build_limits_data(
             _ => {
                 latest.insert(key, limit);
             }
+        }
+    }
+
+    // Newest observed plan SKU per tool; feeds the plan-value default price
+    // when the user has not configured one.
+    let mut detected_plans: HashMap<&'static str, String> = HashMap::new();
+    let mut detected_at: HashMap<&'static str, Option<DateTime<Utc>>> = HashMap::new();
+    for limit in latest.values() {
+        let Some(plan) = limit.plan_type.as_deref() else {
+            continue;
+        };
+        let newer = match detected_at.get(limit.tool) {
+            Some(prev) => limit.observed_at >= *prev,
+            None => true,
+        };
+        if newer {
+            detected_at.insert(limit.tool, limit.observed_at);
+            detected_plans.insert(limit.tool, plan.to_string());
         }
     }
 
@@ -409,8 +587,49 @@ fn build_limits_data(
     }
 
     LimitsData {
-        sections: build_tool_limit_sections(calls, limits_by_tool, sort, currency),
+        sections: build_tool_limit_sections(
+            calls,
+            limits_by_tool,
+            sort,
+            currency,
+            plan_prices,
+            &detected_plans,
+        ),
     }
+}
+
+/// Known self-paid subscription SKUs and their monthly USD prices. Org-paid
+/// tiers (business, enterprise, education) and unknown SKUs return `None` —
+/// a value multiple against a price the user does not pay is noise. A
+/// configured `plan_prices` entry always wins over this table.
+fn default_plan_price_usd(tool_id: &str, plan_type: &str) -> Option<f64> {
+    match (tool_id, plan_type) {
+        ("codex", "plus") => Some(20.0),
+        ("codex", "pro") => Some(200.0),
+        ("copilot", "copilot_pro") => Some(10.0),
+        ("copilot", "copilot_pro_plus") => Some(39.0),
+        _ => None,
+    }
+}
+
+fn plan_value_metric(
+    tool_id: &str,
+    month_cost_usd: f64,
+    plan_prices: &BTreeMap<String, f64>,
+    detected_plan: Option<&String>,
+    currency: &CurrencyFormatter,
+) -> Option<PlanValueMetric> {
+    let configured = plan_prices
+        .get(tool_id)
+        .copied()
+        .filter(|price| price.is_finite() && *price > 0.0);
+    let derived = detected_plan.and_then(|plan| default_plan_price_usd(tool_id, plan));
+    let price = configured.or(derived)?;
+    Some(PlanValueMetric {
+        price: leak(currency.format_money(price)),
+        month_cost: leak(currency.format_money(month_cost_usd)),
+        multiple: leak(format!("{:.1}×", month_cost_usd / price)),
+    })
 }
 
 #[derive(Debug, Clone, Default)]
@@ -532,6 +751,8 @@ fn build_tool_limit_sections(
     mut limits_by_tool: HashMap<&'static str, Vec<LimitMetric>>,
     sort: SortMode,
     currency: &CurrencyFormatter,
+    plan_prices: &BTreeMap<String, f64>,
+    detected_plans: &HashMap<&'static str, String>,
 ) -> Vec<ToolLimitSection> {
     #[derive(Default)]
     struct Acc {
@@ -544,17 +765,20 @@ fn build_tool_limit_sections(
         models: HashMap<String, ModelAcc>,
     }
 
-    const TOOLS: [(&str, &str); 5] = [
-        ("codex", "Codex"),
-        ("claude-code", "Claude Code"),
-        ("cursor", "Cursor"),
-        ("copilot", "Copilot"),
-        ("gemini", "Gemini"),
-    ];
+    const TOOLS: [(&str, &str); 5] = LIMIT_SECTION_TOOLS;
 
     let now = Local::now();
     let mut by_tool: HashMap<&str, Acc> =
         TOOLS.iter().map(|(id, _)| (*id, Acc::default())).collect();
+
+    // Calendar-month API-equivalent spend per tool for the plan-value line;
+    // the 24-hour accumulator below is too narrow for a monthly comparison.
+    let mut month_costs: HashMap<&str, f64> = HashMap::new();
+    for call in calls {
+        if in_period(call, Period::Month, now) {
+            *month_costs.entry(call.tool).or_default() += call.cost_usd;
+        }
+    }
 
     for call in calls {
         let Some(acc) = by_tool.get_mut(call.tool) else {
@@ -625,6 +849,13 @@ fn build_tool_limit_sections(
                 last_seen: leak(format_last_seen(acc.last_seen, now)),
             },
             models: recent_model_rows(acc.models, sort, currency),
+            plan_value: plan_value_metric(
+                id,
+                month_costs.get(id).copied().unwrap_or(0.0),
+                plan_prices,
+                detected_plans.get(id),
+                currency,
+            ),
         })
         .collect()
 }
@@ -1412,19 +1643,20 @@ fn aggregate_sessions(
         }
     }
 
-    let mut rows: Vec<Acc> = by_session.into_values().collect();
+    let mut rows: Vec<(String, Acc)> = by_session.into_iter().collect();
     rows.sort_by(|a, b| {
-        let a_label = project_label(project_labels, &a.project);
-        let b_label = project_label(project_labels, &b.project);
-        compare_labeled_stats(&a.stats, &b.stats, &a_label, &b_label, sort)
+        let a_label = project_label(project_labels, &a.1.project);
+        let b_label = project_label(project_labels, &b.1.project);
+        compare_labeled_stats(&a.1.stats, &b.1.stats, &a_label, &b_label, sort)
     });
-    let max = max_primary_value(rows.iter().map(|row| &row.stats), sort);
+    let max = max_primary_value(rows.iter().map(|row| &row.1.stats), sort);
     let total = rows.len();
 
     rows.into_iter()
         .take(10)
         .enumerate()
-        .map(|(idx, acc)| SessionMetric {
+        .map(|(idx, (key, acc))| SessionMetric {
+            key: leak(key),
             date: leak(
                 acc.date
                     .map(|d| d.format("%Y-%m-%d").to_string())
@@ -1862,7 +2094,11 @@ fn build_model_catalog(
         .collect()
 }
 
-fn build_analytics(calls: &[&ParsedCall], currency: &CurrencyFormatter) -> AnalyticsData {
+fn build_analytics(
+    calls: &[&ParsedCall],
+    currency: &CurrencyFormatter,
+    hourly: bool,
+) -> AnalyticsData {
     #[derive(Default)]
     struct DayAcc {
         total: f64,
@@ -1875,7 +2111,12 @@ fn build_analytics(calls: &[&ParsedCall], currency: &CurrencyFormatter) -> Analy
         calls: u64,
     }
 
-    let mut by_day: BTreeMap<NaiveDate, DayAcc> = BTreeMap::new();
+    // The 24 Hours period is a rolling window, so daily buckets collapse
+    // into one or two misleading bars; it stacks by local hour instead,
+    // matching the Activity Trend's granularity. Keys are hours since the
+    // epoch day zero so the rolling window stays chronological across the
+    // midnight boundary.
+    let mut by_bucket: BTreeMap<i64, (String, DayAcc)> = BTreeMap::new();
     let mut hour_day = [[0u64; 24]; 7];
     let mut by_provider: HashMap<&'static str, ShareAcc> = HashMap::new();
     let mut by_tool: HashMap<&'static str, ShareAcc> = HashMap::new();
@@ -1883,7 +2124,18 @@ fn build_analytics(calls: &[&ParsedCall], currency: &CurrencyFormatter) -> Analy
     for c in calls {
         if let Some(ts) = c.timestamp {
             let local = ts.with_timezone(&Local);
-            let day = by_day.entry(local.date_naive()).or_default();
+            let day_ordinal = i64::from(local.date_naive().num_days_from_ce());
+            let (key, label) = if hourly {
+                (
+                    day_ordinal * 24 + i64::from(local.hour()),
+                    local.format("%Hh").to_string(),
+                )
+            } else {
+                (day_ordinal * 24, local.format("%m-%d").to_string())
+            };
+            let (_, day) = by_bucket
+                .entry(key)
+                .or_insert_with(|| (label, DayAcc::default()));
             day.total += c.cost_usd;
             *day.by_tool.entry(c.tool).or_default() += c.cost_usd;
 
@@ -1905,13 +2157,13 @@ fn build_analytics(calls: &[&ParsedCall], currency: &CurrencyFormatter) -> Analy
         tool.calls += 1;
     }
 
-    let daily_by_tool = by_day
-        .into_iter()
-        .map(|(date, acc)| {
+    let daily_by_tool = by_bucket
+        .into_values()
+        .map(|(label, acc)| {
             let mut segments: Vec<(&'static str, f64)> = acc.by_tool.into_iter().collect();
             segments.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
             StackedDayMetric {
-                day: leak(date.format("%m-%d").to_string()),
+                day: leak(label),
                 total_cost: leak(currency.format_money(acc.total)),
                 segments: segments
                     .into_iter()
@@ -2397,6 +2649,149 @@ mod tests {
     }
 
     #[test]
+    fn analytics_stack_buckets_by_hour_for_the_rolling_24h_period() {
+        // Wall-clock-relative fixtures: the Today filter is a rolling window
+        // ending now.
+        let now = chrono::Utc::now();
+        let calls: Vec<ParsedCall> = [1i64, 2]
+            .into_iter()
+            .map(|hours_ago| ParsedCall {
+                tool: "claude-code",
+                timestamp: Some(now - Duration::hours(hours_ago)),
+                cost_usd: 1.0,
+                ..ParsedCall::default()
+            })
+            .collect();
+        let ingested = Ingested {
+            calls,
+            limits: Vec::new(),
+        };
+
+        let hourly = ingested.analytics(
+            Period::Today,
+            Tool::All,
+            &ProjectFilter::All,
+            &CurrencyFormatter::usd(),
+        );
+        assert_eq!(hourly.daily_by_tool.len(), 2, "one stack per active hour");
+        assert!(hourly
+            .daily_by_tool
+            .iter()
+            .all(|row| row.day.ends_with('h') && row.day.len() == 3));
+
+        let daily = ingested.analytics(
+            Period::Week,
+            Tool::All,
+            &ProjectFilter::All,
+            &CurrencyFormatter::usd(),
+        );
+        assert!(
+            daily.daily_by_tool.len() <= 2,
+            "daily buckets collapse the same calls into at most two days"
+        );
+        assert!(daily
+            .daily_by_tool
+            .iter()
+            .all(|row| row.day.contains('-') && !row.day.ends_with('h')));
+    }
+
+    #[test]
+    fn plan_value_derives_price_from_detected_sku() {
+        // Month costs compare against the wall clock, so the fixture call
+        // must be stamped "now" rather than at the fixed test date.
+        let now = chrono::Utc::now();
+        let call = ParsedCall {
+            tool: "codex",
+            timestamp: Some(now),
+            cost_usd: 96.0,
+            ..ParsedCall::default()
+        };
+        let limit = LimitSnapshot {
+            plan_type: Some("plus".into()),
+            ..mk_limit("codex", None, &now.to_rfc3339(), 10.0, 5.0)
+        };
+        let ingested = Ingested {
+            calls: vec![call],
+            limits: vec![limit],
+        };
+
+        let data = ingested.limits(
+            Tool::All,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+            &BTreeMap::new(),
+        );
+        let codex = data
+            .sections
+            .iter()
+            .find(|section| section.tool == "Codex")
+            .unwrap();
+        let plan_value = codex.plan_value.as_ref().expect("plus SKU has a price");
+        assert_eq!(plan_value.price, "$20.00");
+        assert_eq!(plan_value.month_cost, "$96.00");
+        assert_eq!(plan_value.multiple, "4.8×");
+
+        // No configured price and no priced SKU → no plan value.
+        let claude = data
+            .sections
+            .iter()
+            .find(|section| section.tool == "Claude Code")
+            .unwrap();
+        assert!(claude.plan_value.is_none());
+    }
+
+    #[test]
+    fn plan_value_prefers_configured_price_over_detected_sku() {
+        let now = chrono::Utc::now();
+        let call = ParsedCall {
+            tool: "codex",
+            timestamp: Some(now),
+            cost_usd: 96.0,
+            ..ParsedCall::default()
+        };
+        let limit = LimitSnapshot {
+            plan_type: Some("plus".into()),
+            ..mk_limit("codex", None, &now.to_rfc3339(), 10.0, 5.0)
+        };
+        let ingested = Ingested {
+            calls: vec![call],
+            limits: vec![limit],
+        };
+        let mut plan_prices = BTreeMap::new();
+        plan_prices.insert("codex".to_string(), 200.0);
+        // A configured price also unlocks tools with no detected SKU at all.
+        plan_prices.insert("claude-code".to_string(), 100.0);
+
+        let data = ingested.limits(
+            Tool::All,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+            &plan_prices,
+        );
+        let codex = data
+            .sections
+            .iter()
+            .find(|section| section.tool == "Codex")
+            .unwrap();
+        let plan_value = codex.plan_value.as_ref().expect("configured price");
+        assert_eq!(plan_value.price, "$200.00");
+        assert_eq!(plan_value.multiple, "0.5×");
+
+        let claude = data
+            .sections
+            .iter()
+            .find(|section| section.tool == "Claude Code")
+            .unwrap();
+        let claude_value = claude.plan_value.as_ref().expect("configured price");
+        assert_eq!(claude_value.price, "$100.00");
+        assert_eq!(
+            claude_value.month_cost,
+            CurrencyFormatter::usd().format_money(0.0)
+        );
+        assert_eq!(claude_value.multiple, "0.0×");
+    }
+
+    #[test]
     fn limits_use_latest_snapshot_and_flatten_windows() {
         let ingested = Ingested {
             calls: Vec::new(),
@@ -2410,6 +2805,7 @@ mod tests {
             Tool::All,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
+            &BTreeMap::new(),
             fixed_now(),
         );
 
@@ -2455,12 +2851,14 @@ mod tests {
             Tool::Codex,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
+            &BTreeMap::new(),
             fixed_now(),
         );
         let claude = ingested.limits_at(
             Tool::ClaudeCode,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
+            &BTreeMap::new(),
             fixed_now(),
         );
 
@@ -2513,6 +2911,7 @@ mod tests {
             Tool::All,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
+            &BTreeMap::new(),
             fixed_now(),
         );
         let claude = data
@@ -2560,6 +2959,7 @@ mod tests {
             Tool::All,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
+            &BTreeMap::new(),
             fixed_now(),
         );
 
@@ -2600,7 +3000,13 @@ mod tests {
             .unwrap()
             .with_timezone(&Utc);
 
-        let data = ingested.limits_at(Tool::All, SortMode::Spend, &CurrencyFormatter::usd(), now);
+        let data = ingested.limits_at(
+            Tool::All,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+            &BTreeMap::new(),
+            now,
+        );
 
         let rows = codex_limit_rows(&data);
         assert_eq!(rows.len(), 2);
@@ -2622,7 +3028,13 @@ mod tests {
             .unwrap()
             .with_timezone(&Utc);
 
-        let data = ingested.limits_at(Tool::All, SortMode::Spend, &CurrencyFormatter::usd(), now);
+        let data = ingested.limits_at(
+            Tool::All,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+            &BTreeMap::new(),
+            now,
+        );
 
         let rows = codex_limit_rows(&data);
         assert_eq!(rows.len(), 1, "expired 5h window should be hidden");
@@ -2647,19 +3059,37 @@ mod tests {
         let fresh_now = DateTime::parse_from_rfc3339("2026-05-01T00:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
-        let fresh = ingested.limits_at(Tool::All, SortMode::Spend, &currency, fresh_now);
+        let fresh = ingested.limits_at(
+            Tool::All,
+            SortMode::Spend,
+            &currency,
+            &BTreeMap::new(),
+            fresh_now,
+        );
         assert!(!codex_limit_rows(&fresh)[0].stale);
 
         let stale_now = DateTime::parse_from_rfc3339("2026-05-07T00:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
-        let stale = ingested.limits_at(Tool::All, SortMode::Spend, &currency, stale_now);
+        let stale = ingested.limits_at(
+            Tool::All,
+            SortMode::Spend,
+            &currency,
+            &BTreeMap::new(),
+            stale_now,
+        );
         assert!(codex_limit_rows(&stale)[0].stale);
 
         let hidden_now = DateTime::parse_from_rfc3339("2026-05-14T00:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
-        let hidden = ingested.limits_at(Tool::All, SortMode::Spend, &currency, hidden_now);
+        let hidden = ingested.limits_at(
+            Tool::All,
+            SortMode::Spend,
+            &currency,
+            &BTreeMap::new(),
+            hidden_now,
+        );
         assert!(codex_limit_rows(&hidden).is_empty());
     }
 
@@ -2684,6 +3114,7 @@ mod tests {
             Tool::All,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
+            &BTreeMap::new(),
             far_future,
         );
 
@@ -2709,6 +3140,7 @@ mod tests {
             Tool::ClaudeCode,
             SortMode::Tokens,
             &CurrencyFormatter::usd(),
+            &BTreeMap::new(),
         );
         let tools: Vec<&str> = data.sections.iter().map(|row| row.tool).collect();
 
@@ -3026,7 +3458,12 @@ mod tests {
             limits: Vec::new(),
         };
 
-        let data = ingested.limits(Tool::All, SortMode::Date, &CurrencyFormatter::usd());
+        let data = ingested.limits(
+            Tool::All,
+            SortMode::Date,
+            &CurrencyFormatter::usd(),
+            &BTreeMap::new(),
+        );
 
         assert_eq!(data.sections[0].tool, "Cursor");
         assert_eq!(data.sections[1].tool, "Codex");
@@ -3389,6 +3826,103 @@ mod tests {
         assert_eq!(data.summary.sessions, "2");
         assert_eq!(data.projects[0].sessions, 2);
         assert_eq!(data.projects[0].avg_per_session, "$3.00");
+    }
+
+    #[test]
+    fn project_tool_split_reports_numeric_magnitudes_per_tool() {
+        let ingested = Ingested {
+            calls: vec![
+                mk_project_call("claude-code", "s1", "/Users/me/Code/widgets", 6.0),
+                mk_project_call("claude-code", "s1", "/Users/me/Code/widgets", 3.0),
+                mk_project_call("codex", "s2", "/Users/me/Code/widgets", 3.0),
+                mk_project_call("codex", "s9", "/Users/me/Code/other", 99.0),
+            ],
+            limits: Vec::new(),
+        };
+
+        let filter = ProjectFilter::Selected {
+            identity: crate::ingest::projects::project_identity("/Users/me/Code/widgets"),
+            label: "widgets".into(),
+        };
+        let rows = ingested.project_tool_split(Period::AllTime, &filter, &CurrencyFormatter::usd());
+
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].key, "claude-code");
+        assert_eq!(rows[0].label, "Claude");
+        assert_eq!(rows[0].cost, "$9.00");
+        assert_eq!(rows[0].cost_value, 9.0);
+        assert_eq!(rows[0].calls, 2);
+        assert_eq!(rows[0].sessions, 1);
+        assert_eq!(rows[0].avg_value, 9.0);
+        assert_eq!(rows[1].key, "codex");
+        assert_eq!(rows[1].cost_value, 3.0);
+    }
+
+    #[test]
+    fn project_index_is_uncapped_and_carries_identities() {
+        let calls: Vec<ParsedCall> = (0..12)
+            .map(|i| {
+                mk_project_call(
+                    "claude-code",
+                    &format!("s{i}"),
+                    &format!("/Users/me/Code/p{i:02}"),
+                    1.0 + i as f64,
+                )
+            })
+            .collect();
+        let ingested = Ingested {
+            calls,
+            limits: Vec::new(),
+        };
+
+        let rows = ingested.project_index(
+            Period::AllTime,
+            Tool::All,
+            &ProjectFilter::All,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+        );
+
+        assert_eq!(rows.len(), 12, "index lists every project, uncapped");
+        assert_eq!(rows[0].name, "p11");
+        assert_eq!(rows[0].cost, "$12.00");
+        assert_eq!(rows[0].calls, 1);
+        assert_eq!(rows[0].sessions, 1);
+        assert_eq!(rows[0].last_active, "2026-04-29");
+        assert!(rows.iter().all(|row| !row.identity.is_empty()));
+
+        let inventory = ingested.project_inventory();
+        assert!(rows
+            .iter()
+            .all(|row| inventory.iter().any(|src| src.identity == row.identity)));
+    }
+
+    #[test]
+    fn dashboard_session_rows_carry_resolvable_drilldown_keys() {
+        let ingested = Ingested {
+            calls: vec![
+                mk_project_call("claude-code", "s1", "/Users/me/Code/widgets", 1.0),
+                mk_project_call("claude-code", "s1", "/Users/me/Code/widgets", 2.0),
+                mk_project_call("codex", "s2", "/Users/me/Code/gadgets", 3.0),
+            ],
+            limits: Vec::new(),
+        };
+
+        let data = ingested.dashboard(
+            Period::AllTime,
+            Tool::All,
+            &ProjectFilter::All,
+            SortMode::Spend,
+            &CurrencyFormatter::usd(),
+        );
+
+        assert_eq!(data.sessions.len(), 2);
+        for session in &data.sessions {
+            let view = ingested
+                .session_detail(session.key, SortMode::Spend, &CurrencyFormatter::usd())
+                .expect("session row key resolves to a detail view");
+            assert_eq!(view.key, session.key);
+        }
     }
 
     #[test]

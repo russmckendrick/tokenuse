@@ -30,6 +30,7 @@ pub struct CopyDeck {
     pub report_cli: ReportCliCopy,
     pub cli: CliCopy,
     pub overview: OverviewCopy,
+    pub mcp: McpCopy,
     pub categories: BTreeMap<String, String>,
     pub doctor: DoctorCopy,
     pub keymap: KeymapCopy,
@@ -384,6 +385,7 @@ pub struct PanelCopy {
     pub local_files: String,
     pub money_and_data: String,
     pub tool_integrations: String,
+    pub plan_value: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -401,6 +403,7 @@ pub struct TableCopy {
     pub sessions: String,
     pub sess: String,
     pub avg_per_session: String,
+    pub last_active: String,
     pub cache: String,
     pub cache_rate: String,
     pub time: String,
@@ -468,6 +471,9 @@ pub struct UsageCopy {
     pub stale: String,
     pub stale_as_of: String,
     pub org_managed_credits: String,
+    pub plan_value: String,
+    pub plan_value_line: String,
+    pub open_tool: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -513,6 +519,7 @@ pub struct ConfigValuesCopy {
     pub delete_archive_then_rebuild: String,
     pub build_archive_from_history: String,
     pub fallback_priced_models: String,
+    pub mcp_hint: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -524,6 +531,7 @@ pub struct ConfigPathsCopy {
     pub pricing_data: String,
     pub claude_limits: String,
     pub copilot_limits: String,
+    pub mcp_server: String,
     pub rates_source: String,
 }
 
@@ -719,8 +727,6 @@ pub struct DesktopCopy {
     pub filter_projects: String,
     pub filter_sessions: String,
     pub filter_currencies: String,
-    pub rank: String,
-    pub session_rank: String,
     pub model_usage: String,
     pub loading_label: String,
     pub nav_aria: String,
@@ -732,11 +738,15 @@ pub struct DesktopCopy {
     pub per_tool_split: String,
     pub hour_heatmap: String,
     pub daily_by_tool: String,
+    pub hourly_by_tool: String,
     pub spend_share: String,
     pub top_projects: String,
     pub top_models: String,
+    pub project_sources: String,
     pub sessions_for: String,
     pub call_detail_hint: String,
+    pub plan_prices_hint: String,
+    pub plan_price_placeholder: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -887,6 +897,8 @@ pub struct CliCopy {
     pub doctor_command: String,
     pub status_command: String,
     pub overview_command: String,
+    pub mcp_command: String,
+    pub real_names_flag: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -910,6 +922,15 @@ pub struct OverviewCopy {
     pub status_line: String,
     pub totals_heading: String,
     pub by_tool_heading: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct McpCopy {
+    pub instructions: String,
+    pub tool_status: String,
+    pub tool_overview: String,
+    pub tool_projects: String,
+    pub unknown_tool: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -1012,6 +1033,7 @@ pub struct StatusCopy {
     pub currency_rates_failed_embedded: String,
     pub legacy_cache_imported_records: String,
     pub archive_synced_counts: String,
+    pub tail_resumed_suffix: String,
     pub archive_failed_raw_ingest: String,
     pub archive_failed_raw_ingest_no_sessions_sample_data: String,
     pub archive_failed_raw_ingest_ingest_failed_sample_data: String,

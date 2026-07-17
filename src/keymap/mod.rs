@@ -45,6 +45,7 @@ pub const ACTION_OPEN_EXPORT_FOLDER_PICKER: &str = "open_export_folder_picker";
 pub const ACTION_PAGE_OVERVIEW: &str = "page_overview";
 pub const ACTION_PAGE_DEEP_DIVE: &str = "page_deep_dive";
 pub const ACTION_PAGE_USAGE: &str = "page_usage";
+pub const ACTION_PAGE_COACH: &str = "page_coach";
 pub const ACTION_PAGE_CONFIG: &str = "page_config";
 pub const ACTION_CLOSE_SESSION: &str = "close_session";
 pub const ACTION_RELOAD: &str = "reload";
@@ -87,6 +88,7 @@ const SUPPORTED_ACTIONS: &[&str] = &[
     ACTION_PAGE_OVERVIEW,
     ACTION_PAGE_DEEP_DIVE,
     ACTION_PAGE_USAGE,
+    ACTION_PAGE_COACH,
     ACTION_PAGE_CONFIG,
     ACTION_CLOSE_SESSION,
     ACTION_RELOAD,

@@ -3,7 +3,8 @@ use std::collections::HashSet;
 use color_eyre::Result;
 
 use super::{
-    fingerprint_source, LimitSnapshot, ParsedCall, SessionSource, SessionSourceKind, ToolAdapter,
+    fingerprint_source, AdapterParse, LimitSnapshot, ParsedCall, SessionSource, SessionSourceKind,
+    ToolAdapter,
 };
 
 pub mod config;
@@ -36,6 +37,21 @@ impl ToolAdapter for ClaudeCode {
             return Ok(Vec::new());
         }
         parser::parse_session(source, seen)
+    }
+
+    /// Session JSONL files are append-only, so grown files resume from the
+    /// stored byte offset instead of re-reading every session in the
+    /// project directory.
+    fn parse_with_cursor(
+        &self,
+        source: &SessionSource,
+        seen: &mut HashSet<String>,
+        cursor: Option<&str>,
+    ) -> Result<AdapterParse> {
+        if source.kind == SessionSourceKind::Limit {
+            return Ok(AdapterParse::default());
+        }
+        parser::parse_session_with_cursor(source, seen, cursor)
     }
 
     fn parse_limits(&self, source: &SessionSource) -> Result<Vec<LimitSnapshot>> {

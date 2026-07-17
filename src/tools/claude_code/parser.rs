@@ -1,17 +1,56 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 
 use chrono::{DateTime, Utc};
 use color_eyre::Result;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use walkdir::WalkDir;
 
 use crate::pricing;
-use crate::tools::{jsonl, CodeBlock, ParsedCall, SessionSource, Speed};
+use crate::tools::{jsonl, AdapterParse, CodeBlock, ParsedCall, SessionSource, Speed};
 
 use super::config;
+
+/// Bump to invalidate persisted tail cursors when parsing semantics change;
+/// a mismatch falls back to a full re-parse of every file in the source.
+const PARSE_VERSION: &str = "1";
+/// Newest-modified session files that keep a resume cursor. Older files
+/// change rarely enough that a full re-parse on touch is fine, and the cap
+/// bounds the cursor JSON stored per source.
+const MAX_CURSOR_FILES: usize = 64;
+/// Bytes hashed immediately before a stored offset so a rewritten prefix
+/// (compaction, truncation, editor save) is detected even when the file is
+/// at least as long as it was.
+const PROBE_BYTES: u64 = 256;
+
+/// Persisted per-source resume cursor: one entry per session file, keyed by
+/// absolute path, plus the parse version that wrote it.
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct SourceCursor {
+    v: String,
+    files: BTreeMap<String, FileCursor>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct FileCursor {
+    /// Byte offset just past the last fully parsed (newline-terminated) line.
+    offset: u64,
+    /// `probe_hash` of the bytes ending at `offset`.
+    probe: String,
+    /// Carried cross-line parser state: the last user prompt seen before the
+    /// offset, so tail assistant rounds keep their turn context.
+    #[serde(default)]
+    user_text: String,
+    #[serde(default)]
+    user_chars: Option<u64>,
+    #[serde(default)]
+    user_ts: Option<String>,
+    #[serde(default)]
+    project: Option<String>,
+}
 
 /// User lines starting with this marker record an interrupted assistant turn.
 /// Covers both "[Request interrupted by user]" and the "for tool use" variant.
@@ -122,166 +161,327 @@ pub fn parse_session(
 ) -> Result<Vec<ParsedCall>> {
     let mut calls: Vec<ParsedCall> = Vec::new();
     for path in collect_jsonl(&source.path) {
-        let mut last_user_text = String::new();
-        let mut last_user_chars: Option<u64> = None;
-        let mut last_user_ts: Option<DateTime<Utc>> = None;
-        let file_start_index = calls.len();
-        // Claude Code streams one JSONL line per content block; every line of
-        // a message repeats the message id and the final usage payload. Later
-        // lines of an id already seen in this file merge their activity into
-        // the call the first line created (tool_result lines interleave, so
-        // same-id lines are not always adjacent).
-        let mut file_calls_by_id: HashMap<String, usize> = HashMap::new();
-        let mut project = source.project.clone();
-        let lines = match jsonl::read_lines(&path) {
-            Ok(l) => l,
-            Err(_) => continue,
+        parse_file(&path, &source.project, seen, &mut calls, None);
+    }
+    Ok(calls)
+}
+
+/// Cursor-aware parse: session files whose stored offset still matches skip
+/// their already-parsed prefix; everything else (new files, rewritten files,
+/// stale parse versions) parses fully. Returns the cursor to persist for
+/// the next sync.
+pub fn parse_session_with_cursor(
+    source: &SessionSource,
+    seen: &mut HashSet<String>,
+    prior: Option<&str>,
+) -> Result<AdapterParse> {
+    let prior: Option<SourceCursor> = prior
+        .and_then(|raw| serde_json::from_str(raw).ok())
+        .filter(|cursor: &SourceCursor| cursor.v == PARSE_VERSION);
+
+    let mut calls: Vec<ParsedCall> = Vec::new();
+    let mut resumed_files = 0usize;
+    let mut entries: Vec<(String, FileCursor, Option<std::time::SystemTime>)> = Vec::new();
+    for path in collect_jsonl(&source.path) {
+        let key = path.to_string_lossy().to_string();
+        let resume = prior.as_ref().and_then(|cursor| cursor.files.get(&key));
+        let Some(parsed) = parse_file(&path, &source.project, seen, &mut calls, resume) else {
+            continue;
         };
-        let session_id = path
-            .file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_default();
+        if parsed.resumed {
+            resumed_files += 1;
+        }
+        let mtime = fs::metadata(&path).ok().and_then(|m| m.modified().ok());
+        entries.push((key, parsed.cursor, mtime));
+    }
 
-        for line in lines {
-            let entry: JournalEntry = match serde_json::from_str(&line) {
-                Ok(e) => e,
-                Err(_) => continue,
-            };
+    entries.sort_by_key(|entry| std::cmp::Reverse(entry.2));
+    entries.truncate(MAX_CURSOR_FILES);
+    let cursor = SourceCursor {
+        v: PARSE_VERSION.to_string(),
+        files: entries
+            .into_iter()
+            .map(|(key, cursor, _)| (key, cursor))
+            .collect(),
+    };
+    Ok(AdapterParse {
+        calls,
+        cursor: serde_json::to_string(&cursor).ok(),
+        resumed_files,
+    })
+}
 
-            if let Some(cwd) = entry.cwd.as_ref().filter(|cwd| !cwd.trim().is_empty()) {
-                project = cwd.clone();
-            }
+struct FileParse {
+    cursor: FileCursor,
+    resumed: bool,
+}
 
-            match entry.kind.as_str() {
-                "user" => {
-                    if let Some(msg) = &entry.message {
-                        if msg.role.as_deref() == Some("user") {
-                            let text = extract_user_text(msg);
-                            let trimmed = text.trim();
-                            if trimmed.is_empty() {
-                                continue;
-                            }
-                            if trimmed.starts_with(INTERRUPT_MARKER) {
-                                // The interruption belongs to the previous
-                                // call of this session file, if any.
-                                if calls.len() > file_start_index {
-                                    if let Some(last) = calls.last_mut() {
-                                        last.is_canceled = true;
-                                    }
-                                }
-                                continue;
-                            }
-                            if trimmed.starts_with("<command-")
-                                || trimmed.starts_with("<local-command-")
-                            {
-                                // Slash-command wrappers are UI plumbing, not
-                                // a prompt the user wrote.
-                                continue;
-                            }
-                            last_user_chars = Some(text.chars().count() as u64);
-                            last_user_text = jsonl::truncate_chars(&text, 500);
-                            last_user_ts = entry.timestamp.as_deref().and_then(parse_timestamp);
-                        }
-                    }
-                }
-                "assistant" => {
-                    let Some(msg) = entry.message.as_ref() else {
-                        continue;
-                    };
+/// Parses one session file into `calls`, resuming from `resume` when its
+/// offset and prefix probe still match the file on disk. Returns `None`
+/// when the file cannot be opened.
+///
+/// A resumed parse cannot see prefix lines, so two signals degrade at the
+/// boundary by design: an interrupt marker whose call was parsed in an
+/// earlier sync no longer flags that call, and a message whose streamed
+/// lines span the boundary re-emits with tail-only activity — the archive
+/// merges it into the existing row via the `merge_activity` hint.
+fn parse_file(
+    path: &Path,
+    source_project: &str,
+    seen: &mut HashSet<String>,
+    calls: &mut Vec<ParsedCall>,
+    resume: Option<&FileCursor>,
+) -> Option<FileParse> {
+    let file_len = fs::metadata(path).ok()?.len();
+    let resume = resume.filter(|cursor| {
+        cursor.offset > 0
+            && cursor.offset <= file_len
+            && probe_hash(path, cursor.offset).as_deref() == Some(cursor.probe.as_str())
+    });
+    let resumed = resume.is_some();
+    let start_offset = resume.map(|cursor| cursor.offset).unwrap_or(0);
 
-                    let dedup_key = msg.id.clone().unwrap_or_else(|| {
-                        format!("claude:{}", entry.timestamp.clone().unwrap_or_default())
-                    });
+    let mut last_user_text = resume.map(|c| c.user_text.clone()).unwrap_or_default();
+    let mut last_user_chars: Option<u64> = resume.and_then(|c| c.user_chars);
+    let mut last_user_ts: Option<DateTime<Utc>> = resume
+        .and_then(|c| c.user_ts.as_deref())
+        .and_then(parse_timestamp);
+    let mut project = resume
+        .and_then(|c| c.project.clone())
+        .unwrap_or_else(|| source_project.to_string());
 
-                    if let Some(&idx) = file_calls_by_id.get(&dedup_key) {
-                        merge_streamed_line(&mut calls[idx], msg.content.as_ref());
-                        continue;
-                    }
+    let file_start_index = calls.len();
+    // Claude Code streams one JSONL line per content block; every line of
+    // a message repeats the message id and the final usage payload. Later
+    // lines of an id already seen in this file merge their activity into
+    // the call the first line created (tool_result lines interleave, so
+    // same-id lines are not always adjacent).
+    let mut file_calls_by_id: HashMap<String, usize> = HashMap::new();
+    let session_id = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
 
-                    let Some(model) = msg.model.clone() else {
-                        continue;
-                    };
-                    let Some(usage) = msg.usage.as_ref() else {
-                        continue;
-                    };
+    let mut file = fs::File::open(path).ok()?;
+    if start_offset > 0 {
+        file.seek(SeekFrom::Start(start_offset)).ok()?;
+    }
+    let mut reader = BufReader::new(file);
+    let mut consumed = start_offset;
+    let mut buf: Vec<u8> = Vec::new();
+    loop {
+        buf.clear();
+        let read = match reader.read_until(b'\n', &mut buf) {
+            Ok(read) => read,
+            Err(_) => break,
+        };
+        if read == 0 {
+            break;
+        }
+        if !buf.ends_with(b"\n") {
+            // Mid-append partial line: leave it (and the offset) for the
+            // next sync so the completed line parses exactly once.
+            break;
+        }
+        consumed += buf.len() as u64;
+        let raw = String::from_utf8_lossy(&buf);
+        let line = raw.trim_end_matches(['\n', '\r']);
+        process_line(
+            line,
+            calls,
+            seen,
+            &mut file_calls_by_id,
+            file_start_index,
+            &session_id,
+            &mut project,
+            &mut last_user_text,
+            &mut last_user_chars,
+            &mut last_user_ts,
+        );
+    }
 
-                    if !seen.insert(dedup_key.clone()) {
-                        continue;
-                    }
-
-                    let speed = match usage.speed.as_deref() {
-                        Some("fast") => Speed::Fast,
-                        _ => Speed::Standard,
-                    };
-
-                    let activity = extract_activity(msg.content.as_ref());
-                    let response_text = extract_response_text(msg.content.as_ref());
-                    let mut code_blocks = jsonl::extract_code_fences(&response_text);
-                    code_blocks.extend(activity.code_blocks);
-
-                    let timestamp = entry.timestamp.as_deref().and_then(parse_timestamp);
-                    let elapsed_ms = jsonl::turn_elapsed_ms(timestamp, last_user_ts);
-                    let (cache_creation_total, cache_creation_1h) = cache_creation_buckets(
-                        usage.cache_creation_input_tokens,
-                        usage.cache_creation.as_ref(),
-                    );
-
-                    // Advisor iterations are separately billed API calls that
-                    // ride inside this message's usage. Emit them first so the
-                    // interrupt marker's "previous call" stays the main call.
-                    calls.extend(advisor_calls(
-                        usage,
-                        &dedup_key,
-                        &model,
-                        timestamp,
-                        entry.session_id.as_deref().unwrap_or(&session_id),
-                        &project,
-                        seen,
-                    ));
-
-                    let mut call = ParsedCall {
-                        tool: config::TOOL_ID,
-                        model: model.clone(),
-                        input_tokens: usage.input_tokens,
-                        output_tokens: usage.output_tokens,
-                        cache_creation_input_tokens: cache_creation_total,
-                        cache_creation_1h_input_tokens: cache_creation_1h,
-                        cache_read_input_tokens: usage.cache_read_input_tokens,
-                        web_search_requests: usage
-                            .server_tool_use
-                            .as_ref()
-                            .map(|s| s.web_search_requests)
-                            .unwrap_or(0),
-                        speed,
-                        tools: activity.tools,
-                        bash_commands: activity.bash_commands,
-                        timestamp,
-                        dedup_key,
-                        user_message: last_user_text.clone(),
-                        session_id: entry
-                            .session_id
-                            .clone()
-                            .unwrap_or_else(|| session_id.clone()),
-                        project: project.clone(),
-                        prompt_chars: last_user_chars,
-                        response_chars: Some(response_text.chars().count() as u64),
-                        elapsed_ms,
-                        code_blocks: jsonl::merge_code_blocks(code_blocks),
-                        edited_files: jsonl::dedup_files(activity.edited_files),
-                        referenced_files: jsonl::dedup_files(activity.referenced_files),
-                        ..ParsedCall::default()
-                    };
-
-                    call.cost_usd = pricing::cost(&model, &call, speed);
-                    file_calls_by_id.insert(call.dedup_key.clone(), calls.len());
-                    calls.push(call);
-                }
-                _ => {}
-            }
+    if resumed {
+        for call in &mut calls[file_start_index..] {
+            call.merge_activity = true;
         }
     }
 
-    Ok(calls)
+    Some(FileParse {
+        cursor: FileCursor {
+            offset: consumed,
+            probe: probe_hash(path, consumed).unwrap_or_default(),
+            user_text: last_user_text,
+            user_chars: last_user_chars,
+            user_ts: last_user_ts.map(|ts| ts.to_rfc3339()),
+            project: Some(project),
+        },
+        resumed,
+    })
+}
+
+/// FNV-1a of the up-to-`PROBE_BYTES` bytes ending at `offset`. An offset of
+/// zero hashes nothing and yields the FNV basis, which is fine: offset zero
+/// never resumes.
+fn probe_hash(path: &Path, offset: u64) -> Option<String> {
+    let mut file = fs::File::open(path).ok()?;
+    let take = offset.min(PROBE_BYTES);
+    file.seek(SeekFrom::Start(offset - take)).ok()?;
+    let mut buf = vec![0u8; take as usize];
+    file.read_exact(&mut buf).ok()?;
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in buf {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    Some(format!("{hash:016x}"))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn process_line(
+    line: &str,
+    calls: &mut Vec<ParsedCall>,
+    seen: &mut HashSet<String>,
+    file_calls_by_id: &mut HashMap<String, usize>,
+    file_start_index: usize,
+    session_id: &str,
+    project: &mut String,
+    last_user_text: &mut String,
+    last_user_chars: &mut Option<u64>,
+    last_user_ts: &mut Option<DateTime<Utc>>,
+) {
+    let entry: JournalEntry = match serde_json::from_str(line) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+
+    if let Some(cwd) = entry.cwd.as_ref().filter(|cwd| !cwd.trim().is_empty()) {
+        *project = cwd.clone();
+    }
+
+    match entry.kind.as_str() {
+        "user" => {
+            if let Some(msg) = &entry.message {
+                if msg.role.as_deref() == Some("user") {
+                    let text = extract_user_text(msg);
+                    let trimmed = text.trim();
+                    if trimmed.is_empty() {
+                        return;
+                    }
+                    if trimmed.starts_with(INTERRUPT_MARKER) {
+                        // The interruption belongs to the previous
+                        // call of this session file, if any.
+                        if calls.len() > file_start_index {
+                            if let Some(last) = calls.last_mut() {
+                                last.is_canceled = true;
+                            }
+                        }
+                        return;
+                    }
+                    if trimmed.starts_with("<command-") || trimmed.starts_with("<local-command-") {
+                        // Slash-command wrappers are UI plumbing, not
+                        // a prompt the user wrote.
+                        return;
+                    }
+                    *last_user_chars = Some(text.chars().count() as u64);
+                    *last_user_text = jsonl::truncate_chars(&text, 500);
+                    *last_user_ts = entry.timestamp.as_deref().and_then(parse_timestamp);
+                }
+            }
+        }
+        "assistant" => {
+            let Some(msg) = entry.message.as_ref() else {
+                return;
+            };
+
+            let dedup_key = msg.id.clone().unwrap_or_else(|| {
+                format!("claude:{}", entry.timestamp.clone().unwrap_or_default())
+            });
+
+            if let Some(&idx) = file_calls_by_id.get(&dedup_key) {
+                merge_streamed_line(&mut calls[idx], msg.content.as_ref());
+                return;
+            }
+
+            let Some(model) = msg.model.clone() else {
+                return;
+            };
+            let Some(usage) = msg.usage.as_ref() else {
+                return;
+            };
+
+            if !seen.insert(dedup_key.clone()) {
+                return;
+            }
+
+            let speed = match usage.speed.as_deref() {
+                Some("fast") => Speed::Fast,
+                _ => Speed::Standard,
+            };
+
+            let activity = extract_activity(msg.content.as_ref());
+            let response_text = extract_response_text(msg.content.as_ref());
+            let mut code_blocks = jsonl::extract_code_fences(&response_text);
+            code_blocks.extend(activity.code_blocks);
+
+            let timestamp = entry.timestamp.as_deref().and_then(parse_timestamp);
+            let elapsed_ms = jsonl::turn_elapsed_ms(timestamp, *last_user_ts);
+            let (cache_creation_total, cache_creation_1h) = cache_creation_buckets(
+                usage.cache_creation_input_tokens,
+                usage.cache_creation.as_ref(),
+            );
+
+            // Advisor iterations are separately billed API calls that
+            // ride inside this message's usage. Emit them first so the
+            // interrupt marker's "previous call" stays the main call.
+            calls.extend(advisor_calls(
+                usage,
+                &dedup_key,
+                &model,
+                timestamp,
+                entry.session_id.as_deref().unwrap_or(session_id),
+                project,
+                seen,
+            ));
+
+            let mut call = ParsedCall {
+                tool: config::TOOL_ID,
+                model: model.clone(),
+                input_tokens: usage.input_tokens,
+                output_tokens: usage.output_tokens,
+                cache_creation_input_tokens: cache_creation_total,
+                cache_creation_1h_input_tokens: cache_creation_1h,
+                cache_read_input_tokens: usage.cache_read_input_tokens,
+                web_search_requests: usage
+                    .server_tool_use
+                    .as_ref()
+                    .map(|s| s.web_search_requests)
+                    .unwrap_or(0),
+                speed,
+                tools: activity.tools,
+                bash_commands: activity.bash_commands,
+                timestamp,
+                dedup_key,
+                user_message: last_user_text.clone(),
+                session_id: entry
+                    .session_id
+                    .clone()
+                    .unwrap_or_else(|| session_id.to_string()),
+                project: project.clone(),
+                prompt_chars: *last_user_chars,
+                response_chars: Some(response_text.chars().count() as u64),
+                elapsed_ms,
+                code_blocks: jsonl::merge_code_blocks(code_blocks),
+                edited_files: jsonl::dedup_files(activity.edited_files),
+                referenced_files: jsonl::dedup_files(activity.referenced_files),
+                ..ParsedCall::default()
+            };
+
+            call.cost_usd = pricing::cost(&model, &call, speed);
+            file_calls_by_id.insert(call.dedup_key.clone(), calls.len());
+            calls.push(call);
+        }
+        _ => {}
+    }
 }
 
 /// Later streamed lines of a message repeat its id and usage but carry the
@@ -591,6 +791,164 @@ mod tests {
             writeln!(f, "{}", line).unwrap();
         }
         dir
+    }
+
+    #[test]
+    fn cursor_resume_parses_only_the_appended_tail() {
+        let dir = fixture();
+        let source =
+            SessionSource::session(dir.path().to_path_buf(), "test/project", config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let first = parse_session_with_cursor(&source, &mut seen, None).unwrap();
+        assert_eq!(first.calls.len(), 2);
+        assert_eq!(first.resumed_files, 0);
+        let cursor = first.cursor.clone().expect("cursor persisted");
+
+        // Append a new turn plus a continuation line of msg_2 carrying an
+        // extra tool call (streamed lines split across syncs).
+        let path = dir.path().join("session.jsonl");
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        for line in [
+            r#"{"type":"assistant","timestamp":"2026-04-26T10:05:21Z","sessionId":"s1","message":{"role":"assistant","id":"msg_2","model":"claude-opus-4-7-20250514","usage":{"input_tokens":10,"output_tokens":5},"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"src/tail.rs","new_string":"x"}}]}}"#,
+            r#"{"type":"user","timestamp":"2026-04-26T10:06:00Z","sessionId":"s1","message":{"role":"user","content":"appended prompt"}}"#,
+            r#"{"type":"assistant","timestamp":"2026-04-26T10:06:05Z","sessionId":"s1","message":{"role":"assistant","id":"msg_3","model":"claude-opus-4-7-20250514","usage":{"input_tokens":7,"output_tokens":3},"content":[{"type":"text","text":"ok"}]}}"#,
+        ] {
+            writeln!(f, "{}", line).unwrap();
+        }
+
+        let mut seen = HashSet::new();
+        let second = parse_session_with_cursor(&source, &mut seen, Some(&cursor)).unwrap();
+        assert_eq!(second.resumed_files, 1);
+        assert_eq!(
+            second.calls.len(),
+            2,
+            "only the tail parses: the msg_2 continuation and msg_3"
+        );
+        assert!(second.calls.iter().all(|call| call.merge_activity));
+        let continuation = &second.calls[0];
+        assert_eq!(continuation.dedup_key, "msg_2");
+        assert_eq!(
+            continuation.edited_files,
+            vec!["src/tail.rs"],
+            "tail call carries tail-only activity for the archive merge"
+        );
+        let appended = &second.calls[1];
+        assert_eq!(appended.dedup_key, "msg_3");
+        assert_eq!(
+            appended.user_message, "appended prompt",
+            "user context inside the tail applies"
+        );
+
+        // A third sync with the refreshed cursor parses nothing.
+        let mut seen = HashSet::new();
+        let third =
+            parse_session_with_cursor(&source, &mut seen, second.cursor.as_deref()).unwrap();
+        assert_eq!(third.resumed_files, 1);
+        assert!(third.calls.is_empty());
+    }
+
+    #[test]
+    fn cursor_carries_user_context_across_the_boundary() {
+        let dir = fixture();
+        let source =
+            SessionSource::session(dir.path().to_path_buf(), "test/project", config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let first = parse_session_with_cursor(&source, &mut seen, None).unwrap();
+        let cursor = first.cursor.clone().expect("cursor persisted");
+
+        // The tail starts with an assistant round whose user prompt was
+        // parsed before the boundary ("try again with tests").
+        let path = dir.path().join("session.jsonl");
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        writeln!(
+            f,
+            r#"{{"type":"assistant","timestamp":"2026-04-26T10:05:30Z","sessionId":"s1","message":{{"role":"assistant","id":"msg_4","model":"claude-opus-4-7-20250514","usage":{{"input_tokens":1,"output_tokens":1}},"content":[{{"type":"text","text":"more"}}]}}}}"#
+        )
+        .unwrap();
+
+        let mut seen = HashSet::new();
+        let second = parse_session_with_cursor(&source, &mut seen, Some(&cursor)).unwrap();
+        assert_eq!(second.calls.len(), 1);
+        assert_eq!(second.calls[0].user_message, "try again with tests");
+        assert_eq!(second.calls[0].prompt_chars, Some(20));
+    }
+
+    #[test]
+    fn cursor_rejects_rewritten_prefixes_and_stale_versions() {
+        let dir = fixture();
+        let source =
+            SessionSource::session(dir.path().to_path_buf(), "test/project", config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let first = parse_session_with_cursor(&source, &mut seen, None).unwrap();
+        let cursor = first.cursor.clone().expect("cursor persisted");
+
+        // A stale parse version falls back to a full re-parse.
+        let stale = cursor.replace(
+            &format!("\"v\":\"{PARSE_VERSION}\""),
+            "\"v\":\"tokenuse-test-stale\"",
+        );
+        let mut seen = HashSet::new();
+        let full = parse_session_with_cursor(&source, &mut seen, Some(&stale)).unwrap();
+        assert_eq!(full.resumed_files, 0);
+        assert_eq!(full.calls.len(), 2);
+
+        // A rewritten prefix (same length or longer, different bytes at the
+        // stored offset) fails the probe and re-parses fully.
+        let path = dir.path().join("session.jsonl");
+        let original = std::fs::read(&path).unwrap();
+        let mut rewritten = vec![b' '; original.len()];
+        let replay = b"{\"type\":\"user\"}\n";
+        rewritten[..replay.len()].copy_from_slice(replay);
+        std::fs::write(&path, rewritten).unwrap();
+        let mut seen = HashSet::new();
+        let reparsed = parse_session_with_cursor(&source, &mut seen, Some(&cursor)).unwrap();
+        assert_eq!(reparsed.resumed_files, 0);
+        assert!(reparsed.calls.is_empty(), "blank rewrite has no calls");
+    }
+
+    #[test]
+    fn partial_trailing_lines_wait_for_the_next_sync() {
+        let dir = fixture();
+        let source =
+            SessionSource::session(dir.path().to_path_buf(), "test/project", config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let first = parse_session_with_cursor(&source, &mut seen, None).unwrap();
+        let cursor = first.cursor.clone().expect("cursor persisted");
+
+        // Append half a line (no trailing newline): mid-append snapshot.
+        let path = dir.path().join("session.jsonl");
+        let half = r#"{"type":"assistant","timestamp":"2026-04-26T10:07:00Z","sessionId":"s1","message":{"role":"assistant","id":"msg_5","#;
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        write!(f, "{}", half).unwrap();
+
+        let mut seen = HashSet::new();
+        let second = parse_session_with_cursor(&source, &mut seen, Some(&cursor)).unwrap();
+        assert!(second.calls.is_empty());
+
+        // Complete the line: the whole message parses exactly once.
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        writeln!(
+            f,
+            r#""model":"claude-opus-4-7-20250514","usage":{{"input_tokens":1,"output_tokens":1}},"content":[{{"type":"text","text":"late"}}]}}}}"#
+        )
+        .unwrap();
+        let mut seen = HashSet::new();
+        let third =
+            parse_session_with_cursor(&source, &mut seen, second.cursor.as_deref()).unwrap();
+        assert_eq!(third.calls.len(), 1);
+        assert_eq!(third.calls[0].dedup_key, "msg_5");
     }
 
     #[test]

@@ -1,5 +1,5 @@
 use ratatui::{
-    prelude::{Color, Line, Span},
+    prelude::{Color, Line, Span, Style},
     widgets::Cell,
 };
 
@@ -11,6 +11,40 @@ const BLOCKS: [&str; 9] = ["·", "▁", "▂", "▃", "▄", "▅", "▆", "▇"
 
 pub(super) fn rank_cell(value: u64) -> Cell<'static> {
     Cell::from(Line::from(ranked_bar_spans(value, RANK_WIDTH)))
+}
+
+/// Entity cell for ranked tables: the label sits on a background wash whose
+/// width is proportional to `value`, with a one-cell brighter terminus —
+/// the TUI twin of the desktop `.rank-row` row fill. `width` must match the
+/// column's minimum width so the wash scale stays consistent across rows.
+pub(super) fn rank_name_cell(value: u64, label: &str, width: usize, style: Style) -> Cell<'static> {
+    let budget = width.max(1);
+    let mut chars: Vec<char> = label.chars().take(budget).collect();
+    while chars.len() < budget {
+        chars.push(' ');
+    }
+    let filled = filled_cells(value, budget);
+
+    let mut spans = Vec::new();
+    if filled > 1 {
+        spans.push(Span::styled(
+            chars[..filled - 1].iter().collect::<String>(),
+            style.bg(theme::RANK_FILL_BG),
+        ));
+    }
+    if filled > 0 {
+        spans.push(Span::styled(
+            chars[filled - 1].to_string(),
+            style.bg(theme::RANK_EDGE_BG),
+        ));
+    }
+    if filled < budget {
+        spans.push(Span::styled(
+            chars[filled..].iter().collect::<String>(),
+            style,
+        ));
+    }
+    Cell::from(Line::from(spans))
 }
 
 pub(super) fn gauge_cell(value: u64) -> Cell<'static> {

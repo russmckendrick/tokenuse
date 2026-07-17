@@ -18,8 +18,8 @@ use crate::config::{ConfigPaths, UserConfig};
 use crate::copy::{self, copy, CopyDeck};
 use crate::currency::{CurrencyFormatter, CurrencyTable};
 use crate::data::{
-    AnalyticsData, CoachTimelineDay, DashboardData, LimitsData, ModelCatalogEntry, ProjectOption,
-    SessionDetail, SessionDetailView, SessionOption,
+    AnalyticsData, CoachTimelineDay, DashboardData, LimitsData, ModelCatalogEntry, ProjectIndexRow,
+    ProjectOption, ProjectToolSplit, SessionDetail, SessionDetailView, SessionOption,
 };
 use crate::ingest::Ingested;
 use crate::keymap;
@@ -131,11 +131,12 @@ pub enum Page {
     DeepDive,
     Config,
     Usage,
+    Coach,
     Session,
 }
 
 impl Page {
-    pub const TABS: [Page; 3] = [Page::Overview, Page::DeepDive, Page::Usage];
+    pub const TABS: [Page; 4] = [Page::Overview, Page::DeepDive, Page::Usage, Page::Coach];
 
     pub fn label(self) -> &'static str {
         let copy = copy();
@@ -143,6 +144,7 @@ impl Page {
             Self::Overview => copy.nav.overview.as_str(),
             Self::DeepDive => copy.nav.deep_dive.as_str(),
             Self::Usage => copy.nav.usage.as_str(),
+            Self::Coach => copy.nav.coach.as_str(),
             Self::Config => copy.nav.config.as_str(),
             Self::Session => copy.nav.session.as_str(),
         }
@@ -926,7 +928,8 @@ enum RefreshKind {
 
 struct RefreshOutcome {
     kind: RefreshKind,
-    result: Result<Ingested>,
+    /// Sync stats ride along for the status line; raw ingest has none.
+    result: Result<(Ingested, Option<archive::SyncStats>)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1054,9 +1057,12 @@ impl Refresher {
                     RefreshSource::Archive(paths) => {
                         #[cfg(feature = "quota-sync")]
                         crate::quota_sync::auto_refresh(paths.as_ref());
-                        crate::archive::sync_and_load(paths.as_ref())
+                        crate::archive::sync_and_load_with_stats(paths.as_ref())
+                            .map(|(ingested, stats)| (ingested, Some(stats)))
                     }
-                    RefreshSource::RawIngest => crate::ingest::load(),
+                    RefreshSource::RawIngest => {
+                        crate::ingest::load().map(|ingested| (ingested, None))
+                    }
                 };
                 if result_tx.send(RefreshOutcome { kind, result }).is_err() {
                     return;
@@ -1433,7 +1439,9 @@ impl App {
 
         let currency = self.currency();
         let data = match &self.source {
-            DataSource::Live(ingested) => ingested.limits(tool, sort, &currency),
+            DataSource::Live(ingested) => {
+                ingested.limits(tool, sort, &currency, &self.settings.plan_prices)
+            }
             DataSource::Sample => crate::data::limits_data(tool, sort, &currency),
         };
         self.query_cache
@@ -1537,7 +1545,7 @@ impl App {
 
         let manual = matches!(outcome.kind, RefreshKind::Manual);
         match outcome.result {
-            Ok(ingested) if !ingested.is_empty() => {
+            Ok((ingested, stats)) if !ingested.is_empty() => {
                 let n = ingested.calls.len();
                 self.update_background_alerts(outcome.kind, &ingested);
                 self.bump_data_generation();
@@ -1552,10 +1560,17 @@ impl App {
                 } else {
                     &copy().status.auto_refreshed_calls
                 };
-                self.set_status(
-                    copy::template(template, &[("calls", n.to_string())]),
-                    StatusTone::Success,
-                );
+                let mut text = copy::template(template, &[("calls", n.to_string())]);
+                // The tail-resume trace: how many grown session files were
+                // picked up from their stored byte offset this sync.
+                let resumed = stats.map(|stats| stats.files_resumed).unwrap_or(0);
+                if resumed > 0 {
+                    text.push_str(&copy::template(
+                        &copy().status.tail_resumed_suffix,
+                        &[("files", resumed.to_string())],
+                    ));
+                }
+                self.set_status(text, StatusTone::Success);
             }
             Ok(_) => {
                 let text = if manual {
@@ -1662,9 +1677,31 @@ impl App {
     }
 
     pub fn session_options(&self) -> Vec<SessionOption> {
+        self.session_options_for(self.period, self.tool, &self.project_filter, self.sort)
+    }
+
+    pub fn session_options_for(
+        &self,
+        period: Period,
+        tool: Tool,
+        project_filter: &ProjectFilter,
+        sort: SortMode,
+    ) -> Vec<SessionOption> {
         let currency = self.currency();
         match &self.source {
-            DataSource::Live(ingested) => ingested.session_options(
+            DataSource::Live(ingested) => {
+                ingested.session_options(period, tool, project_filter, sort, &currency)
+            }
+            DataSource::Sample => crate::data::session_options(period, tool, sort, &currency),
+        }
+    }
+
+    /// Full Projects index honouring the active filters; unlike the dashboard
+    /// projects panel this is uncapped and carries the drill-down identity.
+    pub fn project_index(&self) -> Vec<ProjectIndexRow> {
+        let currency = self.currency();
+        match &self.source {
+            DataSource::Live(ingested) => ingested.project_index(
                 self.period,
                 self.tool,
                 &self.project_filter,
@@ -1672,7 +1709,29 @@ impl App {
                 &currency,
             ),
             DataSource::Sample => {
-                crate::data::session_options(self.period, self.tool, self.sort, &currency)
+                crate::data::project_index(self.period, self.tool, self.sort, &currency)
+            }
+        }
+    }
+
+    /// All discovered project sources; empty in sample mode, which has no
+    /// backing files.
+    pub fn project_inventory(&self) -> Vec<crate::ingest::ProjectInventoryRow> {
+        match &self.source {
+            DataSource::Live(ingested) => ingested.project_inventory(),
+            DataSource::Sample => Vec::new(),
+        }
+    }
+
+    /// Per-tool split of one project's activity for the active period.
+    pub fn project_tool_split(&self, project_filter: &ProjectFilter) -> Vec<ProjectToolSplit> {
+        let currency = self.currency();
+        match &self.source {
+            DataSource::Live(ingested) => {
+                ingested.project_tool_split(self.period, project_filter, &currency)
+            }
+            DataSource::Sample => {
+                crate::data::project_tool_split(self.period, project_filter.label(), &currency)
             }
         }
     }
@@ -2106,7 +2165,7 @@ impl App {
             Page::Config => keymap::CONTEXT_CONFIG_PAGE,
             Page::Usage => keymap::CONTEXT_USAGE_PAGE,
             Page::Session => keymap::CONTEXT_SESSION_PAGE,
-            Page::Overview | Page::DeepDive => keymap::CONTEXT_DASHBOARD,
+            Page::Overview | Page::DeepDive | Page::Coach => keymap::CONTEXT_DASHBOARD,
         }
     }
 
@@ -2135,6 +2194,7 @@ impl App {
             keymap::ACTION_PAGE_OVERVIEW => self.set_page(Page::Overview),
             keymap::ACTION_PAGE_DEEP_DIVE => self.set_page(Page::DeepDive),
             keymap::ACTION_PAGE_USAGE => self.set_page(Page::Usage),
+            keymap::ACTION_PAGE_COACH => self.set_page(Page::Coach),
             keymap::ACTION_PAGE_CONFIG => self.set_page(Page::Config),
             keymap::ACTION_CLOSE_SESSION => self.leave_session(),
             keymap::ACTION_RELOAD => self.reload(),
@@ -2789,13 +2849,116 @@ impl App {
             return;
         }
 
-        if self.page != Page::Session {
+        match self.page {
+            Page::Session => {
+                if let Some(idx) =
+                    self.session_call_index_at(terminal_area, mouse.column, mouse.row)
+                {
+                    self.open_session_call_detail(idx);
+                }
+            }
+            Page::DeepDive => {
+                if self.any_modal_open() {
+                    return;
+                }
+                if let Some(key) =
+                    self.deep_dive_session_key_at(terminal_area, mouse.column, mouse.row)
+                {
+                    self.enter_session(&key);
+                    return;
+                }
+                if let Some(label) =
+                    self.deep_dive_project_label_at(terminal_area, mouse.column, mouse.row)
+                {
+                    self.toggle_project_filter_by_label(&label);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Select the clicked project as the active filter; clicking the already
+    /// selected project clears back to All — the same states the `p` picker
+    /// reaches.
+    pub fn toggle_project_filter_by_label(&mut self, label: &str) {
+        if matches!(&self.project_filter, ProjectFilter::Selected { label: current, .. } if current == label)
+        {
+            self.project_filter = ProjectFilter::All;
             return;
         }
-
-        if let Some(idx) = self.session_call_index_at(terminal_area, mouse.column, mouse.row) {
-            self.open_session_call_detail(idx);
+        let option = self
+            .project_options()
+            .into_iter()
+            .find(|option| option.identity.is_some() && option.label == label);
+        if let Some(option) = option {
+            self.project_filter = ProjectFilter::from_option(&option);
         }
+    }
+
+    fn any_modal_open(&self) -> bool {
+        self.help_open
+            || self.project_modal.is_some()
+            || self.currency_modal.is_some()
+            || self.clear_data_modal.is_some()
+            || self.session_modal.is_some()
+            || self.export_modal.is_some()
+            || self.export_dir_picker.is_some()
+    }
+
+    /// Session key under the cursor in the Deep Dive "Top Sessions" panel.
+    pub fn deep_dive_session_key_at(
+        &self,
+        terminal_area: Rect,
+        column: u16,
+        row: u16,
+    ) -> Option<String> {
+        let data = self.dashboard();
+        let table_area = crate::ui::deep_dive_sessions_area(terminal_area, &data)?;
+        // Rows start below the panel border plus the header line and stop
+        // above the bottom border, matching `session_call_index_at`.
+        let row_top = table_area.y.saturating_add(2);
+        let row_bottom = table_area
+            .y
+            .saturating_add(table_area.height)
+            .saturating_sub(1);
+
+        if column < table_area.x
+            || column >= table_area.x.saturating_add(table_area.width)
+            || row < row_top
+            || row >= row_bottom
+        {
+            return None;
+        }
+
+        let session = data.sessions.get(usize::from(row - row_top))?;
+        (!session.key.is_empty()).then(|| session.key.to_string())
+    }
+
+    /// Project label under the cursor in the Deep Dive "By Project" panel.
+    pub fn deep_dive_project_label_at(
+        &self,
+        terminal_area: Rect,
+        column: u16,
+        row: u16,
+    ) -> Option<String> {
+        let data = self.dashboard();
+        let table_area = crate::ui::deep_dive_projects_area(terminal_area, &data)?;
+        let row_top = table_area.y.saturating_add(2);
+        let row_bottom = table_area
+            .y
+            .saturating_add(table_area.height)
+            .saturating_sub(1);
+
+        if column < table_area.x
+            || column >= table_area.x.saturating_add(table_area.width)
+            || row < row_top
+            || row >= row_bottom
+        {
+            return None;
+        }
+
+        let project = data.projects.get(usize::from(row - row_top))?;
+        Some(project.name.to_string())
     }
 
     pub fn session_call_index_at(
@@ -2977,6 +3140,30 @@ impl App {
             query: String::new(),
             selected,
         });
+    }
+
+    /// Sets or clears the monthly subscription price (USD) for a tool id and
+    /// persists the config. Bumps the data generation so cached Usage
+    /// sections rebuild with the new plan-value line.
+    pub fn set_plan_price(&mut self, tool: &str, price: Option<f64>) {
+        match price {
+            Some(price) if price.is_finite() && price > 0.0 => {
+                self.settings.plan_prices.insert(tool.to_string(), price);
+            }
+            _ => {
+                self.settings.plan_prices.remove(tool);
+            }
+        }
+        if let Err(e) = self.settings.save(&self.paths) {
+            self.set_status(
+                copy::template(
+                    &copy().status.config_save_failed,
+                    &[("error", e.to_string())],
+                ),
+                StatusTone::Error,
+            );
+        }
+        self.bump_data_generation();
     }
 
     pub fn set_currency(&mut self, code: &str) {
@@ -3635,7 +3822,7 @@ mod tests {
         result_tx
             .send(RefreshOutcome {
                 kind,
-                result: Ok(ingested),
+                result: Ok((ingested, None)),
             })
             .unwrap();
         app.refresher = Some(Refresher {
@@ -3710,9 +3897,13 @@ mod tests {
         assert_eq!(app.page, Page::Usage);
         assert_eq!(app.period, Period::Today);
         app.handle_key(key(KeyCode::Tab));
+        assert_eq!(app.page, Page::Coach);
+        app.handle_key(key(KeyCode::Tab));
         assert_eq!(app.page, Page::Overview);
 
         app.set_period(Period::AllTime);
+        app.handle_key(key(KeyCode::BackTab));
+        assert_eq!(app.page, Page::Coach);
         app.handle_key(key(KeyCode::BackTab));
         assert_eq!(app.page, Page::Usage);
         assert_eq!(app.period, Period::Today);
@@ -3798,7 +3989,7 @@ mod tests {
         result_tx
             .send(RefreshOutcome {
                 kind: RefreshKind::Manual,
-                result: Ok(ingested_with_calls(2)),
+                result: Ok((ingested_with_calls(2), None)),
             })
             .unwrap();
         app.refresher = Some(Refresher {
@@ -3860,6 +4051,97 @@ mod tests {
 
         assert_eq!(app.call_detail_index, Some(2));
         assert_eq!(app.session_selected, 2);
+    }
+
+    #[test]
+    fn deep_dive_mouse_click_on_top_session_row_opens_session_page() {
+        let mut app = App::default();
+        app.handle_key(key(KeyCode::Char('d')));
+        assert_eq!(app.page, Page::DeepDive);
+
+        let terminal_area = Rect::new(0, 0, 170, 80);
+        let data = app.dashboard();
+        assert!(!data.sessions.is_empty());
+        assert_eq!(data.sessions[0].key, "sample:0");
+        let table_area =
+            crate::ui::deep_dive_sessions_area(terminal_area, &data).expect("sessions panel");
+        let mouse = MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: table_area.x + 2,
+            row: table_area.y + 2,
+            modifiers: KeyModifiers::NONE,
+        };
+
+        app.handle_mouse(mouse, terminal_area);
+
+        assert_eq!(app.page, Page::Session);
+        assert_eq!(
+            app.session_view.as_ref().map(|view| view.key.as_str()),
+            Some("sample:0")
+        );
+    }
+
+    #[test]
+    fn deep_dive_mouse_click_ignored_while_modal_open() {
+        let mut app = App::default();
+        app.handle_key(key(KeyCode::Char('d')));
+        app.handle_key(key(KeyCode::Char('s')));
+        assert!(app.session_modal.is_some());
+
+        let terminal_area = Rect::new(0, 0, 170, 80);
+        let data = app.dashboard();
+        let table_area =
+            crate::ui::deep_dive_sessions_area(terminal_area, &data).expect("sessions panel");
+        let mouse = MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: table_area.x + 2,
+            row: table_area.y + 2,
+            modifiers: KeyModifiers::NONE,
+        };
+
+        app.handle_mouse(mouse, terminal_area);
+
+        assert_eq!(app.page, Page::DeepDive);
+        assert!(app.session_view.is_none());
+    }
+
+    #[test]
+    fn deep_dive_mouse_click_on_project_row_toggles_filter() {
+        let mut app = App::default();
+        app.handle_key(key(KeyCode::Char('d')));
+        assert_eq!(app.page, Page::DeepDive);
+
+        let terminal_area = Rect::new(0, 0, 170, 80);
+        let data = app.dashboard();
+        let first = data.projects[0].name.to_string();
+        let table_area =
+            crate::ui::deep_dive_projects_area(terminal_area, &data).expect("projects panel");
+        let mouse = MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: table_area.x + 2,
+            row: table_area.y + 2,
+            modifiers: KeyModifiers::NONE,
+        };
+
+        app.handle_mouse(mouse, terminal_area);
+        assert!(
+            matches!(&app.project_filter, ProjectFilter::Selected { label, .. } if *label == first)
+        );
+
+        // The filtered dashboard reflows the panel, so re-derive the click
+        // target before toggling the same project back off.
+        let filtered = app.dashboard();
+        assert_eq!(filtered.projects[0].name, first.as_str());
+        let table_area =
+            crate::ui::deep_dive_projects_area(terminal_area, &filtered).expect("projects panel");
+        let mouse = MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: table_area.x + 2,
+            row: table_area.y + 2,
+            modifiers: KeyModifiers::NONE,
+        };
+        app.handle_mouse(mouse, terminal_area);
+        assert!(matches!(app.project_filter, ProjectFilter::All));
     }
 
     #[test]
@@ -4279,7 +4561,7 @@ mod tests {
         result_tx
             .send(RefreshOutcome {
                 kind: RefreshKind::Manual,
-                result: Ok(ingested),
+                result: Ok((ingested, None)),
             })
             .unwrap();
         app.refresher = Some(Refresher {
@@ -4306,10 +4588,13 @@ mod tests {
             result_tx
                 .send(RefreshOutcome {
                     kind: RefreshKind::Auto,
-                    result: Ok(crate::ingest::Ingested {
-                        calls: Vec::new(),
-                        limits: Vec::new(),
-                    }),
+                    result: Ok((
+                        crate::ingest::Ingested {
+                            calls: Vec::new(),
+                            limits: Vec::new(),
+                        },
+                        None,
+                    )),
                 })
                 .unwrap();
         }

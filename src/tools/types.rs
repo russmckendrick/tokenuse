@@ -172,6 +172,28 @@ pub struct CodeBlock {
     pub loc: u64,
 }
 
+/// Result of an adapter parse that may have resumed from a persisted cursor.
+/// `cursor` is an opaque adapter-owned JSON string stored in `source_state`
+/// and handed back on the next parse of the same source; `None` keeps the
+/// source on the full-reparse path. `resumed_files` counts the files whose
+/// prefix was skipped via a valid byte-offset cursor.
+#[derive(Debug, Clone, Default)]
+pub struct AdapterParse {
+    pub calls: Vec<ParsedCall>,
+    pub cursor: Option<String>,
+    pub resumed_files: usize,
+}
+
+impl AdapterParse {
+    pub fn full(calls: Vec<ParsedCall>) -> Self {
+        Self {
+            calls,
+            cursor: None,
+            resumed_files: 0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ParsedCall {
     pub tool: &'static str,
@@ -214,4 +236,9 @@ pub struct ParsedCall {
     /// Archive-only replacement hints. These keys are never persisted with
     /// the canonical row and are acted on only after that row is accepted.
     pub superseded_dedup_keys: Vec<String>,
+    /// Archive-only hint from tail-resumed parses: this call may be the
+    /// continuation of a row whose earlier streamed lines were parsed in a
+    /// previous sync, so on a dedup conflict its activity must be merged
+    /// into the existing row instead of overwriting it. Never persisted.
+    pub merge_activity: bool,
 }

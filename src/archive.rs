@@ -19,7 +19,7 @@ use crate::tools::{
 
 pub const SYNC_INTERVAL: Duration = crate::ingest_cache::TTL;
 
-const ARCHIVE_SCHEMA_VERSION: u32 = 5;
+const ARCHIVE_SCHEMA_VERSION: u32 = 6;
 
 pub struct Archive {
     conn: Connection,
@@ -31,6 +31,9 @@ pub struct SyncStats {
     pub sources_parsed: usize,
     pub calls_inserted: usize,
     pub limits_inserted: usize,
+    /// Session files whose already-parsed prefix was skipped via a stored
+    /// byte-offset cursor instead of being re-read.
+    pub files_resumed: usize,
 }
 
 pub struct StartupLoad {
@@ -63,12 +66,16 @@ pub fn load_startup(paths: &ConfigPaths) -> Result<StartupLoad> {
 }
 
 pub fn sync_and_load(paths: &ConfigPaths) -> Result<Ingested> {
+    sync_and_load_with_stats(paths).map(|(ingested, _)| ingested)
+}
+
+pub fn sync_and_load_with_stats(paths: &ConfigPaths) -> Result<(Ingested, SyncStats)> {
     let mut archive = Archive::open(paths)?;
     if archive.is_empty()? {
         let _ = archive.import_legacy_cache_if_empty()?;
     }
-    archive.sync()?;
-    archive.load()
+    let stats = archive.sync()?;
+    Ok((archive.load()?, stats))
 }
 
 pub fn reset_and_load(paths: &ConfigPaths) -> Result<(Ingested, SyncStats)> {
@@ -166,9 +173,10 @@ impl Archive {
                 }
 
                 let calls_result = if source.kind == SessionSourceKind::Limit {
-                    Ok(Vec::new())
+                    Ok(crate::tools::AdapterParse::default())
                 } else {
-                    adapter.parse(&source, &mut seen)
+                    let stored_cursor = self.source_cursor(source.tool, &path)?;
+                    adapter.parse_with_cursor(&source, &mut seen, stored_cursor.as_deref())
                 };
                 let limits_result = adapter.parse_limits(&source);
                 let parsed_calls_ok = calls_result.is_ok();
@@ -183,10 +191,11 @@ impl Archive {
                     continue;
                 }
 
-                let calls = calls_result.unwrap_or_default();
+                let parsed = calls_result.unwrap_or_default();
                 let limits = limits_result.unwrap_or_default();
+                stats.files_resumed += parsed.resumed_files;
                 let tx = self.conn.transaction()?;
-                for call in &calls {
+                for call in &parsed.calls {
                     if insert_call(&tx, call)? {
                         stats.calls_inserted += 1;
                     }
@@ -202,7 +211,13 @@ impl Archive {
                 };
                 if should_store_fingerprint {
                     if let Some(fingerprint) = fingerprint.as_deref() {
-                        upsert_source_fingerprint(&tx, source.tool, &path, fingerprint)?;
+                        upsert_source_fingerprint(
+                            &tx,
+                            source.tool,
+                            &path,
+                            fingerprint,
+                            parsed.cursor.as_deref().unwrap_or(""),
+                        )?;
                     }
                 }
                 tx.commit()?;
@@ -383,6 +398,22 @@ impl Archive {
                 ",
             )?;
         }
+        if version < 6 {
+            // v6 adds the incremental-parse cursor (adapter-owned JSON with
+            // per-file byte offsets and a parse version). Purely additive:
+            // existing fingerprints stay valid, so no re-parse is forced.
+            self.conn.execute_batch(
+                "
+                BEGIN;
+
+                ALTER TABLE source_state ADD COLUMN cursor_json TEXT NOT NULL DEFAULT '';
+
+                PRAGMA user_version = 6;
+
+                COMMIT;
+                ",
+            )?;
+        }
         Ok(())
     }
 
@@ -395,6 +426,20 @@ impl Archive {
             )
             .optional()
             .map_err(Into::into)
+    }
+
+    /// The adapter-owned incremental-parse cursor stored with this source's
+    /// fingerprint; empty strings read as absent.
+    fn source_cursor(&self, tool: &str, path: &str) -> Result<Option<String>> {
+        let cursor: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT cursor_json FROM source_state WHERE tool = ?1 AND path = ?2",
+                params![tool, path],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(cursor.filter(|cursor| !cursor.is_empty()))
     }
 
     fn load_calls(&self) -> Result<Vec<ParsedCall>> {
@@ -455,6 +500,7 @@ impl Archive {
                 token_quality: TokenQuality::parse(&row.get::<_, String>(26)?),
                 timestamp_quality: TimestampQuality::parse(&row.get::<_, String>(27)?),
                 superseded_dedup_keys: Vec::new(),
+                merge_activity: false,
             })
         })?;
 
@@ -573,15 +619,19 @@ fn insert_call(tx: &Transaction<'_>, call: &ParsedCall) -> Result<bool> {
             &edited_files_json,
             &referenced_files_json,
         )?;
-        update_existing_claude_tool_activity(
-            tx,
-            call,
-            &tools_json,
-            &bash_json,
-            &code_blocks_json,
-            &edited_files_json,
-            &referenced_files_json,
-        )?;
+        if call.merge_activity {
+            merge_existing_claude_tail_activity(tx, call)?;
+        } else {
+            update_existing_claude_tool_activity(
+                tx,
+                call,
+                &tools_json,
+                &bash_json,
+                &code_blocks_json,
+                &edited_files_json,
+                &referenced_files_json,
+            )?;
+        }
     } else {
         zero_superseded_copilot_estimates(tx, call)?;
     }
@@ -824,6 +874,91 @@ fn zero_superseded_copilot_estimates(tx: &Transaction<'_>, call: &ParsedCall) ->
 /// so replace the activity columns outright and never shrink the response
 /// length. Token and cost columns are untouched: usage is identical across a
 /// message's streamed lines.
+/// Merge path for tail-resumed Claude parses: the conflicting call is the
+/// continuation of a message whose earlier streamed lines were parsed in a
+/// previous sync, so it carries only the tail's content blocks. Unlike the
+/// full-reparse overwrite (where the new parse is a superset), the arrays
+/// concatenate — each streamed line contributes distinct blocks — file
+/// lists re-dedup, response chars sum (prefix and tail counts are
+/// disjoint), and a tail-observed interruption sticks.
+fn merge_existing_claude_tail_activity(tx: &Transaction<'_>, call: &ParsedCall) -> Result<()> {
+    if call.tool != crate::tools::claude_code::config::TOOL_ID {
+        return Ok(());
+    }
+
+    let existing = tx
+        .query_row(
+            "
+            SELECT tools_json, bash_commands_json, code_blocks_json,
+                   edited_files_json, referenced_files_json, response_chars
+            FROM calls
+            WHERE tool = ?1 AND dedup_key = ?2
+            ",
+            params![call.tool, call.dedup_key],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, Option<i64>>(5)?,
+                ))
+            },
+        )
+        .optional()?;
+    let Some((tools_json, bash_json, code_json, edited_json, referenced_json, response_chars)) =
+        existing
+    else {
+        return Ok(());
+    };
+
+    let mut tools: Vec<String> = serde_json::from_str(&tools_json).unwrap_or_default();
+    tools.extend(call.tools.iter().cloned());
+    let mut bash: Vec<String> = serde_json::from_str(&bash_json).unwrap_or_default();
+    bash.extend(call.bash_commands.iter().cloned());
+    let mut code_blocks: Vec<crate::tools::CodeBlock> =
+        serde_json::from_str(&code_json).unwrap_or_default();
+    code_blocks.extend(call.code_blocks.iter().cloned());
+    let code_blocks = crate::tools::jsonl::merge_code_blocks(code_blocks);
+    let mut edited: Vec<String> = serde_json::from_str(&edited_json).unwrap_or_default();
+    edited.extend(call.edited_files.iter().cloned());
+    let edited = crate::tools::jsonl::dedup_files(edited);
+    let mut referenced: Vec<String> = serde_json::from_str(&referenced_json).unwrap_or_default();
+    referenced.extend(call.referenced_files.iter().cloned());
+    let referenced = crate::tools::jsonl::dedup_files(referenced);
+    let merged_response_chars = match (response_chars, call.response_chars) {
+        (Some(existing), Some(new)) => Some(existing.saturating_add(u64_to_i64(new))),
+        (Some(existing), None) => Some(existing),
+        (None, Some(new)) => Some(u64_to_i64(new)),
+        (None, None) => None,
+    };
+
+    tx.execute(
+        "
+        UPDATE calls
+        SET tools_json = ?1, bash_commands_json = ?2, code_blocks_json = ?3,
+            edited_files_json = ?4, referenced_files_json = ?5,
+            response_chars = ?6,
+            is_canceled = MAX(is_canceled, ?7)
+        WHERE tool = ?8
+          AND dedup_key = ?9
+        ",
+        params![
+            serde_json::to_string(&tools)?,
+            serde_json::to_string(&bash)?,
+            serde_json::to_string(&code_blocks)?,
+            serde_json::to_string(&edited)?,
+            serde_json::to_string(&referenced)?,
+            merged_response_chars,
+            call.is_canceled as i64,
+            call.tool,
+            call.dedup_key,
+        ],
+    )?;
+    Ok(())
+}
+
 fn update_existing_claude_tool_activity(
     tx: &Transaction<'_>,
     call: &ParsedCall,
@@ -1024,16 +1159,24 @@ fn upsert_source_fingerprint(
     tool: &str,
     path: &str,
     fingerprint: &str,
+    cursor_json: &str,
 ) -> Result<()> {
     tx.execute(
         "
-        INSERT INTO source_state (tool, path, fingerprint, synced_at)
-        VALUES (?1, ?2, ?3, ?4)
+        INSERT INTO source_state (tool, path, fingerprint, synced_at, cursor_json)
+        VALUES (?1, ?2, ?3, ?4, ?5)
         ON CONFLICT(tool, path) DO UPDATE SET
             fingerprint = excluded.fingerprint,
-            synced_at = excluded.synced_at
+            synced_at = excluded.synced_at,
+            cursor_json = excluded.cursor_json
         ",
-        params![tool, path, fingerprint, Utc::now().to_rfc3339()],
+        params![
+            tool,
+            path,
+            fingerprint,
+            Utc::now().to_rfc3339(),
+            cursor_json
+        ],
     )?;
     Ok(())
 }
@@ -1177,6 +1320,7 @@ mod tests {
             token_quality: crate::tools::TokenQuality::Exact,
             timestamp_quality: crate::tools::TimestampQuality::Exact,
             superseded_dedup_keys: Vec::new(),
+            merge_activity: false,
         }
     }
 
@@ -1399,7 +1543,7 @@ mod tests {
             .conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
         let advice_tables: u32 = archive
             .conn
             .query_row(
@@ -1424,7 +1568,7 @@ mod tests {
             .conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
 
         let loaded = archive.load().unwrap();
         assert_eq!(loaded.calls.len(), 1, "calls survive the v4 migration");
@@ -1910,6 +2054,7 @@ mod tests {
                 crate::tools::codex::config::TOOL_ID,
                 "/tmp/source.jsonl",
                 "fingerprint",
+                "",
             )
             .unwrap();
             tx.commit().unwrap();
@@ -1954,6 +2099,138 @@ mod tests {
         let loaded = archive.load().unwrap();
         assert_eq!(loaded.calls, ingested.calls);
         assert_eq!(loaded.limits, ingested.limits);
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn tail_merge_concatenates_activity_instead_of_overwriting() {
+        let paths = temp_paths("tail-merge");
+        let mut archive = Archive::open(&paths).unwrap();
+
+        let full = ParsedCall {
+            tool: crate::tools::claude_code::config::TOOL_ID,
+            is_canceled: false,
+            ..sample_call("msg_1")
+        };
+        let tail = ParsedCall {
+            tools: vec!["Write".into()],
+            bash_commands: vec!["cargo check".into()],
+            edited_files: vec!["src/main.rs".into(), "src/tail.rs".into()],
+            referenced_files: Vec::new(),
+            code_blocks: Vec::new(),
+            response_chars: Some(100),
+            is_canceled: true,
+            merge_activity: true,
+            ..full.clone()
+        };
+
+        {
+            let tx = archive.conn.transaction().unwrap();
+            assert!(insert_call(&tx, &full).unwrap());
+            assert!(!insert_call(&tx, &tail).unwrap());
+            tx.commit().unwrap();
+        }
+
+        let loaded = archive.load().unwrap();
+        let call = &loaded.calls[0];
+        assert_eq!(
+            call.tools,
+            vec!["exec_command", "apply_patch", "Write"],
+            "tail tool occurrences concatenate"
+        );
+        assert_eq!(call.bash_commands, vec!["cargo test", "cargo check"]);
+        assert_eq!(
+            call.edited_files,
+            vec!["src/main.rs", "src/tail.rs"],
+            "file lists union and re-dedup"
+        );
+        assert_eq!(
+            call.response_chars,
+            Some(4096 + 100),
+            "prefix and tail response chars sum"
+        );
+        assert!(call.is_canceled, "a tail-observed interruption sticks");
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn sync_persists_and_replays_adapter_cursors() {
+        let paths = temp_paths("sync-cursor");
+        let mut archive = Archive::open(&paths).unwrap();
+        let source = fake_source(paths.dir.join("source.jsonl"));
+        let seen_cursor = Arc::new(std::sync::Mutex::new(None::<Option<String>>));
+
+        struct CursorAdapter {
+            source: SessionSource,
+            fingerprint: String,
+            emit_cursor: String,
+            resumed_files: usize,
+            seen_cursor: Arc<std::sync::Mutex<Option<Option<String>>>>,
+        }
+        impl ToolAdapter for CursorAdapter {
+            fn id(&self) -> &'static str {
+                self.source.tool
+            }
+            fn display_name(&self) -> &'static str {
+                "Cursor Fake"
+            }
+            fn discover(&self) -> Result<Vec<SessionSource>> {
+                Ok(vec![self.source.clone()])
+            }
+            fn parse(
+                &self,
+                _source: &SessionSource,
+                _seen: &mut HashSet<String>,
+            ) -> Result<Vec<ParsedCall>> {
+                Ok(Vec::new())
+            }
+            fn parse_with_cursor(
+                &self,
+                _source: &SessionSource,
+                _seen: &mut HashSet<String>,
+                cursor: Option<&str>,
+            ) -> Result<crate::tools::AdapterParse> {
+                *self.seen_cursor.lock().unwrap() = Some(cursor.map(str::to_string));
+                Ok(crate::tools::AdapterParse {
+                    calls: Vec::new(),
+                    cursor: Some(self.emit_cursor.clone()),
+                    resumed_files: self.resumed_files,
+                })
+            }
+            fn source_fingerprint(&self, _source: &SessionSource) -> Result<String> {
+                Ok(self.fingerprint.clone())
+            }
+        }
+
+        let adapter: Box<dyn ToolAdapter> = Box::new(CursorAdapter {
+            source: source.clone(),
+            fingerprint: "v1".into(),
+            emit_cursor: "cursor-1".into(),
+            resumed_files: 0,
+            seen_cursor: seen_cursor.clone(),
+        });
+        let stats = archive.sync_with_adapters(&[adapter]).unwrap();
+        assert_eq!(stats.files_resumed, 0);
+        assert_eq!(
+            seen_cursor.lock().unwrap().clone(),
+            Some(None),
+            "first sync has no stored cursor"
+        );
+
+        let adapter: Box<dyn ToolAdapter> = Box::new(CursorAdapter {
+            source,
+            fingerprint: "v2".into(),
+            emit_cursor: "cursor-2".into(),
+            resumed_files: 3,
+            seen_cursor: seen_cursor.clone(),
+        });
+        let stats = archive.sync_with_adapters(&[adapter]).unwrap();
+        assert_eq!(stats.files_resumed, 3);
+        assert_eq!(
+            seen_cursor.lock().unwrap().clone(),
+            Some(Some("cursor-1".into())),
+            "second sync replays the cursor persisted by the first"
+        );
         let _ = fs::remove_dir_all(paths.dir);
     }
 

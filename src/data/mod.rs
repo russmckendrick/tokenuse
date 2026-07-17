@@ -41,6 +41,18 @@ pub struct ToolLimitSection {
     pub limits: Vec<LimitMetric>,
     pub usage: RecentUsageMetric,
     pub models: Vec<RecentModelMetric>,
+    pub plan_value: Option<PlanValueMetric>,
+}
+
+/// API-equivalent calendar-month spend against the tool's subscription
+/// price: what this month's tokens would have cost at API rates versus what
+/// the plan actually costs. Present only when a price is known (configured
+/// in `UserConfig::plan_prices` or derived from a detected plan SKU).
+#[derive(Debug, Clone, Serialize)]
+pub struct PlanValueMetric {
+    pub price: &'static str,
+    pub month_cost: &'static str,
+    pub multiple: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -130,6 +142,9 @@ pub struct ProjectToolMetric {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SessionMetric {
+    /// Drill-down key accepted by `session_detail`; empty when the session
+    /// cannot be resolved (a row is then display-only).
+    pub key: &'static str,
     pub date: &'static str,
     pub project: &'static str,
     pub cost: &'static str,
@@ -416,6 +431,37 @@ pub struct ProjectOption {
     pub calls: u64,
 }
 
+/// One tool's slice of a project's spend, with numeric magnitudes so charts
+/// can draw proportions without re-parsing formatted currency strings.
+#[derive(Debug, Clone, Serialize)]
+pub struct ProjectToolSplit {
+    /// Tool id ("claude-code") for chart colors; `label` is the display name.
+    pub key: &'static str,
+    pub label: &'static str,
+    pub cost: String,
+    pub avg_per_session: String,
+    pub calls: u64,
+    pub sessions: u64,
+    /// Currency-invariant magnitudes used only for chart proportions.
+    pub cost_value: f64,
+    pub avg_value: f64,
+}
+
+/// One row of the full Projects index page: every project in scope, uncapped,
+/// with the normalized identity retained for the drill-down route.
+#[derive(Debug, Clone, Serialize)]
+pub struct ProjectIndexRow {
+    pub identity: String,
+    pub name: String,
+    pub cost: String,
+    pub avg_per_session: String,
+    pub sessions: u64,
+    pub calls: u64,
+    pub last_active: String,
+    pub tool_mix: String,
+    pub value: u64,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct SessionOption {
     pub key: String,
@@ -504,6 +550,15 @@ struct WireToolLimitSection {
     limits: Vec<WireLimitMetric>,
     usage: WireRecentUsageMetric,
     models: Vec<WireRecentModelMetric>,
+    #[serde(default)]
+    plan_value: Option<WirePlanValueMetric>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WirePlanValueMetric {
+    price: String,
+    month_cost: String,
+    multiple: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -902,6 +957,17 @@ impl From<WireToolLimitSection> for ToolLimitSection {
             limits: wire.limits.into_iter().map(Into::into).collect(),
             usage: wire.usage.into(),
             models: wire.models.into_iter().map(Into::into).collect(),
+            plan_value: wire.plan_value.map(Into::into),
+        }
+    }
+}
+
+impl From<WirePlanValueMetric> for PlanValueMetric {
+    fn from(wire: WirePlanValueMetric) -> Self {
+        Self {
+            price: leak(wire.price),
+            month_cost: leak(wire.month_cost),
+            multiple: leak(wire.multiple),
         }
     }
 }
@@ -1023,6 +1089,7 @@ impl From<WireProjectToolMetric> for ProjectToolMetric {
 impl From<WireSessionMetric> for SessionMetric {
     fn from(wire: WireSessionMetric) -> Self {
         Self {
+            key: "",
             date: leak(wire.date),
             project: leak(wire.project),
             cost: leak(wire.cost),
@@ -1218,6 +1285,12 @@ pub fn dashboard_data(
     apply_sample_sort(&mut data, sort);
     apply_currency(&mut data, currency);
 
+    // Keys must line up with `session_options`, which enumerates this same
+    // sorted list to mint its `sample:{idx}` picker keys.
+    for (idx, session) in data.sessions.iter_mut().enumerate() {
+        session.key = leak(format!("sample:{idx}"));
+    }
+
     data
 }
 
@@ -1249,6 +1322,100 @@ pub fn project_options(
     }));
 
     options
+}
+
+/// Sample-mode per-tool split for one project, derived from the sample
+/// dashboard's project/tool rows; numeric magnitudes are recovered from the
+/// formatted money strings, which is fine for demo proportions.
+pub fn project_tool_split(
+    period: Period,
+    project: &str,
+    currency: &CurrencyFormatter,
+) -> Vec<ProjectToolSplit> {
+    fn money_value(text: &str) -> f64 {
+        text.chars()
+            .filter(|c| c.is_ascii_digit() || *c == '.')
+            .collect::<String>()
+            .parse()
+            .unwrap_or(0.0)
+    }
+    fn tool_key(label: &str) -> &'static str {
+        match label {
+            "Claude" => "claude-code",
+            "Cursor" => "cursor",
+            "Codex" => "codex",
+            "Copilot" => "copilot",
+            "Gemini" => "gemini",
+            _ => "",
+        }
+    }
+
+    let data = dashboard_data(
+        period,
+        Tool::All,
+        &ProjectFilter::All,
+        SortMode::Spend,
+        currency,
+    );
+    data.project_tools
+        .iter()
+        .filter(|row| row.project == project)
+        .map(|row| {
+            let cost_value = money_value(row.cost);
+            ProjectToolSplit {
+                key: tool_key(row.tool),
+                label: row.tool,
+                cost: row.cost.into(),
+                avg_per_session: row.avg_per_session.into(),
+                calls: row.calls,
+                sessions: row.sessions,
+                cost_value,
+                avg_value: cost_value / row.sessions.max(1) as f64,
+            }
+        })
+        .collect()
+}
+
+/// Sample-mode Projects index: derived from the sample dashboard, with the
+/// label doubling as the identity and last-active dates taken from the
+/// sample session rows.
+pub fn project_index(
+    period: Period,
+    tool: Tool,
+    sort: SortMode,
+    currency: &CurrencyFormatter,
+) -> Vec<ProjectIndexRow> {
+    let data = dashboard_data(period, tool, &ProjectFilter::All, sort, currency);
+    data.projects
+        .iter()
+        .map(|project| {
+            let calls = data
+                .project_tools
+                .iter()
+                .filter(|row| row.project == project.name)
+                .map(|row| row.calls)
+                .sum();
+            let last_active = data
+                .sessions
+                .iter()
+                .filter(|session| session.project == project.name)
+                .map(|session| session.date)
+                .max()
+                .unwrap_or("-")
+                .to_string();
+            ProjectIndexRow {
+                identity: project.name.into(),
+                name: project.name.into(),
+                cost: project.cost.into(),
+                avg_per_session: project.avg_per_session.into(),
+                sessions: project.sessions,
+                calls,
+                last_active,
+                tool_mix: project.tool_mix.into(),
+                value: project.value,
+            }
+        })
+        .collect()
 }
 
 pub fn session_options(
@@ -1456,6 +1623,10 @@ fn apply_limits_currency(data: &mut LimitsData, currency: &CurrencyFormatter) {
         section.usage.cost = convert_money_text(section.usage.cost, currency, false);
         for model in &mut section.models {
             model.cost = convert_money_text(model.cost, currency, false);
+        }
+        if let Some(plan_value) = &mut section.plan_value {
+            plan_value.price = convert_money_text(plan_value.price, currency, false);
+            plan_value.month_cost = convert_money_text(plan_value.month_cost, currency, false);
         }
     }
 }

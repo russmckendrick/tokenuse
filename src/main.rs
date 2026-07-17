@@ -19,7 +19,7 @@ use tokenuse::{
     archive,
     config::ConfigPaths,
     copy::{copy, template},
-    doctor, ingest, overview, runtime, ui,
+    doctor, ingest, mcp, overview, runtime, ui,
 };
 
 mod report_cli;
@@ -118,6 +118,10 @@ fn handle_subcommand() -> Result<Option<DashboardOptions>> {
             overview::run_overview(json)?;
             Ok(None)
         }
+        CliAction::Mcp { real_names } => {
+            mcp::run(real_names)?;
+            Ok(None)
+        }
         CliAction::SetClaudeCookie(value) => {
             set_subscription_cookie(SubscriptionCookie::Claude, &value)?;
             Ok(None)
@@ -149,6 +153,7 @@ enum CliAction {
     Doctor { json: bool },
     Status { json: bool },
     Overview { json: bool },
+    Mcp { real_names: bool },
     SetClaudeCookie(String),
     ClearClaudeCookie,
     SetCodexCookie(String),
@@ -214,6 +219,15 @@ fn cli_action(args: &[String]) -> CliAction {
         }
         return CliAction::Overview {
             json: args.iter().skip(1).any(|arg| arg == "--json"),
+        };
+    }
+
+    if args.first().is_some_and(|arg| arg == "mcp") {
+        if args.iter().skip(1).any(|arg| is_help_arg(arg)) {
+            return CliAction::Help;
+        }
+        return CliAction::Mcp {
+            real_names: args.iter().skip(1).any(|arg| arg == "--real-names"),
         };
     }
 
@@ -327,12 +341,15 @@ fn print_help() {
     {name} doctor [--json]
     {name} status [--json]
     {name} overview [--json]
+    {name} mcp [--real-names]
 
 {commands}
     report                         {report_command}
     doctor                         {doctor_command}
     status                         {status_command}
     overview                       {overview_command}
+    mcp                            {mcp_command}
+        --real-names               {real_names_flag}
 
 {flags}
     -h, --help                     {help_flag}
@@ -353,6 +370,8 @@ fn print_help() {
         doctor_command = copy.cli.doctor_command,
         status_command = copy.cli.status_command,
         overview_command = copy.cli.overview_command,
+        mcp_command = copy.cli.mcp_command,
+        real_names_flag = copy.cli.real_names_flag,
         help_flag = copy.cli.help_flag,
         version_flag = copy.cli.version_flag,
         sample_flag = copy.cli.sample_flag,
@@ -591,6 +610,19 @@ mod tests {
             cli_action(&[]),
             CliAction::Dashboard(DashboardOptions { sample: false })
         );
+    }
+
+    #[test]
+    fn mcp_command_routes_to_stdio_server() {
+        assert_eq!(
+            cli_action(&args(&["mcp"])),
+            CliAction::Mcp { real_names: false }
+        );
+        assert_eq!(
+            cli_action(&args(&["mcp", "--real-names"])),
+            CliAction::Mcp { real_names: true }
+        );
+        assert_eq!(cli_action(&args(&["mcp", "--help"])), CliAction::Help);
     }
 
     #[test]

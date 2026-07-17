@@ -21,6 +21,380 @@
     "configuration": "Configuration",
     "session": "Session"
   },
+  "coach": {
+    "report": {
+      "overall": "Overall grade",
+      "grade_labels": {
+        "a": "A",
+        "a_plus": "A+",
+        "b": "B",
+        "b_plus": "B+",
+        "c": "C",
+        "d": "D",
+        "f": "F"
+      }
+    },
+    "hero": {
+      "rules_clean": "Rules clean",
+      "findings": "Findings",
+      "high_severity": "{count} high severity",
+      "streak": "Day streak",
+      "total_loc": "AI code output"
+    },
+    "tips": {
+      "title": "Top tips"
+    },
+    "tabs": {
+      "label": "Coach views",
+      "report": "Report",
+      "findings": "Findings",
+      "output": "AI Output",
+      "activity": "Activity"
+    },
+    "groups": {
+      "prompt_quality": "Prompt Quality",
+      "session_hygiene": "Session Hygiene",
+      "code_review": "Code Review",
+      "tool_mastery": "Tool Mastery"
+    },
+    "score": {
+      "wow": "WoW",
+      "mom": "MoM",
+      "rules_triggered": "{count}/{total} rules triggered",
+      "top_issue": "Top issue",
+      "clean": "No issues detected",
+      "trend": "Weekly trend"
+    },
+    "findings": {
+      "title": "Findings",
+      "priority": "Priority findings",
+      "all": "All findings",
+      "high": "High severity",
+      "medium": "Medium severity",
+      "affected_practices": "Practices affected",
+      "total_occurrences": "Total occurrences",
+      "empty": "No anti-patterns detected in this period.",
+      "occurrences": "{count}×",
+      "improve": "How to improve",
+      "examples": "Examples",
+      "more_examples": "+{count} more examples",
+      "filter_label": "Filter findings by severity",
+      "selected": "Selected finding",
+      "occurrences_label": "Occurrences",
+      "sample_size": "Signals checked",
+      "trigger_rate": "Trigger rate",
+      "evidence_count": "Evidence samples",
+      "why_it_matters": "Why it matters",
+      "no_examples": "No representative examples were captured for this signal.",
+      "severity": {
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low"
+      }
+    },
+    "setup": {
+      "heading": "Setup",
+      "subtitle": "Advisory findings from your local Claude Code configuration and read patterns. Estimates are heuristics; these never move your grade.",
+      "savings": "~{tokens} tokens",
+      "empty": "No setup waste detected.",
+      "unused_mcp_title": "{count} configured MCP servers never invoked",
+      "unused_mcp_detail": "{names} — every session pays for their tool schemas; remove them or scope them to the projects that use them",
+      "claude_md_title": "CLAUDE.md over {threshold} lines after imports",
+      "claude_md_detail": "{files} — long instruction files ride into every session's context",
+      "rereads_title": "{count} repeated file reads inside sessions",
+      "rereads_detail": "The same files are read again and again within a session; keeping stable facts in CLAUDE.md or asking for a summary once avoids the re-reads",
+      "junk_title": "{count} file reads inside build or dependency directories",
+      "junk_detail": "{dirs} — reads under dependency and build output directories burn context on generated files"
+    },
+    "flow": {
+      "title": "Flow",
+      "labels": {
+        "deep": "Deep",
+        "moderate": "Moderate",
+        "shallow": "Shallow",
+        "fragmented": "Fragmented"
+      },
+      "avg_followup": "Avg follow-up",
+      "avg_block": "Avg longest block",
+      "deep_days": "Deep-flow days",
+      "fragmented_days": "Fragmented days",
+      "trend": "Recent flow",
+      "chart_aria": "Daily flow scores",
+      "day_detail": "{score} flow · {sessions} sessions · {active} min active · {block} min longest block",
+      "empty": "Not enough timestamped sessions to score flow."
+    },
+    "pace": {
+      "title": "Pace",
+      "streak": "Current streak",
+      "longest_streak": "Longest streak",
+      "late_night": "Late-night share",
+      "weekend": "Weekend share",
+      "risk": "Burnout risk",
+      "days_suffix": "days",
+      "risks": {
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low"
+      },
+      "alerts": {
+        "long_streak": "14+ consecutive active days without a break",
+        "late_night_rising": "Late-night activity is trending up",
+        "weekend_rising": "Weekend activity is trending up",
+        "late_night_heavy": "A heavy share of activity lands after 22:00",
+        "weekend_heavy": "A heavy share of activity lands on weekends"
+      }
+    },
+    "timeline": {
+      "title": "Activity Explorer",
+      "views_label": "Activity views",
+      "work_hours": "Work Hours",
+      "calendar_view": "Calendar",
+      "projects_view": "Projects",
+      "patterns_title": "Activity Patterns",
+      "hourly_profile": "Hourly Activity",
+      "period_trend": "Period Trend",
+      "weekdays": "Weekday",
+      "weekends": "Weekend",
+      "loading_patterns": "Loading activity patterns...",
+      "projects_title": "Project Activity",
+      "ai_loc": "AI LoC",
+      "no_projects": "No project activity in this period.",
+      "est_hours": "Est. Hours",
+      "hot_files": "Hot files",
+      "pattern_mostly_weekdays": "mostly weekdays",
+      "pattern_mostly_weekends": "mostly weekends",
+      "pattern_mixed_days": "weekends + weekdays",
+      "pattern_mornings": "mornings",
+      "pattern_afternoons": "afternoons",
+      "pattern_evenings": "evenings",
+      "pattern_late_nights": "late nights",
+      "pattern_combo": "{days}, {time}",
+      "day": "Day",
+      "calendar": "Activity calendar",
+      "less": "Less",
+      "more": "More",
+      "overlap": "{count} in parallel",
+      "sessions": "{count} sessions",
+      "turns": "{count} turns",
+      "turns_header": "Turns",
+      "bars_label": "Turns per day",
+      "average_label": "7-day average",
+      "calendar_hint": "Each bar is one day's turns; dimmed bars sit outside the selected period. Choose a day, then select a session to inspect its requests.",
+      "session_activity": "Session activity",
+      "session_hint": "Each row is one working session; gaps in its track show interruptions. Select a row to inspect its requests.",
+      "selected_call": "Selected call",
+      "no_tools": "No tools recorded",
+      "loading": "Loading session activity...",
+      "empty": "No sessions recorded for this day."
+    },
+    "output": {
+      "title": "AI Code Output",
+      "total": "Total AI LoC",
+      "active_days": "Active output days",
+      "daily_average": "Average per active day",
+      "peak_day": "Peak output day",
+      "top_language": "Top language",
+      "top_model": "Top model",
+      "share": "{share} of output",
+      "languages": "Languages",
+      "models": "Models",
+      "projects": "Projects",
+      "breakdown": "Output breakdown",
+      "selected": "Selected",
+      "daily_hint": "Generated lines of code across the selected period.",
+      "daily_output": "Daily output",
+      "moving_average": "3-day average",
+      "day_detail": "{day} · {lines} lines · {average} rolling average",
+      "by_half_hour": "By half hour",
+      "half_hour_hint": "Generated lines of code in 30-minute buckets across the selected period.",
+      "half_hour_output": "30-minute output",
+      "half_hour_average": "90-minute average",
+      "by_hour": "By hour",
+      "hourly_hint": "Generated lines of code in hourly buckets across the selected period.",
+      "hourly_output": "Hourly output",
+      "hourly_average": "3-hour average",
+      "by_month": "By month",
+      "monthly_hint": "Generated lines of code by month across the full recorded history.",
+      "monthly_output": "Monthly output",
+      "monthly_average": "3-month average",
+      "by_language": "By language",
+      "by_day": "By day",
+      "by_project": "By project",
+      "by_model": "By model",
+      "coverage_note": "No code-output signal from: {tools}",
+      "empty": "No AI code output detected in this period."
+    },
+    "rules": {
+      "abandon-sessions": {
+        "name": "Abandoned Sessions",
+        "description": "Single-message sessions leave refinement on the table.",
+        "when_triggered": "{count} sessions ({pct}) ended after a single turn.",
+        "how_to_improve": "Iterate with follow-ups - refining a response beats one-shot prompting."
+      },
+      "broken-flow-state": {
+        "name": "Broken Flow State",
+        "description": "Fragmented days with scattered prompts point to context switches and interruptions.",
+        "when_triggered": "{count} of {total} active days ({pct}) show fragmented flow (avg score {stat}).",
+        "how_to_improve": "Protect 2+ hour blocks, silence notifications, and pre-plan the next prompt while the agent works."
+      },
+      "cache-hit-starvation": {
+        "name": "Prompt Cache Starvation",
+        "description": "Long prompts that miss the cache pay full price for context the model has already seen.",
+        "when_triggered": "{count} long-prompt turns served only {stat} of input from cache.",
+        "how_to_improve": "Keep prompt prefixes stable: short stable instructions, file references over pasted code, fewer mid-task resets."
+      },
+      "caps-lock": {
+        "name": "Caps Lock Rage",
+        "description": "Messages written almost entirely in capitals signal frustration, not intent.",
+        "when_triggered": "{count} prompts were written mostly in CAPS.",
+        "how_to_improve": "Step away, take a breath, then return with a calm, structured prompt."
+      },
+      "copy-paste-blindness": {
+        "name": "Copy-Paste Blindness",
+        "description": "Large AI output accepted without any follow-up usually means it shipped unreviewed.",
+        "when_triggered": "{count} sessions produced 50+ AI LoC with no refinement afterwards.",
+        "how_to_improve": "Review generated code before accepting - ask follow-ups, test, and adjust."
+      },
+      "excessive-file-context": {
+        "name": "Excessive File Context",
+        "description": "Bulk-attaching files pays for context the model mostly never reads.",
+        "when_triggered": "{count} turns referenced 30+ files (largest: {stat}).",
+        "how_to_improve": "Attach the 3-5 most relevant files and let the agent search for the rest on demand."
+      },
+      "frustration-signals": {
+        "name": "Frustration Signals",
+        "description": "Excessive punctuation or shouting usually means the current approach is not working.",
+        "when_triggered": "{count} prompts show frustration indicators (!!!, ???, ALL CAPS).",
+        "how_to_improve": "Change strategy instead of escalating: start a fresh session, rephrase, or split the problem."
+      },
+      "high-cancellation": {
+        "name": "Excessive Cancellations",
+        "description": "Frequent interrupts waste quota and usually mean unclear prompting.",
+        "when_triggered": "{count} of {total} turns ({pct}) were interrupted.",
+        "how_to_improve": "Write clearer, more specific prompts, and let responses finish before redirecting."
+      },
+      "late-night-coding": {
+        "name": "Late-Night Coding",
+        "description": "Late-night work correlates with more bugs and lower-quality output.",
+        "when_triggered": "{count} turns happened between midnight and 5am.",
+        "how_to_improve": "Consider healthier working hours; quality drops sharply when fatigued."
+      },
+      "lazy-prompting": {
+        "name": "Lazy Prompting",
+        "description": "Very short prompts rarely give the model enough context to produce quality results.",
+        "when_triggered": "{count} prompts ({pct}) are under 30 characters.",
+        "how_to_improve": "Describe the intent, constraints, and expected output instead of one-liners."
+      },
+      "low-constraint-usage": {
+        "name": "Low Constraint Usage",
+        "description": "Constraints narrow the output space and produce higher-quality code.",
+        "when_triggered": "Only {pct} of substantial prompts include constraint language ({stat} of {total}).",
+        "how_to_improve": "Add explicit constraints: \"do not touch the public API\", \"only use std\", \"limit to 50 lines\"."
+      },
+      "mcp-tool-bloat": {
+        "name": "Tool / MCP Bloat",
+        "description": "Very large active toolsets add silent context overhead to every prompt.",
+        "when_triggered": "{count} sessions invoked 40+ distinct tools (largest: {stat}).",
+        "how_to_improve": "Trim rarely-used MCP servers and scope toolsets per project."
+      },
+      "mega-sessions": {
+        "name": "Mega Sessions",
+        "description": "Very long sessions degrade context quality and response accuracy.",
+        "when_triggered": "{count} sessions ran to 50+ turns (largest: {stat}).",
+        "how_to_improve": "Start new sessions periodically; break large tasks into focused conversations."
+      },
+      "model-overreliance": {
+        "name": "Model Overreliance",
+        "description": "One model for everything means overpaying for simple tasks.",
+        "when_triggered": "{pct} of turns use {stat}.",
+        "how_to_improve": "Route lighter tasks to cheaper models and keep premium models for real reasoning."
+      },
+      "no-language-exploration": {
+        "name": "No Language Exploration",
+        "description": "AI dramatically lowers the cost of trying a new language - unused, that advantage lapses.",
+        "when_triggered": "No new language in {count} weeks ({stat} languages seen overall).",
+        "how_to_improve": "Ask for something small in a language you have never used - the barrier has never been lower."
+      },
+      "premium-waste": {
+        "name": "Premium Model Waste",
+        "description": "Short lookup-style questions rarely benefit from premium-priced models.",
+        "when_triggered": "{count} trivial or lookup-style turns ran on premium models.",
+        "how_to_improve": "Send quick questions to lighter models; reserve premium models for complex generation."
+      },
+      "reasoning-effort-overuse": {
+        "name": "Reasoning Effort Overuse",
+        "description": "High or max reasoning effort bills extra thinking tokens even when the task does not need them.",
+        "when_triggered": "{count} of {total} effort-tagged turns ({pct}) ran at high or max effort.",
+        "how_to_improve": "Default to medium effort and escalate only for genuinely hard problems."
+      },
+      "repeated-prompts": {
+        "name": "Repeated Prompts",
+        "description": "Near-duplicate prompts spend tokens without producing new results.",
+        "when_triggered": "{count} prompts are near-duplicates across {stat} distinct messages.",
+        "how_to_improve": "If a prompt did not work, rephrase it or add context rather than retrying it verbatim."
+      },
+      "retry-loops": {
+        "name": "Retry Loops",
+        "description": "The same file is edited again after a shell run — the first change didn't survive its own verification.",
+        "when_triggered": "{count} of {total} edited files needed a shell-verified re-edit ({pct}), {stat} retry rounds in total.",
+        "how_to_improve": "High retry shares usually mean the first prompt under-specified the change. Paste the failing test or error output up front, ask for the fix and its verification together, and prefer smaller testable steps."
+      },
+      "runaway-agent-loops": {
+        "name": "Runaway Agent Loops",
+        "description": "Turns with an extreme number of tool calls suggest the agent is spinning on a failing approach.",
+        "when_triggered": "{count} turns used 40+ tool calls each (avg {stat}).",
+        "how_to_improve": "If the agent loops, interrupt and rephrase with clearer constraints or a smaller scope."
+      },
+      "session-drift": {
+        "name": "Session Drift",
+        "description": "Sessions that mix many task types muddy the context window.",
+        "when_triggered": "{count} sessions cover four or more different work types.",
+        "how_to_improve": "Start a new session when switching task type - focused sessions get better responses."
+      },
+      "slow-responses": {
+        "name": "Slow Responses",
+        "description": "Consistently slow turns often mean overly broad prompts.",
+        "when_triggered": "{count} turns took over 5 minutes (avg {stat}s).",
+        "how_to_improve": "Break complex asks into smaller, focused requests."
+      },
+      "speed-accept": {
+        "name": "Speed Accept",
+        "description": "Moving on within seconds of receiving a large diff is not a review.",
+        "when_triggered": "{count} times the next message came within 15s of 20+ lines of AI code (avg {stat}).",
+        "how_to_improve": "Read the code: correctness, security, and edge cases deserve more than a glance."
+      },
+      "tunnel-vision": {
+        "name": "Single-Project Tunnel Vision",
+        "description": "AI assistance concentrated in one project leaves the rest of your workflow unassisted.",
+        "when_triggered": "{pct} of turns ({count}/{total}) are in {stat}.",
+        "how_to_improve": "Use the assistant across other projects too: docs, tests, DevOps, exploration."
+      },
+      "verbose-output": {
+        "name": "Verbose Model Output",
+        "description": "Huge answers to tiny prompts burn output tokens without proportional value.",
+        "when_triggered": "{count} turns ({pct}) produced 5K+ output tokens from prompts under 200 characters.",
+        "how_to_improve": "Ask for concise answers or set an output format; add output constraints for routine tasks."
+      },
+      "verbose-prompt-no-compression": {
+        "name": "Verbose Prompts",
+        "description": "Long, filler-heavy prompts inflate input tokens on every turn.",
+        "when_triggered": "{count} prompts ({pct}) are 800+ characters with two or more filler words.",
+        "how_to_improve": "Be terse and structured: bullet points beat paragraphs, and pleasantries cost tokens."
+      },
+      "vibe-coding": {
+        "name": "Vibe Coding",
+        "description": "High AI output from a handful of vague prompts creates knowledge debt.",
+        "when_triggered": "{count} sessions generated {stat}+ AI LoC from five or fewer unstructured prompts.",
+        "how_to_improve": "Write a small spec first and review output line by line - velocity without understanding is debt."
+      },
+      "weekend-overwork": {
+        "name": "Weekend Overwork",
+        "description": "A high weekend share may indicate work-life balance issues.",
+        "when_triggered": "{count} turns ({pct}) happened on weekends.",
+        "how_to_improve": "Keep boundaries between work and personal time - sustained overwork leads to burnout."
+      }
+    }
+  },
   "periods": {
     "today": "24 Hours",
     "week": "7 Days",
@@ -98,7 +472,8 @@
     "local_data": "Local Data",
     "local_files": "Local Files",
     "money_and_data": "Money & Data",
-    "tool_integrations": "Tool Integrations"
+    "tool_integrations": "Tool Integrations",
+    "plan_value": "Plan Value"
   },
   "tables": {
     "blank": "",
@@ -124,6 +499,7 @@
     "prompt": "Prompt",
     "activity": "Activity",
     "tool_mix": "Tool Mix",
+    "last_active": "Last Active",
     "cache_hit": "Cache Hit",
     "setting": "Setting",
     "value": "Value",
@@ -176,7 +552,10 @@
     "additional_disabled": "Additional disabled",
     "stale": "stale",
     "stale_as_of": "as of {date}",
-    "org_managed_credits": "AI Credits · managed by your organization"
+    "org_managed_credits": "AI Credits · managed by your organization",
+    "plan_value": "Plan value",
+    "plan_value_line": "{month_cost} this month vs {price} plan · {multiple}",
+    "open_tool": "Open {tool}"
   },
   "config": {
     "rows": {
@@ -231,7 +610,8 @@
       "quota_snapshot_missing": "No local quota snapshot",
       "delete_archive_then_rebuild": "Delete archive.db, then rebuild",
       "build_archive_from_history": "Build archive.db from local history",
-      "fallback_priced_models": "fallback pricing in use for {models} — add a pricing alias or override so their cost is real"
+      "fallback_priced_models": "fallback pricing in use for {models} — add a pricing alias or override so their cost is real",
+      "mcp_hint": "tokenuse mcp · stdio · projects pseudonymised"
     },
     "paths": {
       "config_dir": "Config dir",
@@ -241,6 +621,7 @@
       "pricing_data": "Pricing data",
       "claude_limits": "Claude limits",
       "copilot_limits": "Copilot limits",
+      "mcp_server": "MCP server",
       "rates_source": "Rates source"
     },
     "links": {
@@ -424,8 +805,6 @@
     "filter_projects": "Filter projects",
     "filter_sessions": "Filter sessions",
     "filter_currencies": "Filter currencies",
-    "rank": "Rank",
-    "session_rank": "Session rank",
     "model_usage": "Model usage",
     "loading_label": "Loading Token Use",
     "nav_aria": "Primary navigation",
@@ -437,11 +816,15 @@
     "per_tool_split": "Per-tool split",
     "hour_heatmap": "Activity by hour",
     "daily_by_tool": "Daily spend by tool",
+    "hourly_by_tool": "Hourly spend by tool",
     "spend_share": "Spend share",
     "top_projects": "Top projects",
     "top_models": "Top models",
+    "project_sources": "Sources",
     "sessions_for": "Sessions",
-    "call_detail_hint": "Select a session to inspect its calls"
+    "call_detail_hint": "Select a session to inspect its calls",
+    "plan_prices_hint": "Monthly subscription price in USD. Powers the plan-value line on Usage consoles — clear the field for tools you pay per use.",
+    "plan_price_placeholder": "USD / month"
   },
   "updates": {
     "title": "Updates",
@@ -496,7 +879,15 @@
     "project": "Project",
     "sort": "Sort",
     "date_range": "Date range",
-    "calendar_weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "calendar_weekdays": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat",
+      "Sun"
+    ],
     "csv_files": {
       "summary_file": "summary.csv",
       "daily_file": "daily.csv",
@@ -574,28 +965,37 @@
     "generate_currency_requires_feature": "--generate-currency-json requires the refresh-currency feature",
     "doctor_command": "Diagnose per-tool data discovery and parsing",
     "status_command": "Print one line with 24-hour and month totals",
-    "overview_command": "Print a copy-pasteable summary of this month"
+    "overview_command": "Print a copy-pasteable summary of this month",
+    "mcp_command": "Run a read-only MCP stdio server for LLM clients",
+    "real_names_flag": "Expose real project names over MCP (default: pseudonymised)"
   },
   "overview": {
     "status_line": "24h {today_cost} ({today_calls} calls, {today_sessions} sessions) | month {month_cost} ({month_calls} calls, {month_sessions} sessions)",
     "totals_heading": "Totals",
     "by_tool_heading": "By Tool"
   },
+  "mcp": {
+    "instructions": "Read-only usage summaries for local AI coding tools, computed from local session logs. Costs are API-equivalent prices; no data leaves this machine. Project names are pseudonymised unless the server was started with --real-names.",
+    "tool_status": "Today's and this month's usage totals: cost, calls, sessions, and token counts",
+    "tool_overview": "This month's usage: totals, per-tool breakdown, activity categories, models, and daily trend",
+    "tool_projects": "This month's per-project spend; project names are pseudonymised by default",
+    "unknown_tool": "Unknown tool: {name}"
+  },
   "categories": {
-    "coding": "Coding",
-    "debugging": "Debugging",
-    "feature": "Feature Dev",
-    "refactoring": "Refactoring",
-    "testing": "Testing",
-    "exploration": "Exploration",
-    "planning": "Planning",
-    "delegation": "Delegation",
-    "git": "Git Ops",
-    "build_deploy": "Build & Deploy",
     "brainstorming": "Brainstorming",
+    "build_deploy": "Build & Deploy",
+    "coding": "Coding",
     "conversation": "Conversation",
+    "debugging": "Debugging",
+    "delegation": "Delegation",
+    "exploration": "Exploration",
+    "feature": "Feature Dev",
     "general": "General",
-    "heading": "By Activity"
+    "git": "Git Ops",
+    "heading": "By Activity",
+    "planning": "Planning",
+    "refactoring": "Refactoring",
+    "testing": "Testing"
   },
   "doctor": {
     "panel_title": "Data Sources",
@@ -616,552 +1016,486 @@
     "detail_no_roots": "no probed location exists; the tool is likely not installed",
     "detail_roots_empty": "locations exist but no session or limit data was found"
   },
-  "coach": {
-    "report": {
-      "overall": "Overall grade",
-      "grade_labels": {
-        "a_plus": "A+",
-        "a": "A",
-        "b_plus": "B+",
-        "b": "B",
-        "c": "C",
-        "d": "D",
-        "f": "F"
-      }
-    },
-    "hero": {
-      "rules_clean": "Rules clean",
-      "findings": "Findings",
-      "high_severity": "{count} high severity",
-      "streak": "Day streak",
-      "total_loc": "AI code output"
-    },
-    "tips": {
-      "title": "Top tips"
-    },
-    "tabs": {
-      "label": "Coach views",
-      "report": "Report",
-      "findings": "Findings",
-      "output": "AI Output",
-      "activity": "Activity"
-    },
-    "groups": {
-      "prompt_quality": "Prompt Quality",
-      "session_hygiene": "Session Hygiene",
-      "code_review": "Code Review",
-      "tool_mastery": "Tool Mastery"
-    },
-    "score": {
-      "wow": "WoW",
-      "mom": "MoM",
-      "rules_triggered": "{count}/{total} rules triggered",
-      "top_issue": "Top issue",
-      "clean": "No issues detected",
-      "trend": "Weekly trend"
-    },
-    "findings": {
-      "title": "Findings",
-      "priority": "Priority findings",
-      "all": "All findings",
-      "high": "High severity",
-      "medium": "Medium severity",
-      "affected_practices": "Practices affected",
-      "total_occurrences": "Total occurrences",
-      "empty": "No anti-patterns detected in this period.",
-      "occurrences": "{count}×",
-      "improve": "How to improve",
-      "examples": "Examples",
-      "more_examples": "+{count} more examples",
-      "filter_label": "Filter findings by severity",
-      "selected": "Selected finding",
-      "occurrences_label": "Occurrences",
-      "sample_size": "Signals checked",
-      "trigger_rate": "Trigger rate",
-      "evidence_count": "Evidence samples",
-      "why_it_matters": "Why it matters",
-      "no_examples": "No representative examples were captured for this signal.",
-      "severity": {
-        "high": "High",
-        "medium": "Medium",
-        "low": "Low"
-      }
-    },
-    "setup": {
-      "heading": "Setup",
-      "subtitle": "Advisory findings from your local Claude Code configuration and read patterns. Estimates are heuristics; these never move your grade.",
-      "savings": "~{tokens} tokens",
-      "empty": "No setup waste detected.",
-      "unused_mcp_title": "{count} configured MCP servers never invoked",
-      "unused_mcp_detail": "{names} — every session pays for their tool schemas; remove them or scope them to the projects that use them",
-      "claude_md_title": "CLAUDE.md over {threshold} lines after imports",
-      "claude_md_detail": "{files} — long instruction files ride into every session's context",
-      "rereads_title": "{count} repeated file reads inside sessions",
-      "rereads_detail": "The same files are read again and again within a session; keeping stable facts in CLAUDE.md or asking for a summary once avoids the re-reads",
-      "junk_title": "{count} file reads inside build or dependency directories",
-      "junk_detail": "{dirs} — reads under dependency and build output directories burn context on generated files"
-    },
-    "flow": {
-      "title": "Flow",
-      "labels": {
-        "deep": "Deep",
-        "moderate": "Moderate",
-        "shallow": "Shallow",
-        "fragmented": "Fragmented"
-      },
-      "avg_followup": "Avg follow-up",
-      "avg_block": "Avg longest block",
-      "deep_days": "Deep-flow days",
-      "fragmented_days": "Fragmented days",
-      "trend": "Recent flow",
-      "chart_aria": "Daily flow scores",
-      "day_detail": "{score} flow · {sessions} sessions · {active} min active · {block} min longest block",
-      "empty": "Not enough timestamped sessions to score flow."
-    },
-    "pace": {
-      "title": "Pace",
-      "streak": "Current streak",
-      "longest_streak": "Longest streak",
-      "late_night": "Late-night share",
-      "weekend": "Weekend share",
-      "risk": "Burnout risk",
-      "days_suffix": "days",
-      "risks": {
-        "low": "Low",
-        "medium": "Medium",
-        "high": "High"
-      },
-      "alerts": {
-        "long_streak": "14+ consecutive active days without a break",
-        "late_night_rising": "Late-night activity is trending up",
-        "weekend_rising": "Weekend activity is trending up",
-        "late_night_heavy": "A heavy share of activity lands after 22:00",
-        "weekend_heavy": "A heavy share of activity lands on weekends"
-      }
-    },
-    "timeline": {
-      "title": "Activity Explorer",
-      "views_label": "Activity views",
-      "work_hours": "Work Hours",
-      "calendar_view": "Calendar",
-      "projects_view": "Projects",
-      "patterns_title": "Activity Patterns",
-      "hourly_profile": "Hourly Activity",
-      "period_trend": "Period Trend",
-      "weekdays": "Weekday",
-      "weekends": "Weekend",
-      "loading_patterns": "Loading activity patterns...",
-      "projects_title": "Project Activity",
-      "ai_loc": "AI LoC",
-      "no_projects": "No project activity in this period.",
-      "est_hours": "Est. Hours",
-      "hot_files": "Hot files",
-      "pattern_mostly_weekdays": "mostly weekdays",
-      "pattern_mostly_weekends": "mostly weekends",
-      "pattern_mixed_days": "weekends + weekdays",
-      "pattern_mornings": "mornings",
-      "pattern_afternoons": "afternoons",
-      "pattern_evenings": "evenings",
-      "pattern_late_nights": "late nights",
-      "pattern_combo": "{days}, {time}",
-      "day": "Day",
-      "calendar": "Activity calendar",
-      "less": "Less",
-      "more": "More",
-      "overlap": "{count} in parallel",
-      "sessions": "{count} sessions",
-      "turns": "{count} turns",
-      "turns_header": "Turns",
-      "bars_label": "Turns per day",
-      "average_label": "7-day average",
-      "calendar_hint": "Each bar is one day's turns; dimmed bars sit outside the selected period. Choose a day, then select a session to inspect its requests.",
-      "session_activity": "Session activity",
-      "session_hint": "Each row is one working session; gaps in its track show interruptions. Select a row to inspect its requests.",
-      "selected_call": "Selected call",
-      "no_tools": "No tools recorded",
-      "loading": "Loading session activity...",
-      "empty": "No sessions recorded for this day."
-    },
-    "output": {
-      "title": "AI Code Output",
-      "total": "Total AI LoC",
-      "active_days": "Active output days",
-      "daily_average": "Average per active day",
-      "peak_day": "Peak output day",
-      "top_language": "Top language",
-      "top_model": "Top model",
-      "share": "{share} of output",
-      "languages": "Languages",
-      "models": "Models",
-      "projects": "Projects",
-      "breakdown": "Output breakdown",
-      "selected": "Selected",
-      "daily_hint": "Generated lines of code across the selected period.",
-      "daily_output": "Daily output",
-      "moving_average": "3-day average",
-      "day_detail": "{day} · {lines} lines · {average} rolling average",
-      "by_half_hour": "By half hour",
-      "half_hour_hint": "Generated lines of code in 30-minute buckets across the selected period.",
-      "half_hour_output": "30-minute output",
-      "half_hour_average": "90-minute average",
-      "by_hour": "By hour",
-      "hourly_hint": "Generated lines of code in hourly buckets across the selected period.",
-      "hourly_output": "Hourly output",
-      "hourly_average": "3-hour average",
-      "by_month": "By month",
-      "monthly_hint": "Generated lines of code by month across the full recorded history.",
-      "monthly_output": "Monthly output",
-      "monthly_average": "3-month average",
-      "by_language": "By language",
-      "by_day": "By day",
-      "by_project": "By project",
-      "by_model": "By model",
-      "coverage_note": "No code-output signal from: {tools}",
-      "empty": "No AI code output detected in this period."
-    },
-    "rules": {
-      "lazy-prompting": {
-        "name": "Lazy Prompting",
-        "description": "Very short prompts rarely give the model enough context to produce quality results.",
-        "when_triggered": "{count} prompts ({pct}) are under 30 characters.",
-        "how_to_improve": "Describe the intent, constraints, and expected output instead of one-liners."
-      },
-      "caps-lock": {
-        "name": "Caps Lock Rage",
-        "description": "Messages written almost entirely in capitals signal frustration, not intent.",
-        "when_triggered": "{count} prompts were written mostly in CAPS.",
-        "how_to_improve": "Step away, take a breath, then return with a calm, structured prompt."
-      },
-      "frustration-signals": {
-        "name": "Frustration Signals",
-        "description": "Excessive punctuation or shouting usually means the current approach is not working.",
-        "when_triggered": "{count} prompts show frustration indicators (!!!, ???, ALL CAPS).",
-        "how_to_improve": "Change strategy instead of escalating: start a fresh session, rephrase, or split the problem."
-      },
-      "repeated-prompts": {
-        "name": "Repeated Prompts",
-        "description": "Near-duplicate prompts spend tokens without producing new results.",
-        "when_triggered": "{count} prompts are near-duplicates across {stat} distinct messages.",
-        "how_to_improve": "If a prompt did not work, rephrase it or add context rather than retrying it verbatim."
-      },
-      "low-constraint-usage": {
-        "name": "Low Constraint Usage",
-        "description": "Constraints narrow the output space and produce higher-quality code.",
-        "when_triggered": "Only {pct} of substantial prompts include constraint language ({stat} of {total}).",
-        "how_to_improve": "Add explicit constraints: \"do not touch the public API\", \"only use std\", \"limit to 50 lines\"."
-      },
-      "verbose-output": {
-        "name": "Verbose Model Output",
-        "description": "Huge answers to tiny prompts burn output tokens without proportional value.",
-        "when_triggered": "{count} turns ({pct}) produced 5K+ output tokens from prompts under 200 characters.",
-        "how_to_improve": "Ask for concise answers or set an output format; add output constraints for routine tasks."
-      },
-      "verbose-prompt-no-compression": {
-        "name": "Verbose Prompts",
-        "description": "Long, filler-heavy prompts inflate input tokens on every turn.",
-        "when_triggered": "{count} prompts ({pct}) are 800+ characters with two or more filler words.",
-        "how_to_improve": "Be terse and structured: bullet points beat paragraphs, and pleasantries cost tokens."
-      },
-      "excessive-file-context": {
-        "name": "Excessive File Context",
-        "description": "Bulk-attaching files pays for context the model mostly never reads.",
-        "when_triggered": "{count} turns referenced 30+ files (largest: {stat}).",
-        "how_to_improve": "Attach the 3-5 most relevant files and let the agent search for the rest on demand."
-      },
-      "session-drift": {
-        "name": "Session Drift",
-        "description": "Sessions that mix many task types muddy the context window.",
-        "when_triggered": "{count} sessions cover four or more different work types.",
-        "how_to_improve": "Start a new session when switching task type - focused sessions get better responses."
-      },
-      "late-night-coding": {
-        "name": "Late-Night Coding",
-        "description": "Late-night work correlates with more bugs and lower-quality output.",
-        "when_triggered": "{count} turns happened between midnight and 5am.",
-        "how_to_improve": "Consider healthier working hours; quality drops sharply when fatigued."
-      },
-      "weekend-overwork": {
-        "name": "Weekend Overwork",
-        "description": "A high weekend share may indicate work-life balance issues.",
-        "when_triggered": "{count} turns ({pct}) happened on weekends.",
-        "how_to_improve": "Keep boundaries between work and personal time - sustained overwork leads to burnout."
-      },
-      "mega-sessions": {
-        "name": "Mega Sessions",
-        "description": "Very long sessions degrade context quality and response accuracy.",
-        "when_triggered": "{count} sessions ran to 50+ turns (largest: {stat}).",
-        "how_to_improve": "Start new sessions periodically; break large tasks into focused conversations."
-      },
-      "abandon-sessions": {
-        "name": "Abandoned Sessions",
-        "description": "Single-message sessions leave refinement on the table.",
-        "when_triggered": "{count} sessions ({pct}) ended after a single turn.",
-        "how_to_improve": "Iterate with follow-ups - refining a response beats one-shot prompting."
-      },
-      "high-cancellation": {
-        "name": "Excessive Cancellations",
-        "description": "Frequent interrupts waste quota and usually mean unclear prompting.",
-        "when_triggered": "{count} of {total} turns ({pct}) were interrupted.",
-        "how_to_improve": "Write clearer, more specific prompts, and let responses finish before redirecting."
-      },
-      "broken-flow-state": {
-        "name": "Broken Flow State",
-        "description": "Fragmented days with scattered prompts point to context switches and interruptions.",
-        "when_triggered": "{count} of {total} active days ({pct}) show fragmented flow (avg score {stat}).",
-        "how_to_improve": "Protect 2+ hour blocks, silence notifications, and pre-plan the next prompt while the agent works."
-      },
-      "slow-responses": {
-        "name": "Slow Responses",
-        "description": "Consistently slow turns often mean overly broad prompts.",
-        "when_triggered": "{count} turns took over 5 minutes (avg {stat}s).",
-        "how_to_improve": "Break complex asks into smaller, focused requests."
-      },
-      "runaway-agent-loops": {
-        "name": "Runaway Agent Loops",
-        "description": "Turns with an extreme number of tool calls suggest the agent is spinning on a failing approach.",
-        "when_triggered": "{count} turns used 40+ tool calls each (avg {stat}).",
-        "how_to_improve": "If the agent loops, interrupt and rephrase with clearer constraints or a smaller scope."
-      },
-      "copy-paste-blindness": {
-        "name": "Copy-Paste Blindness",
-        "description": "Large AI output accepted without any follow-up usually means it shipped unreviewed.",
-        "when_triggered": "{count} sessions produced 50+ AI LoC with no refinement afterwards.",
-        "how_to_improve": "Review generated code before accepting - ask follow-ups, test, and adjust."
-      },
-      "speed-accept": {
-        "name": "Speed Accept",
-        "description": "Moving on within seconds of receiving a large diff is not a review.",
-        "when_triggered": "{count} times the next message came within 15s of 20+ lines of AI code (avg {stat}).",
-        "how_to_improve": "Read the code: correctness, security, and edge cases deserve more than a glance."
-      },
-      "vibe-coding": {
-        "name": "Vibe Coding",
-        "description": "High AI output from a handful of vague prompts creates knowledge debt.",
-        "when_triggered": "{count} sessions generated {stat}+ AI LoC from five or fewer unstructured prompts.",
-        "how_to_improve": "Write a small spec first and review output line by line - velocity without understanding is debt."
-      },
-      "tunnel-vision": {
-        "name": "Single-Project Tunnel Vision",
-        "description": "AI assistance concentrated in one project leaves the rest of your workflow unassisted.",
-        "when_triggered": "{pct} of turns ({count}/{total}) are in {stat}.",
-        "how_to_improve": "Use the assistant across other projects too: docs, tests, DevOps, exploration."
-      },
-      "no-language-exploration": {
-        "name": "No Language Exploration",
-        "description": "AI dramatically lowers the cost of trying a new language - unused, that advantage lapses.",
-        "when_triggered": "No new language in {count} weeks ({stat} languages seen overall).",
-        "how_to_improve": "Ask for something small in a language you have never used - the barrier has never been lower."
-      },
-      "mcp-tool-bloat": {
-        "name": "Tool / MCP Bloat",
-        "description": "Very large active toolsets add silent context overhead to every prompt.",
-        "when_triggered": "{count} sessions invoked 40+ distinct tools (largest: {stat}).",
-        "how_to_improve": "Trim rarely-used MCP servers and scope toolsets per project."
-      },
-      "model-overreliance": {
-        "name": "Model Overreliance",
-        "description": "One model for everything means overpaying for simple tasks.",
-        "when_triggered": "{pct} of turns use {stat}.",
-        "how_to_improve": "Route lighter tasks to cheaper models and keep premium models for real reasoning."
-      },
-      "reasoning-effort-overuse": {
-        "name": "Reasoning Effort Overuse",
-        "description": "High or max reasoning effort bills extra thinking tokens even when the task does not need them.",
-        "when_triggered": "{count} of {total} effort-tagged turns ({pct}) ran at high or max effort.",
-        "how_to_improve": "Default to medium effort and escalate only for genuinely hard problems."
-      },
-      "premium-waste": {
-        "name": "Premium Model Waste",
-        "description": "Short lookup-style questions rarely benefit from premium-priced models.",
-        "when_triggered": "{count} trivial or lookup-style turns ran on premium models.",
-        "how_to_improve": "Send quick questions to lighter models; reserve premium models for complex generation."
-      },
-      "cache-hit-starvation": {
-        "name": "Prompt Cache Starvation",
-        "description": "Long prompts that miss the cache pay full price for context the model has already seen.",
-        "when_triggered": "{count} long-prompt turns served only {stat} of input from cache.",
-        "how_to_improve": "Keep prompt prefixes stable: short stable instructions, file references over pasted code, fewer mid-task resets."
-      }
-    }
-  },
   "keymap": {
     "actions": {
-      "quit": "quit",
-      "open_help": "open help",
-      "close_help": "close help",
-      "close_call_detail": "close call detail",
-      "close_modal": "close modal",
       "cancel": "cancel",
-      "confirm": "select",
-      "next_tab": "next tab",
-      "prev_tab": "previous tab",
-      "period_today": "24h",
-      "period_week": "7 days",
-      "period_thirty_days": "30 days",
-      "period_month": "this month",
-      "period_all_time": "all time",
-      "cycle_tool": "cycle tool",
-      "cycle_sort": "cycle sort mode",
-      "toggle_data_source": "toggle live/sample data",
-      "open_project_picker": "project picker",
-      "open_session_picker": "session picker",
-      "open_export_picker": "open report generator",
-      "open_export_folder_picker": "browse report folder",
-      "page_overview": "Overview",
-      "page_deep_dive": "Deep Dive",
-      "page_usage": "Usage",
-      "page_config": "Configuration",
+      "close_call_detail": "close call detail",
+      "close_help": "close help",
+      "close_modal": "close modal",
       "close_session": "back to Deep Dive",
-      "reload": "reload",
-      "move_up": "move up",
-      "move_down": "move down",
-      "move_page_up": "page up",
-      "move_page_down": "page down",
-      "move_home": "first item",
-      "move_end": "last item",
-      "query_backspace": "delete last char",
-      "query_clear": "clear filter",
-      "go_parent": "parent folder",
+      "confirm": "select",
+      "cookie_action_next": "next cookie action",
+      "cookie_action_prev": "previous cookie action",
       "cookie_field_next": "next cookie field",
       "cookie_field_prev": "previous cookie field",
-      "cookie_action_next": "next cookie action",
-      "cookie_action_prev": "previous cookie action"
+      "cycle_sort": "cycle sort mode",
+      "cycle_tool": "cycle tool",
+      "go_parent": "parent folder",
+      "move_down": "move down",
+      "move_end": "last item",
+      "move_home": "first item",
+      "move_page_down": "page down",
+      "move_page_up": "page up",
+      "move_up": "move up",
+      "next_tab": "next tab",
+      "open_export_folder_picker": "browse report folder",
+      "open_export_picker": "open report generator",
+      "open_help": "open help",
+      "open_project_picker": "project picker",
+      "open_session_picker": "session picker",
+      "page_coach": "Coach",
+      "page_config": "Configuration",
+      "page_deep_dive": "Deep Dive",
+      "page_overview": "Overview",
+      "page_usage": "Usage",
+      "period_all_time": "all time",
+      "period_month": "this month",
+      "period_thirty_days": "30 days",
+      "period_today": "24h",
+      "period_week": "7 days",
+      "prev_tab": "previous tab",
+      "query_backspace": "delete last char",
+      "query_clear": "clear filter",
+      "quit": "quit",
+      "reload": "reload",
+      "toggle_data_source": "toggle live/sample data"
     },
     "help": [
       {
         "title": "General",
         "items": [
-          { "keys": "q", "label": "quit", "action": "quit" },
-          { "keys": "h  ?", "label": "toggle this help", "action": "open_help" },
-          { "keys": "Esc", "label": "close modal · back from page", "action": "cancel" }
+          {
+            "keys": "q",
+            "label": "quit",
+            "action": "quit"
+          },
+          {
+            "keys": "h  ?",
+            "label": "toggle this help",
+            "action": "open_help"
+          },
+          {
+            "keys": "Esc",
+            "label": "close modal · back from page",
+            "action": "cancel"
+          }
         ]
       },
       {
         "title": "Period",
         "items": [
-          { "keys": "1", "label": "24h", "action": "period_today" },
-          { "keys": "2", "label": "7 days", "action": "period_week" },
-          { "keys": "3", "label": "30 days", "action": "period_thirty_days" },
-          { "keys": "4", "label": "this month", "action": "period_month" },
-          { "keys": "5", "label": "all time", "action": "period_all_time" }
+          {
+            "keys": "1",
+            "label": "24h",
+            "action": "period_today"
+          },
+          {
+            "keys": "2",
+            "label": "7 days",
+            "action": "period_week"
+          },
+          {
+            "keys": "3",
+            "label": "30 days",
+            "action": "period_thirty_days"
+          },
+          {
+            "keys": "4",
+            "label": "this month",
+            "action": "period_month"
+          },
+          {
+            "keys": "5",
+            "label": "all time",
+            "action": "period_all_time"
+          }
         ]
       },
       {
         "title": "Filter",
         "items": [
-          { "keys": "t", "label": "cycle tool", "action": "cycle_tool" },
-          { "keys": "g", "label": "cycle sort mode", "action": "cycle_sort" },
-          { "keys": "p", "label": "project picker (typeable)", "action": "open_project_picker" }
+          {
+            "keys": "t",
+            "label": "cycle tool",
+            "action": "cycle_tool"
+          },
+          {
+            "keys": "g",
+            "label": "cycle sort mode",
+            "action": "cycle_sort"
+          },
+          {
+            "keys": "p",
+            "label": "project picker (typeable)",
+            "action": "open_project_picker"
+          }
         ]
       },
       {
         "title": "Tabs",
         "items": [
-          { "keys": "Tab  Shift-Tab", "label": "cycle main tabs", "action": "next_tab" },
-          { "keys": "o", "label": "Overview", "action": "page_overview" },
-          { "keys": "d", "label": "Deep Dive", "action": "page_deep_dive" },
-          { "keys": "u", "label": "Usage / rate limits", "action": "page_usage" }
+          {
+            "keys": "Tab  Shift-Tab",
+            "label": "cycle main tabs",
+            "action": "next_tab"
+          },
+          {
+            "keys": "o",
+            "label": "Overview",
+            "action": "page_overview"
+          },
+          {
+            "keys": "d",
+            "label": "Deep Dive",
+            "action": "page_deep_dive"
+          },
+          {
+            "keys": "u",
+            "label": "Usage / rate limits",
+            "action": "page_usage"
+          },
+          {
+            "keys": "k",
+            "label": "Coach practice report",
+            "action": "page_coach"
+          }
         ]
       },
       {
         "title": "Pages",
         "items": [
-          { "keys": "c", "label": "configuration", "action": "page_config" },
-          { "keys": "s", "label": "session drill-down", "action": "open_session_picker" }
+          {
+            "keys": "c",
+            "label": "configuration",
+            "action": "page_config"
+          },
+          {
+            "keys": "s",
+            "label": "session drill-down",
+            "action": "open_session_picker"
+          }
         ]
       },
       {
         "title": "Scrolling",
         "items": [
-          { "keys": "Up/Down  PgUp/PgDn", "label": "scroll active view", "action": "move_up" }
+          {
+            "keys": "Up/Down  PgUp/PgDn",
+            "label": "scroll active view",
+            "action": "move_up"
+          }
         ]
       },
       {
         "title": "Actions",
         "items": [
-          { "keys": "e", "label": "report generator", "action": "open_export_picker" },
-          { "keys": "f/b in report", "label": "browse report folder", "action": "open_export_folder_picker" },
-          { "keys": "Shift-D", "label": "toggle live/sample data", "action": "toggle_data_source" },
-          { "keys": "r", "label": "reload (re-run ingest)", "action": "reload" }
+          {
+            "keys": "e",
+            "label": "report generator",
+            "action": "open_export_picker"
+          },
+          {
+            "keys": "f/b in report",
+            "label": "browse report folder",
+            "action": "open_export_folder_picker"
+          },
+          {
+            "keys": "Shift-D",
+            "label": "toggle live/sample data",
+            "action": "toggle_data_source"
+          },
+          {
+            "keys": "r",
+            "label": "reload (re-run ingest)",
+            "action": "reload"
+          }
         ]
       },
       {
         "title": "Pickers",
         "items": [
-          { "keys": "type", "label": "filter list as you type", "action": "confirm" },
-          { "keys": "Backspace", "label": "delete last char", "action": "query_backspace" },
-          { "keys": "Ctrl-U", "label": "clear filter", "action": "query_clear" },
-          { "keys": "Up/Down  Home/End", "label": "navigate", "action": "move_up" },
-          { "keys": "Enter", "label": "select", "action": "confirm" }
+          {
+            "keys": "type",
+            "label": "filter list as you type",
+            "action": "confirm"
+          },
+          {
+            "keys": "Backspace",
+            "label": "delete last char",
+            "action": "query_backspace"
+          },
+          {
+            "keys": "Ctrl-U",
+            "label": "clear filter",
+            "action": "query_clear"
+          },
+          {
+            "keys": "Up/Down  Home/End",
+            "label": "navigate",
+            "action": "move_up"
+          },
+          {
+            "keys": "Enter",
+            "label": "select",
+            "action": "confirm"
+          }
         ]
       },
       {
         "title": "Session page",
         "items": [
-          { "keys": "Up/Down  PgUp/PgDn", "label": "select calls", "action": "move_up" },
-          { "keys": "Enter / click", "label": "call details", "action": "confirm" },
-          { "keys": "Home/End", "label": "jump to ends", "action": "move_home" },
-          { "keys": "d  Esc", "label": "back to Deep Dive", "action": "close_session" }
+          {
+            "keys": "Up/Down  PgUp/PgDn",
+            "label": "select calls",
+            "action": "move_up"
+          },
+          {
+            "keys": "Enter / click",
+            "label": "call details",
+            "action": "confirm"
+          },
+          {
+            "keys": "Home/End",
+            "label": "jump to ends",
+            "action": "move_home"
+          },
+          {
+            "keys": "d  Esc",
+            "label": "back to Deep Dive",
+            "action": "close_session"
+          }
         ]
       }
     ],
     "footers": {
-      "dashboard": [
-        { "keys": "q", "label": "quit", "action": "quit" },
-        { "keys": "Tab", "label": "tabs", "action": "next_tab" },
-        { "keys": "1", "label": "24h", "action": "period_today" },
-        { "keys": "2", "label": "week", "action": "period_week" },
-        { "keys": "3", "label": "30 days", "action": "period_thirty_days" },
-        { "keys": "4", "label": "month", "action": "period_month" },
-        { "keys": "5", "label": "all", "action": "period_all_time" },
-        { "keys": "g", "label": "sort", "action": "cycle_sort" },
-        { "keys": "h", "label": "help", "action": "open_help" }
-      ],
       "config": [
-        { "keys": "q", "label": "quit", "action": "quit" },
-        { "keys": "Esc", "label": "Deep Dive", "action": "page_deep_dive" },
-        { "keys": "Up/Down", "label": "move", "action": "move_up" },
-        { "keys": "Enter", "label": "select", "action": "confirm" },
-        { "keys": "h", "label": "help", "action": "open_help" }
+        {
+          "keys": "q",
+          "label": "quit",
+          "action": "quit"
+        },
+        {
+          "keys": "Esc",
+          "label": "Deep Dive",
+          "action": "page_deep_dive"
+        },
+        {
+          "keys": "Up/Down",
+          "label": "move",
+          "action": "move_up"
+        },
+        {
+          "keys": "Enter",
+          "label": "select",
+          "action": "confirm"
+        },
+        {
+          "keys": "h",
+          "label": "help",
+          "action": "open_help"
+        }
       ],
-      "session": [
-        { "keys": "q", "label": "quit", "action": "quit" },
-        { "keys": "Esc/d", "label": "Deep Dive", "action": "close_session" },
-        { "keys": "Up/Down", "label": "move", "action": "move_up" },
-        { "keys": "Enter", "label": "detail", "action": "confirm" },
-        { "keys": "s", "label": "pick", "action": "open_session_picker" },
-        { "keys": "e", "label": "report", "action": "open_export_picker" },
-        { "keys": "g", "label": "sort", "action": "cycle_sort" },
-        { "keys": "h", "label": "help", "action": "open_help" }
-      ],
-      "usage": [
-        { "keys": "q", "label": "quit", "action": "quit" },
-        { "keys": "Tab", "label": "tabs", "action": "next_tab" },
-        { "keys": "o/d", "label": "overview/deep dive", "action": "page_overview" },
-        { "keys": "c", "label": "config", "action": "page_config" },
-        { "keys": "e", "label": "report", "action": "open_export_picker" },
-        { "keys": "g", "label": "sort", "action": "cycle_sort" },
-        { "keys": "h", "label": "help", "action": "open_help" }
+      "dashboard": [
+        {
+          "keys": "q",
+          "label": "quit",
+          "action": "quit"
+        },
+        {
+          "keys": "Tab",
+          "label": "tabs",
+          "action": "next_tab"
+        },
+        {
+          "keys": "1",
+          "label": "24h",
+          "action": "period_today"
+        },
+        {
+          "keys": "2",
+          "label": "week",
+          "action": "period_week"
+        },
+        {
+          "keys": "3",
+          "label": "30 days",
+          "action": "period_thirty_days"
+        },
+        {
+          "keys": "4",
+          "label": "month",
+          "action": "period_month"
+        },
+        {
+          "keys": "5",
+          "label": "all",
+          "action": "period_all_time"
+        },
+        {
+          "keys": "g",
+          "label": "sort",
+          "action": "cycle_sort"
+        },
+        {
+          "keys": "h",
+          "label": "help",
+          "action": "open_help"
+        }
       ],
       "desktop": [
-        { "keys": "1-5", "label": "period", "action": "period_today" },
-        { "keys": "t", "label": "tool", "action": "cycle_tool" },
-        { "keys": "g", "label": "sort", "action": "cycle_sort" },
-        { "keys": "p", "label": "project", "action": "open_project_picker" },
-        { "keys": "s", "label": "session", "action": "open_session_picker" },
-        { "keys": "e", "label": "report", "action": "open_export_picker" },
-        { "keys": "r", "label": "refresh", "action": "reload" }
-      ],
-      "desktop_usage": [
-        { "keys": "1", "label": "24h", "action": "period_today" },
-        { "keys": "s", "label": "session", "action": "open_session_picker" },
-        { "keys": "e", "label": "report", "action": "open_export_picker" },
-        { "keys": "r", "label": "refresh", "action": "reload" }
+        {
+          "keys": "1-5",
+          "label": "period",
+          "action": "period_today"
+        },
+        {
+          "keys": "t",
+          "label": "tool",
+          "action": "cycle_tool"
+        },
+        {
+          "keys": "g",
+          "label": "sort",
+          "action": "cycle_sort"
+        },
+        {
+          "keys": "p",
+          "label": "project",
+          "action": "open_project_picker"
+        },
+        {
+          "keys": "s",
+          "label": "session",
+          "action": "open_session_picker"
+        },
+        {
+          "keys": "e",
+          "label": "report",
+          "action": "open_export_picker"
+        },
+        {
+          "keys": "r",
+          "label": "refresh",
+          "action": "reload"
+        }
       ],
       "desktop_config": [
-        { "keys": "s", "label": "session", "action": "open_session_picker" },
-        { "keys": "e", "label": "report", "action": "open_export_picker" },
-        { "keys": "r", "label": "refresh", "action": "reload" }
+        {
+          "keys": "s",
+          "label": "session",
+          "action": "open_session_picker"
+        },
+        {
+          "keys": "e",
+          "label": "report",
+          "action": "open_export_picker"
+        },
+        {
+          "keys": "r",
+          "label": "refresh",
+          "action": "reload"
+        }
+      ],
+      "desktop_usage": [
+        {
+          "keys": "1",
+          "label": "24h",
+          "action": "period_today"
+        },
+        {
+          "keys": "s",
+          "label": "session",
+          "action": "open_session_picker"
+        },
+        {
+          "keys": "e",
+          "label": "report",
+          "action": "open_export_picker"
+        },
+        {
+          "keys": "r",
+          "label": "refresh",
+          "action": "reload"
+        }
+      ],
+      "session": [
+        {
+          "keys": "q",
+          "label": "quit",
+          "action": "quit"
+        },
+        {
+          "keys": "Esc/d",
+          "label": "Deep Dive",
+          "action": "close_session"
+        },
+        {
+          "keys": "Up/Down",
+          "label": "move",
+          "action": "move_up"
+        },
+        {
+          "keys": "Enter",
+          "label": "detail",
+          "action": "confirm"
+        },
+        {
+          "keys": "s",
+          "label": "pick",
+          "action": "open_session_picker"
+        },
+        {
+          "keys": "e",
+          "label": "report",
+          "action": "open_export_picker"
+        },
+        {
+          "keys": "g",
+          "label": "sort",
+          "action": "cycle_sort"
+        },
+        {
+          "keys": "h",
+          "label": "help",
+          "action": "open_help"
+        }
+      ],
+      "usage": [
+        {
+          "keys": "q",
+          "label": "quit",
+          "action": "quit"
+        },
+        {
+          "keys": "Tab",
+          "label": "tabs",
+          "action": "next_tab"
+        },
+        {
+          "keys": "o/d",
+          "label": "overview/deep dive",
+          "action": "page_overview"
+        },
+        {
+          "keys": "c",
+          "label": "config",
+          "action": "page_config"
+        },
+        {
+          "keys": "e",
+          "label": "report",
+          "action": "open_export_picker"
+        },
+        {
+          "keys": "g",
+          "label": "sort",
+          "action": "cycle_sort"
+        },
+        {
+          "keys": "h",
+          "label": "help",
+          "action": "open_help"
+        }
       ]
     }
   },
@@ -1222,6 +1556,7 @@
     "currency_rates_failed_embedded": "Currency rates failed · embedded ({error})",
     "legacy_cache_imported_records": "Legacy cache imported · {records} records",
     "archive_synced_counts": "Archive synced · {calls} calls · {limits} limits",
+    "tail_resumed_suffix": " · {files} tail-resumed",
     "archive_failed_raw_ingest": "Archive failed · raw ingest ({error})",
     "archive_failed_raw_ingest_no_sessions_sample_data": "Archive failed · raw ingest ({archive_error}) · no local sessions found · sample data",
     "archive_failed_raw_ingest_ingest_failed_sample_data": "Archive failed · raw ingest ({archive_error}) · ingest failed · sample data ({error})",

@@ -66,6 +66,12 @@ pub fn rules() -> Vec<RuleDef> {
             severity: Severity::High,
             detect: runaway_agent_loops,
         },
+        RuleDef {
+            id: "retry-loops",
+            group: RuleGroup::SessionHygiene,
+            severity: Severity::Medium,
+            detect: retry_loops,
+        },
     ]
 }
 
@@ -364,6 +370,82 @@ fn runaway_agent_loops(ctx: &CoachContext) -> Option<RuleHit> {
     })
 }
 
+/// Same-file re-edits with a shell run in between: round `i` edits file F,
+/// a later (or the same) round runs a shell command, and round `j > i` edits
+/// F again — the change did not survive its own verification. Measured per
+/// `(session, file)` edit chain at assistant-round granularity, because the
+/// archive keeps `edited_files` and `bash_commands` as unordered per-round
+/// sets; only tools that report edited files enter the denominator.
+///
+/// A re-edit with no shell command since the previous edit is ordinary
+/// incremental editing and never counts.
+fn retry_loops(ctx: &CoachContext) -> Option<RuleHit> {
+    const MIN_CHAINS: u64 = 15;
+    const MIN_PCT: u64 = 40;
+    const ESCALATE_PCT: u64 = 60;
+
+    let mut chains = 0u64;
+    let mut retried = 0u64;
+    let mut retry_rounds = 0u64;
+    // File → total shell-verified re-edits, across sessions, for examples.
+    let mut by_file: std::collections::HashMap<&str, u64> = std::collections::HashMap::new();
+
+    for session in &ctx.sessions {
+        if !signals::supports_file_refs(session.tool) {
+            continue;
+        }
+        // File → "a shell command ran since this file's last edit".
+        let mut bash_since_edit: std::collections::HashMap<&str, bool> =
+            std::collections::HashMap::new();
+        let mut session_retries: std::collections::HashMap<&str, u64> =
+            std::collections::HashMap::new();
+        for call in session.turns.iter().flat_map(|turn| &turn.calls) {
+            for file in &call.edited_files {
+                match bash_since_edit.get_mut(file.as_str()) {
+                    Some(verified) => {
+                        if *verified {
+                            *session_retries.entry(file.as_str()).or_default() += 1;
+                        }
+                        *verified = false;
+                    }
+                    None => {
+                        bash_since_edit.insert(file.as_str(), false);
+                    }
+                }
+            }
+            if !call.bash_commands.is_empty() {
+                for verified in bash_since_edit.values_mut() {
+                    *verified = true;
+                }
+            }
+        }
+        chains += bash_since_edit.len() as u64;
+        retried += session_retries.len() as u64;
+        for (file, count) in session_retries {
+            retry_rounds += count;
+            *by_file.entry(file).or_default() += count;
+        }
+    }
+
+    let pct = ratio_pct(retried, chains)?;
+    (chains >= MIN_CHAINS && pct >= MIN_PCT).then(|| {
+        let mut worst: Vec<(&str, u64)> = by_file.into_iter().collect();
+        worst.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
+        RuleHit {
+            occurrences: retried,
+            total: chains,
+            pct: Some(pct),
+            stat: Some(retry_rounds.to_string()),
+            escalate: pct >= ESCALATE_PCT,
+            examples: worst
+                .into_iter()
+                .take(MAX_EXAMPLES)
+                .map(|(file, count)| example(file, format!("{count} shell-verified re-edits")))
+                .collect(),
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::run_rules;
@@ -374,6 +456,37 @@ mod tests {
         let refs = ctx_calls(calls);
         let ctx = CoachContext::new(&refs);
         run_rules(&ctx).into_iter().map(|o| o.id).collect()
+    }
+
+    #[test]
+    fn retry_loops_needs_a_shell_run_between_same_file_edits() {
+        // 16 files, each: edit → shell run → edit again. Every chain retries.
+        let mut calls = Vec::new();
+        for i in 0..16 {
+            let file = format!("src/module_{i}.rs");
+            let mut edit = call(&format!("s{i}"), i * 10, "fix the failing test");
+            edit.edited_files = vec![file.clone()];
+            calls.push(edit);
+            let mut verify = call(&format!("s{i}"), i * 10 + 1, "fix the failing test");
+            verify.bash_commands = vec!["cargo test".into()];
+            calls.push(verify);
+            let mut re_edit = call(&format!("s{i}"), i * 10 + 2, "fix the failing test");
+            re_edit.edited_files = vec![file];
+            calls.push(re_edit);
+        }
+        assert!(triggered_ids(&calls).contains(&"retry-loops"));
+
+        // Same shape without the shell runs: plain incremental editing.
+        let mut calls = Vec::new();
+        for i in 0..16 {
+            let file = format!("src/module_{i}.rs");
+            for round in 0..2 {
+                let mut edit = call(&format!("s{i}"), i * 10 + round, "keep editing");
+                edit.edited_files = vec![file.clone()];
+                calls.push(edit);
+            }
+        }
+        assert!(!triggered_ids(&calls).contains(&"retry-loops"));
     }
 
     #[test]

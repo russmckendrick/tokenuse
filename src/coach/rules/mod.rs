@@ -182,14 +182,14 @@ mod tests {
     #[test]
     fn registry_has_the_curated_rule_set() {
         let rules = all_rules();
-        assert_eq!(rules.len(), 27);
+        assert_eq!(rules.len(), 28);
         let mut ids: Vec<&str> = rules.iter().map(|r| r.id).collect();
         ids.sort_unstable();
         let mut deduped = ids.clone();
         deduped.dedup();
         assert_eq!(ids, deduped, "rule ids must be unique");
         assert_eq!(rules_per_group(RuleGroup::PromptQuality), 8);
-        assert_eq!(rules_per_group(RuleGroup::SessionHygiene), 9);
+        assert_eq!(rules_per_group(RuleGroup::SessionHygiene), 10);
         assert_eq!(rules_per_group(RuleGroup::CodeReview), 5);
         assert_eq!(rules_per_group(RuleGroup::ToolMastery), 5);
     }

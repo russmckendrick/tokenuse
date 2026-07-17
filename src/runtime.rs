@@ -63,13 +63,20 @@ pub fn load_startup() -> Result<RuntimeState> {
                 }
                 if let Some(stats) = startup.sync_stats {
                     if stats.calls_inserted > 0 || stats.limits_inserted > 0 {
-                        parts.push(copy::template(
+                        let mut synced = copy::template(
                             &copy().status.archive_synced_counts,
                             &[
                                 ("calls", stats.calls_inserted.to_string()),
                                 ("limits", stats.limits_inserted.to_string()),
                             ],
-                        ));
+                        );
+                        if stats.files_resumed > 0 {
+                            synced.push_str(&copy::template(
+                                &copy().status.tail_resumed_suffix,
+                                &[("files", stats.files_resumed.to_string())],
+                            ));
+                        }
+                        parts.push(synced);
                     }
                 }
 

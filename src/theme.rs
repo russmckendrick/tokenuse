@@ -6,6 +6,10 @@ use ratatui::{
 pub const BACKGROUND: Color = Color::Rgb(32, 36, 56);
 pub const SURFACE: Color = Color::Rgb(37, 41, 61);
 pub const BAR_EMPTY: Color = Color::Rgb(41, 45, 66);
+/// Rank fill wash — BLUE at ~12% over SURFACE (mirrors desktop --color-rank-fill).
+pub const RANK_FILL_BG: Color = Color::Rgb(44, 56, 84);
+/// Rank fill terminus cell — BLUE at ~30% over SURFACE (mirrors --color-rank-edge).
+pub const RANK_EDGE_BG: Color = Color::Rgb(55, 79, 119);
 pub const TEXT: Color = Color::Rgb(203, 212, 242);
 pub const MUTED: Color = Color::Rgb(161, 167, 195);
 pub const DIM: Color = Color::Rgb(110, 116, 146);

@@ -23,6 +23,7 @@ const LOCAL_PRICING_UPSTREAM_FILE_NAME: &str = "pricing-upstream.json";
 const LOCAL_PRICING_OVERRIDES_FILE_NAME: &str = "pricing-overrides.json";
 const LEGACY_LOCAL_PRICING_FILE_NAME: &str = "pricing-snapshot.json";
 const ARCHIVE_DB_FILE_NAME: &str = "archive.db";
+const MCP_SALT_FILE_NAME: &str = "mcp-salt";
 const TOKEN_USE_APP_DIR_NAME: &str = "Token Use App";
 const LIMITS_DIR_NAME: &str = "limits";
 const CLAUDE_CODE_LIMITS_FILE_NAME: &str = "claude-code.json";
@@ -40,6 +41,7 @@ pub struct ConfigPaths {
     pub pricing_overrides_file: PathBuf,
     pub pricing_snapshot_file: PathBuf,
     pub archive_db_file: PathBuf,
+    pub mcp_salt_file: PathBuf,
     pub token_use_app_dir: PathBuf,
     pub limits_dir: PathBuf,
     pub claude_code_limits_file: PathBuf,
@@ -59,6 +61,7 @@ impl ConfigPaths {
             pricing_overrides_file: dir.join(LOCAL_PRICING_OVERRIDES_FILE_NAME),
             pricing_snapshot_file: dir.join(LEGACY_LOCAL_PRICING_FILE_NAME),
             archive_db_file: dir.join(ARCHIVE_DB_FILE_NAME),
+            mcp_salt_file: dir.join(MCP_SALT_FILE_NAME),
             token_use_app_dir: dir.join(TOKEN_USE_APP_DIR_NAME),
             claude_code_limits_file: limits_dir.join(CLAUDE_CODE_LIMITS_FILE_NAME),
             copilot_limits_file: limits_dir.join(COPILOT_LIMITS_FILE_NAME),
@@ -93,6 +96,11 @@ pub struct UserConfig {
     pub background_alerts: BackgroundAlertsConfig,
     #[serde(default)]
     pub desktop: DesktopConfig,
+    /// Monthly subscription price per tool id (USD). Powers the plan-value
+    /// line on Usage consoles; absent tools fall back to a detected-SKU
+    /// default where one exists, otherwise show no plan value.
+    #[serde(default)]
+    pub plan_prices: BTreeMap<String, f64>,
     #[serde(default)]
     pub overrides: BTreeMap<String, Value>,
 }
@@ -103,6 +111,7 @@ impl Default for UserConfig {
             currency: DEFAULT_CURRENCY.into(),
             background_alerts: BackgroundAlertsConfig::default(),
             desktop: DesktopConfig::default(),
+            plan_prices: BTreeMap::new(),
             overrides: BTreeMap::new(),
         }
     }
@@ -222,6 +231,8 @@ impl UserConfig {
         self.currency =
             normalize_currency_code(&self.currency).unwrap_or_else(|| DEFAULT_CURRENCY.into());
         self.background_alerts.normalize();
+        self.plan_prices
+            .retain(|_, price| price.is_finite() && *price > 0.0);
     }
 }
 

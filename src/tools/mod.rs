@@ -18,7 +18,7 @@ pub mod paths;
 pub mod types;
 
 pub use types::{
-    CodeBlock, InteractionMode, LimitCredits, LimitSnapshot, LimitWindow, ParsedCall,
+    AdapterParse, CodeBlock, InteractionMode, LimitCredits, LimitSnapshot, LimitWindow, ParsedCall,
     SessionSource, SessionSourceKind, Speed, TimestampQuality, TokenQuality,
 };
 
@@ -44,6 +44,19 @@ pub trait ToolAdapter: Send + Sync {
     fn discover(&self) -> Result<Vec<SessionSource>>;
 
     fn parse(&self, source: &SessionSource, seen: &mut HashSet<String>) -> Result<Vec<ParsedCall>>;
+
+    /// Incremental parse: `cursor` is the JSON this adapter returned for the
+    /// same source on a previous sync (persisted in `source_state`), letting
+    /// it skip already-parsed bytes. The default ignores cursors and parses
+    /// fully; adapters whose sources are append-only may override.
+    fn parse_with_cursor(
+        &self,
+        source: &SessionSource,
+        seen: &mut HashSet<String>,
+        _cursor: Option<&str>,
+    ) -> Result<AdapterParse> {
+        Ok(AdapterParse::full(self.parse(source, seen)?))
+    }
 
     fn parse_limits(&self, _source: &SessionSource) -> Result<Vec<LimitSnapshot>> {
         Ok(Vec::new())

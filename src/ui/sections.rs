@@ -296,8 +296,7 @@ pub(super) fn render_projects(frame: &mut Frame<'_>, area: Rect, rows: &[Project
         .iter()
         .map(|item| {
             Row::new(vec![
-                graphs::rank_cell(item.value),
-                Cell::from(item.name).style(theme::muted()),
+                graphs::rank_name_cell(item.value, item.name, 25, theme::muted()),
                 Cell::from(item.cost).style(theme::money()),
                 Cell::from(item.avg_per_session).style(theme::money()),
                 Cell::from(item.sessions.to_string()).style(theme::base()),
@@ -306,14 +305,13 @@ pub(super) fn render_projects(frame: &mut Frame<'_>, area: Rect, rows: &[Project
         })
         .collect();
     if table_rows.is_empty() {
-        table_rows.push(empty_table_row(6, copy.empty.no_project_rows.as_str()));
+        table_rows.push(empty_table_row(5, 0, copy.empty.no_project_rows.as_str()));
     }
 
     let table = Table::new(
         table_rows,
         [
-            Constraint::Length(graphs::RANK_WIDTH as u16),
-            Constraint::Min(16),
+            Constraint::Min(25),
             Constraint::Length(9),
             Constraint::Length(8),
             Constraint::Length(5),
@@ -321,7 +319,6 @@ pub(super) fn render_projects(frame: &mut Frame<'_>, area: Rect, rows: &[Project
         ],
     )
     .header(Row::new(vec![
-        Cell::from(copy.tables.blank.as_str()),
         Cell::from(copy.tables.blank.as_str()),
         Cell::from(copy.tables.cost.as_str()).style(theme::dim()),
         Cell::from(copy.tables.avg_per_session.as_str()).style(theme::dim()),
@@ -343,30 +340,27 @@ pub(super) fn render_sessions(frame: &mut Frame<'_>, area: Rect, rows: &[Session
         .iter()
         .map(|item| {
             Row::new(vec![
-                graphs::rank_cell(item.value),
                 Cell::from(item.date).style(theme::muted()),
-                Cell::from(item.project).style(theme::muted()),
+                graphs::rank_name_cell(item.value, item.project, 29, theme::muted()),
                 Cell::from(item.cost).style(theme::money()),
                 Cell::from(item.calls.to_string()).style(theme::base()),
             ])
         })
         .collect();
     if table_rows.is_empty() {
-        table_rows.push(empty_table_row(5, copy.empty.no_sessions.as_str()));
+        table_rows.push(empty_table_row(4, 1, copy.empty.no_sessions.as_str()));
     }
 
     let table = Table::new(
         table_rows,
         [
-            Constraint::Length(graphs::RANK_WIDTH as u16),
             Constraint::Length(10),
-            Constraint::Min(20),
+            Constraint::Min(29),
             Constraint::Length(10),
             Constraint::Length(8),
         ],
     )
     .header(Row::new(vec![
-        Cell::from(copy.tables.blank.as_str()),
         Cell::from(copy.tables.date.as_str()).style(theme::dim()),
         Cell::from(copy.tables.project.as_str()).style(theme::dim()),
         Cell::from(copy.tables.cost.as_str()).style(theme::dim()),
@@ -387,8 +381,7 @@ pub(super) fn render_project_tools(frame: &mut Frame<'_>, area: Rect, rows: &[Pr
         .iter()
         .map(|item| {
             Row::new(vec![
-                graphs::rank_cell(item.value),
-                Cell::from(item.project).style(theme::muted()),
+                graphs::rank_name_cell(item.value, item.project, 21, theme::muted()),
                 Cell::from(item.tool).style(theme::base().fg(theme::YELLOW_SOFT)),
                 Cell::from(item.cost).style(theme::money()),
                 Cell::from(item.calls.to_string()).style(theme::base()),
@@ -398,14 +391,17 @@ pub(super) fn render_project_tools(frame: &mut Frame<'_>, area: Rect, rows: &[Pr
         })
         .collect();
     if table_rows.is_empty() {
-        table_rows.push(empty_table_row(7, copy.empty.no_project_tool_rows.as_str()));
+        table_rows.push(empty_table_row(
+            6,
+            0,
+            copy.empty.no_project_tool_rows.as_str(),
+        ));
     }
 
     let table = Table::new(
         table_rows,
         [
-            Constraint::Length(graphs::RANK_WIDTH as u16),
-            Constraint::Min(12),
+            Constraint::Min(21),
             Constraint::Length(7),
             Constraint::Length(9),
             Constraint::Length(6),
@@ -414,7 +410,6 @@ pub(super) fn render_project_tools(frame: &mut Frame<'_>, area: Rect, rows: &[Pr
         ],
     )
     .header(Row::new(vec![
-        Cell::from(copy.tables.blank.as_str()),
         Cell::from(copy.tables.project.as_str()).style(theme::dim()),
         Cell::from(copy.tables.tool.as_str()).style(theme::dim()),
         Cell::from(copy.tables.cost.as_str()).style(theme::dim()),
@@ -445,8 +440,7 @@ fn render_models_panel(frame: &mut Frame<'_>, area: Rect, title: &str, rows: &[M
         .iter()
         .map(|item| {
             Row::new(vec![
-                graphs::rank_cell(item.value),
-                Cell::from(item.name).style(theme::base()),
+                graphs::rank_name_cell(item.value, item.name, 19, theme::base()),
                 Cell::from(item.cost).style(theme::money()),
                 Cell::from(item.cache).style(theme::base()),
                 Cell::from(item.cache_rate).style(theme::base()),
@@ -455,14 +449,13 @@ fn render_models_panel(frame: &mut Frame<'_>, area: Rect, title: &str, rows: &[M
         })
         .collect();
     if table_rows.is_empty() {
-        table_rows.push(empty_table_row(6, copy.empty.no_models.as_str()));
+        table_rows.push(empty_table_row(5, 0, copy.empty.no_models.as_str()));
     }
 
     let table = Table::new(
         table_rows,
         [
-            Constraint::Length(graphs::RANK_WIDTH as u16),
-            Constraint::Min(10),
+            Constraint::Min(19),
             Constraint::Length(9),
             Constraint::Length(7),
             Constraint::Length(10),
@@ -470,7 +463,6 @@ fn render_models_panel(frame: &mut Frame<'_>, area: Rect, title: &str, rows: &[M
         ],
     )
     .header(Row::new(vec![
-        Cell::from(copy.tables.blank.as_str()),
         Cell::from(copy.tables.blank.as_str()),
         Cell::from(copy.tables.cost.as_str()).style(theme::dim()),
         Cell::from(copy.tables.cache.as_str()).style(theme::dim()),
@@ -501,31 +493,22 @@ pub(super) fn render_activity_categories(
         .iter()
         .map(|item| {
             Row::new(vec![
-                graphs::rank_cell(item.value),
-                Cell::from(item.label).style(theme::base()),
+                graphs::rank_name_cell(item.value, item.label, 23, theme::base()),
                 Cell::from(item.cost).style(theme::money()),
             ])
         })
         .collect();
     if table_rows.is_empty() {
-        table_rows.push(empty_table_row(3, copy.empty.no_rows.as_str()));
+        table_rows.push(empty_table_row(2, 0, copy.empty.no_rows.as_str()));
     }
 
-    let table = Table::new(
-        table_rows,
-        [
-            Constraint::Length(graphs::RANK_WIDTH as u16),
-            Constraint::Min(14),
-            Constraint::Length(9),
-        ],
-    )
-    .header(Row::new(vec![
-        Cell::from(copy.tables.blank.as_str()),
-        Cell::from(copy.tables.blank.as_str()),
-        Cell::from(copy.tables.cost.as_str()).style(theme::dim()),
-    ]))
-    .column_spacing(1)
-    .block(theme::panel_block(title, theme::CYAN));
+    let table = Table::new(table_rows, [Constraint::Min(23), Constraint::Length(9)])
+        .header(Row::new(vec![
+            Cell::from(copy.tables.blank.as_str()),
+            Cell::from(copy.tables.cost.as_str()).style(theme::dim()),
+        ]))
+        .column_spacing(1)
+        .block(theme::panel_block(title, theme::CYAN));
 
     frame.render_widget(table, area);
 }
@@ -542,41 +525,31 @@ pub(super) fn render_counts(
         .iter()
         .map(|item| {
             Row::new(vec![
-                graphs::rank_cell(item.value),
-                Cell::from(item.name).style(theme::base()),
+                graphs::rank_name_cell(item.value, item.name, 25, theme::base()),
                 Cell::from(item.calls.to_string()).style(theme::base()),
             ])
         })
         .collect();
     if table_rows.is_empty() {
-        table_rows.push(empty_table_row(3, copy.empty.no_rows.as_str()));
+        table_rows.push(empty_table_row(2, 0, copy.empty.no_rows.as_str()));
     }
 
-    let table = Table::new(
-        table_rows,
-        [
-            Constraint::Length(graphs::RANK_WIDTH as u16),
-            Constraint::Min(16),
-            Constraint::Length(9),
-        ],
-    )
-    .header(Row::new(vec![
-        Cell::from(copy.tables.blank.as_str()),
-        Cell::from(copy.tables.blank.as_str()),
-        Cell::from(copy.tables.calls.as_str()).style(theme::dim()),
-    ]))
-    .column_spacing(1)
-    .block(theme::panel_block(title, color));
+    let table = Table::new(table_rows, [Constraint::Min(25), Constraint::Length(9)])
+        .header(Row::new(vec![
+            Cell::from(copy.tables.blank.as_str()),
+            Cell::from(copy.tables.calls.as_str()).style(theme::dim()),
+        ]))
+        .column_spacing(1)
+        .block(theme::panel_block(title, color));
 
     frame.render_widget(table, area);
 }
 
-fn empty_table_row(column_count: usize, label: &'static str) -> Row<'static> {
+fn empty_table_row(column_count: usize, label_column: usize, label: &'static str) -> Row<'static> {
     let mut cells = (0..column_count)
         .map(|_| Cell::from(""))
         .collect::<Vec<_>>();
-    let label_column = usize::from(column_count > 1);
-    cells[label_column] = Cell::from(label).style(theme::dim());
+    cells[label_column.min(column_count.saturating_sub(1))] = Cell::from(label).style(theme::dim());
     Row::new(cells)
 }
 
@@ -685,7 +658,7 @@ fn render_tool_usage_header(frame: &mut Frame<'_>, area: Rect, section: &ToolLim
     let mut pulse = vec![Span::styled(format!("{} ", copy.usage.pulse), theme::key())];
     pulse.extend(graphs::sparkline_spans(&section.usage.buckets, spark_width));
 
-    let text = Text::from(vec![
+    let mut lines = vec![
         Line::from(pulse),
         Line::from(vec![
             Span::styled(
@@ -702,9 +675,25 @@ fn render_tool_usage_header(frame: &mut Frame<'_>, area: Rect, section: &ToolLim
             ),
             Span::styled(section.usage.last_seen, theme::muted()),
         ]),
-    ]);
+    ];
+    if let Some(plan_value) = &section.plan_value {
+        lines.push(Line::from(vec![
+            Span::styled(format!("{} ", copy.usage.plan_value), theme::key()),
+            Span::styled(
+                template(
+                    &copy.usage.plan_value_line,
+                    &[
+                        ("month_cost", plan_value.month_cost.to_string()),
+                        ("price", plan_value.price.to_string()),
+                        ("multiple", plan_value.multiple.to_string()),
+                    ],
+                ),
+                theme::muted(),
+            ),
+        ]));
+    }
 
-    Paragraph::new(text)
+    Paragraph::new(Text::from(lines))
         .style(theme::base())
         .render(area, frame.buffer_mut());
 }
@@ -797,7 +786,7 @@ fn render_tool_usage_rows(frame: &mut Frame<'_>, area: Rect, section: &ToolLimit
         ])
     }));
     if rows.is_empty() {
-        rows.push(empty_table_row(6, copy.usage.idle.as_str()));
+        rows.push(empty_table_row(6, 1, copy.usage.idle.as_str()));
     }
 
     let table = Table::new(
@@ -973,6 +962,10 @@ fn render_config_paths(frame: &mut Frame<'_>, area: Rect, app: &App) {
         path_line(
             copy.config.paths.copilot_limits.as_str(),
             app.paths.copilot_limits_file.display().to_string(),
+        ),
+        path_line(
+            copy.config.paths.mcp_server.as_str(),
+            copy.config.values.mcp_hint.clone(),
         ),
     ]);
     lines.push(Line::from(vec![
@@ -2102,7 +2095,7 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Page::Config => "config",
         Page::Session => "session",
         Page::Usage => "usage",
-        Page::Overview | Page::DeepDive => "dashboard",
+        Page::Overview | Page::DeepDive | Page::Coach => "dashboard",
     };
     let commands = footer_line(copy().footer(footer), app);
 
