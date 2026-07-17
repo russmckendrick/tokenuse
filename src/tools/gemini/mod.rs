@@ -12,7 +12,7 @@ pub struct Gemini;
 
 /// Bump when the parser learns to extract new fields so archived sessions
 /// re-parse through it on the next sync.
-const SOURCE_FINGERPRINT_VERSION: &str = "gemini-v2-coach-enrichment";
+const SOURCE_FINGERPRINT_VERSION: &str = "gemini-v3-transcripts";
 
 impl ToolAdapter for Gemini {
     fn id(&self) -> &'static str {

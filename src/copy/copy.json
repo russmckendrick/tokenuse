@@ -19,7 +19,8 @@
     "projects": "Projects",
     "config": "Config",
     "configuration": "Configuration",
-    "session": "Session"
+    "session": "Session",
+    "scrollback": "Scrollback"
   },
   "coach": {
     "report": {
@@ -609,6 +610,7 @@
       "quota_snapshot_found": "Local quota snapshot",
       "quota_snapshot_missing": "No local quota snapshot",
       "delete_archive_then_rebuild": "Delete archive.db, then rebuild",
+      "archive_size": "Archive {size} incl. transcript index",
       "build_archive_from_history": "Build archive.db from local history",
       "fallback_priced_models": "fallback pricing in use for {models} — add a pricing alias or override so their cost is real",
       "mcp_hint": "tokenuse mcp · stdio · projects pseudonymised"
@@ -657,6 +659,20 @@
     "sample_project": "(Sample Data)",
     "sample_date_range": "-",
     "sample_note": "Sample data does not include per-call records · run with live sessions to drill in"
+  },
+  "scrollback": {
+    "title": "Scrollback",
+    "input_label": "Search",
+    "input_placeholder": "search every prompt and reply, Enter to run",
+    "empty_state": "Search your full session history across every tool. Press / and type a phrase, then press Enter.",
+    "no_results": "No matches. Older sessions whose files are gone are searchable by prompt text only.",
+    "result_count": "Showing {shown} of {total} matching sessions",
+    "more_matches": "+{count} more matches in this session",
+    "prompt_only_badge": "prompt only",
+    "role_user": "you",
+    "role_assistant": "assistant",
+    "sample_mode_note": "Sample data mode: search reads your live archive, not the sample dataset.",
+    "error": "Search failed: {error}"
   },
   "modals": {
     "help_title": "Help · keybindings",
@@ -975,10 +991,15 @@
     "by_tool_heading": "By Tool"
   },
   "mcp": {
-    "instructions": "Read-only usage summaries for local AI coding tools, computed from local session logs. Costs are API-equivalent prices; no data leaves this machine. Project names are pseudonymised unless the server was started with --real-names.",
+    "instructions": "Read-only usage summaries for local AI coding tools, computed from local session logs. Costs are API-equivalent prices; no data leaves this machine. Project names are pseudonymised unless the server was started with --real-names. The scrollback tool searches full transcript text; its snippets contain raw transcript content from this machine's own sessions.",
     "tool_status": "Today's and this month's usage totals: cost, calls, sessions, and token counts",
     "tool_overview": "This month's usage: totals, per-tool breakdown, activity categories, models, and daily trend",
     "tool_projects": "This month's per-project spend; project names are pseudonymised by default",
+    "tool_scrollback": "Full-text search across archived session transcripts; results are grouped per session with matching snippets. Snippets contain raw transcript text; project names follow the projects tool's pseudonymisation",
+    "scrollback_arg_query": "Words to search for; terms are ANDed and the final term matches by prefix",
+    "scrollback_arg_project": "Restrict to one project: a project name or pseudonym from the projects tool",
+    "scrollback_arg_tool": "Restrict to one tool id, e.g. claude-code, codex, cursor, copilot, or gemini",
+    "scrollback_missing_query": "The scrollback tool needs a non-empty query argument",
     "unknown_tool": "Unknown tool: {name}"
   },
   "categories": {
@@ -1030,6 +1051,7 @@
       "cookie_field_prev": "previous cookie field",
       "cycle_sort": "cycle sort mode",
       "cycle_tool": "cycle tool",
+      "focus_search": "edit search query",
       "go_parent": "parent folder",
       "move_down": "move down",
       "move_end": "last item",
@@ -1047,6 +1069,7 @@
       "page_config": "Configuration",
       "page_deep_dive": "Deep Dive",
       "page_overview": "Overview",
+      "page_scrollback": "open Scrollback search",
       "page_usage": "Usage",
       "period_all_time": "all time",
       "period_month": "this month",
@@ -1265,6 +1288,31 @@
             "action": "close_session"
           }
         ]
+      },
+      {
+        "title": "Scrollback",
+        "items": [
+          {
+            "keys": "/",
+            "label": "open Scrollback · edit query",
+            "action": "page_scrollback"
+          },
+          {
+            "keys": "Enter",
+            "label": "run search · open session",
+            "action": "confirm"
+          },
+          {
+            "keys": "Esc",
+            "label": "leave the query input",
+            "action": "cancel"
+          },
+          {
+            "keys": "Ctrl+U",
+            "label": "clear the query",
+            "action": "query_clear"
+          }
+        ]
       }
     ],
     "footers": {
@@ -1418,6 +1466,38 @@
           "action": "reload"
         }
       ],
+      "scrollback": [
+        {
+          "keys": "/",
+          "label": "edit query",
+          "action": "focus_search"
+        },
+        {
+          "keys": "Enter",
+          "label": "search / open",
+          "action": "confirm"
+        },
+        {
+          "keys": "Up/Down",
+          "label": "move",
+          "action": "move_up"
+        },
+        {
+          "keys": "t",
+          "label": "tool",
+          "action": "cycle_tool"
+        },
+        {
+          "keys": "p",
+          "label": "project",
+          "action": "open_project_picker"
+        },
+        {
+          "keys": "q",
+          "label": "quit",
+          "action": "quit"
+        }
+      ],
       "session": [
         {
           "keys": "q",
@@ -1426,7 +1506,7 @@
         },
         {
           "keys": "Esc/d",
-          "label": "Deep Dive",
+          "label": "back",
           "action": "close_session"
         },
         {

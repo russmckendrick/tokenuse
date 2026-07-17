@@ -16,7 +16,7 @@ use super::config;
 
 /// Bump to invalidate persisted tail cursors when parsing semantics change;
 /// a mismatch falls back to a full re-parse of every file in the source.
-const PARSE_VERSION: &str = "1";
+const PARSE_VERSION: &str = "2";
 /// Newest-modified session files that keep a resume cursor. Older files
 /// change rarely enough that a full re-parse on touch is fine, and the cap
 /// bounds the cursor JSON stored per source.
@@ -25,6 +25,9 @@ const MAX_CURSOR_FILES: usize = 64;
 /// (compaction, truncation, editor save) is detected even when the file is
 /// at least as long as it was.
 const PROBE_BYTES: u64 = 256;
+/// Chars of the carried full user prompt persisted per file cursor. Bounds
+/// cursor JSON at ~64 KB × MAX_CURSOR_FILES per source in the worst case.
+const CURSOR_USER_TEXT_CAP: usize = 65_536;
 
 /// Persisted per-source resume cursor: one entry per session file, keyed by
 /// absolute path, plus the parse version that wrote it.
@@ -44,6 +47,10 @@ struct FileCursor {
     /// offset, so tail assistant rounds keep their turn context.
     #[serde(default)]
     user_text: String,
+    /// Untruncated form of `user_text` for the transcript index, capped at
+    /// `CURSOR_USER_TEXT_CAP` chars to bound the stored cursor JSON.
+    #[serde(default)]
+    user_text_full: String,
     #[serde(default)]
     user_chars: Option<u64>,
     #[serde(default)]
@@ -242,6 +249,7 @@ fn parse_file(
     let start_offset = resume.map(|cursor| cursor.offset).unwrap_or(0);
 
     let mut last_user_text = resume.map(|c| c.user_text.clone()).unwrap_or_default();
+    let mut last_user_full = resume.map(|c| c.user_text_full.clone()).unwrap_or_default();
     let mut last_user_chars: Option<u64> = resume.and_then(|c| c.user_chars);
     let mut last_user_ts: Option<DateTime<Utc>> = resume
         .and_then(|c| c.user_ts.as_deref())
@@ -295,6 +303,7 @@ fn parse_file(
             &session_id,
             &mut project,
             &mut last_user_text,
+            &mut last_user_full,
             &mut last_user_chars,
             &mut last_user_ts,
         );
@@ -311,6 +320,7 @@ fn parse_file(
             offset: consumed,
             probe: probe_hash(path, consumed).unwrap_or_default(),
             user_text: last_user_text,
+            user_text_full: jsonl::truncate_chars(&last_user_full, CURSOR_USER_TEXT_CAP),
             user_chars: last_user_chars,
             user_ts: last_user_ts.map(|ts| ts.to_rfc3339()),
             project: Some(project),
@@ -346,6 +356,7 @@ fn process_line(
     session_id: &str,
     project: &mut String,
     last_user_text: &mut String,
+    last_user_full: &mut String,
     last_user_chars: &mut Option<u64>,
     last_user_ts: &mut Option<DateTime<Utc>>,
 ) {
@@ -384,6 +395,7 @@ fn process_line(
                     }
                     *last_user_chars = Some(text.chars().count() as u64);
                     *last_user_text = jsonl::truncate_chars(&text, 500);
+                    *last_user_full = text;
                     *last_user_ts = entry.timestamp.as_deref().and_then(parse_timestamp);
                 }
             }
@@ -473,6 +485,8 @@ fn process_line(
                 code_blocks: jsonl::merge_code_blocks(code_blocks),
                 edited_files: jsonl::dedup_files(activity.edited_files),
                 referenced_files: jsonl::dedup_files(activity.referenced_files),
+                transcript_user: Some(last_user_full.clone()),
+                transcript_assistant: Some(response_text),
                 ..ParsedCall::default()
             };
 
@@ -503,6 +517,11 @@ fn merge_streamed_line(call: &mut ParsedCall, content: Option<&Value>) {
     if !response_text.is_empty() {
         call.response_chars =
             Some(call.response_chars.unwrap_or(0) + response_text.chars().count() as u64);
+        let transcript = call.transcript_assistant.get_or_insert_with(String::new);
+        if !transcript.is_empty() {
+            transcript.push('\n');
+        }
+        transcript.push_str(&response_text);
     }
     if !activity.edited_files.is_empty() {
         let mut files = std::mem::take(&mut call.edited_files);
@@ -877,6 +896,65 @@ mod tests {
         assert_eq!(second.calls.len(), 1);
         assert_eq!(second.calls[0].user_message, "try again with tests");
         assert_eq!(second.calls[0].prompt_chars, Some(20));
+        assert_eq!(
+            second.calls[0].transcript_user.as_deref(),
+            Some("try again with tests"),
+            "full user text rides the cursor across the boundary"
+        );
+    }
+
+    #[test]
+    fn cursor_carries_full_transcript_text_across_the_boundary() {
+        let dir = fixture();
+        let source =
+            SessionSource::session(dir.path().to_path_buf(), "test/project", config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let first = parse_session_with_cursor(&source, &mut seen, None).unwrap();
+        let cursor = first.cursor.clone().expect("cursor persisted");
+
+        // Sync 2 consumes only a long user prompt; its assistant round has
+        // not landed yet, so the untruncated text must ride the cursor.
+        let long_prompt = "p".repeat(600);
+        let path = dir.path().join("session.jsonl");
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        writeln!(
+            f,
+            r#"{{"type":"user","timestamp":"2026-04-26T10:06:00Z","sessionId":"s1","message":{{"role":"user","content":"{long_prompt}"}}}}"#
+        )
+        .unwrap();
+        let mut seen = HashSet::new();
+        let second = parse_session_with_cursor(&source, &mut seen, Some(&cursor)).unwrap();
+        assert!(second.calls.is_empty());
+
+        // Sync 3: the assistant line arrives and must carry the full prompt.
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        writeln!(
+            f,
+            r#"{{"type":"assistant","timestamp":"2026-04-26T10:06:05Z","sessionId":"s1","message":{{"role":"assistant","id":"msg_6","model":"claude-opus-4-7-20250514","usage":{{"input_tokens":1,"output_tokens":1}},"content":[{{"type":"text","text":"ok"}}]}}}}"#
+        )
+        .unwrap();
+        let mut seen = HashSet::new();
+        let third =
+            parse_session_with_cursor(&source, &mut seen, second.cursor.as_deref()).unwrap();
+        assert_eq!(third.calls.len(), 1);
+        let call = &third.calls[0];
+        assert_eq!(
+            call.user_message.chars().count(),
+            500,
+            "display text stays truncated"
+        );
+        assert_eq!(
+            call.transcript_user.as_deref(),
+            Some(long_prompt.as_str()),
+            "the cursor carries the untruncated prompt"
+        );
+        assert_eq!(call.transcript_assistant.as_deref(), Some("ok"));
     }
 
     #[test]
@@ -897,6 +975,13 @@ mod tests {
         let full = parse_session_with_cursor(&source, &mut seen, Some(&stale)).unwrap();
         assert_eq!(full.resumed_files, 0);
         assert_eq!(full.calls.len(), 2);
+
+        // A pre-transcript "1" cursor is discarded the same way.
+        let v1 = cursor.replace(&format!("\"v\":\"{PARSE_VERSION}\""), "\"v\":\"1\"");
+        let mut seen = HashSet::new();
+        let reparsed_v1 = parse_session_with_cursor(&source, &mut seen, Some(&v1)).unwrap();
+        assert_eq!(reparsed_v1.resumed_files, 0);
+        assert_eq!(reparsed_v1.calls.len(), 2);
 
         // A rewritten prefix (same length or longer, different bytes at the
         // stored offset) fails the probe and re-parses fully.
@@ -1015,6 +1100,61 @@ mod tests {
         assert_eq!(second.response_chars, Some(4));
         assert!(!second.is_canceled);
         assert!(second.code_blocks.is_empty());
+
+        assert_eq!(
+            first.transcript_user.as_deref(),
+            Some("refactor the parser")
+        );
+        assert_eq!(
+            first.transcript_assistant.as_deref(),
+            Some("Here:\n```rust\nfn a() {}\nfn b() {}\n```"),
+            "assistant text blocks land in the transcript verbatim"
+        );
+        assert_eq!(
+            second.transcript_user.as_deref(),
+            Some("try again with tests")
+        );
+        assert_eq!(second.transcript_assistant.as_deref(), Some("done"));
+    }
+
+    #[test]
+    fn long_prompts_truncate_display_but_keep_full_transcript() {
+        let dir = tempfile_lite::TempDir::new();
+        let path = dir.path().join("session.jsonl");
+        let mut f = std::fs::File::create(&path).unwrap();
+        let long_prompt = "p".repeat(600);
+        writeln!(
+            f,
+            r#"{{"type":"user","timestamp":"2026-04-26T10:00:00Z","sessionId":"s1","message":{{"role":"user","content":"{long_prompt}"}}}}"#
+        )
+        .unwrap();
+        writeln!(
+            f,
+            r#"{{"type":"assistant","timestamp":"2026-04-26T10:00:01Z","sessionId":"s1","message":{{"role":"assistant","id":"msg_long","model":"claude-opus-4-7","usage":{{"input_tokens":1,"output_tokens":1}},"content":[{{"type":"text","text":"first"}},{{"type":"text","text":"second"}}]}}}}"#
+        )
+        .unwrap();
+
+        let source = SessionSource::session(dir.path().to_path_buf(), "p", config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source, &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 1);
+        let call = &calls[0];
+        assert_eq!(
+            call.user_message.chars().count(),
+            500,
+            "display text stays truncated"
+        );
+        assert_eq!(
+            call.transcript_user.as_deref(),
+            Some(long_prompt.as_str()),
+            "the archive transcript keeps the full prompt"
+        );
+        assert_eq!(
+            call.transcript_assistant.as_deref(),
+            Some("first\nsecond"),
+            "text blocks of one line join with a newline"
+        );
     }
 
     #[test]
@@ -1064,6 +1204,12 @@ mod tests {
             call.timestamp,
             parse_timestamp("2026-04-26T10:00:01Z"),
             "merged call keeps the first line's timestamp"
+        );
+        assert_eq!(call.transcript_user.as_deref(), Some("add a helper"));
+        assert_eq!(
+            call.transcript_assistant.as_deref(),
+            Some("On it.\nDone."),
+            "text blocks on later lines join the transcript with a newline"
         );
     }
 

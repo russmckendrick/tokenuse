@@ -231,7 +231,9 @@ pub fn parse_session(
     let mut pending_code_blocks: Vec<CodeBlock> = Vec::new();
     let mut pending_edited: Vec<String> = Vec::new();
     let mut pending_response_chars: Option<u64> = None;
+    let mut pending_response_text = String::new();
     let mut last_user_text = String::new();
+    let mut last_user_full = String::new();
     let mut last_user_chars: Option<u64> = None;
     let mut last_user_ts: Option<DateTime<Utc>> = None;
     let mut previous_total_usage: Option<TokenUsage> = None;
@@ -282,6 +284,7 @@ pub fn parse_session(
                         if !text.is_empty() {
                             last_user_chars = Some(text.chars().count() as u64);
                             last_user_text = jsonl::truncate_chars(text, 500);
+                            last_user_full = text.to_string();
                             last_user_ts = entry.timestamp.as_deref().and_then(parse_timestamp);
                         }
                         continue;
@@ -294,6 +297,10 @@ pub fn parse_session(
                             *pending_response_chars.get_or_insert(0) +=
                                 message.chars().count() as u64;
                             pending_code_blocks.extend(jsonl::extract_code_fences(message));
+                            if !pending_response_text.is_empty() {
+                                pending_response_text.push('\n');
+                            }
+                            pending_response_text.push_str(message);
                         }
                         continue;
                     }
@@ -339,6 +346,7 @@ pub fn parse_session(
                     pending_code_blocks.clear();
                     pending_edited.clear();
                     pending_response_chars = None;
+                    pending_response_text.clear();
                     continue;
                 }
 
@@ -365,6 +373,7 @@ pub fn parse_session(
                         pending_code_blocks.clear();
                         pending_edited.clear();
                         pending_response_chars = None;
+                        pending_response_text.clear();
                         continue;
                     }
                 }
@@ -398,6 +407,7 @@ pub fn parse_session(
                     pending_code_blocks.clear();
                     pending_edited.clear();
                     pending_response_chars = None;
+                    pending_response_text.clear();
                     continue;
                 }
 
@@ -437,6 +447,8 @@ pub fn parse_session(
                     code_blocks: jsonl::merge_code_blocks(mem::take(&mut pending_code_blocks)),
                     edited_files: jsonl::dedup_files(mem::take(&mut pending_edited)),
                     superseded_dedup_keys,
+                    transcript_user: Some(last_user_full.clone()),
+                    transcript_assistant: Some(mem::take(&mut pending_response_text)),
                     ..ParsedCall::default()
                 };
 
@@ -1048,6 +1060,43 @@ mod tests {
         assert!(
             call.is_canceled,
             "turn_aborted cancels the last emitted call"
+        );
+        assert_eq!(
+            call.transcript_user.as_deref(),
+            Some("please fix the tests"),
+            "full trimmed prompt lands in the transcript"
+        );
+        assert_eq!(
+            call.transcript_assistant.as_deref(),
+            Some("Fixing:\n```rust\nassert!(ok);\n```"),
+            "agent_reasoning text stays out of the transcript"
+        );
+    }
+
+    #[test]
+    fn transcript_accumulates_agent_messages_across_a_turn() {
+        const AGENT_MSG_SECOND: &str = r#"{"timestamp":"2026-03-29T15:04:09.000Z","type":"event_msg","payload":{"type":"agent_message","message":"All tests pass now.","phase":"commentary"}}"#;
+        let f = write_session(&[
+            META_OK,
+            TURN_GPT5,
+            USER_MSG,
+            AGENT_MSG,
+            AGENT_MSG_SECOND,
+            TOKEN_FIRST,
+        ]);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source_for(f.path().to_path_buf()), &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 1);
+        let call = &calls[0];
+        assert_eq!(
+            call.transcript_user.as_deref(),
+            Some("please fix the tests")
+        );
+        assert_eq!(
+            call.transcript_assistant.as_deref(),
+            Some("Fixing:\n```rust\nassert!(ok);\n```\nAll tests pass now."),
+            "agent_message events before the token_count join with newlines"
         );
     }
 

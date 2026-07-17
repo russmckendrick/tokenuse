@@ -108,6 +108,7 @@ fn parse_legacy(
 ) -> Vec<ParsedCall> {
     let mut current_model = String::new();
     let mut pending_user_message = String::new();
+    let mut pending_user_full = String::new();
     let mut pending_user_chars: Option<u64> = None;
     let mut calls = Vec::new();
 
@@ -129,6 +130,7 @@ fn parse_legacy(
                 if let Some(c) = event.pointer("/data/content").and_then(|v| v.as_str()) {
                     pending_user_chars = Some(c.chars().count() as u64);
                     pending_user_message = truncate(c, 500);
+                    pending_user_full = c.to_string();
                 }
             }
             "assistant.message" => {
@@ -170,6 +172,7 @@ fn parse_legacy(
                     timestamp,
                     dedup_key,
                     user_message: std::mem::take(&mut pending_user_message),
+                    transcript_user: Some(std::mem::take(&mut pending_user_full)),
                     session_id: session_id.to_string(),
                     project: project.to_string(),
                     prompt_chars: pending_user_chars.take(),
@@ -311,6 +314,7 @@ fn parse_transcript(
     };
 
     let mut pending_user_message = String::new();
+    let mut pending_user_full = String::new();
     let mut pending_user_chars: Option<u64> = None;
     let mut calls = Vec::new();
 
@@ -321,6 +325,7 @@ fn parse_transcript(
             if let Some(c) = event.pointer("/data/content").and_then(|v| v.as_str()) {
                 pending_user_chars = Some(c.chars().count() as u64);
                 pending_user_message = truncate(c, 500);
+                pending_user_full = c.to_string();
             }
             continue;
         }
@@ -385,6 +390,8 @@ fn parse_transcript(
             timestamp,
             dedup_key,
             user_message: std::mem::take(&mut pending_user_message),
+            transcript_user: Some(std::mem::take(&mut pending_user_full)),
+            transcript_assistant: Some(content_text.to_string()),
             session_id: session_id.to_string(),
             project: project.to_string(),
             prompt_chars: pending_user_chars.take(),
@@ -795,11 +802,11 @@ fn parse_chat_session_file(
                     .and_then(parse_timestamp)
             })
             .or(creation_ts);
-        let user_message = req
+        let user_message_full = req
             .get("message")
             .and_then(|m| m.get("text"))
             .and_then(|v| v.as_str())
-            .map(|t| truncate(t, 500))
+            .map(str::to_string)
             .unwrap_or_default();
 
         let mut call = ParsedCall {
@@ -811,7 +818,8 @@ fn parse_chat_session_file(
             tools,
             timestamp,
             dedup_key,
-            user_message,
+            user_message: truncate(&user_message_full, 500),
+            transcript_user: Some(user_message_full),
             session_id: session_id.clone(),
             project: source.project.clone(),
             token_quality: crate::tools::TokenQuality::Exact,
@@ -1024,9 +1032,16 @@ fn usage_dedup_key(session_id: &str, event: &UsageEvent) -> String {
     }
 }
 
+/// Full user/assistant text of one CLI-store turn, attached to the first
+/// usage event of that turn (both display truncation and transcript capture).
+struct TurnText {
+    user: String,
+    assistant: String,
+}
+
 fn usage_event_calls(
     events_by_session: &HashMap<String, Vec<UsageEvent>>,
-    turn_messages: &HashMap<(String, i64), String>,
+    turn_messages: &HashMap<(String, i64), TurnText>,
     seen: &mut HashSet<String>,
 ) -> Vec<ParsedCall> {
     let mut sessions: Vec<_> = events_by_session.iter().collect();
@@ -1041,11 +1056,12 @@ fn usage_event_calls(
                 continue;
             }
 
-            let user_message = event
+            let turn_text = event
                 .turn_index
                 .filter(|turn| message_taken.insert(*turn))
-                .and_then(|turn| turn_messages.get(&(session_id.clone(), turn)))
-                .map(|message| truncate(message, 500))
+                .and_then(|turn| turn_messages.get(&(session_id.clone(), turn)));
+            let user_message = turn_text
+                .map(|text| truncate(&text.user, 500))
                 .unwrap_or_default();
             let model = if event.model.trim().is_empty() {
                 COPILOT_AUTO.to_string()
@@ -1071,6 +1087,8 @@ fn usage_event_calls(
                 timestamp: event.timestamp,
                 dedup_key,
                 user_message,
+                transcript_user: turn_text.map(|text| text.user.clone()),
+                transcript_assistant: turn_text.map(|text| text.assistant.clone()),
                 session_id: session_id.clone(),
                 project: event.project.clone(),
                 ..ParsedCall::default()
@@ -1115,15 +1133,19 @@ fn parse_session_store(
     };
     let turn_rows: Vec<_> = rows.flatten().collect();
 
-    let mut turn_messages: HashMap<(String, i64), String> = HashMap::new();
-    for (session_id, turn_index, user_message, ..) in &turn_rows {
-        if let Some(message) = user_message {
-            if !message.trim().is_empty() {
-                turn_messages
-                    .entry((session_id.clone(), *turn_index))
-                    .or_insert_with(|| message.clone());
-            }
+    let mut turn_messages: HashMap<(String, i64), TurnText> = HashMap::new();
+    for (session_id, turn_index, user_message, assistant_response, ..) in &turn_rows {
+        let user = user_message.as_deref().unwrap_or("");
+        let assistant = assistant_response.as_deref().unwrap_or("");
+        if user.trim().is_empty() && assistant.trim().is_empty() {
+            continue;
         }
+        turn_messages
+            .entry((session_id.clone(), *turn_index))
+            .or_insert_with(|| TurnText {
+                user: user.to_string(),
+                assistant: assistant.to_string(),
+            });
     }
     let evented_turns: HashSet<(String, i64)> = usage_events
         .iter()
@@ -1168,6 +1190,8 @@ fn parse_session_store(
             timestamp: timestamp.as_deref().and_then(parse_store_timestamp),
             dedup_key,
             user_message: truncate(&user_message, 500),
+            transcript_user: Some(user_message.clone()),
+            transcript_assistant: Some(assistant_response.clone()),
             session_id,
             project,
             ..ParsedCall::default()
@@ -1549,6 +1573,11 @@ mod tests {
             call.response_chars, None,
             "legacy events never read assistant content"
         );
+        assert_eq!(call.transcript_user.as_deref(), Some("fix the typo"));
+        assert_eq!(
+            call.transcript_assistant, None,
+            "legacy events carry no assistant text to transcribe"
+        );
         assert!(call.code_blocks.is_empty());
         assert!(!call.is_canceled);
         assert_eq!(call.elapsed_ms, None);
@@ -1782,6 +1811,14 @@ mod tests {
         assert_eq!(call.project, "tokens");
         assert_eq!(call.tools, vec!["Read"]);
         assert_eq!(call.user_message, "fix the failing test");
+        assert_eq!(
+            call.transcript_user.as_deref(),
+            Some("fix the failing test")
+        );
+        assert_eq!(
+            call.transcript_assistant, None,
+            "chat-session journals carry no assistant text to transcribe"
+        );
         assert!(call.timestamp.is_some(), "falls back to root creationDate");
         assert!(call.cost_usd > 0.0);
 
@@ -1903,6 +1940,18 @@ mod tests {
             "the user message attaches only to the first assistant message"
         );
         assert_eq!(calls[1].response_chars, Some(2));
+        assert_eq!(calls[0].transcript_user.as_deref(), Some("hello world"));
+        assert_eq!(
+            calls[0].transcript_assistant.as_deref(),
+            Some("sure thing"),
+            "reasoningText stays out of the transcript"
+        );
+        assert_eq!(
+            calls[1].transcript_user.as_deref(),
+            Some(""),
+            "the user text attaches only to the first assistant message"
+        );
+        assert_eq!(calls[1].transcript_assistant.as_deref(), Some("ok"));
     }
 
     #[test]
@@ -1938,6 +1987,15 @@ mod tests {
         assert_eq!(
             call.response_chars,
             Some("Sure:\n```rust\nfn a() {}\nfn b() {}\n```".chars().count() as u64)
+        );
+        assert_eq!(
+            call.transcript_user.as_deref(),
+            Some(long_prompt.as_str()),
+            "the archive transcript keeps the full prompt"
+        );
+        assert_eq!(
+            call.transcript_assistant.as_deref(),
+            Some("Sure:\n```rust\nfn a() {}\nfn b() {}\n```")
         );
         assert_eq!(
             call.code_blocks,
@@ -2017,6 +2075,12 @@ mod tests {
             "chars/4 estimate rows carry no enrichment"
         );
         assert_eq!(calls[0].response_chars, None);
+        assert_eq!(calls[0].transcript_user.as_deref(), Some("hello there"));
+        assert_eq!(
+            calls[0].transcript_assistant.as_deref(),
+            Some("general kenobi, nice to see you"),
+            "estimate turn rows carry both transcript sides"
+        );
         assert!(calls[0].code_blocks.is_empty());
         assert_eq!(calls[1].project, "russmckendrick/tokens");
         assert!(
@@ -2115,6 +2179,12 @@ mod tests {
             "usage-event rows carry no enrichment"
         );
         assert_eq!(first.response_chars, None);
+        assert_eq!(first.transcript_user.as_deref(), Some("fix the bug"));
+        assert_eq!(
+            first.transcript_assistant.as_deref(),
+            Some("done"),
+            "the turn's full text attaches to its first usage row"
+        );
 
         let second = &calls[1];
         assert_eq!(second.dedup_key, "copilot:sess-ev:turn-0:usage-2");
@@ -2123,10 +2193,23 @@ mod tests {
             second.user_message, "",
             "the turn message attaches only to the first usage row"
         );
+        assert_eq!(
+            second.transcript_user, None,
+            "later usage rows of a turn carry no transcript text"
+        );
+        assert_eq!(second.transcript_assistant, None);
 
         let estimate = &calls[2];
         assert_eq!(estimate.dedup_key, "copilot:sess-ev:turn-1");
         assert_eq!(estimate.model, "copilot-auto");
+        assert_eq!(
+            estimate.transcript_user.as_deref(),
+            Some("turn without events")
+        );
+        assert_eq!(
+            estimate.transcript_assistant.as_deref(),
+            Some("estimated reply")
+        );
     }
 
     #[cfg(feature = "quota-sync")]

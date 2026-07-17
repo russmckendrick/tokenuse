@@ -14,7 +14,7 @@ pub mod parser;
 pub struct Cursor;
 
 /// v4: composer context-meter input credits, workspace project mapping.
-const SOURCE_FINGERPRINT_VERSION: &str = "cursor-v4-context-meter";
+const SOURCE_FINGERPRINT_VERSION: &str = "cursor-v5-transcripts";
 
 impl ToolAdapter for Cursor {
     fn id(&self) -> &'static str {

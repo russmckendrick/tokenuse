@@ -73,6 +73,14 @@ pub fn load() -> Result<Ingested> {
         }
     }
 
+    // The raw path bypasses the archive, which normally consumes the
+    // transcript capture; drop it here so the resident dataset stays
+    // text-free like an archive load.
+    for call in &mut calls {
+        call.transcript_user = None;
+        call.transcript_assistant = None;
+    }
+
     Ok(Ingested { calls, limits })
 }
 

@@ -1,6 +1,7 @@
 mod coach;
 mod components;
 mod graphs;
+mod scrollback;
 mod sections;
 
 use ratatui::{
@@ -48,6 +49,7 @@ pub fn render(frame: &mut Frame<'_>, app: &App) {
         Page::Config => render_config(frame, area, root, app),
         Page::Usage => render_limits(frame, area, root, app),
         Page::Coach => coach::render_coach(frame, area, root, app),
+        Page::Scrollback => scrollback::render_scrollback(frame, area, root, app),
         Page::Session => render_session_page(frame, area, root, app),
     }
 

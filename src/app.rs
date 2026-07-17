@@ -132,11 +132,18 @@ pub enum Page {
     Config,
     Usage,
     Coach,
+    Scrollback,
     Session,
 }
 
 impl Page {
-    pub const TABS: [Page; 4] = [Page::Overview, Page::DeepDive, Page::Usage, Page::Coach];
+    pub const TABS: [Page; 5] = [
+        Page::Overview,
+        Page::DeepDive,
+        Page::Usage,
+        Page::Coach,
+        Page::Scrollback,
+    ];
 
     pub fn label(self) -> &'static str {
         let copy = copy();
@@ -145,6 +152,7 @@ impl Page {
             Self::DeepDive => copy.nav.deep_dive.as_str(),
             Self::Usage => copy.nav.usage.as_str(),
             Self::Coach => copy.nav.coach.as_str(),
+            Self::Scrollback => copy.nav.scrollback.as_str(),
             Self::Config => copy.nav.config.as_str(),
             Self::Session => copy.nav.session.as_str(),
         }
@@ -791,12 +799,56 @@ fn move_index(selected: &mut usize, len: usize, delta: isize) {
     }
 }
 
+/// Human-readable size for the Config page (binary units, one decimal).
+fn format_binary_size(bytes: u64) -> String {
+    const UNITS: [&str; 4] = ["B", "KiB", "MiB", "GiB"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} {}", UNITS[0])
+    } else {
+        format!("{value:.1} {}", UNITS[unit])
+    }
+}
+
+/// Archived tool id for the global tool filter; `All` places no constraint.
+fn scrollback_tool_filter(tool: Tool) -> Option<String> {
+    let id = match tool {
+        Tool::All => return None,
+        Tool::ClaudeCode => crate::tools::claude_code::config::TOOL_ID,
+        Tool::Cursor => crate::tools::cursor::config::TOOL_ID,
+        Tool::Codex => crate::tools::codex::config::TOOL_ID,
+        Tool::Copilot => crate::tools::copilot::config::TOOL_ID,
+        Tool::Gemini => crate::tools::gemini::config::TOOL_ID,
+    };
+    Some(id.to_string())
+}
+
 #[derive(Debug, Clone)]
 pub struct SessionModal {
     pub options: Vec<SessionOption>,
     pub filtered: Vec<usize>,
     pub query: String,
     pub selected: usize,
+}
+
+/// State of the Scrollback page: the transcript-search query, whether the
+/// input line has key focus (the TUI's only page-level text input), and the
+/// last search's results. Results live here so drilling into a session and
+/// back keeps them.
+#[derive(Debug, Default)]
+pub struct ScrollbackState {
+    pub query: String,
+    pub input_focused: bool,
+    /// `None` until the first search runs; distinguishes the pre-search
+    /// empty state from a search with no matches.
+    pub results: Option<crate::search::SearchResults>,
+    pub selected: usize,
+    pub error: Option<String>,
 }
 
 impl SessionModal {
@@ -1126,6 +1178,10 @@ pub struct App {
     pub session_view: Option<SessionDetailView>,
     pub session_scroll: usize,
     pub session_selected: usize,
+    /// Page to return to when the session drill-down closes; set by
+    /// `enter_session` so Scrollback results survive the round trip.
+    pub session_return_page: Page,
+    pub scrollback: ScrollbackState,
     pub call_detail_index: Option<usize>,
     pub help_open: bool,
     pub refresher: Option<Refresher>,
@@ -1171,6 +1227,8 @@ impl Default for App {
             session_view: None,
             session_scroll: 0,
             session_selected: 0,
+            session_return_page: Page::DeepDive,
+            scrollback: ScrollbackState::default(),
             call_detail_index: None,
             help_open: false,
             refresher: None,
@@ -1765,6 +1823,9 @@ impl App {
     pub fn enter_session(&mut self, key: &str) {
         match self.lookup_session_view(key) {
             Some(view) => {
+                if self.page != Page::Session {
+                    self.session_return_page = self.page;
+                }
                 self.session_view = Some(view);
                 self.session_scroll = 0;
                 self.session_selected = 0;
@@ -1784,7 +1845,8 @@ impl App {
     }
 
     pub fn leave_session(&mut self) {
-        self.page = Page::DeepDive;
+        self.page = self.session_return_page;
+        self.session_return_page = Page::DeepDive;
         self.session_view = None;
         self.session_scroll = 0;
         self.session_selected = 0;
@@ -1991,10 +2053,19 @@ impl App {
                 )
             )
         };
-        let clear_value = if self.paths.archive_db_file.exists() {
-            copy.config.values.delete_archive_then_rebuild.clone()
-        } else {
-            copy.config.values.build_archive_from_history.clone()
+        // Archive size rides on the clear-data row: since v7 the file also
+        // holds the Scrollback transcript index, so its growth is worth a
+        // glance and Clear Data is the purge path.
+        let clear_value = match std::fs::metadata(&self.paths.archive_db_file) {
+            Ok(meta) => format!(
+                "{} · {}",
+                crate::copy::template(
+                    &copy.config.values.archive_size,
+                    &[("size", format_binary_size(meta.len()))],
+                ),
+                copy.config.values.delete_archive_then_rebuild
+            ),
+            Err(_) => copy.config.values.build_archive_from_history.clone(),
         };
         let claude_limits_value = format!(
             "{} · {}",
@@ -2165,6 +2236,8 @@ impl App {
             Page::Config => keymap::CONTEXT_CONFIG_PAGE,
             Page::Usage => keymap::CONTEXT_USAGE_PAGE,
             Page::Session => keymap::CONTEXT_SESSION_PAGE,
+            Page::Scrollback if self.scrollback.input_focused => keymap::CONTEXT_SCROLLBACK_INPUT,
+            Page::Scrollback => keymap::CONTEXT_SCROLLBACK_PAGE,
             Page::Overview | Page::DeepDive | Page::Coach => keymap::CONTEXT_DASHBOARD,
         }
     }
@@ -2184,7 +2257,10 @@ impl App {
             keymap::ACTION_PERIOD_THIRTY_DAYS => self.period = Period::ThirtyDays,
             keymap::ACTION_PERIOD_MONTH => self.period = Period::Month,
             keymap::ACTION_PERIOD_ALL_TIME => self.period = Period::AllTime,
-            keymap::ACTION_CYCLE_TOOL => self.tool = self.tool.next(),
+            keymap::ACTION_CYCLE_TOOL => {
+                self.tool = self.tool.next();
+                self.refresh_scrollback_after_filter_change();
+            }
             keymap::ACTION_CYCLE_SORT => self.cycle_sort(),
             keymap::ACTION_TOGGLE_DATA_SOURCE => self.toggle_data_source(),
             keymap::ACTION_OPEN_PROJECT_PICKER => self.open_project_modal(),
@@ -2195,7 +2271,13 @@ impl App {
             keymap::ACTION_PAGE_DEEP_DIVE => self.set_page(Page::DeepDive),
             keymap::ACTION_PAGE_USAGE => self.set_page(Page::Usage),
             keymap::ACTION_PAGE_COACH => self.set_page(Page::Coach),
+            keymap::ACTION_PAGE_SCROLLBACK => self.open_scrollback(),
             keymap::ACTION_PAGE_CONFIG => self.set_page(Page::Config),
+            keymap::ACTION_FOCUS_SEARCH => {
+                if self.page == Page::Scrollback {
+                    self.scrollback.input_focused = true;
+                }
+            }
             keymap::ACTION_CLOSE_SESSION => self.leave_session(),
             keymap::ACTION_RELOAD => self.reload(),
             keymap::ACTION_MOVE_UP => self.move_active_selection(-1),
@@ -2281,6 +2363,8 @@ impl App {
             self.export_dir_picker = None;
         } else if self.export_modal.is_some() {
             self.export_modal = None;
+        } else if self.page == Page::Scrollback && self.scrollback.input_focused {
+            self.scrollback.input_focused = false;
         }
     }
 
@@ -2305,6 +2389,12 @@ impl App {
             self.activate_config_row();
         } else if self.page == Page::Session {
             self.open_session_call_detail(self.session_selected);
+        } else if self.page == Page::Scrollback {
+            if self.scrollback.input_focused {
+                self.run_scrollback_search();
+            } else {
+                self.open_scrollback_result();
+            }
         }
     }
 
@@ -2318,6 +2408,7 @@ impl App {
             self.project_filter = ProjectFilter::from_option(&option);
         }
         self.project_modal = None;
+        self.refresh_scrollback_after_filter_change();
     }
 
     fn confirm_session_picker(&mut self) {
@@ -2418,6 +2509,8 @@ impl App {
                 (self.session_selected + delta as usize).min(last)
             };
             self.select_session_call(next);
+        } else if self.page == Page::Scrollback {
+            self.move_scrollback_selection(delta);
         }
     }
 
@@ -2437,6 +2530,8 @@ impl App {
                 (self.session_selected + delta as usize).min(last)
             };
             self.select_session_call(next);
+        } else if self.page == Page::Scrollback {
+            self.move_scrollback_selection(delta);
         }
     }
 
@@ -2455,6 +2550,8 @@ impl App {
             self.config_selected = 0;
         } else if self.page == Page::Session {
             self.select_session_call(0);
+        } else if self.page == Page::Scrollback {
+            self.scrollback.selected = 0;
         }
     }
 
@@ -2478,6 +2575,8 @@ impl App {
                 .map(|view| view.calls.len())
                 .unwrap_or(0);
             self.select_session_call(row_count.saturating_sub(1));
+        } else if self.page == Page::Scrollback {
+            self.scrollback.selected = self.scrollback_result_count().saturating_sub(1);
         }
     }
 
@@ -2783,6 +2882,8 @@ impl App {
         } else if let Some(modal) = self.session_modal.as_mut() {
             modal.query.pop();
             modal.refilter();
+        } else if self.page == Page::Scrollback && self.scrollback.input_focused {
+            self.scrollback.query.pop();
         }
     }
 
@@ -2803,6 +2904,8 @@ impl App {
         } else if let Some(modal) = self.session_modal.as_mut() {
             modal.query.clear();
             modal.refilter();
+        } else if self.page == Page::Scrollback && self.scrollback.input_focused {
+            self.scrollback.query.clear();
         }
     }
 
@@ -2826,6 +2929,9 @@ impl App {
         } else if let Some(modal) = self.session_modal.as_mut() {
             modal.query.push(c);
             modal.refilter();
+            true
+        } else if self.page == Page::Scrollback && self.scrollback.input_focused {
+            self.scrollback.query.push(c);
             true
         } else {
             false
@@ -3023,6 +3129,92 @@ impl App {
         self.page = page;
         if page == Page::Usage {
             self.period = Period::Today;
+        }
+        // Deliberately no auto-focus when Tab-cycling onto Scrollback: a
+        // focused input would swallow the o/d/u/k/c navigation letters. Only
+        // the explicit `/` shortcut (open_scrollback) grabs the input.
+    }
+
+    /// Open Scrollback with the query input focused (the `/` shortcut).
+    fn open_scrollback(&mut self) {
+        self.set_page(Page::Scrollback);
+        self.scrollback.input_focused = true;
+    }
+
+    fn scrollback_result_count(&self) -> usize {
+        self.scrollback
+            .results
+            .as_ref()
+            .map(|results| results.sessions.len())
+            .unwrap_or(0)
+    }
+
+    fn move_scrollback_selection(&mut self, delta: isize) {
+        let len = self.scrollback_result_count();
+        move_index(&mut self.scrollback.selected, len, delta);
+    }
+
+    /// Run the transcript search for the current query, honouring the global
+    /// tool and project filters. Synchronous by design: FTS5 answers in
+    /// single-digit milliseconds, so no async plumbing in the key handler.
+    pub fn run_scrollback_search(&mut self) {
+        self.scrollback.error = None;
+        let query = self.scrollback.query.trim().to_string();
+        if query.is_empty() {
+            self.scrollback.results = None;
+            return;
+        }
+        let filters = crate::search::SearchFilters {
+            tool: scrollback_tool_filter(self.tool),
+            project: match &self.project_filter {
+                ProjectFilter::All => None,
+                ProjectFilter::Selected { identity, .. } => Some(identity.clone()),
+            },
+            session_limit: crate::search::DEFAULT_SESSION_LIMIT,
+        };
+        match crate::search::search_transcripts(&self.paths, &query, &filters) {
+            Ok(mut results) => {
+                results.format_costs(&self.currency());
+                self.scrollback.results = Some(results);
+                self.scrollback.selected = 0;
+                self.scrollback.input_focused = false;
+            }
+            Err(error) => {
+                let message =
+                    copy::template(&copy().scrollback.error, &[("error", error.to_string())]);
+                self.scrollback.error = Some(message.clone());
+                self.set_status(message, StatusTone::Error);
+            }
+        }
+    }
+
+    fn open_scrollback_result(&mut self) {
+        // Search always reads the live archive, so its keys cannot resolve
+        // against the sample dataset; say so instead of a session-not-found
+        // dead end.
+        if matches!(self.source, DataSource::Sample) {
+            self.set_status(
+                copy().scrollback.sample_mode_note.clone(),
+                StatusTone::Warning,
+            );
+            return;
+        }
+        let key = self
+            .scrollback
+            .results
+            .as_ref()
+            .and_then(|results| results.sessions.get(self.scrollback.selected))
+            .map(|session| session.key.clone());
+        if let Some(key) = key {
+            self.enter_session(&key);
+        }
+    }
+
+    /// Keep Scrollback results in step with the global tool/project filters:
+    /// a filter change while results are showing re-runs the search.
+    fn refresh_scrollback_after_filter_change(&mut self) {
+        if self.page == Page::Scrollback && self.scrollback.results.is_some() {
+            self.run_scrollback_search();
         }
     }
 
@@ -3651,6 +3843,63 @@ mod tests {
     }
 
     #[test]
+    fn scrollback_input_focus_and_query_editing() {
+        // Point search at a directory with no archive so it returns empty
+        // results instead of touching the real config dir.
+        let mut app = App {
+            paths: ConfigPaths::new(std::env::temp_dir().join(format!(
+                "tokenuse-scrollback-test-{}",
+                Utc::now().timestamp_nanos_opt().unwrap_or_default()
+            ))),
+            ..App::default()
+        };
+
+        app.handle_key(key(KeyCode::Char('/')));
+        assert_eq!(app.page, Page::Scrollback);
+        assert!(
+            app.scrollback.input_focused,
+            "/ opens with the input focused"
+        );
+
+        for c in "retry".chars() {
+            app.handle_key(key(KeyCode::Char(c)));
+        }
+        assert_eq!(app.scrollback.query, "retry");
+        app.handle_key(key(KeyCode::Backspace));
+        assert_eq!(app.scrollback.query, "retr");
+
+        app.handle_key(key(KeyCode::Enter));
+        assert!(!app.scrollback.input_focused, "Enter runs and leaves input");
+        assert!(app.scrollback.results.is_some(), "a search ran");
+
+        app.handle_key(key(KeyCode::Char('/')));
+        assert!(app.scrollback.input_focused, "/ refocuses the query");
+        app.handle_key(key(KeyCode::Esc));
+        assert!(!app.scrollback.input_focused, "Esc leaves the input");
+    }
+
+    #[test]
+    fn leaving_a_session_returns_to_the_page_it_was_opened_from() {
+        let mut app = App::default();
+        let key = app
+            .session_options()
+            .first()
+            .map(|option| option.key.clone())
+            .expect("sample data has sessions");
+
+        app.set_page(Page::Scrollback);
+        app.enter_session(&key);
+        assert_eq!(app.page, Page::Session);
+        app.leave_session();
+        assert_eq!(app.page, Page::Scrollback, "returns to Scrollback");
+
+        app.set_page(Page::DeepDive);
+        app.enter_session(&key);
+        app.leave_session();
+        assert_eq!(app.page, Page::DeepDive);
+    }
+
+    #[test]
     fn period_day_bounds_match_the_call_filter_semantics() {
         let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 12).unwrap();
         let day = |y, m, d| chrono::NaiveDate::from_ymd_opt(y, m, d).unwrap();
@@ -3899,9 +4148,13 @@ mod tests {
         app.handle_key(key(KeyCode::Tab));
         assert_eq!(app.page, Page::Coach);
         app.handle_key(key(KeyCode::Tab));
+        assert_eq!(app.page, Page::Scrollback);
+        app.handle_key(key(KeyCode::Tab));
         assert_eq!(app.page, Page::Overview);
 
         app.set_period(Period::AllTime);
+        app.handle_key(key(KeyCode::BackTab));
+        assert_eq!(app.page, Page::Scrollback);
         app.handle_key(key(KeyCode::BackTab));
         assert_eq!(app.page, Page::Coach);
         app.handle_key(key(KeyCode::BackTab));

@@ -241,4 +241,11 @@ pub struct ParsedCall {
     /// previous sync, so on a dedup conflict its activity must be merged
     /// into the existing row instead of overwriting it. Never persisted.
     pub merge_activity: bool,
+    /// Archive-only: full user prompt text for the transcript search index.
+    /// Consumed by the archive's transcripts table; load_calls() leaves it
+    /// None so resident data stays text-free.
+    pub transcript_user: Option<String>,
+    /// Archive-only: full assistant response text (text blocks only —
+    /// thinking/reasoning and tool output excluded). Never resident.
+    pub transcript_assistant: Option<String>,
 }

@@ -10,6 +10,8 @@ pub const CONTEXT_DASHBOARD: &str = "dashboard";
 pub const CONTEXT_USAGE_PAGE: &str = "usage_page";
 pub const CONTEXT_CONFIG_PAGE: &str = "config_page";
 pub const CONTEXT_SESSION_PAGE: &str = "session_page";
+pub const CONTEXT_SCROLLBACK_PAGE: &str = "scrollback_page";
+pub const CONTEXT_SCROLLBACK_INPUT: &str = "scrollback_input";
 pub const CONTEXT_HELP: &str = "help";
 pub const CONTEXT_CALL_DETAIL: &str = "call_detail";
 pub const CONTEXT_PROJECT_PICKER: &str = "project_picker";
@@ -46,7 +48,9 @@ pub const ACTION_PAGE_OVERVIEW: &str = "page_overview";
 pub const ACTION_PAGE_DEEP_DIVE: &str = "page_deep_dive";
 pub const ACTION_PAGE_USAGE: &str = "page_usage";
 pub const ACTION_PAGE_COACH: &str = "page_coach";
+pub const ACTION_PAGE_SCROLLBACK: &str = "page_scrollback";
 pub const ACTION_PAGE_CONFIG: &str = "page_config";
+pub const ACTION_FOCUS_SEARCH: &str = "focus_search";
 pub const ACTION_CLOSE_SESSION: &str = "close_session";
 pub const ACTION_RELOAD: &str = "reload";
 pub const ACTION_MOVE_UP: &str = "move_up";
@@ -89,7 +93,9 @@ const SUPPORTED_ACTIONS: &[&str] = &[
     ACTION_PAGE_DEEP_DIVE,
     ACTION_PAGE_USAGE,
     ACTION_PAGE_COACH,
+    ACTION_PAGE_SCROLLBACK,
     ACTION_PAGE_CONFIG,
+    ACTION_FOCUS_SEARCH,
     ACTION_CLOSE_SESSION,
     ACTION_RELOAD,
     ACTION_MOVE_UP,

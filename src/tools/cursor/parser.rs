@@ -418,6 +418,8 @@ fn reconstruct_state(
                 speed: speed_from_model(&model),
                 dedup_key,
                 user_message: truncate_chars(&rich.user_message, 500),
+                transcript_user: Some(rich.user_message.clone()),
+                transcript_assistant: Some(rich.response_text.clone()),
                 session_id: composer.id.clone(),
                 project,
                 is_canceled: composer.aborted && idx + 1 == turns.len(),
@@ -1680,6 +1682,8 @@ fn calls_from_store(
                 speed: speed_from_model(&model),
                 dedup_key: format!("cursor:chat:{}:{identity}", store.conversation_id),
                 user_message: truncate_chars(&rich.user_message, 500),
+                transcript_user: Some(rich.user_message.clone()),
+                transcript_assistant: Some(rich.response_text.clone()),
                 session_id: store.conversation_id.clone(),
                 project: transcript
                     .and_then(|session| session.project.clone())
@@ -1755,6 +1759,8 @@ fn calls_from_transcript(
                 speed: speed_from_model(&model),
                 dedup_key: format!("cursor:transcript:{conversation_id}:{idx}"),
                 user_message: truncate_chars(&rich.user_message, 500),
+                transcript_user: Some(rich.user_message.clone()),
+                transcript_assistant: Some(rich.response_text.clone()),
                 session_id: conversation_id.to_string(),
                 project: transcript
                     .project
@@ -2125,6 +2131,8 @@ mod tests {
         assert_eq!(calls[0].bash_commands, vec!["cargo test"]);
         assert_eq!(calls[0].timestamp_quality, TimestampQuality::Exact);
         assert_eq!(calls[0].token_quality, TokenQuality::Exact);
+        assert_eq!(calls[0].transcript_user.as_deref(), Some("fix the bug"));
+        assert_eq!(calls[0].transcript_assistant.as_deref(), Some("Done."));
     }
 
     #[test]
@@ -2382,6 +2390,48 @@ mod tests {
         assert_eq!(session.turns.len(), 1);
         assert_eq!(session.turns[0].request_id.as_deref(), Some("request-1"));
         assert_eq!(session.turns[0].reasoning_text, "check");
+
+        let calls = calls_from_store(&session, None, None, "fallback");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].transcript_user.as_deref(), Some("fix it"));
+        assert_eq!(
+            calls[0].transcript_assistant.as_deref(),
+            Some("done"),
+            "reasoning text stays out of the transcript"
+        );
+    }
+
+    #[test]
+    fn transcript_calls_keep_full_text_alongside_truncated_display() {
+        let long_prompt = "p".repeat(600);
+        let raw = format!(
+            "{}\n{}",
+            format_args!(
+                r#"{{"role":"user","content":[{{"type":"text","text":"{long_prompt}"}}]}}"#
+            ),
+            r#"{"role":"assistant","content":[{"type":"text","text":"fixed it"}]}"#,
+        );
+        let session = TranscriptSession {
+            turns: parse_jsonl_transcript(&raw, None),
+            ..TranscriptSession::default()
+        };
+
+        let calls = calls_from_transcript("conv-t", &session, None, "fallback");
+
+        assert_eq!(calls.len(), 1);
+        let call = &calls[0];
+        assert_eq!(call.dedup_key, "cursor:transcript:conv-t:0");
+        assert_eq!(
+            call.user_message.chars().count(),
+            500,
+            "display text stays truncated"
+        );
+        assert_eq!(
+            call.transcript_user.as_deref(),
+            Some(long_prompt.as_str()),
+            "the archive transcript keeps the full prompt"
+        );
+        assert_eq!(call.transcript_assistant.as_deref(), Some("fixed it"));
     }
 
     #[test]

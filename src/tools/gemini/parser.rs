@@ -137,6 +137,7 @@ fn parse_session_data(
 ) -> Vec<ParsedCall> {
     let session_start = parse_timestamp(&session.start_time);
     let mut last_user_text = String::new();
+    let mut last_user_full = String::new();
     let mut last_user_chars: Option<u64> = None;
     let mut last_user_ts: Option<DateTime<Utc>> = None;
     let mut calls = Vec::new();
@@ -147,6 +148,7 @@ fn parse_session_data(
             if !text.trim().is_empty() {
                 last_user_chars = Some(text.chars().count() as u64);
                 last_user_text = truncate(&text, 500);
+                last_user_full = text;
                 last_user_ts = message.timestamp.as_deref().and_then(parse_timestamp);
             }
             continue;
@@ -201,6 +203,8 @@ fn parse_session_data(
             // wrong interval.
             elapsed_ms: jsonl::turn_elapsed_ms(message_ts, last_user_ts),
             code_blocks: jsonl::merge_code_blocks(jsonl::extract_code_fences(&response_text)),
+            transcript_user: Some(last_user_full.clone()),
+            transcript_assistant: Some(response_text),
             ..ParsedCall::default()
         };
         call.cost_usd = pricing::cost(&model, &call, Speed::Standard);
@@ -418,6 +422,8 @@ mod tests {
         assert!(!calls[0].is_canceled);
         assert!(calls[0].edited_files.is_empty());
         assert!(calls[0].referenced_files.is_empty());
+        assert_eq!(calls[0].transcript_user.as_deref(), Some("run the build"));
+        assert_eq!(calls[0].transcript_assistant.as_deref(), Some("done"));
 
         assert_eq!(calls[1].dedup_key, "gemini:s1:g2");
         assert_eq!(calls[1].tools, vec!["Read"]);
@@ -459,6 +465,15 @@ mod tests {
             "display text stays truncated"
         );
         assert_eq!(call.prompt_chars, Some(600), "measured before truncation");
+        assert_eq!(
+            call.transcript_user.as_deref(),
+            Some(long_prompt.as_str()),
+            "the archive transcript keeps the full prompt"
+        );
+        assert_eq!(
+            call.transcript_assistant.as_deref(),
+            Some("Sure:\n```rust\nfn a() {}\nfn b() {}\n```")
+        );
         assert_eq!(
             call.code_blocks,
             vec![CodeBlock {

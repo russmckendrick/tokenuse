@@ -76,6 +76,12 @@
       "id": "page_coach"
     },
     {
+      "id": "page_scrollback"
+    },
+    {
+      "id": "focus_search"
+    },
+    {
       "id": "page_config"
     },
     {
@@ -256,6 +262,13 @@
     {
       "context": "dashboard",
       "keys": [
+        "/"
+      ],
+      "action": "page_scrollback"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
         "r"
       ],
       "action": "reload"
@@ -392,6 +405,13 @@
     {
       "context": "usage_page",
       "keys": [
+        "/"
+      ],
+      "action": "page_scrollback"
+    },
+    {
+      "context": "usage_page",
+      "keys": [
         "r"
       ],
       "action": "reload"
@@ -475,6 +495,13 @@
         "Enter"
       ],
       "action": "confirm"
+    },
+    {
+      "context": "config_page",
+      "keys": [
+        "/"
+      ],
+      "action": "page_scrollback"
     },
     {
       "context": "session_page",
@@ -582,6 +609,13 @@
         "e"
       ],
       "action": "open_export_picker"
+    },
+    {
+      "context": "session_page",
+      "keys": [
+        "/"
+      ],
+      "action": "page_scrollback"
     },
     {
       "context": "help",
@@ -981,6 +1015,218 @@
         "Enter"
       ],
       "action": "confirm"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "q"
+      ],
+      "action": "quit"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "h",
+        "?"
+      ],
+      "action": "open_help"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "Shift+D"
+      ],
+      "action": "toggle_data_source"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "Tab"
+      ],
+      "action": "next_tab"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "Shift+Tab"
+      ],
+      "action": "prev_tab"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "o"
+      ],
+      "action": "page_overview"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "d"
+      ],
+      "action": "page_deep_dive"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "u"
+      ],
+      "action": "page_usage"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "k"
+      ],
+      "action": "page_coach"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "c"
+      ],
+      "action": "page_config"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "t"
+      ],
+      "action": "cycle_tool"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "p"
+      ],
+      "action": "open_project_picker"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "r"
+      ],
+      "action": "reload"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "Up"
+      ],
+      "action": "move_up"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "Down"
+      ],
+      "action": "move_down"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "PgUp"
+      ],
+      "action": "move_page_up"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "PgDn"
+      ],
+      "action": "move_page_down"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "Home"
+      ],
+      "action": "move_home"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "End"
+      ],
+      "action": "move_end"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "Enter"
+      ],
+      "action": "confirm"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "/",
+        "Esc"
+      ],
+      "action": "focus_search"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "g"
+      ],
+      "action": "cycle_sort"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "s"
+      ],
+      "action": "open_session_picker"
+    },
+    {
+      "context": "scrollback_page",
+      "keys": [
+        "e"
+      ],
+      "action": "open_export_picker"
+    },
+    {
+      "context": "scrollback_input",
+      "keys": [
+        "Esc"
+      ],
+      "action": "cancel"
+    },
+    {
+      "context": "scrollback_input",
+      "keys": [
+        "Enter"
+      ],
+      "action": "confirm"
+    },
+    {
+      "context": "scrollback_input",
+      "keys": [
+        "Backspace"
+      ],
+      "action": "query_backspace"
+    },
+    {
+      "context": "scrollback_input",
+      "keys": [
+        "Ctrl+U"
+      ],
+      "action": "query_clear"
+    },
+    {
+      "context": "scrollback_input",
+      "keys": [
+        "Tab"
+      ],
+      "action": "next_tab"
+    },
+    {
+      "context": "scrollback_input",
+      "keys": [
+        "Shift+Tab"
+      ],
+      "action": "prev_tab"
     }
   ]
 }

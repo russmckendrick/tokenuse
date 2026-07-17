@@ -19,6 +19,7 @@ pub struct CopyDeck {
     pub usage: UsageCopy,
     pub config: ConfigCopy,
     pub session: SessionCopy,
+    pub scrollback: ScrollbackCopy,
     pub modals: ModalCopy,
     pub actions: ActionCopy,
     pub desktop: DesktopCopy,
@@ -61,6 +62,23 @@ pub struct NavCopy {
     pub config: String,
     pub configuration: String,
     pub session: String,
+    pub scrollback: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ScrollbackCopy {
+    pub title: String,
+    pub input_label: String,
+    pub input_placeholder: String,
+    pub empty_state: String,
+    pub no_results: String,
+    pub result_count: String,
+    pub more_matches: String,
+    pub prompt_only_badge: String,
+    pub role_user: String,
+    pub role_assistant: String,
+    pub sample_mode_note: String,
+    pub error: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -517,6 +535,7 @@ pub struct ConfigValuesCopy {
     pub quota_snapshot_found: String,
     pub quota_snapshot_missing: String,
     pub delete_archive_then_rebuild: String,
+    pub archive_size: String,
     pub build_archive_from_history: String,
     pub fallback_priced_models: String,
     pub mcp_hint: String,
@@ -930,6 +949,11 @@ pub struct McpCopy {
     pub tool_status: String,
     pub tool_overview: String,
     pub tool_projects: String,
+    pub tool_scrollback: String,
+    pub scrollback_arg_query: String,
+    pub scrollback_arg_project: String,
+    pub scrollback_arg_tool: String,
+    pub scrollback_missing_query: String,
     pub unknown_tool: String,
 }
 
@@ -1154,6 +1178,10 @@ impl CopyDeck {
         ensure_template(&self.timeline.relative_rank, &["value"])?;
         ensure_template(&self.usage.console_title, &["tool"])?;
         ensure_template(&self.export.report_title, &["period", "tool"])?;
+        ensure_template(&self.scrollback.result_count, &["shown", "total"])?;
+        ensure_template(&self.scrollback.more_matches, &["count"])?;
+        ensure_template(&self.scrollback.error, &["error"])?;
+        ensure_template(&self.config.values.archive_size, &["size"])?;
         if self.export.calendar_weekdays.len() != 7 {
             return Err("export.calendar_weekdays must contain seven labels".into());
         }
@@ -1286,6 +1314,7 @@ mod tests {
         let files = [
             ("src/ui/mod.rs", include_str!("../ui/mod.rs")),
             ("src/ui/sections.rs", include_str!("../ui/sections.rs")),
+            ("src/ui/scrollback.rs", include_str!("../ui/scrollback.rs")),
             ("src/main.rs", include_str!("../main.rs")),
             ("src/export/workbook.rs", export_source),
             ("src/export/chart.rs", include_str!("../export/chart.rs")),
@@ -1323,6 +1352,10 @@ mod tests {
             (
                 "desktop/src/routes/ProjectsPage.svelte",
                 include_str!("../../desktop/src/routes/ProjectsPage.svelte"),
+            ),
+            (
+                "desktop/src/routes/ScrollbackPage.svelte",
+                include_str!("../../desktop/src/routes/ScrollbackPage.svelte"),
             ),
             (
                 "desktop/src/shell/Sidebar.svelte",

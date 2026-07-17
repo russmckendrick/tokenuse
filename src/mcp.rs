@@ -36,6 +36,7 @@ const DATA_TTL: Duration = Duration::from_secs(15 * 60);
 const TOOL_STATUS: &str = "status";
 const TOOL_OVERVIEW: &str = "overview";
 const TOOL_PROJECTS: &str = "projects";
+const TOOL_SCROLLBACK: &str = "scrollback";
 
 const JSONRPC_METHOD_NOT_FOUND: i64 = -32601;
 const JSONRPC_INVALID_PARAMS: i64 = -32602;
@@ -133,7 +134,8 @@ impl McpServer {
             "tools/call" => {
                 let id = id?;
                 let name = params.get("name").and_then(Value::as_str).unwrap_or("");
-                match self.call_tool(name) {
+                let arguments = params.get("arguments").cloned().unwrap_or(Value::Null);
+                match self.call_tool(name, &arguments) {
                     Ok(Some(payload)) => Some(result_response(id, tool_result(&payload, false))),
                     Ok(None) => Some(error_response(
                         id,
@@ -160,7 +162,7 @@ impl McpServer {
 
     /// `Ok(None)` = unknown tool name; `Err` = tool execution failure, which
     /// MCP reports inside a successful response with `isError: true`.
-    fn call_tool(&mut self, name: &str) -> Result<Option<Value>> {
+    fn call_tool(&mut self, name: &str, arguments: &Value) -> Result<Option<Value>> {
         match name {
             TOOL_STATUS => {
                 let data = self.data()?;
@@ -180,6 +182,32 @@ impl McpServer {
                     real_names,
                     &salt,
                 )))
+            }
+            TOOL_SCROLLBACK => {
+                // Validate the query before any archive access so a bad call
+                // fails fast without triggering a sync.
+                if arguments
+                    .get("query")
+                    .and_then(Value::as_str)
+                    .is_none_or(|query| query.trim().is_empty())
+                {
+                    return Err(color_eyre::eyre::eyre!(copy()
+                        .mcp
+                        .scrollback_missing_query
+                        .clone()));
+                }
+                let real_names = self.real_names;
+                let salt = self.salt.clone();
+                // data() next: piggybacks the TTL'd archive sync so the
+                // transcript index is at most one refresh interval stale.
+                let data = self.data()?;
+                Ok(Some(scrollback_payload(
+                    &data.ingested,
+                    &data.formatter,
+                    real_names,
+                    &salt,
+                    arguments,
+                )?))
             }
             _ => Ok(None),
         }
@@ -240,7 +268,120 @@ fn tool_definitions() -> Vec<Value> {
             "description": mcp_copy.tool_projects,
             "inputSchema": no_args,
         }),
+        json!({
+            "name": TOOL_SCROLLBACK,
+            "description": mcp_copy.tool_scrollback,
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string", "description": mcp_copy.scrollback_arg_query },
+                    "project": { "type": "string", "description": mcp_copy.scrollback_arg_project },
+                    "tool": { "type": "string", "description": mcp_copy.scrollback_arg_tool },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": crate::search::MAX_SESSION_LIMIT,
+                    },
+                },
+                "required": ["query"],
+            },
+        }),
     ]
+}
+
+/// Transcript search over the Scrollback index. Project labels are
+/// pseudonymised like the projects tool (and a pseudonym or label is accepted
+/// as the project filter); snippets are returned raw — the client is reading
+/// its own local transcripts.
+fn scrollback_payload(
+    ingested: &Ingested,
+    formatter: &CurrencyFormatter,
+    real_names: bool,
+    salt: &str,
+    arguments: &Value,
+) -> Result<Value> {
+    let query = arguments
+        .get("query")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+    if query.is_empty() {
+        return Err(color_eyre::eyre::eyre!(copy()
+            .mcp
+            .scrollback_missing_query
+            .clone()));
+    }
+    let tool = arguments
+        .get("tool")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let session_limit = arguments.get("limit").and_then(Value::as_u64).unwrap_or(0) as usize;
+
+    // Display labels by project identity. The projects tool pseudonymises
+    // the Month dashboard's names (labels disambiguated within that subset),
+    // so prefer those exact strings where they resolve; the full-history
+    // label map covers everything else.
+    let labels = crate::ingest::projects::project_label_lookup(
+        ingested.calls.iter().map(|call| call.project.as_str()),
+    );
+    let month_labels = month_label_by_identity(ingested, formatter, &labels);
+    // The project argument may be a real label, a pseudonym from a previous
+    // response, or a raw identity; resolve labels/pseudonyms to identities
+    // and pass anything else through for the search core to match.
+    let resolve = |argument: &str| {
+        month_labels
+            .iter()
+            .chain(labels.iter())
+            .find_map(|(identity, label)| {
+                let hit = label == argument || (!real_names && pseudonym(salt, label) == argument);
+                hit.then(|| identity.clone())
+            })
+            .unwrap_or_else(|| argument.to_string())
+    };
+    let project = arguments
+        .get("project")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(resolve);
+
+    let filters = crate::search::SearchFilters {
+        project,
+        tool,
+        session_limit,
+    };
+    let mut results = crate::search::search_transcripts(&ConfigPaths::default(), query, &filters)?;
+    results.format_costs(formatter);
+
+    Ok(json!({
+        "query": results.query,
+        "currency": formatter.code(),
+        "pseudonymised": !real_names,
+        "total_sessions": results.total_sessions,
+        "sessions": results.sessions.iter().map(|session| {
+            let identity = crate::ingest::projects::project_identity(&session.project);
+            let label = month_labels
+                .get(&identity)
+                .cloned()
+                .unwrap_or_else(|| crate::ingest::projects::project_label(&labels, &identity));
+            json!({
+                "session": session.key,
+                "tool": session.tool,
+                "project": if real_names { label } else { pseudonym(salt, &label) },
+                "last_timestamp": session.last_timestamp,
+                "cost": session.cost,
+                "match_count": session.match_count,
+                "prompt_only": session.prompt_only,
+                "matches": session.matches.iter().map(|matched| json!({
+                    "role": matched.role,
+                    "timestamp": matched.timestamp,
+                    "snippet": crate::search::snippet_text(&matched.snippet),
+                })).collect::<Vec<_>>(),
+            })
+        }).collect::<Vec<_>>(),
+    }))
 }
 
 fn tool_result(payload: &Value, is_error: bool) -> Value {
@@ -371,6 +512,36 @@ fn projects_payload(
     })
 }
 
+/// The exact display names the projects tool emits (Month dashboard labels)
+/// keyed back to project identities. Labels are shortest-unique path
+/// suffixes, so a name maps to the identity it suffixes; ambiguous names
+/// (same suffix on several identities) are skipped and fall back to the
+/// full-history label.
+fn month_label_by_identity(
+    ingested: &Ingested,
+    formatter: &CurrencyFormatter,
+    labels: &std::collections::HashMap<String, String>,
+) -> std::collections::HashMap<String, String> {
+    let dashboard = ingested.dashboard(
+        Period::Month,
+        Tool::All,
+        &ProjectFilter::All,
+        SortMode::Spend,
+        formatter,
+    );
+    let mut map = std::collections::HashMap::new();
+    for metric in &dashboard.projects {
+        let name = metric.name;
+        let mut candidates = labels.keys().filter(|identity| {
+            identity.as_str() == name || identity.ends_with(&format!("/{name}"))
+        });
+        if let (Some(identity), None) = (candidates.next(), candidates.next()) {
+            map.insert(identity.clone(), name.to_string());
+        }
+    }
+    map
+}
+
 /// Salted FNV-1a: stable for a given salt file, unlinkable without it.
 fn pseudonym(salt: &str, name: &str) -> String {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
@@ -444,7 +615,7 @@ mod tests {
     }
 
     #[test]
-    fn tools_list_exposes_the_three_read_tools() {
+    fn tools_list_exposes_the_four_read_tools() {
         let response = server()
             .handle_line(r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#)
             .expect("tools/list responds");
@@ -453,10 +624,34 @@ mod tests {
             .iter()
             .filter_map(|tool| tool["name"].as_str())
             .collect();
-        assert_eq!(names, vec![TOOL_STATUS, TOOL_OVERVIEW, TOOL_PROJECTS]);
+        assert_eq!(
+            names,
+            vec![TOOL_STATUS, TOOL_OVERVIEW, TOOL_PROJECTS, TOOL_SCROLLBACK]
+        );
         assert!(tools
             .iter()
             .all(|tool| tool["description"].as_str().is_some_and(|d| !d.is_empty())));
+
+        let scrollback = tools
+            .iter()
+            .find(|tool| tool["name"] == TOOL_SCROLLBACK)
+            .expect("scrollback definition");
+        assert_eq!(scrollback["inputSchema"]["required"], json!(["query"]));
+        assert!(scrollback["inputSchema"]["properties"]["query"].is_object());
+    }
+
+    #[test]
+    fn scrollback_without_a_query_is_a_tool_error() {
+        // Fails before any archive access, so it is safe in unit tests.
+        let response = server()
+            .handle_line(
+                r#"{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"scrollback","arguments":{}}}"#,
+            )
+            .expect("scrollback responds");
+        assert_eq!(response["result"]["isError"], true);
+        assert!(response["result"]["content"][0]["text"]
+            .as_str()
+            .is_some_and(|text| !text.is_empty()));
     }
 
     #[test]

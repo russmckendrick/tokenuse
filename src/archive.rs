@@ -19,7 +19,7 @@ use crate::tools::{
 
 pub const SYNC_INTERVAL: Duration = crate::ingest_cache::TTL;
 
-const ARCHIVE_SCHEMA_VERSION: u32 = 6;
+const ARCHIVE_SCHEMA_VERSION: u32 = 7;
 
 pub struct Archive {
     conn: Connection,
@@ -141,6 +141,8 @@ impl Archive {
     pub fn reset_database(&mut self) -> Result<()> {
         self.conn.execute_batch(
             "
+            DROP TABLE IF EXISTS transcripts_fts;
+            DROP TABLE IF EXISTS transcripts;
             DROP TABLE IF EXISTS source_state;
             DROP TABLE IF EXISTS limit_snapshots;
             DROP TABLE IF EXISTS calls;
@@ -194,7 +196,26 @@ impl Archive {
                 let parsed = calls_result.unwrap_or_default();
                 let limits = limits_result.unwrap_or_default();
                 stats.files_resumed += parsed.resumed_files;
-                let tx = self.conn.transaction()?;
+                // IMMEDIATE takes the write lock at BEGIN so the fingerprint
+                // re-check below is race-free: two refreshers (TUI, desktop,
+                // MCP) that both saw a stale fingerprint serialize here, and
+                // the loser skips instead of re-applying the same parse —
+                // which would double-append claude tail-merge transcripts.
+                let tx = self
+                    .conn
+                    .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                if let Some(fingerprint) = fingerprint.as_deref() {
+                    let already_synced: Option<String> = tx
+                        .query_row(
+                            "SELECT fingerprint FROM source_state WHERE tool = ?1 AND path = ?2",
+                            params![source.tool, path.as_str()],
+                            |row| row.get(0),
+                        )
+                        .optional()?;
+                    if already_synced.as_deref() == Some(fingerprint) {
+                        continue;
+                    }
+                }
                 for call in &parsed.calls {
                     if insert_call(&tx, call)? {
                         stats.calls_inserted += 1;
@@ -414,6 +435,77 @@ impl Archive {
                 ",
             )?;
         }
+        if version < 7 {
+            // v7 adds the Scrollback transcript store: full user/assistant
+            // text per turn plus an external-content FTS5 index. Rows already
+            // archived get their truncated prompts seeded as 'prompt'-origin
+            // fallbacks so vanished sources stay searchable; clearing
+            // source_state forces one full re-parse so surviving sources are
+            // re-read with transcript capture and upgraded to 'full'.
+            self.conn.execute_batch(
+                "
+                BEGIN;
+
+                CREATE TABLE transcripts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tool TEXT NOT NULL,
+                    dedup_key TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    project TEXT NOT NULL,
+                    timestamp TEXT,
+                    user_text TEXT NOT NULL DEFAULT '',
+                    assistant_text TEXT NOT NULL DEFAULT '',
+                    origin TEXT NOT NULL DEFAULT 'prompt',
+                    UNIQUE(tool, dedup_key)
+                );
+                CREATE INDEX idx_transcripts_session ON transcripts(tool, session_id);
+                CREATE INDEX idx_transcripts_project ON transcripts(project);
+
+                CREATE VIRTUAL TABLE transcripts_fts USING fts5(
+                    user_text, assistant_text,
+                    content='transcripts', content_rowid='id',
+                    tokenize='unicode61 remove_diacritics 2'
+                );
+
+                CREATE TRIGGER transcripts_ai AFTER INSERT ON transcripts BEGIN
+                    INSERT INTO transcripts_fts(rowid, user_text, assistant_text)
+                    VALUES (new.id, new.user_text, new.assistant_text);
+                END;
+                CREATE TRIGGER transcripts_ad AFTER DELETE ON transcripts BEGIN
+                    INSERT INTO transcripts_fts(transcripts_fts, rowid, user_text, assistant_text)
+                    VALUES ('delete', old.id, old.user_text, old.assistant_text);
+                END;
+                CREATE TRIGGER transcripts_au AFTER UPDATE OF user_text, assistant_text ON transcripts BEGIN
+                    INSERT INTO transcripts_fts(transcripts_fts, rowid, user_text, assistant_text)
+                    VALUES ('delete', old.id, old.user_text, old.assistant_text);
+                    INSERT INTO transcripts_fts(rowid, user_text, assistant_text)
+                    VALUES (new.id, new.user_text, new.assistant_text);
+                END;
+
+                -- Superseded Copilot estimate rows were zeroed in place (all
+                -- token and cost columns null out; no parser emits all-zero
+                -- rows) and their turns re-archived under usage keys; seeding
+                -- them too would double every upgraded turn in the index.
+                INSERT INTO transcripts (tool, dedup_key, session_id, project, timestamp, user_text, origin)
+                SELECT tool, dedup_key, session_id, project, timestamp, user_message, 'prompt'
+                FROM calls
+                WHERE user_message != ''
+                  AND NOT (
+                    tool = 'copilot' AND cost_usd = 0
+                    AND input_tokens = 0 AND output_tokens = 0
+                    AND cache_read_input_tokens = 0 AND cache_creation_input_tokens = 0
+                  );
+
+                CREATE INDEX idx_calls_session ON calls(tool, session_id);
+
+                DELETE FROM source_state;
+
+                PRAGMA user_version = 7;
+
+                COMMIT;
+                ",
+            )?;
+        }
         Ok(())
     }
 
@@ -501,6 +593,10 @@ impl Archive {
                 timestamp_quality: TimestampQuality::parse(&row.get::<_, String>(27)?),
                 superseded_dedup_keys: Vec::new(),
                 merge_activity: false,
+                // Transcript text lives only in the transcripts table; the
+                // resident dataset stays text-free.
+                transcript_user: None,
+                transcript_assistant: None,
             })
         })?;
 
@@ -635,10 +731,121 @@ fn insert_call(tx: &Transaction<'_>, call: &ParsedCall) -> Result<bool> {
     } else {
         zero_superseded_copilot_estimates(tx, call)?;
     }
+    upsert_transcript(tx, call)?;
     remove_superseded_cursor_rows(tx, call)?;
     remove_superseded_codex_rows(tx, call, inserted > 0)?;
     zero_superseded_copilot_turn_estimates(tx, call)?;
     Ok(inserted > 0)
+}
+
+/// Strip the private-use sentinel characters the search snippets use as
+/// highlight markers; corpus text containing them could otherwise forge
+/// highlight spans in rendered results.
+fn clean_transcript_text(text: &str) -> std::borrow::Cow<'_, str> {
+    if text.contains(['\u{E000}', '\u{E001}']) {
+        std::borrow::Cow::Owned(text.replace(['\u{E000}', '\u{E001}'], ""))
+    } else {
+        std::borrow::Cow::Borrowed(text)
+    }
+}
+
+/// Write a call's full transcript text into the Scrollback store. Calls that
+/// carry no text (metadata-only reparses, limit rows, legacy-cache imports)
+/// never touch existing rows. Two conflict shapes:
+/// - Claude tail continuations append their assistant blocks (prefix and tail
+///   blocks are disjoint by construction, mirroring the response_chars sum in
+///   merge_existing_claude_tail_activity). The suffix guard makes the append
+///   idempotent: a replayed tail (e.g. two refreshers racing on the same
+///   grown file) is detected as already applied and skipped.
+/// - Everything else is grow-only per column: a fresh parse of an append-only
+///   source is a superset of what was archived, so longer text wins and a
+///   weaker parse can never clobber previously captured text. This also
+///   upgrades migration-seeded 'prompt' fallback rows to 'full'.
+///
+/// Both branches refresh `project`: parsers refine it across syncs (cursor
+/// workspace resolution, claude cwd lines) and the calls row tracks it via
+/// update_existing_cursor_project, so the transcript row must follow.
+fn upsert_transcript(tx: &Transaction<'_>, call: &ParsedCall) -> Result<()> {
+    let user_text = clean_transcript_text(call.transcript_user.as_deref().unwrap_or(""));
+    let assistant_text = clean_transcript_text(call.transcript_assistant.as_deref().unwrap_or(""));
+    if user_text.is_empty() && assistant_text.is_empty() {
+        return Ok(());
+    }
+
+    let is_claude_tail_merge =
+        call.tool == crate::tools::claude_code::config::TOOL_ID && call.merge_activity;
+    if is_claude_tail_merge {
+        tx.execute(
+            "
+            INSERT INTO transcripts (
+                tool, dedup_key, session_id, project, timestamp,
+                user_text, assistant_text, origin
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'full')
+            ON CONFLICT(tool, dedup_key) DO UPDATE SET
+                assistant_text = CASE
+                    WHEN excluded.assistant_text = '' THEN assistant_text
+                    WHEN assistant_text = '' THEN excluded.assistant_text
+                    WHEN substr(assistant_text, -length(excluded.assistant_text))
+                        = excluded.assistant_text THEN assistant_text
+                    ELSE assistant_text || char(10) || excluded.assistant_text
+                END,
+                user_text = CASE
+                    WHEN excluded.user_text != '' AND (user_text = '' OR origin = 'prompt')
+                        THEN excluded.user_text
+                    ELSE user_text
+                END,
+                project = CASE
+                    WHEN excluded.project != '' THEN excluded.project
+                    ELSE project
+                END,
+                origin = 'full'
+            ",
+            params![
+                call.tool,
+                call.dedup_key,
+                call.session_id,
+                call.project,
+                datetime_to_db(call.timestamp),
+                user_text,
+                assistant_text,
+            ],
+        )?;
+    } else {
+        tx.execute(
+            "
+            INSERT INTO transcripts (
+                tool, dedup_key, session_id, project, timestamp,
+                user_text, assistant_text, origin
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'full')
+            ON CONFLICT(tool, dedup_key) DO UPDATE SET
+                user_text = CASE
+                    WHEN length(excluded.user_text) > length(user_text)
+                        THEN excluded.user_text
+                    ELSE user_text
+                END,
+                assistant_text = CASE
+                    WHEN length(excluded.assistant_text) > length(assistant_text)
+                        THEN excluded.assistant_text
+                    ELSE assistant_text
+                END,
+                project = CASE
+                    WHEN excluded.project != '' THEN excluded.project
+                    ELSE project
+                END,
+                origin = 'full'
+            ",
+            params![
+                call.tool,
+                call.dedup_key,
+                call.session_id,
+                call.project,
+                datetime_to_db(call.timestamp),
+                user_text,
+                assistant_text,
+            ],
+        )?;
+    }
+    Ok(())
 }
 
 /// A Copilot OTel span row carries the transcript-style key of the same turn
@@ -669,7 +876,35 @@ fn zero_superseded_copilot_turn_estimates(tx: &Transaction<'_>, call: &ParsedCal
             ",
             params![call.tool, dedup_key],
         )?;
+        remove_transcript_if_superseding_carries_text(tx, call, dedup_key)?;
     }
+    Ok(())
+}
+
+/// A superseded row's transcript is deleted only when the superseding call
+/// carries its own transcript text — otherwise (e.g. Copilot OTel spans,
+/// which have usage but no message text) the estimate row holds the turn's
+/// only copy and deleting it would erase the transcript entirely.
+fn remove_transcript_if_superseding_carries_text(
+    tx: &Transaction<'_>,
+    call: &ParsedCall,
+    superseded_key: &str,
+) -> Result<()> {
+    let has_text = call
+        .transcript_user
+        .as_deref()
+        .is_some_and(|text| !text.is_empty())
+        || call
+            .transcript_assistant
+            .as_deref()
+            .is_some_and(|text| !text.is_empty());
+    if !has_text {
+        return Ok(());
+    }
+    tx.execute(
+        "DELETE FROM transcripts WHERE tool = ?1 AND dedup_key = ?2",
+        params![call.tool, superseded_key],
+    )?;
     Ok(())
 }
 
@@ -729,6 +964,10 @@ fn remove_superseded_codex_rows(
             "DELETE FROM calls WHERE tool = ?1 AND dedup_key = ?2",
             params![call.tool, dedup_key],
         )?;
+        tx.execute(
+            "DELETE FROM transcripts WHERE tool = ?1 AND dedup_key = ?2",
+            params![call.tool, dedup_key],
+        )?;
     }
     Ok(())
 }
@@ -752,6 +991,10 @@ fn remove_superseded_cursor_rows(tx: &Transaction<'_>, call: &ParsedCall) -> Res
         }
         tx.execute(
             "DELETE FROM calls WHERE tool = ?1 AND dedup_key = ?2",
+            params![call.tool, dedup_key],
+        )?;
+        tx.execute(
+            "DELETE FROM transcripts WHERE tool = ?1 AND dedup_key = ?2",
             params![call.tool, dedup_key],
         )?;
     }
@@ -864,6 +1107,7 @@ fn zero_superseded_copilot_estimates(tx: &Transaction<'_>, call: &ParsedCall) ->
             ",
             params![call.tool, dedup_key],
         )?;
+        remove_transcript_if_superseding_carries_text(tx, call, &dedup_key)?;
     }
     Ok(())
 }
@@ -1321,6 +1565,8 @@ mod tests {
             timestamp_quality: crate::tools::TimestampQuality::Exact,
             superseded_dedup_keys: Vec::new(),
             merge_activity: false,
+            transcript_user: None,
+            transcript_assistant: None,
         }
     }
 
@@ -1543,7 +1789,7 @@ mod tests {
             .conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 6);
+        assert_eq!(version, 7);
         let advice_tables: u32 = archive
             .conn
             .query_row(
@@ -1568,7 +1814,7 @@ mod tests {
             .conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 6);
+        assert_eq!(version, 7);
 
         let loaded = archive.load().unwrap();
         assert_eq!(loaded.calls.len(), 1, "calls survive the v4 migration");
@@ -2313,6 +2559,374 @@ mod tests {
         let stats = archive.sync_with_adapters(&[]).unwrap();
         assert_eq!(stats.sources_seen, 0);
         assert_eq!(archive.load().unwrap().calls.len(), 2);
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    fn transcript_row(archive: &Archive, key: &str) -> Option<(String, String, String)> {
+        archive
+            .conn
+            .query_row(
+                "SELECT user_text, assistant_text, origin FROM transcripts
+                 WHERE tool = ?1 AND dedup_key = ?2",
+                params![crate::tools::codex::config::TOOL_ID, key],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()
+            .unwrap()
+    }
+
+    fn fts_match_count(archive: &Archive, needle: &str) -> i64 {
+        archive
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM transcripts_fts WHERE transcripts_fts MATCH ?1",
+                params![format!("\"{needle}\"")],
+                |row| row.get(0),
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn migrate_v6_archive_seeds_prompt_fallback_transcripts() {
+        let paths = temp_paths("migrate-v6-transcripts");
+        create_legacy_db(
+            &paths,
+            "
+            ALTER TABLE calls ADD COLUMN is_canceled INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE calls ADD COLUMN prompt_chars INTEGER;
+            ALTER TABLE calls ADD COLUMN response_chars INTEGER;
+            ALTER TABLE calls ADD COLUMN elapsed_ms INTEGER;
+            ALTER TABLE calls ADD COLUMN code_blocks_json TEXT NOT NULL DEFAULT '[]';
+            ALTER TABLE calls ADD COLUMN edited_files_json TEXT NOT NULL DEFAULT '[]';
+            ALTER TABLE calls ADD COLUMN referenced_files_json TEXT NOT NULL DEFAULT '[]';
+            ALTER TABLE calls ADD COLUMN interaction_mode TEXT NOT NULL DEFAULT 'unknown';
+            ALTER TABLE calls ADD COLUMN token_quality TEXT NOT NULL DEFAULT 'unknown';
+            ALTER TABLE calls ADD COLUMN timestamp_quality TEXT NOT NULL DEFAULT 'unknown';
+            ALTER TABLE source_state ADD COLUMN cursor_json TEXT NOT NULL DEFAULT '';
+            PRAGMA user_version = 6;
+            ",
+        );
+
+        let archive = Archive::open(&paths).unwrap();
+        let version: u32 = archive
+            .conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 7);
+
+        let seeded = transcript_row(&archive, "legacy-call").unwrap();
+        assert_eq!(seeded.0, "legacy row", "truncated prompt seeds user_text");
+        assert_eq!(seeded.1, "", "no assistant text for legacy rows");
+        assert_eq!(seeded.2, "prompt", "seeded rows are prompt-origin");
+        assert_eq!(
+            fts_match_count(&archive, "legacy"),
+            1,
+            "seeded rows are indexed"
+        );
+
+        let sources: i64 = archive
+            .conn
+            .query_row("SELECT COUNT(*) FROM source_state", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(sources, 0, "v7 clears source_state to force re-parse");
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn transcript_upsert_is_grow_only_and_upgrades_prompt_rows() {
+        let paths = temp_paths("transcript-grow");
+        let mut archive = Archive::open(&paths).unwrap();
+
+        // First parse: metadata only (no transcript capture).
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![sample_call("k1")],
+                limits: Vec::new(),
+            })
+            .unwrap();
+        assert_eq!(
+            transcript_row(&archive, "k1"),
+            None,
+            "text-less calls create no transcript row"
+        );
+
+        // Re-parse with captured text creates the row.
+        let mut with_text = sample_call("k1");
+        with_text.transcript_user = Some("build the thing properly".into());
+        with_text.transcript_assistant = Some("done, ran the tests".into());
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![with_text],
+                limits: Vec::new(),
+            })
+            .unwrap();
+        let row = transcript_row(&archive, "k1").unwrap();
+        assert_eq!(row.0, "build the thing properly");
+        assert_eq!(row.1, "done, ran the tests");
+        assert_eq!(row.2, "full");
+
+        // A weaker later parse never shrinks stored text.
+        let mut weaker = sample_call("k1");
+        weaker.transcript_user = Some("build".into());
+        weaker.transcript_assistant = Some(String::new());
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![weaker],
+                limits: Vec::new(),
+            })
+            .unwrap();
+        let row = transcript_row(&archive, "k1").unwrap();
+        assert_eq!(row.0, "build the thing properly");
+        assert_eq!(row.1, "done, ran the tests");
+
+        // A longer parse grows it, and the FTS index follows.
+        let mut longer = sample_call("k1");
+        longer.transcript_user = Some("build the thing properly this time".into());
+        longer.transcript_assistant = Some("done, ran the tests, all green".into());
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![longer],
+                limits: Vec::new(),
+            })
+            .unwrap();
+        let row = transcript_row(&archive, "k1").unwrap();
+        assert_eq!(row.0, "build the thing properly this time");
+        assert_eq!(fts_match_count(&archive, "green"), 1);
+        assert_eq!(fts_match_count(&archive, "tests"), 1, "no stale FTS rows");
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn claude_tail_merge_appends_assistant_transcript() {
+        let paths = temp_paths("transcript-tail-merge");
+        let mut archive = Archive::open(&paths).unwrap();
+
+        let mut prefix = sample_call("msg-1");
+        prefix.tool = crate::tools::claude_code::config::TOOL_ID;
+        prefix.transcript_user = Some("fix the bug".into());
+        prefix.transcript_assistant = Some("Looking at the parser first.".into());
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![prefix],
+                limits: Vec::new(),
+            })
+            .unwrap();
+
+        // Next sync delivers the same message's tail blocks.
+        let mut tail = sample_call("msg-1");
+        tail.tool = crate::tools::claude_code::config::TOOL_ID;
+        tail.merge_activity = true;
+        tail.transcript_user = Some("fix the bug".into());
+        tail.transcript_assistant = Some("Fixed and covered by a test.".into());
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![tail],
+                limits: Vec::new(),
+            })
+            .unwrap();
+
+        let row = archive
+            .conn
+            .query_row(
+                "SELECT user_text, assistant_text, origin FROM transcripts
+                 WHERE tool = ?1 AND dedup_key = 'msg-1'",
+                params![crate::tools::claude_code::config::TOOL_ID],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                },
+            )
+            .unwrap();
+        assert_eq!(row.0, "fix the bug");
+        assert_eq!(
+            row.1,
+            "Looking at the parser first.\nFixed and covered by a test."
+        );
+        assert_eq!(row.2, "full");
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn claude_tail_merge_is_idempotent_for_replayed_tails() {
+        let paths = temp_paths("transcript-tail-replay");
+        let mut archive = Archive::open(&paths).unwrap();
+
+        let mut prefix = sample_call("msg-1");
+        prefix.tool = crate::tools::claude_code::config::TOOL_ID;
+        prefix.transcript_assistant = Some("Looking at the parser.".into());
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![prefix],
+                limits: Vec::new(),
+            })
+            .unwrap();
+
+        // Two racing refreshers deliver the same tail twice.
+        for _ in 0..2 {
+            let mut tail = sample_call("msg-1");
+            tail.tool = crate::tools::claude_code::config::TOOL_ID;
+            tail.merge_activity = true;
+            tail.transcript_assistant = Some("Fixed.".into());
+            archive
+                .insert_ingested(&Ingested {
+                    calls: vec![tail],
+                    limits: Vec::new(),
+                })
+                .unwrap();
+        }
+
+        let assistant: String = archive
+            .conn
+            .query_row(
+                "SELECT assistant_text FROM transcripts WHERE tool = ?1 AND dedup_key = 'msg-1'",
+                params![crate::tools::claude_code::config::TOOL_ID],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            assistant, "Looking at the parser.\nFixed.",
+            "a replayed tail appends once"
+        );
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn copilot_usage_upgrade_replaces_estimate_transcripts() {
+        let paths = temp_paths("copilot-transcript-supersede");
+        let mut archive = Archive::open(&paths).unwrap();
+
+        // Sync N: chars/4 estimate row carries the turn's transcript.
+        let mut estimate = sample_call("copilot:sess-1:turn-0");
+        estimate.tool = crate::tools::copilot::config::TOOL_ID;
+        estimate.transcript_user = Some("write the tests".into());
+        estimate.transcript_assistant = Some("Done, added coverage.".into());
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![estimate],
+                limits: Vec::new(),
+            })
+            .unwrap();
+
+        // Sync N+1: the usage-event row supersedes it with identical text.
+        let mut usage = sample_call("copilot:sess-1:turn-0:usage-7");
+        usage.tool = crate::tools::copilot::config::TOOL_ID;
+        usage.transcript_user = Some("write the tests".into());
+        usage.transcript_assistant = Some("Done, added coverage.".into());
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![usage],
+                limits: Vec::new(),
+            })
+            .unwrap();
+
+        let rows: i64 = archive
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM transcripts WHERE tool = ?1 AND session_id = 'sess-1'",
+                params![crate::tools::copilot::config::TOOL_ID],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(rows, 1, "the estimate transcript is replaced, not doubled");
+
+        // An OTel-style superseding row without text must NOT delete the
+        // turn's only transcript.
+        let mut text_estimate = sample_call("copilot:sess-2:turn-0");
+        text_estimate.tool = crate::tools::copilot::config::TOOL_ID;
+        text_estimate.transcript_user = Some("hello".into());
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![text_estimate],
+                limits: Vec::new(),
+            })
+            .unwrap();
+        let mut otel = sample_call(&format!(
+            "{}span-1",
+            crate::tools::copilot::config::OTEL_DEDUP_PREFIX
+        ));
+        otel.tool = crate::tools::copilot::config::TOOL_ID;
+        otel.session_id = "sess-2".into();
+        otel.superseded_dedup_keys = vec!["copilot:sess-2:turn-0".into()];
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![otel],
+                limits: Vec::new(),
+            })
+            .unwrap();
+        let kept: i64 = archive
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM transcripts WHERE tool = ?1 AND dedup_key = 'copilot:sess-2:turn-0'",
+                params![crate::tools::copilot::config::TOOL_ID],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(kept, 1, "a text-less superseder keeps the only transcript");
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn superseded_rows_drop_their_transcripts() {
+        let paths = temp_paths("transcript-supersede");
+        let mut archive = Archive::open(&paths).unwrap();
+
+        let mut legacy = sample_call("codex:legacy-key");
+        legacy.transcript_user = Some("old prompt".into());
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![legacy],
+                limits: Vec::new(),
+            })
+            .unwrap();
+        assert!(transcript_row(&archive, "codex:legacy-key").is_some());
+
+        let mut canonical = sample_call("codex:lineage-key");
+        canonical.superseded_dedup_keys = vec!["codex:legacy-key".into()];
+        canonical.transcript_user = Some("old prompt".into());
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![canonical],
+                limits: Vec::new(),
+            })
+            .unwrap();
+
+        assert_eq!(
+            transcript_row(&archive, "codex:legacy-key"),
+            None,
+            "superseded transcript rows are deleted with their calls rows"
+        );
+        assert!(transcript_row(&archive, "codex:lineage-key").is_some());
+        assert_eq!(
+            fts_match_count(&archive, "old prompt"),
+            1,
+            "the FTS index drops the superseded row too"
+        );
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn reset_database_drops_transcript_tables() {
+        let paths = temp_paths("transcript-reset");
+        let mut archive = Archive::open(&paths).unwrap();
+        let mut call = sample_call("k1");
+        call.transcript_user = Some("some text".into());
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![call],
+                limits: Vec::new(),
+            })
+            .unwrap();
+
+        archive.reset_database().unwrap();
+        let count: i64 = archive
+            .conn
+            .query_row("SELECT COUNT(*) FROM transcripts", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0, "reset rebuilds empty transcript tables");
+        assert_eq!(fts_match_count(&archive, "some"), 0);
         let _ = fs::remove_dir_all(paths.dir);
     }
 }

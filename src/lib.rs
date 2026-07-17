@@ -19,6 +19,7 @@ pub mod pricing;
 pub mod quota_sync;
 pub mod reports;
 pub mod runtime;
+pub mod search;
 #[cfg(feature = "quota-sync")]
 pub mod secrets;
 pub mod theme;
