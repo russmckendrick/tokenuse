@@ -25,11 +25,11 @@ Archive v5 adds interaction, token, and timestamp provenance. Coach accepts only
 - Severity penalties: high = 12, medium = 7, low = 3, applied once per **triggered** rule — occurrence counts do not move the score.
 - `score = max(0, round(100 · (1 − penalty / (rules_in_group × 12))))` per group.
 - Weekly series: calls bucketed by local ISO week, the full rule set re-run per bucket. WoW compares the last two weekly scores; MoM compares the mean of the last 4 weeks against weeks 5–8 back. Fewer buckets → "–". The trailing 12 weekly scores per group ship in the payload as `trend` for the report-card sparklines.
-- Composite grade: `composite_score` is the rules-weighted mean of the group scores — `round(Σ(score·rules_in_group) / 27)` — so a group carries the share of the overall grade its rules hold in the catalog. `grade_id` maps any 0–100 score to a letter id: A+ ≥ 97, A ≥ 90, B+ ≥ 85, B ≥ 80, C ≥ 70, D ≥ 60, else F (copy maps ids to letters via `coach.report.grade_labels`). The composite plus its grade ship as `CoachData.overall`; each group also carries its own `grade_id`.
+- Composite grade: `composite_score` is the rules-weighted mean of the group scores — `round(Σ(score·rules_in_group) / 28)` — so a group carries the share of the overall grade its rules hold in the catalog. `grade_id` maps any 0–100 score to a letter id: A+ ≥ 97, A ≥ 90, B+ ≥ 85, B ≥ 80, C ≥ 70, D ≥ 60, else F (copy maps ids to letters via `coach.report.grade_labels`). The composite plus its grade ship as `CoachData.overall`; each group also carries its own `grade_id`.
 
-## Rule catalog (27 rules, `src/coach/rules/`)
+## Rule catalog (28 rules, `src/coach/rules/`)
 
-Groups: prompt-quality 8, session-hygiene 9, code-review 5, tool-mastery 5. User-facing wording lives in `src/copy/copy.json` under `coach.rules.<id>` (a test asserts the ids match). Signals: **P** prompt text/length, **T** timestamps, **K** tokens, **M** model, **L** tool calls, **C** code blocks, **F** file lists, **X** cancellation.
+Groups: prompt-quality 8, session-hygiene 10, code-review 5, tool-mastery 5. User-facing wording lives in `src/copy/copy.json` under `coach.rules.<id>` (a test asserts the ids match). Signals: **P** prompt text/length, **T** timestamps, **K** tokens, **M** model, **L** tool calls, **C** code blocks, **F** file lists, **X** cancellation.
 
 | id | group | severity | trigger (defaults) | signals |
 | --- | --- | --- | --- | --- |
@@ -50,6 +50,7 @@ Groups: prompt-quality 8, session-hygiene 9, code-review 5, tool-mastery 5. User
 | broken-flow-state | session-hygiene | medium | >60% of ≥5 scored days fragmented; high >80% | T |
 | slow-responses | session-hygiene | low | >5 turns over 5 min (elapsed) | T |
 | runaway-agent-loops | session-hygiene | high | ≥3 turns with 40+ tool calls | L |
+| retry-loops | session-hygiene | medium | ≥40% of ≥15 edited-file chains re-edited after a shell run; high ≥60% | F L |
 | copy-paste-blindness | code-review | high | ≥3 sessions: ≥50 AI LoC, no refinement afterwards | C P F |
 | speed-accept | code-review | high | ≥5 times: next message <15s after ≥20 AI LoC | C T |
 | vibe-coding | code-review | high | ≥3 sessions: ≥100 AI LoC from ≤5 unstructured prompts | C P |
@@ -63,6 +64,7 @@ Groups: prompt-quality 8, session-hygiene 9, code-review 5, tool-mastery 5. User
 
 ### Deviations from the reference
 
+- **retry-loops** is not in the reference set — it ports codeburn's one-shot/retry idea onto tokens' archive. Detection runs at assistant-round granularity ("round i edits F, a shell command runs, round j > i edits F again") because `edited_files`/`bash_commands` are unordered per-round sets; intra-round edit→test→edit loops are invisible and a re-edit without any shell run in between never counts.
 - **runaway-agent-loops** raises the per-turn tool threshold from 15 to 40: tokens' turns aggregate full agentic CLI loops where 15+ tool calls is routine.
 - **slow-responses** raises the latency threshold from 30s to 5 minutes for the same reason — a turn spans the whole agentic run, and 300s matches the flow score's slowest latency band.
 - **mcp-tool-bloat** implements the documented semantics (distinct tools per session); the reference's DSL referenced a nonexistent field and could never fire.

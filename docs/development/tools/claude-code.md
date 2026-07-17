@@ -155,6 +155,19 @@ User lines that are slash-command wrappers (`<command-...>`, `<local-command-...
 
 The adapter prefixes its source fingerprints with `claude-code-v3-streamed-blocks`; bumping that constant forces archived sessions back through the parser after an extraction change.
 
+## Incremental tail parsing (archive v6)
+
+A Claude Code source is a whole project directory, so before v6 a single appended line re-parsed every session file in that project. Session JSONL files are append-only, so the adapter now persists a cursor (`source_state.cursor_json`) with, per file: the byte offset just past the last complete line, an FNV-1a probe of the 256 bytes before it, and the carried cross-line state (last user prompt/chars/timestamp and project) so tail assistant rounds keep their turn context. Cursors cover the 64 newest files by mtime; older files fall back to a full re-parse when touched.
+
+On sync, a grown file whose offset and probe still match seeks straight to the stored offset and parses only the tail; anything else (new files, truncated or rewritten prefixes, a bumped `PARSE_VERSION`) parses fully. A trailing line without a newline is a mid-append snapshot: it is left unconsumed so the completed line parses exactly once on the next sync.
+
+Two signals degrade at the resume boundary by design:
+
+- A message whose streamed lines span the boundary re-emits from the tail with tail-only activity. Those calls carry an archive-only `merge_activity` hint: on the dedup conflict, the archive **concatenates** activity into the existing row (each streamed line holds distinct content blocks), re-dedups file lists, sums `response_chars`, and keeps the stored token counts — instead of the full-reparse path's overwrite.
+- An interrupt marker whose call was parsed in an earlier sync no longer flags that call as canceled (the parser cannot reach prefix calls). Cancellation rates can undercount slightly across sync boundaries.
+
+The sync status line (TUI title bar and desktop status bar) appends `· N tail-resumed` whenever files resumed this way. Bump `PARSE_VERSION` in `parser.rs` when parsing semantics change so stale cursors fall back to a full re-parse; bumping `SOURCE_FINGERPRINT_VERSION` already forces the re-parse itself.
+
 ## Known limitations
 
 - The user message captured per call is the most recent user turn before the assistant response, truncated to 500 chars. If a user sends multiple messages in rapid succession before any assistant reply, only the last is recorded.

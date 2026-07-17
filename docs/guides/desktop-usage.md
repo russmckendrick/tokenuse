@@ -19,15 +19,16 @@ The desktop app uses a persistent left sidebar rather than the TUI tab strip. Ev
 
 - Overview
 - Analytics
-- Tools
+- Coach
 - Models
 - Projects
+- Tools
 - Claude Code, Cursor, Codex, Copilot, and Gemini
 - Config
 
 Use **Collapse** at the bottom of the sidebar to reduce it to an icon rail. The choice is remembered locally. The active screen remains highlighted in either state.
 
-The five direct tool rows dynamically order themselves from highest to lowest rolling 24-hour call activity, so the tools currently driving usage stay closest to the main views. Primary screen and Config positions never move.
+Tools sits directly above the five direct tool rows as the group's summary entry. The tool rows dynamically order themselves from highest to lowest rolling 24-hour call activity, so the tools currently driving usage stay closest to their summary. Primary screen and Config positions never move.
 
 The header holds the controls that apply to the current screen in one toolbar: title, period, contextual tool/project/sort filters, refresh, then report. At compact window widths the filter labels collapse to icons while their current values remain visible. Overview and Analytics expose period, tool, sort, and project filters. Dedicated tool pages expose period and sort. Models uses the active period for ranking and details while keeping all five ranges visible in its table. Projects exposes period, sort, and project. The parent Tools screen is a fixed rolling 24-hour capacity view, so its period control is intentionally hidden.
 
@@ -48,13 +49,15 @@ Utilisation gauges come from the latest non-stale plan snapshots. Each compact t
 Analytics is the time and distribution workspace. It includes:
 
 - chronological activity for the selected period;
-- daily spend stacked by tool;
+- daily spend stacked by tool (hourly stacks on the rolling 24 Hours period, where daily bars would collapse into one or two misleading columns);
 - an hour-by-weekday activity heatmap;
 - provider and tool share donuts;
 - cache efficiency;
 - ranked projects, models, sessions, project/tool rows, core tools, shell commands, and MCP servers.
 
-Charts use the same token-driven colors and relative ranking language as the TUI. Hovered chart values are exact for that bucket; bars, heat intensity, and rank strips are relative to the visible dataset.
+Top Sessions rows are links: select one (click, `Enter`, or `Space`) to open that session in the full session view, alongside the existing session picker. Closing the session view returns to the page it was opened from, at the scroll position you left. Project rows link too: selecting one on Overview, Analytics, or a tool page opens that project's dedicated page.
+
+Charts use the same token-driven colors and relative ranking language as the TUI. Hovered chart values are exact for that bucket; bars, heat intensity, and row rank fills are relative to the visible dataset. Ranked tables carry that relative magnitude as a muted wash across each row's background (hover a row for the exact percentage) rather than a meter column, so the full project and model names keep the space.
 
 ### Coach
 
@@ -71,9 +74,11 @@ Findings respect the header tool and project filters. Rules only count tools tha
 
 ### Tools
 
-The parent Tools screen shows one rolling 24-hour console for each supported tool. Every tool stays visible, including idle tools, so it is clear which sources were checked. A console combines recent cost, calls, tokens, last-seen time, plan-limit gauges, and top models.
+The parent Tools screen is a rolling 24-hour overview of the whole tool fleet: one compact KPI card per supported tool with its 24-hour cost, activity pulse, calls, tokens, last-seen time, primary limit gauges with reset times, and — when a subscription price is known — the plan-value line. Cards order dynamically from highest to lowest rolling 24-hour call activity, matching the sidebar tool rows. The busiest tool's card spans the full row as a spotlight with extra detail: limit plans and its top models with calls, tokens, and cost. Every tool stays visible, including idle tools, so it is clear which sources were checked. Each card is a shortcut: selecting it opens that tool's dedicated page. The full consoles no longer repeat here — they live on the tool pages.
 
-The direct tool entries open dedicated pages with the selected time range. Each page has larger cost, call, session, and cache summaries, the tool's current utilisation console, top projects, top models, and sessions. Tool marks are displayed without decorative icon boxes so the summary row has more room for data.
+When a subscription price is known for a tool, its card and its tool-page console add a plan-value strip: the calendar month's API-equivalent spend against the monthly plan price, with the resulting value multiple (for example `£412.80 this month vs £160.00 plan · 2.1×`). Prices come from the Config page's Plan Value panel (entered in USD, shown in the display currency); for detected ChatGPT Plus/Pro and Copilot Pro/Pro+ plans a built-in price is used until one is configured. Org-paid tiers never get a default — a value multiple against a price you do not pay is noise.
+
+The direct tool entries open dedicated pages with the selected time range. Each page has larger cost, call, session, and cache summaries, the tool's current utilisation console, top projects, top models, and sessions. Session rows open the full session view, and closing it returns to the tool page. Tool marks are displayed without decorative icon boxes so the summary row has more room for data.
 
 Copilot AI Credits rows show exact used and remaining/total credits, reset time, plan, and additional-usage status. Business or Enterprise payloads that hide per-seat credits show an organization-managed row rather than a blank console. A limit whose reset has passed, or whose reset-less snapshot is over a week old, dims as stale and is hidden one week later.
 
@@ -85,15 +90,18 @@ The active header period controls row ranking and the expanded details. Select a
 
 ### Projects
 
-Projects is a drill-down from project to session to call. Select a project to list its sessions, then select a session to open its call rows. Call details include the full stored prompt, model, token buckets, pricing rates, tools, reasoning/web-search counts, shell commands, interaction mode, and exact/estimated timestamp and token quality when those fields were available locally. Modern Cursor Agent sessions appear here as one call per user request rather than separate overlapping bubble, AgentKv, and transcript rows.
+Projects is a two-level drill-down. The page itself is a full index of every project in the selected period — one row per project with cost, avg/session, sessions, calls, last-active date, and tool mix, uncapped unlike the top-10 dashboard panels. Selecting a row (or a project row anywhere else in the app) opens that project's dedicated page.
 
-The project picker can narrow the page to one normalized project identity. Project labels use the shortest unique path suffix, while the archive retains the raw project value for debugging and reports.
+The project page scopes everything to that one project across all tools, honouring the period and sort selectors: a KPI band (cost, calls, sessions, cache hit, AI code output, and estimated active hours with the observed work pattern), the chronological activity pulse, the full session list, a per-tool split donut (switchable between cost, calls, sessions, and avg/session), top models, By Activity task categories, core tools, shell commands, MCP servers, and a Sources panel listing the raw per-tool paths discovery found. The session list renders incrementally as you scroll, and each row opens the full session view — call details there include the full stored prompt, model, token buckets, pricing rates, tools, reasoning/web-search counts, shell commands, interaction mode, and exact/estimated timestamp and token quality when those fields were available locally. Modern Cursor Agent sessions appear as one call per user request rather than separate overlapping bubble, AgentKv, and transcript rows.
+
+The project picker in the header can still narrow the index to one normalized project identity. Project labels use the shortest unique path suffix, while the archive retains the raw project value for debugging and reports.
 
 ### Config
 
 Config groups shared data settings and desktop-only behavior:
 
 - display currency;
+- monthly plan prices (**Plan Value** panel) powering the Usage consoles' plan-value strips;
 - live/sample **Sample Data** toggle;
 - confirmed currency and pricing-book downloads;
 - Claude Code status-line setup and Claude/Copilot limit sync;
@@ -110,13 +118,15 @@ The **Data Sources** panel runs the same read-only diagnostics as `tokenuse doct
 
 When any model in the archive is billed at the fallback pricing rate, the pricing row's warning (the affected `tool · model` pairs and the fix hint) is shown in the warning tone so guessed costs stand out from real ones.
 
+The Local Data panel also shows the launch hint for the bundled MCP server (`tokenuse mcp` — stdio, project names pseudonymised); see the TUI usage guide for the full command reference.
+
 ## Keyboard
 
 Desktop navigation is resolved in the Svelte shell; data actions call typed Rust commands directly. Shortcuts are ignored while typing in an input, select, or text area, except for `Esc`.
 
 | Key | Action |
 | --- | --- |
-| `Tab` / `Shift-Tab` | Cycle Overview, Analytics, Coach, Tools, Models, Projects, and Config. |
+| `Tab` / `Shift-Tab` | Cycle Overview, Analytics, Coach, Models, Projects, Tools, and Config. |
 | `o` | Open Overview. |
 | `d` | Open Analytics. |
 | `h` | Open Coach. |
@@ -130,7 +140,7 @@ Desktop navigation is resolved in the Svelte shell; data actions call typed Rust
 | `e` | Open report generation. |
 | `r` | Refresh the archive. |
 | `Shift-D` | Toggle live and sample data. |
-| `Esc` | Close the active detail/modal, or return from Session to Analytics. |
+| `Esc` | Close the active detail/modal, or return from the session view to the page it was opened from. |
 
 Clickable model, project, session, and call rows also support `Enter` and `Space`.
 
