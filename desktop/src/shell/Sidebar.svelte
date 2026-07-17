@@ -8,6 +8,7 @@
     PanelLeftClose,
     PanelLeftOpen,
     Settings,
+    TextSearch,
     Wrench
   } from 'lucide-svelte';
   import ProviderIcon from '../icons/ProviderIcon.svelte';
@@ -92,6 +93,18 @@
     >
       <HeartPulse size={16} />
       {#if !collapsed}<span>{copy.nav.coach}</span>{/if}
+    </button>
+
+    <button
+      type="button"
+      class="sidebar-item"
+      class:active={isActive('scrollback')}
+      aria-current={isActive('scrollback') ? 'page' : undefined}
+      title={copy.nav.scrollback}
+      onclick={() => navigate({ page: 'scrollback' })}
+    >
+      <TextSearch size={16} />
+      {#if !collapsed}<span>{copy.nav.scrollback}</span>{/if}
     </button>
 
     <button

@@ -378,6 +378,37 @@ export type SessionDetail = {
   prompt_full: string;
 };
 
+export type SnippetPart = {
+  text: string;
+  hit: boolean;
+};
+
+export type ScrollbackMatch = {
+  dedup_key: string;
+  timestamp: string | null;
+  role: 'user' | 'assistant';
+  snippet: SnippetPart[];
+};
+
+export type ScrollbackSessionResult = {
+  key: string;
+  session_id: string;
+  tool: string;
+  project: string;
+  last_timestamp: string | null;
+  cost_usd: number;
+  cost: string;
+  match_count: number;
+  prompt_only: boolean;
+  matches: ScrollbackMatch[];
+};
+
+export type ScrollbackResults = {
+  query: string;
+  total_sessions: number;
+  sessions: ScrollbackSessionResult[];
+};
+
 export type SessionDetailView = {
   key: string;
   session_id: string;
@@ -599,6 +630,7 @@ export type CopyDeck = {
     paths: Record<string, string>;
   };
   session: Record<string, string>;
+  scrollback: Record<string, string>;
   modals: Record<string, string>;
   actions: Record<string, string>;
   desktop: Record<string, string>;

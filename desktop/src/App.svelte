@@ -16,6 +16,7 @@
   import TrayPopover from './TrayPopover.svelte';
   import CoachPage from './routes/CoachPage.svelte';
   import ModelsPage from './routes/ModelsPage.svelte';
+  import ScrollbackPage from './routes/ScrollbackPage.svelte';
   import OverviewPage from './routes/OverviewPage.svelte';
   import ProjectsPage from './routes/ProjectsPage.svelte';
   import ToolsPage from './routes/ToolsPage.svelte';
@@ -182,6 +183,8 @@
       }
       case 'models':
         return nav.models;
+      case 'scrollback':
+        return nav.scrollback;
       case 'projects':
         return route.project?.label ?? nav.projects;
       case 'config':
@@ -434,6 +437,8 @@
         return { page: 'tools' };
       case 'c':
         return { page: 'config' };
+      case '/':
+        return { page: 'scrollback' };
       default:
         return null;
     }
@@ -955,9 +960,9 @@
         copy={snapshot.copy}
         title={currentPageTitle}
         {snapshot}
-        showPeriod={router.route.page !== 'config' && router.route.page !== 'session' && (router.route.page !== 'tools' || router.route.tool !== undefined)}
+        showPeriod={router.route.page !== 'config' && router.route.page !== 'session' && router.route.page !== 'scrollback' && (router.route.page !== 'tools' || router.route.tool !== undefined)}
         showTool={router.route.page === 'overview' || router.route.page === 'analytics' || router.route.page === 'coach'}
-        showSort={router.route.page !== 'config' && router.route.page !== 'session' && router.route.page !== 'models' && router.route.page !== 'coach'}
+        showSort={router.route.page !== 'config' && router.route.page !== 'session' && router.route.page !== 'models' && router.route.page !== 'coach' && router.route.page !== 'scrollback'}
         showProject={router.route.page === 'overview' || router.route.page === 'analytics' || router.route.page === 'coach' || (router.route.page === 'projects' && !router.route.project)}
         {setPeriod}
         setTool={setToolFromEvent}
@@ -976,6 +981,8 @@
               <AnalyticsPage {snapshot} openSessionPicker={() => openModal('session')} {openSession} {openProject} />
             {:else if router.route.page === 'coach'}
               <CoachPage {snapshot} />
+            {:else if router.route.page === 'scrollback'}
+              <ScrollbackPage {snapshot} {openSession} />
             {:else if router.route.page === 'tools'}
               <ToolsPage {snapshot} tool={router.route.tool} {usageTone} {navigate} {openSession} {openProject} />
             {:else if router.route.page === 'models'}

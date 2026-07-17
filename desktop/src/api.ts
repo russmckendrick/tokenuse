@@ -14,6 +14,7 @@ import type {
   ProjectPageData,
   ReportFormatId,
   ReportResponse,
+  ScrollbackResults,
   SessionDetailView,
   SortId,
   ToolPageData,
@@ -44,6 +45,12 @@ export const api = {
     invoke<CoachTimelineDay | null>('get_coach_timeline', { day }),
   getSessionDetail: (key: string) =>
     invoke<SessionDetailView | null>('get_session_detail', { key }),
+  searchTranscripts: (args: {
+    query: string;
+    project?: string | null;
+    tool?: string | null;
+    limit?: number;
+  }) => invoke<ScrollbackResults>('search_transcripts', args),
   setOpenAtLogin: (enabled: boolean) =>
     invoke<DesktopSnapshot>('set_open_at_login', { enabled }),
   setShowDockOrTaskbarIcon: (enabled: boolean) =>

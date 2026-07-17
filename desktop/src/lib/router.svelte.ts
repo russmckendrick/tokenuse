@@ -4,6 +4,7 @@ export type RoutePage =
   | 'overview'
   | 'analytics'
   | 'coach'
+  | 'scrollback'
   | 'tools'
   | 'models'
   | 'projects'
@@ -21,7 +22,7 @@ export type Route = {
 };
 
 /** Pages reachable from the sidebar, in nav (and Tab-cycle) order. */
-export const NAV_PAGES: RoutePage[] = ['overview', 'analytics', 'coach', 'models', 'projects', 'tools', 'config'];
+export const NAV_PAGES: RoutePage[] = ['overview', 'analytics', 'coach', 'scrollback', 'models', 'projects', 'tools', 'config'];
 
 let route = $state<Route>({ page: 'overview' });
 
