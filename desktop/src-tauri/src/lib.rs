@@ -578,6 +578,7 @@ pub fn run() {
             commands::set_codex_session_cookie,
             commands::clear_codex_session_cookie,
             commands::get_doctor,
+            commands::search_transcripts,
             commands::set_report_dir,
             commands::report_projects,
             commands::generate_report,

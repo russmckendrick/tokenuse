@@ -523,6 +523,37 @@ pub(crate) async fn get_doctor() -> CommandResult<tokenuse::doctor::DoctorReport
 }
 
 #[tauri::command]
+/// Scrollback transcript search. Reads the archive over its own read-only
+/// connection, so it deliberately skips the shared App lock and runs on the
+/// blocking pool like `get_doctor`.
+pub(crate) async fn search_transcripts(
+    query: String,
+    project: Option<String>,
+    tool: Option<String>,
+    limit: Option<u32>,
+) -> CommandResult<tokenuse::search::SearchResults> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let paths = tokenuse::config::ConfigPaths::default();
+        let filters = tokenuse::search::SearchFilters {
+            project,
+            tool,
+            session_limit: limit.map(|l| l as usize).unwrap_or(0),
+        };
+        let mut results = tokenuse::search::search_transcripts(&paths, &query, &filters)
+            .map_err(|e| CommandError::Tokenuse(e.to_string()))?;
+        let config = tokenuse::config::UserConfig::load(&paths).unwrap_or_default();
+        let currency_table = tokenuse::currency::CurrencyTable::load(&paths).unwrap_or_else(|_| {
+            tokenuse::currency::CurrencyTable::embedded()
+                .expect("embedded currency rates must be valid JSON")
+        });
+        results.format_costs(&currency_table.formatter(&config.currency));
+        Ok(results)
+    })
+    .await
+    .map_err(|e| CommandError::Join(e.to_string()))?
+}
+
+#[tauri::command]
 pub(crate) async fn set_report_dir(
     path: String,
     state: State<'_, SharedState>,
