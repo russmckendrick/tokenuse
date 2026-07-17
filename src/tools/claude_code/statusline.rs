@@ -605,11 +605,15 @@ mod tests {
     }
 
     fn tempdir() -> PathBuf {
+        // The counter keeps parallel tests out of each other's directories
+        // when two land in the same nanosecond stamp.
+        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let stamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let dir = std::env::temp_dir().join(format!("tokenuse-statusline-{stamp}"));
+        let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("tokenuse-statusline-{stamp}-{seq}"));
         fs::create_dir_all(&dir).unwrap();
         dir
     }

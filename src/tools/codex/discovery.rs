@@ -82,7 +82,14 @@ mod tests {
             .iter()
             .find(|s| s.path.file_name().and_then(|n| n.to_str()) == Some("rollout-a.jsonl"))
             .unwrap();
-        assert_eq!(dated_source.project, "2026/03/29");
+        // The fallback label is the relative parent with native separators
+        // (backslashes on Windows); project_identity normalizes them later.
+        let expected = std::path::Path::new("2026")
+            .join("03")
+            .join("29")
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(dated_source.project, expected);
 
         let _ = std::fs::remove_dir_all(&base);
     }
