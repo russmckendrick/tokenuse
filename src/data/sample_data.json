@@ -2,8 +2,8 @@
   "periods": {
     "today": {
       "summary": {
-        "cost": "$18.44",
-        "calls": "286",
+        "cost": "$21.58",
+        "calls": "346",
         "sessions": "6",
         "cache_hit": "94.6%",
         "input": "1.8M",
@@ -12,59 +12,287 @@
         "written": "410K"
       },
       "daily": [
-        { "day": "04-29", "cost": "$18.44", "calls": 286, "value": 100 }
+        {
+          "day": "04-29",
+          "cost": "$21.58",
+          "calls": 346,
+          "value": 100
+        }
       ],
       "projects": [
-        { "name": "acme/atlas-dashboard", "cost": "$8.72", "avg_per_session": "$2.91", "sessions": 3, "tool_mix": "Claude $5.4  Codex $3.3", "value": 100 },
-        { "name": "northstar/cli", "cost": "$5.18", "avg_per_session": "$2.59", "sessions": 2, "tool_mix": "Codex $4.1  Cursor $1.1", "value": 59 },
-        { "name": "brightlane/docs", "cost": "$4.54", "avg_per_session": "$4.54", "sessions": 1, "tool_mix": "Copilot $2.6  Claude $1.9", "value": 52 }
+        {
+          "name": "acme/atlas-dashboard",
+          "cost": "$8.72",
+          "avg_per_session": "$2.91",
+          "sessions": 3,
+          "tool_mix": "Claude $5.4  Codex $3.3",
+          "value": 100
+        },
+        {
+          "name": "brightlane/docs",
+          "cost": "$6.58",
+          "avg_per_session": "$6.58",
+          "sessions": 1,
+          "tool_mix": "Copilot $2.6  Claude $1.9  Gemini $2.0",
+          "value": 75
+        },
+        {
+          "name": "northstar/cli",
+          "cost": "$5.18",
+          "avg_per_session": "$2.59",
+          "sessions": 2,
+          "tool_mix": "Codex $4.1  Cursor $1.1",
+          "value": 59
+        }
       ],
       "project_tools": [
-        { "project": "acme/atlas-dashboard", "tool": "Claude", "cost": "$5.42", "calls": 83, "sessions": 2, "avg_per_session": "$2.71", "value": 100 },
-        { "project": "northstar/cli", "tool": "Codex", "cost": "$4.08", "calls": 72, "sessions": 1, "avg_per_session": "$4.08", "value": 75 },
-        { "project": "acme/atlas-dashboard", "tool": "Codex", "cost": "$3.30", "calls": 48, "sessions": 1, "avg_per_session": "$3.30", "value": 61 },
-        { "project": "brightlane/docs", "tool": "Copilot", "cost": "$2.61", "calls": 43, "sessions": 1, "avg_per_session": "$2.61", "value": 48 },
-        { "project": "brightlane/docs", "tool": "Claude", "cost": "$1.93", "calls": 24, "sessions": 1, "avg_per_session": "$1.93", "value": 36 },
-        { "project": "northstar/cli", "tool": "Cursor", "cost": "$1.10", "calls": 16, "sessions": 1, "avg_per_session": "$1.10", "value": 20 }
+        {
+          "project": "acme/atlas-dashboard",
+          "tool": "Claude",
+          "cost": "$5.42",
+          "calls": 83,
+          "sessions": 2,
+          "avg_per_session": "$2.71",
+          "value": 100
+        },
+        {
+          "project": "northstar/cli",
+          "tool": "Codex",
+          "cost": "$4.08",
+          "calls": 72,
+          "sessions": 1,
+          "avg_per_session": "$4.08",
+          "value": 75
+        },
+        {
+          "project": "acme/atlas-dashboard",
+          "tool": "Codex",
+          "cost": "$3.30",
+          "calls": 48,
+          "sessions": 1,
+          "avg_per_session": "$3.30",
+          "value": 61
+        },
+        {
+          "project": "brightlane/docs",
+          "tool": "Copilot",
+          "cost": "$2.61",
+          "calls": 43,
+          "sessions": 1,
+          "avg_per_session": "$2.61",
+          "value": 48
+        },
+        {
+          "project": "brightlane/docs",
+          "tool": "Gemini",
+          "cost": "$2.04",
+          "calls": 44,
+          "sessions": 1,
+          "avg_per_session": "$2.04",
+          "value": 38
+        },
+        {
+          "project": "brightlane/docs",
+          "tool": "Claude",
+          "cost": "$1.93",
+          "calls": 24,
+          "sessions": 1,
+          "avg_per_session": "$1.93",
+          "value": 36
+        },
+        {
+          "project": "northstar/cli",
+          "tool": "Cursor",
+          "cost": "$1.10",
+          "calls": 16,
+          "sessions": 1,
+          "avg_per_session": "$1.10",
+          "value": 20
+        }
       ],
       "sessions": [
-        { "date": "2026-04-29", "project": "acme/atlas-dashboard", "cost": "$5.42", "calls": 83, "value": 100 },
-        { "date": "2026-04-29", "project": "northstar/cli", "cost": "$4.08", "calls": 72, "value": 75 },
-        { "date": "2026-04-29", "project": "acme/atlas-dashboard", "cost": "$3.30", "calls": 48, "value": 61 },
-        { "date": "2026-04-29", "project": "brightlane/docs", "cost": "$2.61", "calls": 43, "value": 48 },
-        { "date": "2026-04-29", "project": "brightlane/docs", "cost": "$1.93", "calls": 24, "value": 36 }
+        {
+          "date": "2026-04-29",
+          "project": "acme/atlas-dashboard",
+          "cost": "$5.42",
+          "calls": 83,
+          "value": 100
+        },
+        {
+          "date": "2026-04-29",
+          "project": "northstar/cli",
+          "cost": "$4.08",
+          "calls": 72,
+          "value": 75
+        },
+        {
+          "date": "2026-04-29",
+          "project": "acme/atlas-dashboard",
+          "cost": "$3.30",
+          "calls": 48,
+          "value": 61
+        },
+        {
+          "date": "2026-04-29",
+          "project": "brightlane/docs",
+          "cost": "$2.61",
+          "calls": 43,
+          "value": 48
+        },
+        {
+          "date": "2026-04-29",
+          "project": "brightlane/docs",
+          "cost": "$1.93",
+          "calls": 24,
+          "value": 36
+        }
       ],
       "models": [
-        { "id": "gpt-5", "tool": "codex", "cost": "$8.24", "cache": "93.8%", "cache_rate": "10%", "calls": 120, "value": 100 },
-        { "id": "claude-opus-4-7", "tool": "claude-code", "cost": "$6.31", "cache": "96.9%", "cache_rate": "10%", "calls": 91, "value": 77 },
-        { "id": "claude-sonnet-4-5", "tool": "claude-code", "cost": "$2.58", "cache": "89.2%", "cache_rate": "10%", "calls": 48, "value": 31 },
-        { "id": "anthropic-auto", "tool": "copilot", "cost": "$1.31", "cache": "-", "cache_rate": "10%", "calls": 27, "value": 16 }
+        {
+          "id": "gpt-5",
+          "tool": "codex",
+          "cost": "$8.24",
+          "cache": "93.8%",
+          "cache_rate": "10%",
+          "calls": 120,
+          "value": 100
+        },
+        {
+          "id": "claude-opus-4-7",
+          "tool": "claude-code",
+          "cost": "$6.31",
+          "cache": "96.9%",
+          "cache_rate": "10%",
+          "calls": 91,
+          "value": 77
+        },
+        {
+          "id": "claude-sonnet-4-5",
+          "tool": "claude-code",
+          "cost": "$2.58",
+          "cache": "89.2%",
+          "cache_rate": "10%",
+          "calls": 48,
+          "value": 31
+        },
+        {
+          "id": "gemini-2.5-pro",
+          "tool": "gemini",
+          "cost": "$1.47",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 26,
+          "value": 18
+        },
+        {
+          "id": "anthropic-auto",
+          "tool": "copilot",
+          "cost": "$1.31",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 27,
+          "value": 16
+        },
+        {
+          "id": "claude-sonnet-4-5",
+          "tool": "cursor",
+          "cost": "$1.10",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 16,
+          "value": 13
+        },
+        {
+          "id": "gemini-2.5-flash",
+          "tool": "gemini",
+          "cost": "$0.57",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 18,
+          "value": 7
+        }
       ],
       "tools": [
-        { "name": "Bash", "calls": 92, "value": 100 },
-        { "name": "Edit", "calls": 77, "value": 84 },
-        { "name": "Read", "calls": 63, "value": 68 },
-        { "name": "Search", "calls": 31, "value": 34 },
-        { "name": "Write", "calls": 21, "value": 23 },
-        { "name": "TodoWrite", "calls": 16, "value": 17 }
+        {
+          "name": "Bash",
+          "calls": 92,
+          "value": 100
+        },
+        {
+          "name": "Edit",
+          "calls": 77,
+          "value": 84
+        },
+        {
+          "name": "Read",
+          "calls": 63,
+          "value": 68
+        },
+        {
+          "name": "Search",
+          "calls": 31,
+          "value": 34
+        },
+        {
+          "name": "Write",
+          "calls": 21,
+          "value": 23
+        },
+        {
+          "name": "TodoWrite",
+          "calls": 16,
+          "value": 17
+        }
       ],
       "commands": [
-        { "name": "cargo", "calls": 38, "value": 100 },
-        { "name": "rg", "calls": 31, "value": 82 },
-        { "name": "git", "calls": 20, "value": 53 },
-        { "name": "pnpm", "calls": 16, "value": 42 },
-        { "name": "curl", "calls": 9, "value": 24 },
-        { "name": "ls", "calls": 8, "value": 21 }
+        {
+          "name": "cargo",
+          "calls": 38,
+          "value": 100
+        },
+        {
+          "name": "rg",
+          "calls": 31,
+          "value": 82
+        },
+        {
+          "name": "git",
+          "calls": 20,
+          "value": 53
+        },
+        {
+          "name": "pnpm",
+          "calls": 16,
+          "value": 42
+        },
+        {
+          "name": "curl",
+          "calls": 9,
+          "value": 24
+        },
+        {
+          "name": "ls",
+          "calls": 8,
+          "value": 21
+        }
       ],
       "mcp_servers": [
-        { "name": "browser-control", "calls": 12, "value": 100 },
-        { "name": "design-preview", "calls": 6, "value": 50 }
+        {
+          "name": "browser-control",
+          "calls": 12,
+          "value": 100
+        },
+        {
+          "name": "design-preview",
+          "calls": 6,
+          "value": 50
+        }
       ]
     },
     "week": {
       "summary": {
-        "cost": "$78.35",
-        "calls": "1,084",
+        "cost": "$98.99",
+        "calls": "1,443",
         "sessions": "28",
         "cache_hit": "95.1%",
         "input": "7.2M",
@@ -73,75 +301,408 @@
         "written": "2.4M"
       },
       "daily": [
-        { "day": "04-23", "cost": "$6.32", "calls": 96, "value": 20 },
-        { "day": "04-24", "cost": "$8.11", "calls": 118, "value": 25 },
-        { "day": "04-25", "cost": "$12.84", "calls": 174, "value": 40 },
-        { "day": "04-26", "cost": "$9.76", "calls": 144, "value": 30 },
-        { "day": "04-27", "cost": "$14.52", "calls": 210, "value": 45 },
-        { "day": "04-28", "cost": "$8.36", "calls": 56, "value": 26 },
-        { "day": "04-29", "cost": "$18.44", "calls": 286, "value": 57 }
+        {
+          "day": "04-23",
+          "cost": "$7.98",
+          "calls": 121,
+          "value": 20
+        },
+        {
+          "day": "04-24",
+          "cost": "$10.25",
+          "calls": 149,
+          "value": 25
+        },
+        {
+          "day": "04-25",
+          "cost": "$16.22",
+          "calls": 220,
+          "value": 40
+        },
+        {
+          "day": "04-26",
+          "cost": "$12.33",
+          "calls": 182,
+          "value": 30
+        },
+        {
+          "day": "04-27",
+          "cost": "$18.35",
+          "calls": 265,
+          "value": 45
+        },
+        {
+          "day": "04-28",
+          "cost": "$10.56",
+          "calls": 71,
+          "value": 26
+        },
+        {
+          "day": "04-29",
+          "cost": "$23.30",
+          "calls": 435,
+          "value": 57
+        }
       ],
       "projects": [
-        { "name": "acme/atlas-dashboard", "cost": "$26.90", "avg_per_session": "$3.84", "sessions": 7, "tool_mix": "Claude $14  Codex $9.1  Cursor $3.8", "value": 100 },
-        { "name": "northstar/cli", "cost": "$18.42", "avg_per_session": "$2.30", "sessions": 8, "tool_mix": "Codex $11  Claude $4.2  Cursor $3.2", "value": 68 },
-        { "name": "brightlane/docs", "cost": "$14.73", "avg_per_session": "$2.46", "sessions": 6, "tool_mix": "Copilot $6.8  Claude $5.1  Codex $2.8", "value": 55 },
-        { "name": "orbit/mobile-app", "cost": "$10.56", "avg_per_session": "$2.64", "sessions": 4, "tool_mix": "Cursor $6.3  Copilot $4.3", "value": 39 },
-        { "name": "harbor/data-tools", "cost": "$7.74", "avg_per_session": "$2.58", "sessions": 3, "tool_mix": "Claude $4.9  Codex $2.8", "value": 29 }
+        {
+          "name": "acme/atlas-dashboard",
+          "cost": "$26.90",
+          "avg_per_session": "$3.84",
+          "sessions": 7,
+          "tool_mix": "Claude $14  Codex $9.1  Cursor $3.8",
+          "value": 100
+        },
+        {
+          "name": "northstar/cli",
+          "cost": "$18.42",
+          "avg_per_session": "$2.30",
+          "sessions": 8,
+          "tool_mix": "Codex $11  Claude $4.2  Cursor $3.2",
+          "value": 68
+        },
+        {
+          "name": "orbit/mobile-app",
+          "cost": "$16.66",
+          "avg_per_session": "$4.17",
+          "sessions": 4,
+          "tool_mix": "Cursor $6.3  Copilot $4.3  Gemini $6.1",
+          "value": 62
+        },
+        {
+          "name": "brightlane/docs",
+          "cost": "$14.73",
+          "avg_per_session": "$2.46",
+          "sessions": 6,
+          "tool_mix": "Copilot $6.8  Claude $5.1  Codex $2.8",
+          "value": 55
+        },
+        {
+          "name": "harbor/data-tools",
+          "cost": "$12.19",
+          "avg_per_session": "$4.06",
+          "sessions": 3,
+          "tool_mix": "Claude $4.9  Codex $2.8  Gemini $4.5",
+          "value": 45
+        }
       ],
       "project_tools": [
-        { "project": "acme/atlas-dashboard", "tool": "Claude", "cost": "$14.02", "calls": 188, "sessions": 4, "avg_per_session": "$3.51", "value": 100 },
-        { "project": "northstar/cli", "tool": "Codex", "cost": "$10.98", "calls": 154, "sessions": 5, "avg_per_session": "$2.20", "value": 78 },
-        { "project": "acme/atlas-dashboard", "tool": "Codex", "cost": "$9.10", "calls": 132, "sessions": 2, "avg_per_session": "$4.55", "value": 65 },
-        { "project": "brightlane/docs", "tool": "Copilot", "cost": "$6.82", "calls": 116, "sessions": 3, "avg_per_session": "$2.27", "value": 49 },
-        { "project": "orbit/mobile-app", "tool": "Cursor", "cost": "$6.31", "calls": 83, "sessions": 2, "avg_per_session": "$3.16", "value": 45 },
-        { "project": "brightlane/docs", "tool": "Claude", "cost": "$5.12", "calls": 86, "sessions": 2, "avg_per_session": "$2.56", "value": 37 },
-        { "project": "harbor/data-tools", "tool": "Claude", "cost": "$4.93", "calls": 72, "sessions": 2, "avg_per_session": "$2.47", "value": 35 },
-        { "project": "orbit/mobile-app", "tool": "Copilot", "cost": "$4.25", "calls": 69, "sessions": 2, "avg_per_session": "$2.13", "value": 30 },
-        { "project": "northstar/cli", "tool": "Claude", "cost": "$4.20", "calls": 64, "sessions": 2, "avg_per_session": "$2.10", "value": 30 },
-        { "project": "acme/atlas-dashboard", "tool": "Cursor", "cost": "$3.78", "calls": 44, "sessions": 1, "avg_per_session": "$3.78", "value": 27 }
+        {
+          "project": "acme/atlas-dashboard",
+          "tool": "Claude",
+          "cost": "$14.02",
+          "calls": 188,
+          "sessions": 4,
+          "avg_per_session": "$3.51",
+          "value": 100
+        },
+        {
+          "project": "northstar/cli",
+          "tool": "Codex",
+          "cost": "$10.98",
+          "calls": 154,
+          "sessions": 5,
+          "avg_per_session": "$2.20",
+          "value": 78
+        },
+        {
+          "project": "acme/atlas-dashboard",
+          "tool": "Codex",
+          "cost": "$9.10",
+          "calls": 132,
+          "sessions": 2,
+          "avg_per_session": "$4.55",
+          "value": 65
+        },
+        {
+          "project": "brightlane/docs",
+          "tool": "Copilot",
+          "cost": "$6.82",
+          "calls": 116,
+          "sessions": 3,
+          "avg_per_session": "$2.27",
+          "value": 49
+        },
+        {
+          "project": "orbit/mobile-app",
+          "tool": "Cursor",
+          "cost": "$6.31",
+          "calls": 83,
+          "sessions": 2,
+          "avg_per_session": "$3.16",
+          "value": 45
+        },
+        {
+          "project": "orbit/mobile-app",
+          "tool": "Gemini",
+          "cost": "$6.10",
+          "calls": 134,
+          "sessions": 3,
+          "avg_per_session": "$2.03",
+          "value": 44
+        },
+        {
+          "project": "brightlane/docs",
+          "tool": "Claude",
+          "cost": "$5.12",
+          "calls": 86,
+          "sessions": 2,
+          "avg_per_session": "$2.56",
+          "value": 37
+        },
+        {
+          "project": "harbor/data-tools",
+          "tool": "Claude",
+          "cost": "$4.93",
+          "calls": 72,
+          "sessions": 2,
+          "avg_per_session": "$2.47",
+          "value": 35
+        },
+        {
+          "project": "harbor/data-tools",
+          "tool": "Gemini",
+          "cost": "$4.45",
+          "calls": 98,
+          "sessions": 2,
+          "avg_per_session": "$2.23",
+          "value": 32
+        },
+        {
+          "project": "orbit/mobile-app",
+          "tool": "Copilot",
+          "cost": "$4.25",
+          "calls": 69,
+          "sessions": 2,
+          "avg_per_session": "$2.13",
+          "value": 30
+        },
+        {
+          "project": "northstar/cli",
+          "tool": "Claude",
+          "cost": "$4.20",
+          "calls": 64,
+          "sessions": 2,
+          "avg_per_session": "$2.10",
+          "value": 30
+        },
+        {
+          "project": "acme/atlas-dashboard",
+          "tool": "Cursor",
+          "cost": "$3.78",
+          "calls": 44,
+          "sessions": 1,
+          "avg_per_session": "$3.78",
+          "value": 27
+        }
       ],
       "sessions": [
-        { "date": "2026-04-29", "project": "acme/atlas-dashboard", "cost": "$8.72", "calls": 131, "value": 100 },
-        { "date": "2026-04-27", "project": "northstar/cli", "cost": "$7.64", "calls": 126, "value": 88 },
-        { "date": "2026-04-25", "project": "brightlane/docs", "cost": "$6.21", "calls": 91, "value": 71 },
-        { "date": "2026-04-28", "project": "orbit/mobile-app", "cost": "$5.83", "calls": 74, "value": 67 },
-        { "date": "2026-04-26", "project": "harbor/data-tools", "cost": "$4.91", "calls": 68, "value": 56 }
+        {
+          "date": "2026-04-29",
+          "project": "acme/atlas-dashboard",
+          "cost": "$8.72",
+          "calls": 131,
+          "value": 100
+        },
+        {
+          "date": "2026-04-27",
+          "project": "northstar/cli",
+          "cost": "$7.64",
+          "calls": 126,
+          "value": 88
+        },
+        {
+          "date": "2026-04-25",
+          "project": "brightlane/docs",
+          "cost": "$6.21",
+          "calls": 91,
+          "value": 71
+        },
+        {
+          "date": "2026-04-28",
+          "project": "orbit/mobile-app",
+          "cost": "$5.83",
+          "calls": 74,
+          "value": 67
+        },
+        {
+          "date": "2026-04-26",
+          "project": "harbor/data-tools",
+          "cost": "$4.91",
+          "calls": 68,
+          "value": 56
+        }
       ],
       "models": [
-        { "id": "gpt-5", "tool": "codex", "cost": "$31.42", "cache": "94.1%", "cache_rate": "10%", "calls": 402, "value": 100 },
-        { "id": "claude-opus-4-7", "tool": "claude-code", "cost": "$24.15", "cache": "96.7%", "cache_rate": "10%", "calls": 318, "value": 77 },
-        { "id": "claude-sonnet-4-5", "tool": "claude-code", "cost": "$14.96", "cache": "91.4%", "cache_rate": "10%", "calls": 228, "value": 48 },
-        { "id": "anthropic-auto", "tool": "copilot", "cost": "$5.61", "cache": "-", "cache_rate": "10%", "calls": 92, "value": 18 },
-        { "id": "openai-auto", "tool": "copilot", "cost": "$2.21", "cache": "-", "cache_rate": "10%", "calls": 44, "value": 7 }
+        {
+          "id": "gpt-5",
+          "tool": "codex",
+          "cost": "$31.42",
+          "cache": "94.1%",
+          "cache_rate": "10%",
+          "calls": 402,
+          "value": 100
+        },
+        {
+          "id": "claude-opus-4-7",
+          "tool": "claude-code",
+          "cost": "$24.15",
+          "cache": "96.7%",
+          "cache_rate": "10%",
+          "calls": 318,
+          "value": 77
+        },
+        {
+          "id": "claude-sonnet-4-5",
+          "tool": "claude-code",
+          "cost": "$14.96",
+          "cache": "91.4%",
+          "cache_rate": "10%",
+          "calls": 228,
+          "value": 48
+        },
+        {
+          "id": "claude-sonnet-4-5",
+          "tool": "cursor",
+          "cost": "$10.09",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 127,
+          "value": 32
+        },
+        {
+          "id": "gemini-2.5-pro",
+          "tool": "gemini",
+          "cost": "$7.60",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 139,
+          "value": 24
+        },
+        {
+          "id": "anthropic-auto",
+          "tool": "copilot",
+          "cost": "$5.61",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 92,
+          "value": 18
+        },
+        {
+          "id": "gemini-2.5-flash",
+          "tool": "gemini",
+          "cost": "$2.95",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 93,
+          "value": 9
+        },
+        {
+          "id": "openai-auto",
+          "tool": "copilot",
+          "cost": "$2.21",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 44,
+          "value": 7
+        }
       ],
       "tools": [
-        { "name": "Bash", "calls": 312, "value": 100 },
-        { "name": "Edit", "calls": 248, "value": 79 },
-        { "name": "Read", "calls": 221, "value": 71 },
-        { "name": "Search", "calls": 128, "value": 41 },
-        { "name": "Write", "calls": 76, "value": 24 },
-        { "name": "TodoWrite", "calls": 54, "value": 17 },
-        { "name": "WebFetch", "calls": 22, "value": 7 }
+        {
+          "name": "Bash",
+          "calls": 312,
+          "value": 100
+        },
+        {
+          "name": "Edit",
+          "calls": 248,
+          "value": 79
+        },
+        {
+          "name": "Read",
+          "calls": 221,
+          "value": 71
+        },
+        {
+          "name": "Search",
+          "calls": 128,
+          "value": 41
+        },
+        {
+          "name": "Write",
+          "calls": 76,
+          "value": 24
+        },
+        {
+          "name": "TodoWrite",
+          "calls": 54,
+          "value": 17
+        },
+        {
+          "name": "WebFetch",
+          "calls": 22,
+          "value": 7
+        }
       ],
       "commands": [
-        { "name": "cargo", "calls": 104, "value": 100 },
-        { "name": "rg", "calls": 92, "value": 88 },
-        { "name": "git", "calls": 66, "value": 63 },
-        { "name": "pnpm", "calls": 51, "value": 49 },
-        { "name": "curl", "calls": 30, "value": 29 },
-        { "name": "ls", "calls": 28, "value": 27 },
-        { "name": "sqlite3", "calls": 14, "value": 13 }
+        {
+          "name": "cargo",
+          "calls": 104,
+          "value": 100
+        },
+        {
+          "name": "rg",
+          "calls": 92,
+          "value": 88
+        },
+        {
+          "name": "git",
+          "calls": 66,
+          "value": 63
+        },
+        {
+          "name": "pnpm",
+          "calls": 51,
+          "value": 49
+        },
+        {
+          "name": "curl",
+          "calls": 30,
+          "value": 29
+        },
+        {
+          "name": "ls",
+          "calls": 28,
+          "value": 27
+        },
+        {
+          "name": "sqlite3",
+          "calls": 14,
+          "value": 13
+        }
       ],
       "mcp_servers": [
-        { "name": "browser-control", "calls": 48, "value": 100 },
-        { "name": "design-preview", "calls": 21, "value": 44 },
-        { "name": "workspace-index", "calls": 12, "value": 25 }
+        {
+          "name": "browser-control",
+          "calls": 48,
+          "value": 100
+        },
+        {
+          "name": "design-preview",
+          "calls": 21,
+          "value": 44
+        },
+        {
+          "name": "workspace-index",
+          "calls": 12,
+          "value": 25
+        }
       ]
     },
     "thirty_days": {
       "summary": {
-        "cost": "$214.67",
-        "calls": "3,418",
+        "cost": "$266.89",
+        "calls": "4,354",
         "sessions": "74",
         "cache_hit": "94.0%",
         "input": "18.6M",
@@ -150,80 +711,439 @@
         "written": "5.8M"
       },
       "daily": [
-        { "day": "04-01", "cost": "$8.92", "calls": 124, "value": 25 },
-        { "day": "04-04", "cost": "$12.41", "calls": 186, "value": 35 },
-        { "day": "04-08", "cost": "$15.90", "calls": 248, "value": 45 },
-        { "day": "04-12", "cost": "$24.36", "calls": 312, "value": 68 },
-        { "day": "04-16", "cost": "$18.72", "calls": 284, "value": 52 },
-        { "day": "04-20", "cost": "$29.58", "calls": 402, "value": 83 },
-        { "day": "04-23", "cost": "$6.32", "calls": 96, "value": 18 },
-        { "day": "04-25", "cost": "$12.84", "calls": 174, "value": 36 },
-        { "day": "04-27", "cost": "$14.52", "calls": 210, "value": 41 },
-        { "day": "04-29", "cost": "$18.44", "calls": 286, "value": 52 }
+        {
+          "day": "04-01",
+          "cost": "$8.92",
+          "calls": 124,
+          "value": 25
+        },
+        {
+          "day": "04-04",
+          "cost": "$12.41",
+          "calls": 186,
+          "value": 35
+        },
+        {
+          "day": "04-08",
+          "cost": "$15.90",
+          "calls": 248,
+          "value": 45
+        },
+        {
+          "day": "04-12",
+          "cost": "$24.36",
+          "calls": 312,
+          "value": 68
+        },
+        {
+          "day": "04-16",
+          "cost": "$18.72",
+          "calls": 284,
+          "value": 52
+        },
+        {
+          "day": "04-20",
+          "cost": "$29.58",
+          "calls": 402,
+          "value": 83
+        },
+        {
+          "day": "04-23",
+          "cost": "$6.32",
+          "calls": 96,
+          "value": 18
+        },
+        {
+          "day": "04-25",
+          "cost": "$12.84",
+          "calls": 174,
+          "value": 36
+        },
+        {
+          "day": "04-27",
+          "cost": "$14.52",
+          "calls": 210,
+          "value": 41
+        },
+        {
+          "day": "04-29",
+          "cost": "$18.44",
+          "calls": 286,
+          "value": 52
+        }
       ],
       "projects": [
-        { "name": "acme/atlas-dashboard", "cost": "$62.40", "avg_per_session": "$3.28", "sessions": 19, "tool_mix": "Claude $31  Codex $22  Cursor $9.4", "value": 100 },
-        { "name": "northstar/cli", "cost": "$44.82", "avg_per_session": "$2.49", "sessions": 18, "tool_mix": "Codex $28  Claude $9.6  Cursor $7.2", "value": 72 },
-        { "name": "brightlane/docs", "cost": "$34.15", "avg_per_session": "$1.90", "sessions": 18, "tool_mix": "Copilot $15  Claude $12  Codex $7.1", "value": 55 },
-        { "name": "orbit/mobile-app", "cost": "$28.96", "avg_per_session": "$3.62", "sessions": 8, "tool_mix": "Cursor $17  Copilot $12", "value": 46 },
-        { "name": "harbor/data-tools", "cost": "$23.41", "avg_per_session": "$3.34", "sessions": 7, "tool_mix": "Claude $15  Codex $8.2", "value": 38 },
-        { "name": "launchpad/api", "cost": "$20.93", "avg_per_session": "$5.23", "sessions": 4, "tool_mix": "Codex $13  Claude $7.8", "value": 34 }
+        {
+          "name": "acme/atlas-dashboard",
+          "cost": "$62.40",
+          "avg_per_session": "$3.28",
+          "sessions": 19,
+          "tool_mix": "Claude $31  Codex $22  Cursor $9.4",
+          "value": 100
+        },
+        {
+          "name": "northstar/cli",
+          "cost": "$44.82",
+          "avg_per_session": "$2.49",
+          "sessions": 18,
+          "tool_mix": "Codex $28  Claude $9.6  Cursor $7.2",
+          "value": 72
+        },
+        {
+          "name": "orbit/mobile-app",
+          "cost": "$44.16",
+          "avg_per_session": "$5.52",
+          "sessions": 8,
+          "tool_mix": "Cursor $17  Copilot $12  Gemini $15",
+          "value": 71
+        },
+        {
+          "name": "brightlane/docs",
+          "cost": "$34.15",
+          "avg_per_session": "$1.90",
+          "sessions": 18,
+          "tool_mix": "Copilot $15  Claude $12  Codex $7.1",
+          "value": 55
+        },
+        {
+          "name": "launchpad/api",
+          "cost": "$31.73",
+          "avg_per_session": "$7.93",
+          "sessions": 4,
+          "tool_mix": "Codex $13  Claude $7.8  Gemini $11",
+          "value": 51
+        },
+        {
+          "name": "harbor/data-tools",
+          "cost": "$23.41",
+          "avg_per_session": "$3.34",
+          "sessions": 7,
+          "tool_mix": "Claude $15  Codex $8.2",
+          "value": 38
+        }
       ],
       "project_tools": [
-        { "project": "acme/atlas-dashboard", "tool": "Claude", "cost": "$31.02", "calls": 412, "sessions": 10, "avg_per_session": "$3.10", "value": 100 },
-        { "project": "northstar/cli", "tool": "Codex", "cost": "$28.01", "calls": 388, "sessions": 11, "avg_per_session": "$2.55", "value": 90 },
-        { "project": "acme/atlas-dashboard", "tool": "Codex", "cost": "$21.98", "calls": 306, "sessions": 6, "avg_per_session": "$3.66", "value": 71 },
-        { "project": "orbit/mobile-app", "tool": "Cursor", "cost": "$16.82", "calls": 246, "sessions": 5, "avg_per_session": "$3.36", "value": 54 },
-        { "project": "brightlane/docs", "tool": "Copilot", "cost": "$15.02", "calls": 264, "sessions": 8, "avg_per_session": "$1.88", "value": 48 },
-        { "project": "harbor/data-tools", "tool": "Claude", "cost": "$15.18", "calls": 201, "sessions": 4, "avg_per_session": "$3.80", "value": 49 },
-        { "project": "launchpad/api", "tool": "Codex", "cost": "$13.12", "calls": 188, "sessions": 2, "avg_per_session": "$6.56", "value": 42 },
-        { "project": "brightlane/docs", "tool": "Claude", "cost": "$12.03", "calls": 192, "sessions": 6, "avg_per_session": "$2.01", "value": 39 },
-        { "project": "orbit/mobile-app", "tool": "Copilot", "cost": "$12.14", "calls": 180, "sessions": 3, "avg_per_session": "$4.05", "value": 39 },
-        { "project": "acme/atlas-dashboard", "tool": "Cursor", "cost": "$9.40", "calls": 138, "sessions": 3, "avg_per_session": "$3.13", "value": 30 }
+        {
+          "project": "acme/atlas-dashboard",
+          "tool": "Claude",
+          "cost": "$31.02",
+          "calls": 412,
+          "sessions": 10,
+          "avg_per_session": "$3.10",
+          "value": 100
+        },
+        {
+          "project": "northstar/cli",
+          "tool": "Codex",
+          "cost": "$28.01",
+          "calls": 388,
+          "sessions": 11,
+          "avg_per_session": "$2.55",
+          "value": 90
+        },
+        {
+          "project": "acme/atlas-dashboard",
+          "tool": "Codex",
+          "cost": "$21.98",
+          "calls": 306,
+          "sessions": 6,
+          "avg_per_session": "$3.66",
+          "value": 71
+        },
+        {
+          "project": "orbit/mobile-app",
+          "tool": "Cursor",
+          "cost": "$16.82",
+          "calls": 246,
+          "sessions": 5,
+          "avg_per_session": "$3.36",
+          "value": 54
+        },
+        {
+          "project": "orbit/mobile-app",
+          "tool": "Gemini",
+          "cost": "$15.20",
+          "calls": 322,
+          "sessions": 7,
+          "avg_per_session": "$2.17",
+          "value": 49
+        },
+        {
+          "project": "harbor/data-tools",
+          "tool": "Claude",
+          "cost": "$15.18",
+          "calls": 201,
+          "sessions": 4,
+          "avg_per_session": "$3.80",
+          "value": 49
+        },
+        {
+          "project": "brightlane/docs",
+          "tool": "Copilot",
+          "cost": "$15.02",
+          "calls": 264,
+          "sessions": 8,
+          "avg_per_session": "$1.88",
+          "value": 48
+        },
+        {
+          "project": "launchpad/api",
+          "tool": "Codex",
+          "cost": "$13.12",
+          "calls": 188,
+          "sessions": 2,
+          "avg_per_session": "$6.56",
+          "value": 42
+        },
+        {
+          "project": "orbit/mobile-app",
+          "tool": "Copilot",
+          "cost": "$12.14",
+          "calls": 180,
+          "sessions": 3,
+          "avg_per_session": "$4.05",
+          "value": 39
+        },
+        {
+          "project": "brightlane/docs",
+          "tool": "Claude",
+          "cost": "$12.03",
+          "calls": 192,
+          "sessions": 6,
+          "avg_per_session": "$2.01",
+          "value": 39
+        },
+        {
+          "project": "launchpad/api",
+          "tool": "Gemini",
+          "cost": "$10.80",
+          "calls": 230,
+          "sessions": 5,
+          "avg_per_session": "$2.16",
+          "value": 35
+        },
+        {
+          "project": "acme/atlas-dashboard",
+          "tool": "Cursor",
+          "cost": "$9.40",
+          "calls": 138,
+          "sessions": 3,
+          "avg_per_session": "$3.13",
+          "value": 30
+        }
       ],
       "sessions": [
-        { "date": "2026-04-20", "project": "acme/atlas-dashboard", "cost": "$12.84", "calls": 186, "value": 100 },
-        { "date": "2026-04-12", "project": "northstar/cli", "cost": "$10.72", "calls": 164, "value": 83 },
-        { "date": "2026-04-29", "project": "acme/atlas-dashboard", "cost": "$8.72", "calls": 131, "value": 68 },
-        { "date": "2026-04-18", "project": "launchpad/api", "cost": "$8.41", "calls": 96, "value": 65 },
-        { "date": "2026-04-27", "project": "northstar/cli", "cost": "$7.64", "calls": 126, "value": 59 }
+        {
+          "date": "2026-04-20",
+          "project": "acme/atlas-dashboard",
+          "cost": "$12.84",
+          "calls": 186,
+          "value": 100
+        },
+        {
+          "date": "2026-04-12",
+          "project": "northstar/cli",
+          "cost": "$10.72",
+          "calls": 164,
+          "value": 83
+        },
+        {
+          "date": "2026-04-29",
+          "project": "acme/atlas-dashboard",
+          "cost": "$8.72",
+          "calls": 131,
+          "value": 68
+        },
+        {
+          "date": "2026-04-18",
+          "project": "launchpad/api",
+          "cost": "$8.41",
+          "calls": 96,
+          "value": 65
+        },
+        {
+          "date": "2026-04-27",
+          "project": "northstar/cli",
+          "cost": "$7.64",
+          "calls": 126,
+          "value": 59
+        }
       ],
       "models": [
-        { "id": "gpt-5", "tool": "codex", "cost": "$86.41", "cache": "93.6%", "cache_rate": "10%", "calls": 1206, "value": 100 },
-        { "id": "claude-opus-4-7", "tool": "claude-code", "cost": "$64.08", "cache": "96.1%", "cache_rate": "10%", "calls": 928, "value": 74 },
-        { "id": "claude-sonnet-4-5", "tool": "claude-code", "cost": "$42.56", "cache": "90.7%", "cache_rate": "10%", "calls": 772, "value": 49 },
-        { "id": "anthropic-auto", "tool": "copilot", "cost": "$14.26", "cache": "-", "cache_rate": "10%", "calls": 330, "value": 17 },
-        { "id": "openai-auto", "tool": "copilot", "cost": "$7.36", "cache": "-", "cache_rate": "10%", "calls": 182, "value": 9 }
+        {
+          "id": "gpt-5",
+          "tool": "codex",
+          "cost": "$86.41",
+          "cache": "93.6%",
+          "cache_rate": "10%",
+          "calls": 1206,
+          "value": 100
+        },
+        {
+          "id": "claude-opus-4-7",
+          "tool": "claude-code",
+          "cost": "$64.08",
+          "cache": "96.1%",
+          "cache_rate": "10%",
+          "calls": 928,
+          "value": 74
+        },
+        {
+          "id": "claude-sonnet-4-5",
+          "tool": "claude-code",
+          "cost": "$42.56",
+          "cache": "90.7%",
+          "cache_rate": "10%",
+          "calls": 772,
+          "value": 49
+        },
+        {
+          "id": "claude-sonnet-4-5",
+          "tool": "cursor",
+          "cost": "$26.22",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 384,
+          "value": 30
+        },
+        {
+          "id": "gemini-2.5-pro",
+          "tool": "gemini",
+          "cost": "$18.72",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 331,
+          "value": 22
+        },
+        {
+          "id": "anthropic-auto",
+          "tool": "copilot",
+          "cost": "$14.26",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 330,
+          "value": 17
+        },
+        {
+          "id": "openai-auto",
+          "tool": "copilot",
+          "cost": "$7.36",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 182,
+          "value": 9
+        },
+        {
+          "id": "gemini-2.5-flash",
+          "tool": "gemini",
+          "cost": "$7.28",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 221,
+          "value": 8
+        }
       ],
       "tools": [
-        { "name": "Bash", "calls": 906, "value": 100 },
-        { "name": "Edit", "calls": 742, "value": 82 },
-        { "name": "Read", "calls": 681, "value": 75 },
-        { "name": "Search", "calls": 396, "value": 44 },
-        { "name": "Write", "calls": 214, "value": 24 },
-        { "name": "TodoWrite", "calls": 176, "value": 19 },
-        { "name": "WebFetch", "calls": 72, "value": 8 }
+        {
+          "name": "Bash",
+          "calls": 906,
+          "value": 100
+        },
+        {
+          "name": "Edit",
+          "calls": 742,
+          "value": 82
+        },
+        {
+          "name": "Read",
+          "calls": 681,
+          "value": 75
+        },
+        {
+          "name": "Search",
+          "calls": 396,
+          "value": 44
+        },
+        {
+          "name": "Write",
+          "calls": 214,
+          "value": 24
+        },
+        {
+          "name": "TodoWrite",
+          "calls": 176,
+          "value": 19
+        },
+        {
+          "name": "WebFetch",
+          "calls": 72,
+          "value": 8
+        }
       ],
       "commands": [
-        { "name": "cargo", "calls": 284, "value": 100 },
-        { "name": "rg", "calls": 260, "value": 92 },
-        { "name": "git", "calls": 204, "value": 72 },
-        { "name": "pnpm", "calls": 144, "value": 51 },
-        { "name": "curl", "calls": 96, "value": 34 },
-        { "name": "ls", "calls": 84, "value": 30 },
-        { "name": "sqlite3", "calls": 41, "value": 14 }
+        {
+          "name": "cargo",
+          "calls": 284,
+          "value": 100
+        },
+        {
+          "name": "rg",
+          "calls": 260,
+          "value": 92
+        },
+        {
+          "name": "git",
+          "calls": 204,
+          "value": 72
+        },
+        {
+          "name": "pnpm",
+          "calls": 144,
+          "value": 51
+        },
+        {
+          "name": "curl",
+          "calls": 96,
+          "value": 34
+        },
+        {
+          "name": "ls",
+          "calls": 84,
+          "value": 30
+        },
+        {
+          "name": "sqlite3",
+          "calls": 41,
+          "value": 14
+        }
       ],
       "mcp_servers": [
-        { "name": "browser-control", "calls": 132, "value": 100 },
-        { "name": "design-preview", "calls": 76, "value": 58 },
-        { "name": "workspace-index", "calls": 42, "value": 32 },
-        { "name": "session-recorder", "calls": 14, "value": 11 }
+        {
+          "name": "browser-control",
+          "calls": 132,
+          "value": 100
+        },
+        {
+          "name": "design-preview",
+          "calls": 76,
+          "value": 58
+        },
+        {
+          "name": "workspace-index",
+          "calls": 42,
+          "value": 32
+        },
+        {
+          "name": "session-recorder",
+          "calls": 14,
+          "value": 11
+        }
       ]
     },
     "month": {
       "summary": {
-        "cost": "$198.22",
-        "calls": "3,086",
+        "cost": "$235.24",
+        "calls": "3,766",
         "sessions": "67",
         "cache_hit": "94.2%",
         "input": "16.9M",
@@ -232,76 +1152,409 @@
         "written": "5.1M"
       },
       "daily": [
-        { "day": "04-04", "cost": "$12.41", "calls": 186, "value": 42 },
-        { "day": "04-08", "cost": "$15.90", "calls": 248, "value": 54 },
-        { "day": "04-12", "cost": "$24.36", "calls": 312, "value": 82 },
-        { "day": "04-16", "cost": "$18.72", "calls": 284, "value": 63 },
-        { "day": "04-20", "cost": "$29.58", "calls": 402, "value": 100 },
-        { "day": "04-25", "cost": "$12.84", "calls": 174, "value": 43 },
-        { "day": "04-27", "cost": "$14.52", "calls": 210, "value": 49 },
-        { "day": "04-29", "cost": "$18.44", "calls": 286, "value": 62 }
+        {
+          "day": "04-04",
+          "cost": "$12.41",
+          "calls": 186,
+          "value": 42
+        },
+        {
+          "day": "04-08",
+          "cost": "$15.90",
+          "calls": 248,
+          "value": 54
+        },
+        {
+          "day": "04-12",
+          "cost": "$24.36",
+          "calls": 312,
+          "value": 82
+        },
+        {
+          "day": "04-16",
+          "cost": "$18.72",
+          "calls": 284,
+          "value": 63
+        },
+        {
+          "day": "04-20",
+          "cost": "$29.58",
+          "calls": 402,
+          "value": 100
+        },
+        {
+          "day": "04-25",
+          "cost": "$12.84",
+          "calls": 174,
+          "value": 43
+        },
+        {
+          "day": "04-27",
+          "cost": "$14.52",
+          "calls": 210,
+          "value": 49
+        },
+        {
+          "day": "04-29",
+          "cost": "$18.44",
+          "calls": 286,
+          "value": 62
+        }
       ],
       "projects": [
-        { "name": "acme/atlas-dashboard", "cost": "$58.06", "avg_per_session": "$3.42", "sessions": 17, "tool_mix": "Claude $29  Codex $21  Cursor $8.1", "value": 100 },
-        { "name": "northstar/cli", "cost": "$41.34", "avg_per_session": "$2.43", "sessions": 17, "tool_mix": "Codex $26  Claude $8.9  Cursor $6.4", "value": 71 },
-        { "name": "brightlane/docs", "cost": "$31.50", "avg_per_session": "$1.97", "sessions": 16, "tool_mix": "Copilot $14  Claude $11  Codex $6.5", "value": 54 },
-        { "name": "orbit/mobile-app", "cost": "$27.02", "avg_per_session": "$3.86", "sessions": 7, "tool_mix": "Cursor $16  Copilot $11", "value": 47 },
-        { "name": "harbor/data-tools", "cost": "$22.44", "avg_per_session": "$3.74", "sessions": 6, "tool_mix": "Claude $15  Codex $7.6", "value": 39 },
-        { "name": "launchpad/api", "cost": "$17.86", "avg_per_session": "$4.47", "sessions": 4, "tool_mix": "Codex $11  Claude $6.7", "value": 31 }
+        {
+          "name": "acme/atlas-dashboard",
+          "cost": "$58.06",
+          "avg_per_session": "$3.42",
+          "sessions": 17,
+          "tool_mix": "Claude $29  Codex $21  Cursor $8.1",
+          "value": 100
+        },
+        {
+          "name": "northstar/cli",
+          "cost": "$41.34",
+          "avg_per_session": "$2.43",
+          "sessions": 17,
+          "tool_mix": "Codex $26  Claude $8.9  Cursor $6.4",
+          "value": 71
+        },
+        {
+          "name": "orbit/mobile-app",
+          "cost": "$39.32",
+          "avg_per_session": "$5.62",
+          "sessions": 7,
+          "tool_mix": "Cursor $16  Copilot $11  Gemini $12",
+          "value": 68
+        },
+        {
+          "name": "brightlane/docs",
+          "cost": "$31.50",
+          "avg_per_session": "$1.97",
+          "sessions": 16,
+          "tool_mix": "Copilot $14  Claude $11  Codex $6.5",
+          "value": 54
+        },
+        {
+          "name": "harbor/data-tools",
+          "cost": "$31.34",
+          "avg_per_session": "$5.22",
+          "sessions": 6,
+          "tool_mix": "Claude $15  Codex $7.6  Gemini $8.9",
+          "value": 54
+        },
+        {
+          "name": "launchpad/api",
+          "cost": "$17.86",
+          "avg_per_session": "$4.47",
+          "sessions": 4,
+          "tool_mix": "Codex $11  Claude $6.7",
+          "value": 31
+        }
       ],
       "project_tools": [
-        { "project": "acme/atlas-dashboard", "tool": "Claude", "cost": "$28.94", "calls": 384, "sessions": 9, "avg_per_session": "$3.22", "value": 100 },
-        { "project": "northstar/cli", "tool": "Codex", "cost": "$26.04", "calls": 356, "sessions": 10, "avg_per_session": "$2.60", "value": 90 },
-        { "project": "acme/atlas-dashboard", "tool": "Codex", "cost": "$21.02", "calls": 286, "sessions": 5, "avg_per_session": "$4.20", "value": 73 },
-        { "project": "orbit/mobile-app", "tool": "Cursor", "cost": "$15.82", "calls": 230, "sessions": 4, "avg_per_session": "$3.96", "value": 55 },
-        { "project": "brightlane/docs", "tool": "Copilot", "cost": "$13.92", "calls": 240, "sessions": 7, "avg_per_session": "$1.99", "value": 48 },
-        { "project": "harbor/data-tools", "tool": "Claude", "cost": "$14.88", "calls": 190, "sessions": 4, "avg_per_session": "$3.72", "value": 51 },
-        { "project": "launchpad/api", "tool": "Codex", "cost": "$11.14", "calls": 164, "sessions": 2, "avg_per_session": "$5.57", "value": 38 },
-        { "project": "brightlane/docs", "tool": "Claude", "cost": "$11.04", "calls": 176, "sessions": 5, "avg_per_session": "$2.21", "value": 38 }
+        {
+          "project": "acme/atlas-dashboard",
+          "tool": "Claude",
+          "cost": "$28.94",
+          "calls": 384,
+          "sessions": 9,
+          "avg_per_session": "$3.22",
+          "value": 100
+        },
+        {
+          "project": "northstar/cli",
+          "tool": "Codex",
+          "cost": "$26.04",
+          "calls": 356,
+          "sessions": 10,
+          "avg_per_session": "$2.60",
+          "value": 90
+        },
+        {
+          "project": "acme/atlas-dashboard",
+          "tool": "Codex",
+          "cost": "$21.02",
+          "calls": 286,
+          "sessions": 5,
+          "avg_per_session": "$4.20",
+          "value": 73
+        },
+        {
+          "project": "orbit/mobile-app",
+          "tool": "Cursor",
+          "cost": "$15.82",
+          "calls": 230,
+          "sessions": 4,
+          "avg_per_session": "$3.96",
+          "value": 55
+        },
+        {
+          "project": "harbor/data-tools",
+          "tool": "Claude",
+          "cost": "$14.88",
+          "calls": 190,
+          "sessions": 4,
+          "avg_per_session": "$3.72",
+          "value": 51
+        },
+        {
+          "project": "brightlane/docs",
+          "tool": "Copilot",
+          "cost": "$13.92",
+          "calls": 240,
+          "sessions": 7,
+          "avg_per_session": "$1.99",
+          "value": 48
+        },
+        {
+          "project": "orbit/mobile-app",
+          "tool": "Gemini",
+          "cost": "$12.30",
+          "calls": 262,
+          "sessions": 6,
+          "avg_per_session": "$2.05",
+          "value": 43
+        },
+        {
+          "project": "launchpad/api",
+          "tool": "Codex",
+          "cost": "$11.14",
+          "calls": 164,
+          "sessions": 2,
+          "avg_per_session": "$5.57",
+          "value": 38
+        },
+        {
+          "project": "brightlane/docs",
+          "tool": "Claude",
+          "cost": "$11.04",
+          "calls": 176,
+          "sessions": 5,
+          "avg_per_session": "$2.21",
+          "value": 38
+        },
+        {
+          "project": "harbor/data-tools",
+          "tool": "Gemini",
+          "cost": "$8.90",
+          "calls": 188,
+          "sessions": 4,
+          "avg_per_session": "$2.23",
+          "value": 31
+        }
       ],
       "sessions": [
-        { "date": "2026-04-20", "project": "acme/atlas-dashboard", "cost": "$12.84", "calls": 186, "value": 100 },
-        { "date": "2026-04-12", "project": "northstar/cli", "cost": "$10.72", "calls": 164, "value": 83 },
-        { "date": "2026-04-29", "project": "acme/atlas-dashboard", "cost": "$8.72", "calls": 131, "value": 68 },
-        { "date": "2026-04-18", "project": "launchpad/api", "cost": "$8.41", "calls": 96, "value": 65 },
-        { "date": "2026-04-27", "project": "northstar/cli", "cost": "$7.64", "calls": 126, "value": 59 }
+        {
+          "date": "2026-04-20",
+          "project": "acme/atlas-dashboard",
+          "cost": "$12.84",
+          "calls": 186,
+          "value": 100
+        },
+        {
+          "date": "2026-04-12",
+          "project": "northstar/cli",
+          "cost": "$10.72",
+          "calls": 164,
+          "value": 83
+        },
+        {
+          "date": "2026-04-29",
+          "project": "acme/atlas-dashboard",
+          "cost": "$8.72",
+          "calls": 131,
+          "value": 68
+        },
+        {
+          "date": "2026-04-18",
+          "project": "launchpad/api",
+          "cost": "$8.41",
+          "calls": 96,
+          "value": 65
+        },
+        {
+          "date": "2026-04-27",
+          "project": "northstar/cli",
+          "cost": "$7.64",
+          "calls": 126,
+          "value": 59
+        }
       ],
       "models": [
-        { "id": "gpt-5", "tool": "codex", "cost": "$79.11", "cache": "93.8%", "cache_rate": "10%", "calls": 1084, "value": 100 },
-        { "id": "claude-opus-4-7", "tool": "claude-code", "cost": "$59.66", "cache": "96.2%", "cache_rate": "10%", "calls": 866, "value": 75 },
-        { "id": "claude-sonnet-4-5", "tool": "claude-code", "cost": "$39.84", "cache": "91.1%", "cache_rate": "10%", "calls": 700, "value": 50 },
-        { "id": "anthropic-auto", "tool": "copilot", "cost": "$12.76", "cache": "-", "cache_rate": "10%", "calls": 286, "value": 16 },
-        { "id": "openai-auto", "tool": "copilot", "cost": "$6.85", "cache": "-", "cache_rate": "10%", "calls": 150, "value": 9 }
+        {
+          "id": "gpt-5",
+          "tool": "codex",
+          "cost": "$79.11",
+          "cache": "93.8%",
+          "cache_rate": "10%",
+          "calls": 1084,
+          "value": 100
+        },
+        {
+          "id": "claude-opus-4-7",
+          "tool": "claude-code",
+          "cost": "$59.66",
+          "cache": "96.2%",
+          "cache_rate": "10%",
+          "calls": 866,
+          "value": 75
+        },
+        {
+          "id": "claude-sonnet-4-5",
+          "tool": "claude-code",
+          "cost": "$39.84",
+          "cache": "91.1%",
+          "cache_rate": "10%",
+          "calls": 700,
+          "value": 50
+        },
+        {
+          "id": "claude-sonnet-4-5",
+          "tool": "cursor",
+          "cost": "$15.82",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 230,
+          "value": 20
+        },
+        {
+          "id": "gemini-2.5-pro",
+          "tool": "gemini",
+          "cost": "$15.26",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 270,
+          "value": 19
+        },
+        {
+          "id": "anthropic-auto",
+          "tool": "copilot",
+          "cost": "$12.76",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 286,
+          "value": 16
+        },
+        {
+          "id": "openai-auto",
+          "tool": "copilot",
+          "cost": "$6.85",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 150,
+          "value": 9
+        },
+        {
+          "id": "gemini-2.5-flash",
+          "tool": "gemini",
+          "cost": "$5.94",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 180,
+          "value": 8
+        }
       ],
       "tools": [
-        { "name": "Bash", "calls": 828, "value": 100 },
-        { "name": "Edit", "calls": 690, "value": 83 },
-        { "name": "Read", "calls": 624, "value": 75 },
-        { "name": "Search", "calls": 352, "value": 43 },
-        { "name": "Write", "calls": 196, "value": 24 },
-        { "name": "TodoWrite", "calls": 158, "value": 19 },
-        { "name": "WebFetch", "calls": 64, "value": 8 }
+        {
+          "name": "Bash",
+          "calls": 828,
+          "value": 100
+        },
+        {
+          "name": "Edit",
+          "calls": 690,
+          "value": 83
+        },
+        {
+          "name": "Read",
+          "calls": 624,
+          "value": 75
+        },
+        {
+          "name": "Search",
+          "calls": 352,
+          "value": 43
+        },
+        {
+          "name": "Write",
+          "calls": 196,
+          "value": 24
+        },
+        {
+          "name": "TodoWrite",
+          "calls": 158,
+          "value": 19
+        },
+        {
+          "name": "WebFetch",
+          "calls": 64,
+          "value": 8
+        }
       ],
       "commands": [
-        { "name": "cargo", "calls": 260, "value": 100 },
-        { "name": "rg", "calls": 238, "value": 92 },
-        { "name": "git", "calls": 188, "value": 72 },
-        { "name": "pnpm", "calls": 132, "value": 51 },
-        { "name": "curl", "calls": 84, "value": 32 },
-        { "name": "ls", "calls": 78, "value": 30 },
-        { "name": "sqlite3", "calls": 36, "value": 14 }
+        {
+          "name": "cargo",
+          "calls": 260,
+          "value": 100
+        },
+        {
+          "name": "rg",
+          "calls": 238,
+          "value": 92
+        },
+        {
+          "name": "git",
+          "calls": 188,
+          "value": 72
+        },
+        {
+          "name": "pnpm",
+          "calls": 132,
+          "value": 51
+        },
+        {
+          "name": "curl",
+          "calls": 84,
+          "value": 32
+        },
+        {
+          "name": "ls",
+          "calls": 78,
+          "value": 30
+        },
+        {
+          "name": "sqlite3",
+          "calls": 36,
+          "value": 14
+        }
       ],
       "mcp_servers": [
-        { "name": "browser-control", "calls": 118, "value": 100 },
-        { "name": "design-preview", "calls": 70, "value": 59 },
-        { "name": "workspace-index", "calls": 38, "value": 32 },
-        { "name": "session-recorder", "calls": 12, "value": 10 }
+        {
+          "name": "browser-control",
+          "calls": 118,
+          "value": 100
+        },
+        {
+          "name": "design-preview",
+          "calls": 70,
+          "value": 59
+        },
+        {
+          "name": "workspace-index",
+          "calls": 38,
+          "value": 32
+        },
+        {
+          "name": "session-recorder",
+          "calls": 12,
+          "value": 10
+        }
       ]
     },
     "all_time": {
       "summary": {
-        "cost": "$642.18",
-        "calls": "10,842",
+        "cost": "$805.50",
+        "calls": "13,706",
         "sessions": "236",
         "cache_hit": "93.7%",
         "input": "54.2M",
@@ -310,75 +1563,441 @@
         "written": "18.3M"
       },
       "daily": [
-        { "day": "03-06", "cost": "$22.10", "calls": 310, "value": 24 },
-        { "day": "03-11", "cost": "$31.42", "calls": 482, "value": 34 },
-        { "day": "03-18", "cost": "$44.18", "calls": 690, "value": 48 },
-        { "day": "03-25", "cost": "$36.76", "calls": 556, "value": 40 },
-        { "day": "04-01", "cost": "$28.92", "calls": 426, "value": 31 },
-        { "day": "04-08", "cost": "$58.40", "calls": 820, "value": 63 },
-        { "day": "04-12", "cost": "$74.36", "calls": 1012, "value": 80 },
-        { "day": "04-20", "cost": "$92.58", "calls": 1302, "value": 100 },
-        { "day": "04-27", "cost": "$41.52", "calls": 610, "value": 45 },
-        { "day": "04-29", "cost": "$18.44", "calls": 286, "value": 20 }
+        {
+          "day": "03-06",
+          "cost": "$22.10",
+          "calls": 310,
+          "value": 24
+        },
+        {
+          "day": "03-11",
+          "cost": "$31.42",
+          "calls": 482,
+          "value": 34
+        },
+        {
+          "day": "03-18",
+          "cost": "$44.18",
+          "calls": 690,
+          "value": 48
+        },
+        {
+          "day": "03-25",
+          "cost": "$36.76",
+          "calls": 556,
+          "value": 40
+        },
+        {
+          "day": "04-01",
+          "cost": "$28.92",
+          "calls": 426,
+          "value": 31
+        },
+        {
+          "day": "04-08",
+          "cost": "$58.40",
+          "calls": 820,
+          "value": 63
+        },
+        {
+          "day": "04-12",
+          "cost": "$74.36",
+          "calls": 1012,
+          "value": 80
+        },
+        {
+          "day": "04-20",
+          "cost": "$92.58",
+          "calls": 1302,
+          "value": 100
+        },
+        {
+          "day": "04-27",
+          "cost": "$41.52",
+          "calls": 610,
+          "value": 45
+        },
+        {
+          "day": "04-29",
+          "cost": "$18.44",
+          "calls": 286,
+          "value": 20
+        }
       ],
       "projects": [
-        { "name": "acme/atlas-dashboard", "cost": "$184.72", "avg_per_session": "$4.86", "sessions": 38, "tool_mix": "Claude $94  Codex $62  Cursor $29", "value": 100 },
-        { "name": "northstar/cli", "cost": "$136.30", "avg_per_session": "$3.32", "sessions": 41, "tool_mix": "Codex $86  Claude $29  Cursor $21", "value": 74 },
-        { "name": "brightlane/docs", "cost": "$103.18", "avg_per_session": "$2.11", "sessions": 49, "tool_mix": "Copilot $46  Claude $38  Codex $19", "value": 56 },
-        { "name": "orbit/mobile-app", "cost": "$84.90", "avg_per_session": "$4.04", "sessions": 21, "tool_mix": "Cursor $51  Copilot $34", "value": 46 },
-        { "name": "harbor/data-tools", "cost": "$67.82", "avg_per_session": "$4.52", "sessions": 15, "tool_mix": "Claude $42  Codex $26", "value": 37 },
-        { "name": "launchpad/api", "cost": "$42.35", "avg_per_session": "$4.71", "sessions": 9, "tool_mix": "Codex $26  Claude $16", "value": 23 },
-        { "name": "meadow/site", "cost": "$22.91", "avg_per_session": "$2.86", "sessions": 8, "tool_mix": "Copilot $13  Cursor $9.8", "value": 12 }
+        {
+          "name": "acme/atlas-dashboard",
+          "cost": "$184.72",
+          "avg_per_session": "$4.86",
+          "sessions": 38,
+          "tool_mix": "Claude $94  Codex $62  Cursor $29",
+          "value": 100
+        },
+        {
+          "name": "northstar/cli",
+          "cost": "$136.30",
+          "avg_per_session": "$3.32",
+          "sessions": 41,
+          "tool_mix": "Codex $86  Claude $29  Cursor $21",
+          "value": 74
+        },
+        {
+          "name": "orbit/mobile-app",
+          "cost": "$133.00",
+          "avg_per_session": "$6.33",
+          "sessions": 21,
+          "tool_mix": "Cursor $51  Copilot $34  Gemini $48",
+          "value": 72
+        },
+        {
+          "name": "brightlane/docs",
+          "cost": "$103.18",
+          "avg_per_session": "$2.11",
+          "sessions": 49,
+          "tool_mix": "Copilot $46  Claude $38  Codex $19",
+          "value": 56
+        },
+        {
+          "name": "harbor/data-tools",
+          "cost": "$67.82",
+          "avg_per_session": "$4.52",
+          "sessions": 15,
+          "tool_mix": "Claude $42  Codex $26",
+          "value": 37
+        },
+        {
+          "name": "meadow/site",
+          "cost": "$58.41",
+          "avg_per_session": "$7.30",
+          "sessions": 8,
+          "tool_mix": "Copilot $13  Cursor $9.8  Gemini $36",
+          "value": 32
+        },
+        {
+          "name": "launchpad/api",
+          "cost": "$42.35",
+          "avg_per_session": "$4.71",
+          "sessions": 9,
+          "tool_mix": "Codex $26  Claude $16",
+          "value": 23
+        }
       ],
       "project_tools": [
-        { "project": "acme/atlas-dashboard", "tool": "Claude", "cost": "$93.84", "calls": 1210, "sessions": 20, "avg_per_session": "$4.69", "value": 100 },
-        { "project": "northstar/cli", "tool": "Codex", "cost": "$86.20", "calls": 1184, "sessions": 24, "avg_per_session": "$3.59", "value": 92 },
-        { "project": "acme/atlas-dashboard", "tool": "Codex", "cost": "$62.04", "calls": 864, "sessions": 12, "avg_per_session": "$5.17", "value": 66 },
-        { "project": "orbit/mobile-app", "tool": "Cursor", "cost": "$50.88", "calls": 730, "sessions": 12, "avg_per_session": "$4.24", "value": 54 },
-        { "project": "brightlane/docs", "tool": "Copilot", "cost": "$45.92", "calls": 808, "sessions": 22, "avg_per_session": "$2.09", "value": 49 },
-        { "project": "harbor/data-tools", "tool": "Claude", "cost": "$41.64", "calls": 562, "sessions": 9, "avg_per_session": "$4.63", "value": 44 },
-        { "project": "brightlane/docs", "tool": "Claude", "cost": "$38.12", "calls": 604, "sessions": 17, "avg_per_session": "$2.24", "value": 41 },
-        { "project": "orbit/mobile-app", "tool": "Copilot", "cost": "$34.02", "calls": 512, "sessions": 9, "avg_per_session": "$3.78", "value": 36 },
-        { "project": "launchpad/api", "tool": "Codex", "cost": "$26.38", "calls": 390, "sessions": 5, "avg_per_session": "$5.28", "value": 28 },
-        { "project": "acme/atlas-dashboard", "tool": "Cursor", "cost": "$28.84", "calls": 404, "sessions": 6, "avg_per_session": "$4.81", "value": 31 }
+        {
+          "project": "acme/atlas-dashboard",
+          "tool": "Claude",
+          "cost": "$93.84",
+          "calls": 1210,
+          "sessions": 20,
+          "avg_per_session": "$4.69",
+          "value": 100
+        },
+        {
+          "project": "northstar/cli",
+          "tool": "Codex",
+          "cost": "$86.20",
+          "calls": 1184,
+          "sessions": 24,
+          "avg_per_session": "$3.59",
+          "value": 92
+        },
+        {
+          "project": "acme/atlas-dashboard",
+          "tool": "Codex",
+          "cost": "$62.04",
+          "calls": 864,
+          "sessions": 12,
+          "avg_per_session": "$5.17",
+          "value": 66
+        },
+        {
+          "project": "orbit/mobile-app",
+          "tool": "Cursor",
+          "cost": "$50.88",
+          "calls": 730,
+          "sessions": 12,
+          "avg_per_session": "$4.24",
+          "value": 54
+        },
+        {
+          "project": "orbit/mobile-app",
+          "tool": "Gemini",
+          "cost": "$48.10",
+          "calls": 1000,
+          "sessions": 22,
+          "avg_per_session": "$2.19",
+          "value": 51
+        },
+        {
+          "project": "brightlane/docs",
+          "tool": "Copilot",
+          "cost": "$45.92",
+          "calls": 808,
+          "sessions": 22,
+          "avg_per_session": "$2.09",
+          "value": 49
+        },
+        {
+          "project": "harbor/data-tools",
+          "tool": "Claude",
+          "cost": "$41.64",
+          "calls": 562,
+          "sessions": 9,
+          "avg_per_session": "$4.63",
+          "value": 44
+        },
+        {
+          "project": "brightlane/docs",
+          "tool": "Claude",
+          "cost": "$38.12",
+          "calls": 604,
+          "sessions": 17,
+          "avg_per_session": "$2.24",
+          "value": 41
+        },
+        {
+          "project": "meadow/site",
+          "tool": "Gemini",
+          "cost": "$35.50",
+          "calls": 730,
+          "sessions": 16,
+          "avg_per_session": "$2.22",
+          "value": 38
+        },
+        {
+          "project": "orbit/mobile-app",
+          "tool": "Copilot",
+          "cost": "$34.02",
+          "calls": 512,
+          "sessions": 9,
+          "avg_per_session": "$3.78",
+          "value": 36
+        },
+        {
+          "project": "acme/atlas-dashboard",
+          "tool": "Cursor",
+          "cost": "$28.84",
+          "calls": 404,
+          "sessions": 6,
+          "avg_per_session": "$4.81",
+          "value": 31
+        },
+        {
+          "project": "launchpad/api",
+          "tool": "Codex",
+          "cost": "$26.38",
+          "calls": 390,
+          "sessions": 5,
+          "avg_per_session": "$5.28",
+          "value": 28
+        }
       ],
       "sessions": [
-        { "date": "2026-04-20", "project": "acme/atlas-dashboard", "cost": "$28.84", "calls": 386, "value": 100 },
-        { "date": "2026-04-12", "project": "northstar/cli", "cost": "$24.72", "calls": 364, "value": 86 },
-        { "date": "2026-03-18", "project": "orbit/mobile-app", "cost": "$18.50", "calls": 206, "value": 64 },
-        { "date": "2026-04-18", "project": "launchpad/api", "cost": "$16.41", "calls": 196, "value": 57 },
-        { "date": "2026-04-29", "project": "acme/atlas-dashboard", "cost": "$8.72", "calls": 131, "value": 30 }
+        {
+          "date": "2026-04-20",
+          "project": "acme/atlas-dashboard",
+          "cost": "$28.84",
+          "calls": 386,
+          "value": 100
+        },
+        {
+          "date": "2026-04-12",
+          "project": "northstar/cli",
+          "cost": "$24.72",
+          "calls": 364,
+          "value": 86
+        },
+        {
+          "date": "2026-03-18",
+          "project": "orbit/mobile-app",
+          "cost": "$18.50",
+          "calls": 206,
+          "value": 64
+        },
+        {
+          "date": "2026-04-18",
+          "project": "launchpad/api",
+          "cost": "$16.41",
+          "calls": 196,
+          "value": 57
+        },
+        {
+          "date": "2026-04-29",
+          "project": "acme/atlas-dashboard",
+          "cost": "$8.72",
+          "calls": 131,
+          "value": 30
+        }
       ],
       "models": [
-        { "id": "gpt-5", "tool": "codex", "cost": "$262.18", "cache": "93.1%", "cache_rate": "10%", "calls": 3846, "value": 100 },
-        { "id": "claude-opus-4-7", "tool": "claude-code", "cost": "$190.72", "cache": "95.7%", "cache_rate": "10%", "calls": 2704, "value": 73 },
-        { "id": "claude-sonnet-4-5", "tool": "claude-code", "cost": "$128.40", "cache": "90.4%", "cache_rate": "10%", "calls": 2408, "value": 49 },
-        { "id": "anthropic-auto", "tool": "copilot", "cost": "$40.86", "cache": "-", "cache_rate": "10%", "calls": 1198, "value": 16 },
-        { "id": "openai-auto", "tool": "copilot", "cost": "$20.02", "cache": "-", "cache_rate": "10%", "calls": 686, "value": 8 }
+        {
+          "id": "gpt-5",
+          "tool": "codex",
+          "cost": "$262.18",
+          "cache": "93.1%",
+          "cache_rate": "10%",
+          "calls": 3846,
+          "value": 100
+        },
+        {
+          "id": "claude-opus-4-7",
+          "tool": "claude-code",
+          "cost": "$190.72",
+          "cache": "95.7%",
+          "cache_rate": "10%",
+          "calls": 2704,
+          "value": 73
+        },
+        {
+          "id": "claude-sonnet-4-5",
+          "tool": "claude-code",
+          "cost": "$128.40",
+          "cache": "90.4%",
+          "cache_rate": "10%",
+          "calls": 2408,
+          "value": 49
+        },
+        {
+          "id": "claude-sonnet-4-5",
+          "tool": "cursor",
+          "cost": "$79.72",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 1134,
+          "value": 30
+        },
+        {
+          "id": "gemini-2.5-pro",
+          "tool": "gemini",
+          "cost": "$60.19",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 1038,
+          "value": 23
+        },
+        {
+          "id": "anthropic-auto",
+          "tool": "copilot",
+          "cost": "$40.86",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 1198,
+          "value": 16
+        },
+        {
+          "id": "gemini-2.5-flash",
+          "tool": "gemini",
+          "cost": "$23.41",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 692,
+          "value": 9
+        },
+        {
+          "id": "openai-auto",
+          "tool": "copilot",
+          "cost": "$20.02",
+          "cache": "-",
+          "cache_rate": "10%",
+          "calls": 686,
+          "value": 8
+        }
       ],
       "tools": [
-        { "name": "Bash", "calls": 2880, "value": 100 },
-        { "name": "Edit", "calls": 2346, "value": 81 },
-        { "name": "Read", "calls": 2140, "value": 74 },
-        { "name": "Search", "calls": 1262, "value": 44 },
-        { "name": "Write", "calls": 694, "value": 24 },
-        { "name": "TodoWrite", "calls": 540, "value": 19 },
-        { "name": "WebFetch", "calls": 210, "value": 7 }
+        {
+          "name": "Bash",
+          "calls": 2880,
+          "value": 100
+        },
+        {
+          "name": "Edit",
+          "calls": 2346,
+          "value": 81
+        },
+        {
+          "name": "Read",
+          "calls": 2140,
+          "value": 74
+        },
+        {
+          "name": "Search",
+          "calls": 1262,
+          "value": 44
+        },
+        {
+          "name": "Write",
+          "calls": 694,
+          "value": 24
+        },
+        {
+          "name": "TodoWrite",
+          "calls": 540,
+          "value": 19
+        },
+        {
+          "name": "WebFetch",
+          "calls": 210,
+          "value": 7
+        }
       ],
       "commands": [
-        { "name": "cargo", "calls": 860, "value": 100 },
-        { "name": "rg", "calls": 792, "value": 92 },
-        { "name": "git", "calls": 664, "value": 77 },
-        { "name": "pnpm", "calls": 442, "value": 51 },
-        { "name": "curl", "calls": 260, "value": 30 },
-        { "name": "ls", "calls": 214, "value": 25 },
-        { "name": "sqlite3", "calls": 112, "value": 13 }
+        {
+          "name": "cargo",
+          "calls": 860,
+          "value": 100
+        },
+        {
+          "name": "rg",
+          "calls": 792,
+          "value": 92
+        },
+        {
+          "name": "git",
+          "calls": 664,
+          "value": 77
+        },
+        {
+          "name": "pnpm",
+          "calls": 442,
+          "value": 51
+        },
+        {
+          "name": "curl",
+          "calls": 260,
+          "value": 30
+        },
+        {
+          "name": "ls",
+          "calls": 214,
+          "value": 25
+        },
+        {
+          "name": "sqlite3",
+          "calls": 112,
+          "value": 13
+        }
       ],
       "mcp_servers": [
-        { "name": "browser-control", "calls": 420, "value": 100 },
-        { "name": "design-preview", "calls": 246, "value": 59 },
-        { "name": "workspace-index", "calls": 168, "value": 40 },
-        { "name": "session-recorder", "calls": 54, "value": 13 }
+        {
+          "name": "browser-control",
+          "calls": 420,
+          "value": 100
+        },
+        {
+          "name": "design-preview",
+          "calls": 246,
+          "value": 59
+        },
+        {
+          "name": "workspace-index",
+          "calls": 168,
+          "value": 40
+        },
+        {
+          "name": "session-recorder",
+          "calls": 54,
+          "value": 13
+        }
       ]
     }
   },
@@ -387,84 +2006,347 @@
       {
         "tool": "Codex",
         "limits": [
-          { "tool": "Codex", "scope": "Codex", "window": "5h", "used": 17, "left": "83% left", "reset": "16:47", "plan": "Pro Lite" },
-          { "tool": "Codex", "scope": "Codex", "window": "weekly", "used": 6, "left": "94% left", "reset": "05 May 07:00", "plan": "Pro Lite" },
-          { "tool": "Codex", "scope": "GPT-5.3-Codex-Spark", "window": "5h", "used": 0, "left": "100% left", "reset": "19:37", "plan": "-" },
-          { "tool": "Codex", "scope": "GPT-5.3-Codex-Spark", "window": "weekly", "used": 0, "left": "100% left", "reset": "06 May 14:37", "plan": "-" }
+          {
+            "tool": "Codex",
+            "scope": "Codex",
+            "window": "5h",
+            "used": 17,
+            "left": "83% left",
+            "reset": "16:47",
+            "plan": "Pro Lite"
+          },
+          {
+            "tool": "Codex",
+            "scope": "Codex",
+            "window": "weekly",
+            "used": 6,
+            "left": "94% left",
+            "reset": "05 May 07:00",
+            "plan": "Pro Lite"
+          },
+          {
+            "tool": "Codex",
+            "scope": "GPT-5.3-Codex-Spark",
+            "window": "5h",
+            "used": 0,
+            "left": "100% left",
+            "reset": "19:37",
+            "plan": "-"
+          },
+          {
+            "tool": "Codex",
+            "scope": "GPT-5.3-Codex-Spark",
+            "window": "weekly",
+            "used": 0,
+            "left": "100% left",
+            "reset": "06 May 14:37",
+            "plan": "-"
+          }
         ],
         "usage": {
-          "buckets": [0, 0, 12, 24, 8, 0, 18, 30, 42, 17, 5, 0, 0, 0, 18, 48, 66, 21, 9, 0, 36, 75, 44, 11],
+          "buckets": [
+            0,
+            0,
+            12,
+            24,
+            8,
+            0,
+            18,
+            30,
+            42,
+            17,
+            5,
+            0,
+            0,
+            0,
+            18,
+            48,
+            66,
+            21,
+            9,
+            0,
+            36,
+            75,
+            44,
+            11
+          ],
           "calls": 41,
           "tokens": "1.2M",
           "cost": "$5.38",
           "last_seen": "now"
         },
         "models": [
-          { "id": "gpt-5", "tool": "codex", "calls": 24, "tokens": "820K", "cost": "$3.91", "value": 100 },
-          { "id": "gpt-5.3-codex-spark", "tool": "codex", "calls": 17, "tokens": "380K", "cost": "$1.47", "value": 46 }
+          {
+            "id": "gpt-5",
+            "tool": "codex",
+            "calls": 24,
+            "tokens": "820K",
+            "cost": "$3.91",
+            "value": 100
+          },
+          {
+            "id": "gpt-5.3-codex-spark",
+            "tool": "codex",
+            "calls": 17,
+            "tokens": "380K",
+            "cost": "$1.47",
+            "value": 46
+          }
         ],
-        "plan_value": { "price": "$20.00", "month_cost": "$96.40", "multiple": "4.8×" }
+        "plan_value": {
+          "price": "$20.00",
+          "month_cost": "$96.40",
+          "multiple": "4.8×"
+        }
       },
       {
         "tool": "Claude Code",
-        "limits": [],
+        "limits": [
+          {
+            "tool": "Claude Code",
+            "scope": "Claude Code",
+            "window": "5h",
+            "used": 41,
+            "left": "59%",
+            "reset": "18 Jul 14:00",
+            "plan": "Max 20x",
+            "stale": false,
+            "as_of": "18 Jul 09:12"
+          },
+          {
+            "tool": "Claude Code",
+            "scope": "Claude Code",
+            "window": "weekly",
+            "used": 63,
+            "left": "37%",
+            "reset": "21 Jul 09:00",
+            "plan": "Max 20x",
+            "stale": false,
+            "as_of": "18 Jul 09:12"
+          }
+        ],
         "usage": {
-          "buckets": [8, 14, 0, 0, 21, 44, 36, 9, 0, 0, 12, 28, 0, 6, 18, 40, 55, 31, 12, 0, 9, 20, 48, 33],
+          "buckets": [
+            8,
+            14,
+            0,
+            0,
+            21,
+            44,
+            36,
+            9,
+            0,
+            0,
+            12,
+            28,
+            0,
+            6,
+            18,
+            40,
+            55,
+            31,
+            12,
+            0,
+            9,
+            20,
+            48,
+            33
+          ],
           "calls": 73,
           "tokens": "5.8M",
           "cost": "$11.42",
           "last_seen": "18m"
         },
         "models": [
-          { "id": "claude-opus-4-7", "tool": "claude-code", "calls": 51, "tokens": "4.9M", "cost": "$10.70", "value": 100 },
-          { "id": "claude-haiku-4-5", "tool": "claude-code", "calls": 22, "tokens": "900K", "cost": "$0.72", "value": 18 }
+          {
+            "id": "claude-opus-4-7",
+            "tool": "claude-code",
+            "calls": 51,
+            "tokens": "4.9M",
+            "cost": "$10.70",
+            "value": 100
+          },
+          {
+            "id": "claude-haiku-4-5",
+            "tool": "claude-code",
+            "calls": 22,
+            "tokens": "900K",
+            "cost": "$0.72",
+            "value": 18
+          }
         ],
-        "plan_value": { "price": "$200.00", "month_cost": "$412.80", "multiple": "2.1×" }
+        "plan_value": {
+          "price": "$200.00",
+          "month_cost": "$412.80",
+          "multiple": "2.1×"
+        }
       },
       {
         "tool": "Cursor",
         "limits": [],
         "usage": {
-          "buckets": [0, 0, 0, 6, 10, 4, 0, 0, 0, 9, 13, 0, 0, 0, 0, 7, 15, 24, 8, 0, 0, 12, 18, 0],
+          "buckets": [
+            0,
+            0,
+            0,
+            6,
+            10,
+            4,
+            0,
+            0,
+            0,
+            9,
+            13,
+            0,
+            0,
+            0,
+            0,
+            7,
+            15,
+            24,
+            8,
+            0,
+            0,
+            12,
+            18,
+            0
+          ],
           "calls": 18,
           "tokens": "184K",
           "cost": "$0.92",
           "last_seen": "47m"
         },
         "models": [
-          { "id": "claude-sonnet-4-5", "tool": "cursor", "calls": 18, "tokens": "184K", "cost": "$0.92", "value": 100 }
+          {
+            "id": "claude-sonnet-4-5",
+            "tool": "cursor",
+            "calls": 18,
+            "tokens": "184K",
+            "cost": "$0.92",
+            "value": 100
+          }
         ]
       },
       {
         "tool": "Copilot",
         "limits": [
-          { "tool": "Copilot", "scope": "AI Credits", "window": "monthly", "used": 9, "left": "91% left", "reset": "01 Aug 01:00", "plan": "Copilot Pro", "used_credits": 128, "remaining_credits": 1372, "total_credits": 1500, "additional_usage": false }
+          {
+            "tool": "Copilot",
+            "scope": "AI Credits",
+            "window": "monthly",
+            "used": 9,
+            "left": "91% left",
+            "reset": "01 Aug 01:00",
+            "plan": "Copilot Pro",
+            "used_credits": 128,
+            "remaining_credits": 1372,
+            "total_credits": 1500,
+            "additional_usage": false
+          }
         ],
         "usage": {
-          "buckets": [4, 7, 0, 0, 0, 16, 22, 5, 0, 8, 0, 0, 0, 0, 0, 10, 29, 20, 5, 0, 0, 7, 0, 0],
+          "buckets": [
+            4,
+            7,
+            0,
+            0,
+            0,
+            16,
+            22,
+            5,
+            0,
+            8,
+            0,
+            0,
+            0,
+            0,
+            0,
+            10,
+            29,
+            20,
+            5,
+            0,
+            0,
+            7,
+            0,
+            0
+          ],
           "calls": 29,
           "tokens": "96K",
           "cost": "$0.47",
           "last_seen": "2h"
         },
         "models": [
-          { "id": "anthropic-auto", "tool": "copilot", "calls": 17, "tokens": "60K", "cost": "$0.31", "value": 100 },
-          { "id": "openai-auto", "tool": "copilot", "calls": 12, "tokens": "36K", "cost": "$0.16", "value": 60 }
+          {
+            "id": "anthropic-auto",
+            "tool": "copilot",
+            "calls": 17,
+            "tokens": "60K",
+            "cost": "$0.31",
+            "value": 100
+          },
+          {
+            "id": "openai-auto",
+            "tool": "copilot",
+            "calls": 12,
+            "tokens": "36K",
+            "cost": "$0.16",
+            "value": 60
+          }
         ]
       },
       {
         "tool": "Gemini",
         "limits": [],
         "usage": {
-          "buckets": [0, 5, 11, 0, 0, 14, 18, 6, 0, 0, 7, 12, 0, 0, 9, 16, 21, 13, 0, 0, 6, 19, 10, 0],
+          "buckets": [
+            0,
+            5,
+            11,
+            0,
+            0,
+            14,
+            18,
+            6,
+            0,
+            0,
+            7,
+            12,
+            0,
+            0,
+            9,
+            16,
+            21,
+            13,
+            0,
+            0,
+            6,
+            19,
+            10,
+            0
+          ],
           "calls": 22,
           "tokens": "240K",
           "cost": "$0.76",
           "last_seen": "3h"
         },
         "models": [
-          { "id": "gemini-2.5-pro", "tool": "gemini", "calls": 14, "tokens": "180K", "cost": "$0.62", "value": 100 },
-          { "id": "gemini-2.5-flash", "tool": "gemini", "calls": 8, "tokens": "60K", "cost": "$0.14", "value": 33 }
+          {
+            "id": "gemini-2.5-pro",
+            "tool": "gemini",
+            "calls": 14,
+            "tokens": "180K",
+            "cost": "$0.62",
+            "value": 100
+          },
+          {
+            "id": "gemini-2.5-flash",
+            "tool": "gemini",
+            "calls": 8,
+            "tokens": "60K",
+            "cost": "$0.14",
+            "value": 33
+          }
         ]
       }
     ]

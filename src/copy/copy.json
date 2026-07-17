@@ -657,10 +657,7 @@
     "quality_session": "Session-level",
     "quality_file": "File time",
     "quality_unknown": "Unknown",
-    "close": "Close",
-    "sample_project": "(Sample Data)",
-    "sample_date_range": "-",
-    "sample_note": "Sample data does not include per-call records · run with live sessions to drill in"
+    "close": "Close"
   },
   "scrollback": {
     "title": "Scrollback",

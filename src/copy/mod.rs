@@ -588,9 +588,6 @@ pub struct SessionCopy {
     pub quality_file: String,
     pub quality_unknown: String,
     pub close: String,
-    pub sample_project: String,
-    pub sample_date_range: String,
-    pub sample_note: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

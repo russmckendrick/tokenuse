@@ -1477,7 +1477,9 @@ impl App {
         let currency = self.currency();
         match &self.source {
             DataSource::Live(ingested) => ingested.session_detail(key, self.sort, &currency),
-            DataSource::Sample => crate::data::session_detail(key, self.sort, &currency),
+            DataSource::Sample => {
+                crate::data::session_detail(key, self.period, self.sort, &currency)
+            }
         }
     }
 
@@ -1798,7 +1800,9 @@ impl App {
         let currency = self.currency();
         match &self.source {
             DataSource::Live(ingested) => ingested.session_detail(key, self.sort, &currency),
-            DataSource::Sample => crate::data::session_detail(key, self.sort, &currency),
+            DataSource::Sample => {
+                crate::data::session_detail(key, self.period, self.sort, &currency)
+            }
         }
     }
 

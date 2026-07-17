@@ -934,8 +934,9 @@ impl From<WireDashboardData> for DashboardData {
             tools: wire.tools.into_iter().map(Into::into).collect(),
             commands: wire.commands.into_iter().map(Into::into).collect(),
             mcp_servers: wire.mcp_servers.into_iter().map(Into::into).collect(),
-            // Bundled sample data carries no per-call classification signals
-            // and never exercises the pricing fallback.
+            // `by_activity` is synthesized per period in `dashboard_data`
+            // (see `sample_by_activity`); the bundled data carries no per-call
+            // classification signals and never exercises the pricing fallback.
             by_activity: Vec::new(),
             fallback_priced_models: Vec::new(),
         }
@@ -1195,6 +1196,43 @@ fn sample_activity_timeline(rows: &[DailyMetric], period: Period) -> Vec<Activit
         .collect()
 }
 
+/// Sample task-category split for the By Activity view: distributes the
+/// visible period total across a fixed set of categories so the panel renders
+/// with the same wording (`TaskCategory::label`) and bar shape as live data.
+/// Built in USD from the period summary; `apply_currency` converts the costs.
+fn sample_by_activity(summary: &Summary) -> Vec<ActivityMetric> {
+    use crate::categories::TaskCategory;
+    const WEIGHTS: [(TaskCategory, u64); 9] = [
+        (TaskCategory::Coding, 30),
+        (TaskCategory::Debugging, 16),
+        (TaskCategory::Feature, 14),
+        (TaskCategory::Exploration, 12),
+        (TaskCategory::Refactoring, 10),
+        (TaskCategory::Testing, 8),
+        (TaskCategory::Planning, 5),
+        (TaskCategory::Git, 3),
+        (TaskCategory::BuildDeploy, 2),
+    ];
+    let max_weight = 30;
+    let total_units = parse_money_sort_value(summary.cost); // USD * 10_000
+    let total_calls = parse_count(summary.calls);
+    if total_units == 0 {
+        return Vec::new();
+    }
+    WEIGHTS
+        .iter()
+        .map(|(category, weight)| ActivityMetric {
+            label: category.label(),
+            cost: leak(format!(
+                "${:.2}",
+                (total_units * weight / 100) as f64 / 10_000.0
+            )),
+            calls: total_calls * weight / 100,
+            value: (weight * 100 / max_weight).clamp(1, 100),
+        })
+        .collect()
+}
+
 fn parse_sample_day(value: &str, base: NaiveDate) -> Option<NaiveDate> {
     let (month, day) = value.split_once('-')?;
     let month = month.parse::<u32>().ok()?;
@@ -1282,6 +1320,7 @@ pub fn dashboard_data(
 
     apply_project_filter(&mut data, project_filter);
     data.activity_timeline = sample_activity_timeline(&data.daily, period);
+    data.by_activity = sample_by_activity(&data.summary);
     apply_sample_sort(&mut data, sort);
     apply_currency(&mut data, currency);
 
@@ -1442,26 +1481,158 @@ pub fn session_options(
 
 pub fn session_detail(
     key: &str,
-    _sort: SortMode,
-    _currency: &CurrencyFormatter,
+    period: Period,
+    sort: SortMode,
+    currency: &CurrencyFormatter,
 ) -> Option<SessionDetailView> {
-    if !key.starts_with("sample:") {
-        return None;
+    let idx: usize = key.strip_prefix("sample:")?.parse().ok()?;
+
+    // Resolve the exact picker row (project / date / cost) the key points at,
+    // computed in USD so the synthesized per-call ledger reconciles with the
+    // session list regardless of the display currency.
+    let usd = CurrencyFormatter::usd();
+    let data = dashboard_data(period, Tool::All, &ProjectFilter::All, sort, &usd);
+    let session = data.sessions.get(idx)?;
+    let total_usd = parse_money_sort_value(session.cost) as f64 / 10_000.0;
+    // Match the picker row's call count so the ledger length, the "of {total}"
+    // header, and the session KPI all agree (guarded against pathological rows;
+    // the largest bundled sample session is well under this ceiling).
+    let count = session.calls.clamp(1, 500);
+
+    // Per-call templates cycled across the ledger: tool, model id, mode,
+    // prompt, and whether the call ran shell commands.
+    const TEMPLATES: [(&str, &str, InteractionKind, &str, &str); 5] = [
+        (
+            "claude-code",
+            "claude-opus-4-7",
+            InteractionKind::Agent,
+            "Refactor the ingest pipeline to stream rows instead of buffering",
+            "cargo test --workspace",
+        ),
+        (
+            "codex",
+            "gpt-5",
+            InteractionKind::Chat,
+            "Explain why the currency conversion double-counts cached tokens",
+            "",
+        ),
+        (
+            "claude-code",
+            "claude-sonnet-4-5",
+            InteractionKind::Agent,
+            "Add a regression test for the fallback pricing path",
+            "cargo clippy --all-targets",
+        ),
+        (
+            "gemini",
+            "gemini-2.5-pro",
+            InteractionKind::Plan,
+            "Plan the migration to the v7 archive schema",
+            "",
+        ),
+        (
+            "cursor",
+            "claude-sonnet-4-5",
+            InteractionKind::Agent,
+            "Wire the By Activity panel into the desktop snapshot",
+            "pnpm run check",
+        ),
+    ];
+    // Weight cycle: a few heavy calls, mostly light ones. Costs are split by
+    // these weights so the ledger sums back to the picker row's total.
+    const WEIGHTS: [u64; 6] = [5, 1, 2, 1, 3, 1];
+    let weight_total: u64 = (0..count)
+        .map(|i| WEIGHTS[(i as usize) % WEIGHTS.len()])
+        .sum();
+
+    let sess = &copy().session;
+    let mode_label = |kind: InteractionKind| match kind {
+        InteractionKind::Agent => sess.mode_agent.clone(),
+        InteractionKind::Chat => sess.mode_chat.clone(),
+        InteractionKind::Plan => sess.mode_plan.clone(),
+    };
+
+    let mut calls = Vec::with_capacity(count as usize);
+    let mut total_input = 0u64;
+    let mut total_output = 0u64;
+    let mut total_cache_read = 0u64;
+    let mut minute = 9 * 60; // first call at 09:00 local
+    for i in 0..count {
+        let template = &TEMPLATES[(i as usize) % TEMPLATES.len()];
+        let weight = WEIGHTS[(i as usize) % WEIGHTS.len()];
+        let cost_usd = total_usd * weight as f64 / weight_total as f64;
+        let input = (cost_usd * 38_000.0) as u64;
+        let output = (cost_usd * 2_600.0) as u64;
+        let cache_read = (cost_usd * 520_000.0) as u64;
+        let cache_write = (cost_usd * 9_000.0) as u64;
+        let reasoning = if matches!(template.2, InteractionKind::Plan) {
+            output / 2
+        } else {
+            0
+        };
+        total_input += input;
+        total_output += output;
+        total_cache_read += cache_read;
+
+        let bash: Vec<String> = if template.4.is_empty() {
+            Vec::new()
+        } else {
+            vec![template.4.to_string()]
+        };
+        let tools = if bash.is_empty() {
+            "Read, Edit".to_string()
+        } else {
+            "Bash, Read, Edit".to_string()
+        };
+        let hour = (minute / 60) % 24;
+        let timestamp = format!("{} {:02}:{:02}", session.date, hour, minute % 60);
+        minute += 7;
+
+        let identity = crate::models::resolve(template.0, template.1);
+        calls.push(SessionDetail {
+            timestamp,
+            model: identity.display,
+            cost: currency.format_money(cost_usd),
+            cache_read_rate: "90%".into(),
+            cache_write_rate: "10%".into(),
+            input_tokens: input,
+            output_tokens: output,
+            cache_read,
+            cache_write,
+            reasoning_tokens: reasoning,
+            web_search_requests: 0,
+            tools,
+            interaction_mode: mode_label(template.2),
+            token_quality: sess.quality_exact.clone(),
+            timestamp_quality: sess.quality_session.clone(),
+            bash_commands: bash,
+            prompt: template.3.into(),
+            prompt_full: template.3.into(),
+        });
     }
+
     Some(SessionDetailView {
         key: key.into(),
-        session_id: key.trim_start_matches("sample:").into(),
-        project: copy().session.sample_project.clone(),
+        session_id: format!("sample-{idx}"),
+        project: session.project.into(),
         tool: copy().tools.sample.as_str(),
-        date_range: copy().session.sample_date_range.clone(),
-        total_cost: "$0.00".into(),
-        total_calls: 0,
-        total_input: "0".into(),
-        total_output: "0".into(),
-        total_cache_read: "0".into(),
-        calls: Vec::new(),
-        note: Some(copy().session.sample_note.clone()),
+        date_range: session.date.into(),
+        total_cost: currency.format_money(total_usd),
+        total_calls: count,
+        total_input: format_compact(total_input),
+        total_output: format_compact(total_output),
+        total_cache_read: format_compact(total_cache_read),
+        calls,
+        note: None,
     })
+}
+
+/// Interaction mode for a sample call ledger row; mapped to copy labels.
+#[derive(Debug, Clone, Copy)]
+enum InteractionKind {
+    Agent,
+    Chat,
+    Plan,
 }
 
 pub fn limits_data(_tool: Tool, sort: SortMode, currency: &CurrencyFormatter) -> LimitsData {
@@ -1597,6 +1768,9 @@ fn apply_currency(data: &mut DashboardData, currency: &CurrencyFormatter) {
     for row in &mut data.activity_timeline {
         row.cost = convert_money_text(row.cost, currency, false);
     }
+    for row in &mut data.by_activity {
+        row.cost = convert_money_text(row.cost, currency, false);
+    }
     for row in &mut data.projects {
         row.cost = convert_money_text(row.cost, currency, false);
         row.avg_per_session = convert_money_text(row.avg_per_session, currency, false);
@@ -1699,6 +1873,18 @@ fn format_int(n: u64) -> String {
         out.push(*b as char);
     }
     out
+}
+
+fn format_compact(n: u64) -> String {
+    if n >= 1_000_000_000 {
+        format!("{:.1}B", n as f64 / 1_000_000_000.0)
+    } else if n >= 1_000_000 {
+        format!("{:.1}M", n as f64 / 1_000_000.0)
+    } else if n >= 1_000 {
+        format!("{:.1}K", n as f64 / 1_000.0)
+    } else {
+        n.to_string()
+    }
 }
 
 fn leak(s: String) -> &'static str {
@@ -1928,12 +2114,12 @@ pub fn coach_sample(period: Period) -> CoachData {
             trend: sample_output_trend(period),
             by_project: vec![
                 CountMetric {
-                    name: "tokens",
+                    name: "acme/atlas-dashboard",
                     calls: 3200,
                     value: 100,
                 },
                 CountMetric {
-                    name: "russ.cloud",
+                    name: "northstar/cli",
                     calls: 1612,
                     value: 50,
                 },
@@ -2154,7 +2340,7 @@ pub fn coach_timeline_sample(day: &str) -> Option<CoachTimelineDay> {
         rows: vec![
             TimelineSessionRow {
                 session_key: "claude-code:sample-1".into(),
-                project: "tokens".into(),
+                project: "acme/atlas-dashboard".into(),
                 tool: "claude-code".into(),
                 tool_label: "Claude Code".into(),
                 turns: 14,
@@ -2172,7 +2358,7 @@ pub fn coach_timeline_sample(day: &str) -> Option<CoachTimelineDay> {
             },
             TimelineSessionRow {
                 session_key: "codex:sample-2".into(),
-                project: "russ.cloud".into(),
+                project: "northstar/cli".into(),
                 tool: "codex".into(),
                 tool_label: "Codex".into(),
                 turns: 6,
@@ -2309,10 +2495,29 @@ mod tests {
             ["ai", "commit"].concat(),
             ["code/", "dvr"].concat(),
         ];
+        // The hand-authored Rust samples (coach payload, session ledger,
+        // timeline) must stay anonymized too — the JSON scan above misses them.
+        let currency = CurrencyFormatter::usd();
+        let mut rust_samples = serde_json::to_string(&coach_sample(Period::AllTime)).unwrap();
+        if let Some(day) = coach_sample(Period::AllTime).timeline_grid.first() {
+            if let Some(timeline) = coach_timeline_sample(day.day) {
+                rust_samples.push_str(&serde_json::to_string(&timeline).unwrap());
+            }
+        }
+        if let Some(detail) =
+            session_detail("sample:0", Period::AllTime, SortMode::Spend, &currency)
+        {
+            rust_samples.push_str(&serde_json::to_string(&detail).unwrap());
+        }
+        let rust_samples = rust_samples.to_lowercase();
         for banned in banned {
             assert!(
                 !raw.contains(&banned),
                 "sample data should not contain {banned}"
+            );
+            assert!(
+                !rust_samples.contains(&banned),
+                "rust sample payloads should not contain {banned}"
             );
         }
     }
