@@ -13,7 +13,8 @@ use crate::{
     ids::{parse_period, parse_report_format, parse_sort, parse_tool},
     restore_main_window,
     snapshot::{
-        snapshot, tray_snapshot, DesktopSnapshot, ReportResponse, ToolPageData, TraySnapshot,
+        project_page, snapshot, tray_snapshot, DesktopSnapshot, ProjectPageData, ReportResponse,
+        ToolPageData, TraySnapshot,
     },
     state::{save_user_settings, with_app, CommandError, CommandResult, SharedState},
     sync_open_at_login,
@@ -104,6 +105,19 @@ pub(crate) async fn set_currency(
 }
 
 #[tauri::command]
+pub(crate) async fn set_plan_price(
+    tool: String,
+    price: Option<f64>,
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    with_app(state, move |app| {
+        app.set_plan_price(&tool, price);
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[tauri::command]
 pub(crate) async fn get_model_catalog(
     period: String,
     state: State<'_, SharedState>,
@@ -133,6 +147,21 @@ pub(crate) async fn get_tool_page(
         })
     })
     .await
+}
+
+#[tauri::command]
+pub(crate) async fn get_project_index(
+    state: State<'_, SharedState>,
+) -> CommandResult<Vec<tokenuse::data::ProjectIndexRow>> {
+    with_app(state, |app| Ok(app.project_index())).await
+}
+
+#[tauri::command]
+pub(crate) async fn get_project_page(
+    identity: String,
+    state: State<'_, SharedState>,
+) -> CommandResult<ProjectPageData> {
+    with_app(state, move |app| Ok(project_page(app, &identity))).await
 }
 
 #[tauri::command]

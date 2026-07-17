@@ -2,7 +2,11 @@ use serde::Serialize;
 use tokenuse::{
     app::{App, ConfigRowView, DataSource, Period, ProjectFilter, SortMode, Tool},
     copy::{self, CopyDeck},
-    data::{DashboardData, LimitsData, ProjectOption, SessionOption},
+    data::{
+        CoachProjectActivity, DashboardData, LimitsData, OutputSummary, ProjectOption,
+        ProjectToolSplit, SessionOption,
+    },
+    ingest::ProjectInventoryRow,
     reports::ReportFormat,
 };
 
@@ -61,6 +65,14 @@ pub(crate) struct SubscriptionCookieState {
 pub(crate) struct DesktopSettingsState {
     pub(crate) open_at_login: bool,
     pub(crate) show_dock_or_taskbar_icon: bool,
+    pub(crate) plan_prices: Vec<PlanPriceRow>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct PlanPriceRow {
+    pub(crate) id: &'static str,
+    pub(crate) label: &'static str,
+    pub(crate) price: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -90,6 +102,58 @@ pub(crate) struct ReportResponse {
 pub(crate) struct ToolPageData {
     pub(crate) dashboard: DashboardData,
     pub(crate) usage: LimitsData,
+}
+
+/// Payload for the per-project desktop page: the project-filtered dashboard
+/// for the active period across all tools, the project's full session list,
+/// its discovered sources, and the Coach output/activity profile.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ProjectPageData {
+    pub(crate) identity: String,
+    pub(crate) name: String,
+    pub(crate) dashboard: DashboardData,
+    pub(crate) sessions: Vec<SessionOption>,
+    pub(crate) sources: Vec<ProjectInventoryRow>,
+    pub(crate) tool_split: Vec<ProjectToolSplit>,
+    pub(crate) output: OutputSummary,
+    pub(crate) activity: Option<CoachProjectActivity>,
+}
+
+pub(crate) fn project_page(app: &App, identity: &str) -> ProjectPageData {
+    let sources: Vec<ProjectInventoryRow> = app
+        .project_inventory()
+        .into_iter()
+        .filter(|row| row.identity == identity)
+        .collect();
+    let name = sources
+        .first()
+        .map(|row| row.project.clone())
+        .or_else(|| {
+            app.project_options()
+                .into_iter()
+                .find(|option| option.identity.as_deref() == Some(identity))
+                .map(|option| option.label)
+        })
+        .unwrap_or_else(|| identity.to_string());
+
+    let filter = ProjectFilter::Selected {
+        identity: identity.to_string(),
+        label: name.clone(),
+    };
+    let coach = app.coach_for(app.period, Tool::All, &filter);
+
+    ProjectPageData {
+        identity: identity.to_string(),
+        name,
+        dashboard: app.dashboard_for(app.period, Tool::All, &filter, app.sort),
+        sessions: app.session_options_for(app.period, Tool::All, &filter, app.sort),
+        sources,
+        tool_split: app.project_tool_split(&filter),
+        // The coach payload is scoped to this one project, so its output
+        // block and single activity row are already project-specific.
+        activity: coach.projects.first().cloned(),
+        output: coach.output,
+    }
 }
 
 pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
@@ -197,6 +261,14 @@ fn desktop_settings(app: &App) -> DesktopSettingsState {
     DesktopSettingsState {
         open_at_login: app.settings.desktop.open_at_login,
         show_dock_or_taskbar_icon: app.settings.desktop.show_dock_or_taskbar_icon,
+        plan_prices: tokenuse::ingest::LIMIT_SECTION_TOOLS
+            .into_iter()
+            .map(|(id, label)| PlanPriceRow {
+                id,
+                label,
+                price: app.settings.plan_prices.get(id).copied(),
+            })
+            .collect(),
     }
 }
 
@@ -221,3 +293,4 @@ pub(crate) fn tray_snapshot(app: &App) -> TraySnapshot {
         usage: app.usage_for(Tool::All, SortMode::Spend),
     }
 }
+
