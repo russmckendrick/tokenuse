@@ -299,7 +299,7 @@ Reports are built from raw `Ingested` calls and limits through `ReportDataset`, 
 | SVG | one `.svg` file | One-page 16:9 executive visual summary with KPI strip, readable activity heatmap/trend, and top project/model/session highlights. |
 | PNG | one `.png` file | Same one-page executive summary rendered through `plotters`' bitmap backend. |
 | JSON | one `.json` file | Pretty-printed full `ReportDataset`. |
-| Excel | one `.xlsx` file | Multi-sheet workbook: Summary, Activity, Projects, Project Tools, Sessions, Calls, Models, Tools, Commands, MCP Servers, Limits Latest, Limits Raw, and Metadata. |
+| Excel | one `.xlsx` file | Multi-sheet workbook: Summary, Activity, Projects, Project Tools, Sessions, Calls, Models, Tools, Commands, MCP Servers, By Activity (task categories), Limits Latest, Limits Raw, and Metadata. |
 | CSV | a directory of `.csv` files | One file per Excel/report area with hand-written RFC 4180 escaping. |
 
 The report pipeline depends on `plotters` for SVG/PNG summaries, `fulgur` for browserless HTML/CSS-to-PDF rendering, `rust_xlsxwriter` for Excel, and `serde_json` for JSON. HTML generation is hand-written, escaped at render time, and uses no external scripts or network dependency. Full raw data lives in JSON, Excel, and CSV outputs rather than the visual deck/summary reports.

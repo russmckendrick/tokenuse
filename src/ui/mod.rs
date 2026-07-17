@@ -18,11 +18,11 @@ use crate::{
 
 use components::{centered_rect, weighted_columns};
 use sections::{
-    render_activity_pulse, render_config, render_counts, render_currency_modal, render_daily_trend,
-    render_export_dir_picker_modal, render_export_modal, render_footer, render_help_modal,
-    render_kpi_strip, render_limits, render_model_efficiency, render_models, render_project_modal,
-    render_project_tools, render_projects, render_session_modal, render_session_page,
-    render_sessions, render_title_bar,
+    render_activity_categories, render_activity_pulse, render_config, render_counts,
+    render_currency_modal, render_daily_trend, render_export_dir_picker_modal, render_export_modal,
+    render_footer, render_help_modal, render_kpi_strip, render_limits, render_model_efficiency,
+    render_models, render_project_modal, render_project_tools, render_projects,
+    render_session_modal, render_session_page, render_sessions, render_title_bar,
 };
 
 pub fn render(frame: &mut Frame<'_>, app: &App) {
@@ -160,7 +160,14 @@ fn render_dashboard(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
         &data.tools,
     );
 
-    let bottom = weighted_columns(sections[8], 70);
+    let bottom = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(34),
+            Constraint::Percentage(33),
+            Constraint::Percentage(33),
+        ])
+        .split(sections[8]);
     render_counts(
         frame,
         bottom[0],
@@ -175,6 +182,7 @@ fn render_dashboard(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
         theme::MAGENTA,
         &data.mcp_servers,
     );
+    render_activity_categories(frame, bottom[2], &data.by_activity);
     render_footer(frame, sections[10], app);
     render_project_modal(frame, root, app);
     render_currency_modal(frame, root, app);
@@ -192,7 +200,14 @@ fn deep_dive_panel_heights(area_height: u16, data: &DashboardData) -> [u16; 4] {
     let main = project_tools
         .max(models.saturating_add(1).saturating_add(tools))
         .min(21);
-    let bottom = table_panel_height(data.commands.len().max(data.mcp_servers.len()), 5, 13);
+    let bottom = table_panel_height(
+        data.commands
+            .len()
+            .max(data.mcp_servers.len())
+            .max(data.by_activity.len()),
+        5,
+        13,
+    );
     let mut heights = [top, sessions, main, bottom];
 
     let reserved = 3 + 3 + 4; // title, footer, and the gaps between content bands
@@ -317,6 +332,7 @@ mod tests {
         assert!(rendered.contains(&copy.panels.activity_trend));
         assert!(rendered.contains(&copy.panels.model_efficiency));
         assert!(rendered.contains(&copy.panels.project_spend_by_tool));
+        assert!(rendered.contains(&copy.categories["heading"]));
         assert!(rendered.contains("q quit"));
         let first_footer_hint = copy.footer("dashboard")[0].clone();
         assert!(rendered.contains(&format!(

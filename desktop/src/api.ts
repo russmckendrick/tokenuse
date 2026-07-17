@@ -6,6 +6,7 @@ import type {
   DesktopSnapshot,
   DesktopUpdateDownloadEvent,
   DesktopUpdateMetadata,
+  DoctorReport,
   ModelCatalogEntry,
   PeriodId,
   ProjectOption,
@@ -66,6 +67,7 @@ export const api = {
   checkDesktopUpdate: () => invoke<DesktopUpdateMetadata | null>('check_desktop_update'),
   installDesktopUpdate: (onEvent: Channel<DesktopUpdateDownloadEvent>) =>
     invoke<void>('install_desktop_update', { onEvent }),
+  getDoctor: () => invoke<DoctorReport>('get_doctor'),
   setReportDir: (path: string) => invoke<DesktopSnapshot>('set_report_dir', { path }),
   reportProjects: (period: PeriodId) => invoke<ProjectOption[]>('report_projects', { period }),
   generateReport: (

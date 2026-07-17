@@ -383,6 +383,40 @@ export type SessionDetailView = {
   note: string | null;
 };
 
+/** Mirrors `src/doctor.rs` `Verdict` (serde snake_case). */
+export type DoctorVerdict = 'ok' | 'nothing_found' | 'errors' | 'discovery_failed';
+
+export type DoctorEnvOverride = {
+  name: string;
+  value: string | null;
+};
+
+export type DoctorRootStatus = {
+  label: string;
+  path: string;
+  exists: boolean;
+};
+
+/** Mirrors `src/doctor.rs` `ToolReport`. */
+export type DoctorToolReport = {
+  id: string;
+  name: string;
+  env: DoctorEnvOverride[];
+  roots: DoctorRootStatus[];
+  session_sources: number;
+  limit_sources: number;
+  sampled_sources: number;
+  sampled_calls: number;
+  sampled_limit_snapshots: number;
+  parse_errors: number;
+  verdict: DoctorVerdict;
+  detail: string | null;
+};
+
+export type DoctorReport = {
+  tools: DoctorToolReport[];
+};
+
 export type ConfigRow = {
   id: string;
   name: string;
@@ -538,6 +572,7 @@ export type CopyDeck = {
   filters: Record<string, string>;
   panels: Record<string, string>;
   categories: Record<string, string>;
+  doctor: Record<string, string>;
   tables: Record<string, string>;
   timeline: Record<string, string>;
   usage: Record<string, string>;

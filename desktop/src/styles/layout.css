@@ -374,7 +374,8 @@
 .duo-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
-  align-items: start;
+  /* Sibling cards in a row always stretch to equal height (DESIGN.md). */
+  align-items: stretch;
   gap: var(--space-xl);
   min-width: 0;
 }

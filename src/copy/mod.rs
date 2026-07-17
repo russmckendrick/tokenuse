@@ -914,6 +914,12 @@ pub struct OverviewCopy {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DoctorCopy {
+    /// Desktop Data Sources panel title; the CLI renders without headings.
+    pub panel_title: String,
+    pub subtitle: String,
+    pub run: String,
+    pub running: String,
+    pub last_run: String,
     pub env_not_set: String,
     pub root_found: String,
     pub root_missing: String,

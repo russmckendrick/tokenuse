@@ -598,6 +598,11 @@
     "heading": "By Activity"
   },
   "doctor": {
+    "panel_title": "Data Sources",
+    "subtitle": "Read-only checks of every tool's probed locations, discovery, and a bounded parse sample",
+    "run": "Run diagnostics",
+    "running": "Running…",
+    "last_run": "Checked {time}",
     "env_not_set": "not set",
     "root_found": "found",
     "root_missing": "missing",

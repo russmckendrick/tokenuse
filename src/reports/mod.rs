@@ -145,6 +145,9 @@ pub struct ReportDataset {
     pub tools: Vec<ReportCount>,
     pub commands: Vec<ReportCount>,
     pub mcp_servers: Vec<ReportCount>,
+    /// Spend by deterministic task category (`crate::categories`), distinct
+    /// from `activity` which is the daily timeline.
+    pub task_categories: Vec<ReportCount>,
     pub limits_latest: Vec<ReportLimitLatest>,
     pub limits_raw: Vec<ReportLimitRaw>,
 }
@@ -487,6 +490,7 @@ fn build_ingested_dataset(
     let tools = aggregate_report_tools(&filtered, currency);
     let commands = aggregate_report_commands(&filtered, currency);
     let mcp_servers = aggregate_report_mcp_servers(&filtered, currency);
+    let task_categories = aggregate_report_task_categories(&filtered, currency);
     let period_limits = filter_limits(&ingested.limits, request.period, now);
     let limits_latest = latest_limits(&period_limits);
     let limits_raw = raw_limits(&period_limits);
@@ -503,6 +507,7 @@ fn build_ingested_dataset(
         tools,
         commands,
         mcp_servers,
+        task_categories,
         limits_latest,
         limits_raw,
     }
@@ -625,6 +630,17 @@ fn build_sample_dataset(
             ..Default::default()
         })
         .collect();
+    let task_categories = dashboard
+        .by_activity
+        .iter()
+        .map(|row| ReportCount {
+            name: row.label.to_string(),
+            calls: row.calls,
+            cost: row.cost.to_string(),
+            cost_usd: parse_display_money_value(row.cost),
+            ..Default::default()
+        })
+        .collect();
 
     ReportDataset {
         metadata,
@@ -653,6 +669,7 @@ fn build_sample_dataset(
         tools,
         commands,
         mcp_servers,
+        task_categories,
         limits_latest: Vec::new(),
         limits_raw: Vec::new(),
     }
@@ -1092,6 +1109,38 @@ fn aggregate_report_mcp_servers(
     report_count_rows(counts, currency)
 }
 
+/// Spend by deterministic task category. Sorted by cost rather than calls:
+/// the category story is where the money went, not how chatty a category was.
+fn aggregate_report_task_categories(
+    calls: &[&ParsedCall],
+    currency: &CurrencyFormatter,
+) -> Vec<ReportCount> {
+    let mut counts: HashMap<crate::categories::TaskCategory, Totals> = HashMap::new();
+    for call in calls {
+        counts
+            .entry(crate::categories::classify(call))
+            .or_default()
+            .add_call(call);
+    }
+    let mut rows: Vec<_> = counts.into_iter().collect();
+    rows.sort_by(|a, b| {
+        b.1.cost_usd
+            .partial_cmp(&a.1.cost_usd)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| b.1.calls.cmp(&a.1.calls))
+            .then_with(|| a.0.cmp(&b.0))
+    });
+    rows.into_iter()
+        .map(|(category, totals)| ReportCount {
+            name: category.label().to_string(),
+            calls: totals.calls,
+            tokens: totals.tokens,
+            cost: currency.format_money(totals.cost_usd),
+            cost_usd: totals.cost_usd,
+        })
+        .collect()
+}
+
 fn report_count_rows(
     counts: HashMap<String, Totals>,
     currency: &CurrencyFormatter,
@@ -1228,6 +1277,11 @@ fn write_csv_report_dir(dir: &Path, dataset: &ReportDataset) -> Result<()> {
     write_csv_rows(dir, "tools.csv", counts_csv(&dataset.tools))?;
     write_csv_rows(dir, "commands.csv", counts_csv(&dataset.commands))?;
     write_csv_rows(dir, "mcp_servers.csv", counts_csv(&dataset.mcp_servers))?;
+    write_csv_rows(
+        dir,
+        "task_categories.csv",
+        counts_csv(&dataset.task_categories),
+    )?;
     write_csv_rows(
         dir,
         "limits_latest.csv",
@@ -1664,6 +1718,12 @@ fn write_xlsx_report(path: &Path, dataset: &ReportDataset) -> Result<()> {
         &mut workbook,
         "MCP Servers",
         counts_csv(&dataset.mcp_servers),
+        &header,
+    )?;
+    write_sheet(
+        &mut workbook,
+        "By Activity",
+        counts_csv(&dataset.task_categories),
         &header,
     )?;
     write_sheet(
@@ -3845,6 +3905,29 @@ mod tests {
     }
 
     #[test]
+    fn report_dataset_breaks_spend_down_by_task_category() {
+        let ingested = Ingested {
+            calls: vec![call("/tmp/a", "s1", "k1", 1), call("/tmp/a", "s1", "k2", 1)],
+            limits: Vec::new(),
+        };
+        let dataset = build_ingested_dataset(
+            &request(ReportFormat::Json, false),
+            &ingested,
+            &CurrencyFormatter::usd(),
+            "live",
+            "id",
+        );
+        // The fixture call runs `cargo test` without edits, so both calls
+        // classify as Testing and aggregate into one category row.
+        assert_eq!(dataset.task_categories.len(), 1);
+        let row = &dataset.task_categories[0];
+        assert_eq!(row.name, crate::categories::TaskCategory::Testing.label());
+        assert_eq!(row.calls, 2);
+        assert!(row.cost_usd > 0.0);
+        assert!(row.tokens > 0);
+    }
+
+    #[test]
     fn redacted_report_hides_sensitive_fields() {
         let ingested = Ingested {
             calls: vec![call(
@@ -3974,6 +4057,7 @@ mod tests {
             "tools.csv",
             "commands.csv",
             "mcp_servers.csv",
+            "task_categories.csv",
             "limits_latest.csv",
             "limits_raw.csv",
             "metadata.csv",

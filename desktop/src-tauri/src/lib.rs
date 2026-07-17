@@ -574,6 +574,7 @@ pub fn run() {
             commands::clear_claude_session_cookie,
             commands::set_codex_session_cookie,
             commands::clear_codex_session_cookie,
+            commands::get_doctor,
             commands::set_report_dir,
             commands::report_projects,
             commands::generate_report,

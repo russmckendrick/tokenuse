@@ -483,6 +483,53 @@ fn render_models_panel(frame: &mut Frame<'_>, area: Rect, title: &str, rows: &[M
     frame.render_widget(table, area);
 }
 
+/// Ranked task-category spend (`DashboardData::by_activity`). Cost is the
+/// value column: the category story is where the money went, and the narrow
+/// bottom-band slot has no room for a calls column too.
+pub(super) fn render_activity_categories(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    rows: &[ActivityMetric],
+) {
+    let copy = copy();
+    let title = copy
+        .categories
+        .get("heading")
+        .map(String::as_str)
+        .unwrap_or("By Activity");
+    let mut table_rows: Vec<Row<'static>> = rows
+        .iter()
+        .map(|item| {
+            Row::new(vec![
+                graphs::rank_cell(item.value),
+                Cell::from(item.label).style(theme::base()),
+                Cell::from(item.cost).style(theme::money()),
+            ])
+        })
+        .collect();
+    if table_rows.is_empty() {
+        table_rows.push(empty_table_row(3, copy.empty.no_rows.as_str()));
+    }
+
+    let table = Table::new(
+        table_rows,
+        [
+            Constraint::Length(graphs::RANK_WIDTH as u16),
+            Constraint::Min(14),
+            Constraint::Length(9),
+        ],
+    )
+    .header(Row::new(vec![
+        Cell::from(copy.tables.blank.as_str()),
+        Cell::from(copy.tables.blank.as_str()),
+        Cell::from(copy.tables.cost.as_str()).style(theme::dim()),
+    ]))
+    .column_spacing(1)
+    .block(theme::panel_block(title, theme::CYAN));
+
+    frame.render_widget(table, area);
+}
+
 pub(super) fn render_counts(
     frame: &mut Frame<'_>,
     area: Rect,

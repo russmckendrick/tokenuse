@@ -98,12 +98,17 @@ Config groups shared data settings and desktop-only behavior:
 - confirmed currency and pricing-book downloads;
 - Claude Code status-line setup and Claude/Copilot limit sync;
 - optional Claude.ai and ChatGPT quota-cookie sync when the build supports it;
+- on-demand per-tool data-source diagnostics (**Data Sources**);
 - clear and rebuild local archive;
 - report folder;
 - open at login and Dock/taskbar visibility;
 - Windows/Linux update checks.
 
 Turning on Sample Data changes only the visible source. Any live snapshot remains cached, background refreshes continue updating it, and turning Sample Data off returns to that live snapshot.
+
+The **Data Sources** panel runs the same read-only diagnostics as `tokenuse doctor`, on demand. **Run diagnostics** reports, for every tool adapter, the locations it probes (found or missing), the environment overrides in effect, how many session and limit sources discovery found, and a bounded parse sample, ending in an OK / NOTHING FOUND / ERRORS / DISCOVERY FAILED verdict with the likely cause. Because the checks re-walk the filesystem and parse sample files, they run only when the button is pressed; the result and its timestamp stay in the window until the next run and are never part of the background snapshot poll.
+
+When any model in the archive is billed at the fallback pricing rate, the pricing row's warning (the affected `tool · model` pairs and the fix hint) is shown in the warning tone so guessed costs stand out from real ones.
 
 ## Keyboard
 

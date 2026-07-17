@@ -60,7 +60,13 @@
         onmouseleave={() => (hovered = null)}
       />
       {#if index % labelStep === 0}
-        <text x={slot * index + slot / 2} y={HEIGHT - 3} text-anchor="middle" class="axis-label">
+        <!-- Clamp so edge labels stay inside the viewBox instead of clipping. -->
+        <text
+          x={Math.min(Math.max(slot * index + slot / 2, 16), WIDTH - 16)}
+          y={HEIGHT - 3}
+          text-anchor="middle"
+          class="axis-label"
+        >
           {row.day}
         </text>
       {/if}

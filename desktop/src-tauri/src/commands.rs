@@ -483,6 +483,17 @@ pub(crate) async fn clear_codex_session_cookie(
 }
 
 #[tauri::command]
+/// Run the read-only per-tool doctor diagnostics. This re-walks every
+/// adapter's probe roots and parses a bounded sample, so it runs on demand
+/// from the Config page button — never from the snapshot poll — and on a
+/// blocking task so the UI thread is not stalled. It needs no app state.
+pub(crate) async fn get_doctor() -> CommandResult<tokenuse::doctor::DoctorReport> {
+    tauri::async_runtime::spawn_blocking(tokenuse::doctor::report)
+        .await
+        .map_err(|e| CommandError::Join(e.to_string()))
+}
+
+#[tauri::command]
 pub(crate) async fn set_report_dir(
     path: String,
     state: State<'_, SharedState>,

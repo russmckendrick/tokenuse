@@ -318,7 +318,7 @@ The primary navigation is a fixed left rail, `desktop.sidebar.width` (200px) exp
 
 The shell is fixed (sidebar + status bar); each page scrolls vertically on its own. No page may scroll horizontally — wide tables scroll inside their panel.
 
-Data-list panels stay content-sized for short results and cap at 480px for long results. Once capped, the panel body owns vertical scrolling and keeps its table header sticky; grid siblings never stretch merely to match a longer list.
+Sibling cards in the same grid row are always equal height: the tallest card sets the row and every other card stretches to match, so each band ends on one flush bottom edge — no ragged card bottoms, ever. Stretched cards keep their content top-anchored and let calm surface show below; they never pad with filler to fake fullness. Data-list panels cap at 480px; once capped, the panel body owns vertical scrolling and keeps its table header sticky. A capped list may stretch up to its cap to match the row but never drives the row taller than 480px — do not compose a row that pairs a taller-than-cap panel with a capped list, since the cap would break the flush edge.
 
 - **Sticky page header** at the top of every page: page title (13px Inter 600), period selector, page-scoped tool/project/sort controls, then refresh and export in one primary toolbar. At compact desktop widths the contextual controls collapse from text labels to icon + current value; wrapping is reserved for the narrowest supported window sizes. The header keeps the hairline bottom border while content scrolls under it.
 - Grid zones below the header use `desktop.spacing.xl` between sibling panels and `2xl` between unrelated sections; `3xl` is page padding only.
@@ -360,7 +360,7 @@ Each section must have one clear question. If its title, hint, KPIs, and chart d
 - KPIs orient the analysis below them: total, active population, average, peak, and dominant dimensions are a useful sequence. Avoid vanity metrics that have no corresponding detail.
 - A KPI must be computed from the complete filtered dataset. Never derive totals, active counts, averages, or peaks from a display-capped `Top N` array.
 - If a list is capped for rendering, label it as ranked/Top N and keep its cap separate from the summary and chart data contracts.
-- Equal-height sibling panels are appropriate only when they are semantic peers, as with Flow and Pace. Do not stretch unrelated panels or data lists to manufacture symmetry.
+- Sibling panels in a shared row are always equal height — the row stretches every card to its tallest member (see Page anatomy and scrolling). Choose row partners so the symmetry reads as intentional: pair panels of comparable content volume, and let a shorter list end with calm empty surface below its rows rather than filler content.
 
 #### Filters, time, and data integrity
 
@@ -484,6 +484,7 @@ Use `desktop/tokenusebars.svg` as the source asset for generated app icons. The 
 - Do give a substantial new analytical workflow its own full-width section or page tab instead of compressing it into the existing grid.
 - Do connect actionable summaries to the exact matching detail and preserve the surrounding comparison context.
 - Do keep summary calculations and time-series payloads independent from ranked-list display caps.
+- Do keep sibling cards in a grid row equal height on the desktop — the tallest card sets the row and the others stretch to its flush bottom edge.
 - Don't add decorative backgrounds, oversized type outside the hero bands, or large empty hero areas.
 - Don't add drop-shadow halos, stacked cards, or rounded-card styling that makes the desktop feel like a generic web mockup. The 8px corners on outer desktop panels are the cap, paired with hairline borders and flat depth.
 - Don't use accordions or expanding cards for primary analytics, timelines, findings, or evidence.
