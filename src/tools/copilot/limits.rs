@@ -881,12 +881,8 @@ mod tests {
     #[test]
     fn any_sidecar_present_detects_per_account_files() {
         let dir = std::env::temp_dir().join(format!(
-            "tokenuse-copilot-sidecars-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            "tokenuse-copilot-sidecars-{}",
+            crate::tools::paths::test_run_id()
         ));
         fs::create_dir_all(&dir).unwrap();
         let legacy = dir.join(config::LIMIT_SIDECAR_FILE);

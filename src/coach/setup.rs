@@ -484,12 +484,8 @@ mod tests {
     #[test]
     fn claude_md_expansion_follows_imports_with_cycle_guard() {
         let dir = std::env::temp_dir().join(format!(
-            "tokenuse-setup-scan-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            "tokenuse-setup-scan-{}",
+            crate::tools::paths::test_run_id()
         ));
         std::fs::create_dir_all(&dir).unwrap();
         let main = dir.join("CLAUDE.md");

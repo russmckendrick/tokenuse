@@ -194,7 +194,6 @@ mod tests {
         SessionDetailView,
     };
     use std::sync::Mutex;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     /// plotters' font lookup on macOS is not safe across threads, so chart
     /// tests must serialize their access. JSON/CSV tests do not need this.
@@ -202,12 +201,8 @@ mod tests {
 
     fn tempdir(name: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!(
-            "tokenuse-export-{}-{}-{}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos(),
+            "tokenuse-export-{}-{}",
+            crate::tools::paths::test_run_id(),
             name
         ));
         fs::create_dir_all(&path).unwrap();

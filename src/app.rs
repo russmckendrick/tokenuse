@@ -3542,12 +3542,8 @@ mod tests {
 
     fn tempdir(name: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!(
-            "tokenuse-app-{}-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos(),
+            "tokenuse-app-{}-{}",
+            crate::tools::paths::test_run_id(),
             name
         ));
         std::fs::create_dir_all(&path).unwrap();

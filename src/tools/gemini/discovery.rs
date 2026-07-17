@@ -98,12 +98,8 @@ mod tests {
     impl TempDir {
         fn new() -> Self {
             let path = std::env::temp_dir().join(format!(
-                "tokenuse-gemini-discovery-{}-{}",
-                std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
+                "tokenuse-gemini-discovery-{}",
+                crate::tools::paths::test_run_id()
             ));
             std::fs::create_dir_all(&path).unwrap();
             Self(path)

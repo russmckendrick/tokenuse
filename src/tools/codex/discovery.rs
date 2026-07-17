@@ -54,12 +54,8 @@ mod tests {
     #[test]
     fn archived_sessions_are_discovered_alongside_dated_sessions() {
         let base = std::env::temp_dir().join(format!(
-            "tokenuse-codex-discovery-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            "tokenuse-codex-discovery-{}",
+            crate::tools::paths::test_run_id()
         ));
         let dated = base.join("sessions/2026/03/29");
         let archived = base.join("archived_sessions");

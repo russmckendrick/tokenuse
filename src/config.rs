@@ -275,12 +275,8 @@ mod tests {
 
     fn temp_paths(name: &str) -> ConfigPaths {
         let dir = std::env::temp_dir().join(format!(
-            "tokenuse-config-{}-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos(),
+            "tokenuse-config-{}-{}",
+            crate::tools::paths::test_run_id(),
             name
         ));
         ConfigPaths::new(dir)

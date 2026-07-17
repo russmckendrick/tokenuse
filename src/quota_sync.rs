@@ -51,12 +51,8 @@ mod tests {
     #[test]
     fn copilot_auto_refresh_gates_on_sidecar_presence() {
         let dir = std::env::temp_dir().join(format!(
-            "tokenuse-quota-sync-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            "tokenuse-quota-sync-{}",
+            crate::tools::paths::test_run_id()
         ));
         std::fs::create_dir_all(&dir).unwrap();
         let paths = ConfigPaths::new(dir.clone());

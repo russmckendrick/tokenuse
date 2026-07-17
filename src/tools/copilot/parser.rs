@@ -1483,12 +1483,8 @@ mod tests {
     impl TempDir {
         fn new() -> Self {
             let p = std::env::temp_dir().join(format!(
-                "tokenuse-copilot-{}-{}",
-                std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
+                "tokenuse-copilot-{}",
+                crate::tools::paths::test_run_id()
             ));
             std::fs::create_dir_all(&p).unwrap();
             Self(p)

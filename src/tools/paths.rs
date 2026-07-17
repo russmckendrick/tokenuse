@@ -19,6 +19,26 @@ pub fn env_path(var: &str) -> Option<PathBuf> {
         .filter(|p| !p.as_os_str().is_empty())
 }
 
+/// Unique per-invocation suffix for test scratch directories: pid, a
+/// nanosecond stamp, and an atomic counter. Parallel tests routinely land in
+/// the same nanosecond; without the counter two tests share a directory and
+/// one test's cleanup deletes the other's live files (observed as SQLite
+/// disk I/O errors and clobbered fixtures).
+#[cfg(test)]
+pub(crate) fn test_run_id() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    format!(
+        "{}-{stamp}-{}",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    )
+}
+
 /// Resolve a program name to an executable path using the inherited PATH
 /// plus well-known install directories. GUI launches (Finder/Dock) inherit
 /// launchd's minimal PATH, which misses Homebrew and user-local installs.
@@ -96,12 +116,8 @@ mod tests {
     impl TempDir {
         fn new(label: &str) -> Self {
             let p = std::env::temp_dir().join(format!(
-                "tokenuse-paths-{label}-{}-{}",
-                std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
+                "tokenuse-paths-{label}-{}",
+                crate::tools::paths::test_run_id()
             ));
             std::fs::create_dir_all(&p).unwrap();
             Self(p)

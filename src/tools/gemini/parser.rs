@@ -608,12 +608,8 @@ mod tests {
     impl TempFile {
         fn new(name: &str) -> Self {
             let dir = std::env::temp_dir().join(format!(
-                "tokenuse-gemini-parser-{}-{}",
-                std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
+                "tokenuse-gemini-parser-{}",
+                crate::tools::paths::test_run_id()
             ));
             std::fs::create_dir_all(&dir).unwrap();
             Self(dir.join(name))

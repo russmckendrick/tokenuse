@@ -363,12 +363,8 @@ mod tests {
 
     fn temp_paths(name: &str) -> ConfigPaths {
         let dir = std::env::temp_dir().join(format!(
-            "tokenuse-currency-{}-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos(),
+            "tokenuse-currency-{}-{}",
+            crate::tools::paths::test_run_id(),
             name
         ));
         std::fs::create_dir_all(&dir).unwrap();
