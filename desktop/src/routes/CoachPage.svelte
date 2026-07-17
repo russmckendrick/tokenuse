@@ -570,6 +570,24 @@
           </div>
         {/if}
       </Panel>
+      <Panel title={coachCopy.setup.heading} tone="yellow">
+        <p class="setup-subtitle dim">{coachCopy.setup.subtitle}</p>
+        {#if coach.setup.length === 0}
+          <p class="coach-empty">{coachCopy.setup.empty}</p>
+        {:else}
+          <ul class="setup-findings">
+            {#each coach.setup as finding (finding.id)}
+              <li class="setup-finding">
+                <div class="setup-finding-head">
+                  <strong>{finding.title}</strong>
+                  <span class="mono dim">{finding.savings_label}</span>
+                </div>
+                <p class="dim">{finding.detail}</p>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </Panel>
     {:else if coachView === 'output'}
       <Panel title={coachCopy.output.title} tone="magenta">
         {#if coach.output.by_language.length === 0}
@@ -731,6 +749,31 @@
 </section>
 
 <style>
+  .setup-subtitle {
+    margin: 0 0 var(--space-md);
+    font-size: 12px;
+  }
+
+  .setup-findings {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--space-md);
+  }
+
+  .setup-finding-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-md);
+  }
+
+  .setup-finding p {
+    margin: 2px 0 0;
+    font-size: 12px;
+  }
+
   .coach-hero {
     grid-template-columns: minmax(230px, 1.4fr) repeat(4, minmax(0, 1fr));
   }

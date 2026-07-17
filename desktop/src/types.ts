@@ -111,11 +111,21 @@ export type CoachData = {
   overall: CoachOverall;
   practice_groups: PracticeGroupScore[];
   findings: CoachFinding[];
+  /** Advisory configuration findings; never move the grade. */
+  setup: CoachSetupFinding[];
   flow: FlowSummary;
   pace: PaceSummary;
   output: OutputSummary;
   timeline_grid: TimelineGridDay[];
   projects: CoachProjectActivity[];
+};
+
+export type CoachSetupFinding = {
+  id: string;
+  title: string;
+  detail: string;
+  savings_tokens: number;
+  savings_label: string;
 };
 
 export type CoachProjectActivity = {
@@ -270,6 +280,10 @@ export type DashboardData = {
   tools: CountMetric[];
   commands: CountMetric[];
   mcp_servers: CountMetric[];
+  /** Deterministic task categories classified per call. */
+  by_activity: ActivityMetric[];
+  /** `tool · model` pairs billed at the fallback pricing rate. */
+  fallback_priced_models: string[];
 };
 
 export type LimitMetric = {
@@ -471,6 +485,20 @@ export type CoachCopy = {
     no_examples: string;
     severity: Record<string, string>;
   };
+  setup: {
+    heading: string;
+    subtitle: string;
+    savings: string;
+    empty: string;
+    unused_mcp_title: string;
+    unused_mcp_detail: string;
+    claude_md_title: string;
+    claude_md_detail: string;
+    rereads_title: string;
+    rereads_detail: string;
+    junk_title: string;
+    junk_detail: string;
+  };
   flow: {
     title: string;
     labels: Record<string, string>;
@@ -509,6 +537,7 @@ export type CopyDeck = {
   metrics: Record<string, string>;
   filters: Record<string, string>;
   panels: Record<string, string>;
+  categories: Record<string, string>;
   tables: Record<string, string>;
   timeline: Record<string, string>;
   usage: Record<string, string>;

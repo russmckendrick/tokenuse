@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api } from '../api';
   import ActivityPulse from '../components/ActivityPulse.svelte';
+  import ActivityCategoryTable from '../components/tables/ActivityCategoryTable.svelte';
   import CountTable from '../components/tables/CountTable.svelte';
   import ModelTable from '../components/tables/ModelTable.svelte';
   import ProjectTable from '../components/tables/ProjectTable.svelte';
@@ -97,6 +98,10 @@
       <ModelTable rows={snapshot.dashboard.models} copy={snapshot.copy} />
     </Panel>
   </section>
+
+  <Panel title={snapshot.copy.categories.heading} tone="cyan" scrollable>
+    <ActivityCategoryTable rows={snapshot.dashboard.by_activity} copy={snapshot.copy} />
+  </Panel>
 
   <Panel title={snapshot.copy.panels.top_sessions} tone="red" scrollable>
     <button class="panel-command" type="button" onclick={openSessionPicker}>{snapshot.copy.actions.open_session_picker}</button>
