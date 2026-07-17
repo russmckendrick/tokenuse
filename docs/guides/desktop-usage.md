@@ -20,6 +20,7 @@ The desktop app uses a persistent left sidebar rather than the TUI tab strip. Ev
 - Overview
 - Analytics
 - Coach
+- Scrollback
 - Models
 - Projects
 - Tools
@@ -30,7 +31,7 @@ Use **Collapse** at the bottom of the sidebar to reduce it to an icon rail. The 
 
 Tools sits directly above the five direct tool rows as the group's summary entry. The tool rows dynamically order themselves from highest to lowest rolling 24-hour call activity, so the tools currently driving usage stay closest to their summary. Primary screen and Config positions never move.
 
-The header holds the controls that apply to the current screen in one toolbar: title, period, contextual tool/project/sort filters, refresh, then report. At compact window widths the filter labels collapse to icons while their current values remain visible. Overview and Analytics expose period, tool, sort, and project filters. Dedicated tool pages expose period and sort. Models uses the active period for ranking and details while keeping all five ranges visible in its table. Projects exposes period, sort, and project. The parent Tools screen is a fixed rolling 24-hour capacity view, so its period control is intentionally hidden.
+The header holds the controls that apply to the current screen in one toolbar: title, period, contextual tool/project/sort filters, refresh, then report. At compact window widths the filter labels collapse to icons while their current values remain visible. Overview and Analytics expose period, tool, sort, and project filters. Dedicated tool pages expose period and sort. Models uses the active period for ranking and details while keeping all five ranges visible in its table. Projects exposes period, sort, and project. The parent Tools screen is a fixed rolling 24-hour capacity view, so its period control is intentionally hidden. Scrollback hides the period and sort controls too — its search box and tool/project selects live in the page's own toolbar.
 
 The footer shows live or sample source, currency, and context-sensitive shortcut hints. Refresh, report, configuration, and sync results appear as temporary bottom-right toasts instead of permanently consuming header space.
 
@@ -71,6 +72,16 @@ Coach turns your local usage history into a practice report card. It is entirely
 - **Activity tab**: Work Hours shows the hour×weekday intensity grid, weekday/weekend hourly profile, and period trend. Calendar is a daily activity bar strip (turns per day) that follows the selected period: scoped periods show a trailing ~2-month window with out-of-period bars dimmed (still clickable), All Time shows the trailing year. Picking a day exposes the session table — one row per session with its time range, project, tool, turns, cost, and timeline track — and selecting a row opens the fixed call inspector. Projects ranks the active projects with spend, calls, sessions, AI LoC, and tool coverage.
 
 Findings respect the header tool and project filters. Rules only count tools that can actually produce a signal — a tool whose logs lack, say, cancellation events never inflates a cancellation rate. Older archived calls whose source files are gone are excluded from rule denominators rather than counted as clean.
+
+### Scrollback
+
+Scrollback is full-text search across every archived session transcript — your prompts and the assistant's replies, across all five tools. Open it from the sidebar or with `/`.
+
+Search runs as you type: from two characters, the query fires 300 ms after you stop typing, and `Enter` searches immediately. Matching is word-based — terms are ANDed and the final term matches by prefix (`lifeti` finds `lifetimes`); there is no substring matching inside words. The toolbar's tool and project selects narrow the scope and re-run the search at once, and a counter reports how many sessions matched against how many are shown.
+
+Results are session groups ranked best match first. Each group's header row carries the project, tool, date, session cost, and match count, with a background wash proportional to the group's match count relative to the busiest session in the result set. Below it sit up to three snippets, each tagged **you** or **assistant** with the matched terms highlighted, and a `+N more matches in this session` line when there are more. A `prompt only` badge marks sessions whose source files were already gone when transcript capture landed — only their stored prompt excerpts are searchable.
+
+Clicking a group (or `Enter` / `Space`) opens the full session view; closing it returns to Scrollback with the query, filters, and results exactly as you left them. In sample-data mode, search reads your live archive rather than the sample dataset, and the page says so. Transcript text lives in `archive.db`; the Config page's Clear Data action is the way to purge it.
 
 ### Tools
 
@@ -126,10 +137,11 @@ Desktop navigation is resolved in the Svelte shell; data actions call typed Rust
 
 | Key | Action |
 | --- | --- |
-| `Tab` / `Shift-Tab` | Cycle Overview, Analytics, Coach, Models, Projects, Tools, and Config. |
+| `Tab` / `Shift-Tab` | Cycle Overview, Analytics, Coach, Scrollback, Models, Projects, Tools, and Config. |
 | `o` | Open Overview. |
 | `d` | Open Analytics. |
 | `h` | Open Coach. |
+| `/` | Open Scrollback transcript search. |
 | `u` | Open Tools. |
 | `c` | Open Config. |
 | `1`–`5` | Select 24 Hours, 7 Days, 30 Days, This Month, or All Time where the period is available. |
@@ -179,7 +191,7 @@ Windows notifications are most reliable from an installed build. On Windows and 
 
 ## Refresh, Reports, And Local Data
 
-Use the header refresh button or `r` to sync the archive in the background. The previous snapshot remains visible if a refresh fails. Clear Data asks for confirmation, deletes `archive.db`, and immediately reimports existing local history. Configuration, rates, pricing books, limit sidecars, and reports are retained; archive-only history is lost if its original source files no longer exist.
+Use the header refresh button or `r` to sync the archive in the background. The previous snapshot remains visible if a refresh fails. Clear Data asks for confirmation, deletes `archive.db`, and immediately reimports existing local history. Configuration, rates, pricing books, limit sidecars, and reports are retained; archive-only history is lost if its original source files no longer exist. Once `archive.db` exists, the Clear Data row's value leads with its current size (for example `Archive 12.3 MiB incl. transcript index`) — the archive also holds the Scrollback transcript index, and Clear Data is the way to purge captured transcript text.
 
 Report generation has independent period, project/all-projects, format, and redaction controls. It writes executive HTML/PDF decks, SVG/PNG visual summaries, JSON, Excel, or a CSV folder. Reports include all tools for the selected period and project scope. Folder selection uses the native dialog and applies to the running session.
 

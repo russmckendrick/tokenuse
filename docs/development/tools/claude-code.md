@@ -153,7 +153,13 @@ Beyond token accounting, the parser extracts per-call signals for the desktop Co
 
 User lines that are slash-command wrappers (`<command-...>`, `<local-command-...>`) or interrupt markers never become `user_message`/`prompt_chars` — they are UI plumbing, not prompts.
 
-The adapter prefixes its source fingerprints with `claude-code-v3-streamed-blocks`; bumping that constant forces archived sessions back through the parser after an extraction change.
+The adapter prefixes its source fingerprints with `claude-code-v4-transcripts`; bumping that constant forces archived sessions back through the parser after an extraction change.
+
+## Transcript capture (archive v7)
+
+Each emitted call also stores its full turn text for Scrollback search: the most recent user message untruncated (unlike the 500-char display `user_message`) and the concatenated `text` content blocks of the assistant message. Thinking blocks are excluded, matching `response_chars`. The text rides the two archive-only `ParsedCall` fields (`transcript_user` / `transcript_assistant`) into the archive's `transcripts` table during sync and is never loaded back into memory.
+
+Two interactions with incremental tail parsing are deliberate. Tail-resumed continuations of a message that spans the resume boundary **append** their assistant blocks to the stored transcript row (prefix and tail blocks are disjoint, mirroring the `response_chars` sum on merge). And the per-file cursor now carries the full last user text — capped at 64 KiB characters to bound the stored cursor JSON — so tail assistant rounds keep their prompt; that cursor-shape change is why `PARSE_VERSION` went `1` → `2`, forcing stale cursors back through a full parse. The `claude-code-v4-transcripts` fingerprint bump forces the one-time re-parse that backfills full text into existing archives.
 
 ## Incremental tail parsing (archive v6)
 

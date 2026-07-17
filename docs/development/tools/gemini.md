@@ -112,7 +112,11 @@ Gemini session files carry full message text and per-message timestamps, so the 
 | `is_canceled` | — | Always `false`: session files record no interrupt/abort events |
 | `edited_files` / `referenced_files` | — | Always empty: `toolCalls[].args` are only read for Bash commands, not mined for file paths |
 
-The adapter prefixes its source fingerprints with `gemini-v2-coach-enrichment`; bumping that constant forces archived sessions back through the parser after an extraction change.
+The adapter prefixes its source fingerprints with `gemini-v3-transcripts`; bumping that constant forces archived sessions back through the parser after an extraction change.
+
+## Transcript capture (archive v7)
+
+Each emitted call also stores its full turn text for Scrollback search: the latest user message `content` untruncated (unlike the 500-char display `user_message`) and the Gemini message's `content` text. Thoughts exist only as token counts in Gemini session files — there is no reasoning text to exclude. The text rides the two archive-only `ParsedCall` fields (`transcript_user` / `transcript_assistant`) into the archive's `transcripts` table during sync and is never loaded back into memory. The `gemini-v3-transcripts` fingerprint bump forces the one-time re-parse that backfills full text into existing archives.
 
 ## Known limitations
 

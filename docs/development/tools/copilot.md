@@ -218,7 +218,22 @@ Copilot's sources differ sharply in what they expose, so enrichment is populated
 
 The pending user message (and its `prompt_chars`) attaches only to the first `assistant.message` after it; follow-up assistant messages in the same turn carry `prompt_chars: None`.
 
-The adapter appends `copilot-transcript-schema:2` to legacy/transcript session fingerprints; bumping it forces archived transcripts back through the parser after an extraction change. CLI stores keep their separate `copilot-cli-schema` version, which did not change for enrichment because store rows emit none.
+The adapter appends `copilot-transcript-schema:4` to non-CLI-store session fingerprints (legacy events, VS Code transcripts, chat-session journals, and the OTel store); bumping it forces those archived sources back through the parser after an extraction change. CLI stores keep their separate `copilot-cli-schema` version (currently `3`). Both were last bumped for transcript capture.
+
+## Transcript capture (archive v7)
+
+Copilot's sources also differ in what turn text they can retain for Scrollback search, carried by the two archive-only `ParsedCall` fields (`transcript_user` / `transcript_assistant`) that are written to the archive's `transcripts` table during sync and never loaded back into memory:
+
+| Source | Captured text |
+| --- | --- |
+| Legacy `events.jsonl` | user text only — the legacy path never reads assistant `data.content` |
+| VS Code chat-session journals | user text only (`message.text`) |
+| VS Code transcript JSON | user **and** assistant text; `data.reasoningText` is excluded, mirroring `response_chars` |
+| CLI session-store turns | user **and** assistant text — including turns whose tokens come from `assistant_usage_events`, where the turn's text attaches to the turn's first usage row |
+| OTel spans (`agent-traces.db`) | none — spans carry token counts, not message text |
+| `data.db` aggregates | none |
+
+The bumps to `copilot-transcript-schema:4` and `copilot-cli-schema:3` force the one-time re-parse that backfills the text into existing archives.
 
 ## Known Limitations
 

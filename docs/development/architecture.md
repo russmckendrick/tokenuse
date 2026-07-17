@@ -35,7 +35,7 @@ flowchart TD
 
 The durable archive lives at `<config dir>/tokenuse/archive.db`. If it already has rows, startup loads it immediately and queues an incremental background sync so the dashboard opens without reparsing every source. If the archive is empty, startup imports the legacy `~/.cache/tokenuse/ingest-cache.json` snapshot when present, performs one synchronous source sync, then renders from the archive. If the archive cannot be opened or migrated, the app falls back to raw `ingest::load()` for that run.
 
-Both Config pages can also clear local usage data after confirmation. That path deletes `archive.db`, recreates the schema, and immediately syncs local tool sources so per-source fingerprints are rebuilt from scratch. Config files, rates, pricing books, limit sidecars, legacy pricing snapshots, and generated reports are kept; archive-only history is lost if the original source files are no longer present.
+Both Config pages can also clear local usage data after confirmation. That path deletes `archive.db`, recreates the schema, and immediately syncs local tool sources so per-source fingerprints are rebuilt from scratch. Config files, rates, pricing books, limit sidecars, legacy pricing snapshots, and generated reports are kept; archive-only history is lost if the original source files are no longer present. Since v7 the archive also holds the Scrollback transcript index, so both Config pages lead the Clear Data row's value with the current archive size (`Archive {size} incl. transcript index`, binary units) and Clear Data remains the purge path for captured transcript text.
 
 The startup loader lives in `src/runtime.rs` so both frontends use the same config, currency, archive, fallback, and background refresh setup. `tokenuse --sample` changes the TUI's initial visible source but retains any loaded live snapshot, so `Shift-D` can restore it. The desktop app stores an `App` instance behind Tauri managed state and exposes narrow commands for filters, pure page queries, session lookup, config actions, refresh, reports, desktop settings, and the tray popover. It also runs a small backend monitor that continues calling `App::poll_reload()` while the webview is hidden, drains queued background usage alerts, and sends native notifications from Rust. See [Desktop app usage](../guides/desktop-usage.md).
 
@@ -71,8 +71,9 @@ Every adapter emits `ParsedCall` from `src/tools/types.rs`. The important fields
 | `token_quality` | `exact`, `estimated`, `mixed`, or `unknown` provenance for token totals |
 | `timestamp_quality` | `exact`, `session`, `file`, or `unknown` provenance for the timestamp |
 | `superseded_dedup_keys` | Transient exact legacy rows replaced by a reconstructed canonical call; never persisted |
+| `transcript_user`, `transcript_assistant` | Archive-only full turn text for Scrollback search; written to SQLite during sync and never loaded back into memory |
 
-The cancellation-through-file fields are the archive v4 Coach enrichment; archive v5 adds mode and quality provenance plus safe transient supersession — see [Coach engine](coach.md).
+The cancellation-through-file fields are the archive v4 Coach enrichment; archive v5 adds mode and quality provenance plus safe transient supersession — see [Coach engine](coach.md). The two transcript fields feed the archive v7 transcript store — see [Archive And Sync](#archive-and-sync).
 
 ## Model Identity
 
@@ -139,7 +140,7 @@ flowchart LR
 
 ## Frontends, Pages, And Modals
 
-The TUI is a small state machine over five pages (Overview, Deep Dive, Usage, Config, Session) plus picker, confirmation, detail, and help modals. Overview, Deep Dive, and Usage are reachable through the tab strip via `Tab` / `Shift-Tab` or their direct keys; Config and Session are sub-pages opened from any tab. `g` cycles the global sort mode, and `Shift-D` toggles the visible data source between live and sample data when live data is available. Shortcut definitions, help groups, and footer hints live in `src/keymap/keymap.json`; `src/keymap/mod.rs` validates the embedded JSON and resolves keys to action IDs. `src/app.rs` applies those actions to state, while rendering is dispatched from `src/ui/mod.rs`.
+The TUI is a small state machine over seven pages (Overview, Deep Dive, Usage, Coach, Scrollback, Config, Session) plus picker, confirmation, detail, and help modals. Overview, Deep Dive, Usage, Coach, and Scrollback are reachable through the tab strip via `Tab` / `Shift-Tab` or their direct keys; Config and Session are sub-pages opened from any tab. `g` cycles the global sort mode, and `Shift-D` toggles the visible data source between live and sample data when live data is available. Shortcut definitions, help groups, and footer hints live in `src/keymap/keymap.json`; `src/keymap/mod.rs` validates the embedded JSON and resolves keys to action IDs. `src/app.rs` applies those actions to state, while rendering is dispatched from `src/ui/mod.rs`.
 
 ```mermaid
 flowchart LR
@@ -148,6 +149,9 @@ flowchart LR
     O -- c --> Cfg[Config]
     O -- s --> SP[Session picker]
     SP -- Enter --> Sess[Session page]
+    O -- k --> K[Coach]
+    O -- / --> SB[Scrollback]
+    SB -- Enter --> Sess
     DD -- o / Shift-Tab --> O
     DD -- u --> U
     DD -- s --> SP
@@ -158,7 +162,7 @@ flowchart LR
     Cfg -- Esc/d --> DD
     Cfg -- o --> O
     Cfg -- u --> O
-    Sess -- Esc/d --> DD
+    Sess -- Esc/d --> Ret[page that opened it]
     O -- p --> Pick[Project picker]
     DD -- p --> Pick
     O -- e --> Exp[Report picker]
@@ -177,7 +181,9 @@ flowchart LR
 - **Overview** (`Page::Overview`): default command-center landing page. Compact KPI strip plus a chronological activity pulse, models, project/tool spend, shell commands, and MCP servers. Acts as the at-a-glance landing for everyday use.
 - **Deep Dive** (`Page::DeepDive`): analysis workbench with every panel listed under [Aggregation](#aggregation), including a larger chronological activity trend, top sessions, model efficiency, and core tool counts that are not on Overview.
 - **Usage** (`Page::Usage`): per-tool 24-hour console with an activity pulse, optional plan-side rate limit gauges, and top-3 models per tool. Built from `Ingested::limits` over the same `ParsedCall` set plus `LimitSnapshot` records. Entering Usage normalizes the visible period to `Period::Today`, the rolling 24-hour window; project filters are deliberately ignored, while sort mode controls section/model order. See [TUI usage](../guides/tui-usage.md#usage-page).
-- **Session** (`Page::Session`): drill-down for one `tool:session_id`. Rendered from `SessionDetailView`, computed by filtering `Ingested.calls` by `session_key(call) == key` and sorting calls with the active sort mode. Live data shows per-call timestamp, model, cost, in/out tokens, cache, tools used, and a 120-char single-line prompt snippet; selecting a call opens a modal with the full stored prompt plus reasoning/web-search counts, bash commands, interaction mode, token quality, and timestamp quality. Sample mode shows a privacy note since per-call records are not bundled.
+- **Coach** (`Page::Coach`): the practice report card — overall grade, per-group scores, triggered findings, and the advisory Setup panel, sharing the desktop Coach page's data and copy. See [Coach engine](coach.md).
+- **Scrollback** (`Page::Scrollback`): full-text transcript search over the archive (see [Archive And Sync](#archive-and-sync)). `/` from the other pages opens it with the query input focused — the TUI's only page-level text input. Enter runs the search synchronously (FTS5 answers in single-digit milliseconds, so the key handler needs no async plumbing) honouring the global tool and project filters; results group per session, Enter drills into the Session page, and results survive the round trip because `ScrollbackState` lives on `App`. Sample mode still searches the live archive — the sample dataset has no transcript index.
+- **Session** (`Page::Session`): drill-down for one `tool:session_id`. Rendered from `SessionDetailView`, computed by filtering `Ingested.calls` by `session_key(call) == key` and sorting calls with the active sort mode. Live data shows per-call timestamp, model, cost, in/out tokens, cache, tools used, and a 120-char single-line prompt snippet; selecting a call opens a modal with the full stored prompt plus reasoning/web-search counts, bash commands, interaction mode, token quality, and timestamp quality. Sample mode shows a privacy note since per-call records are not bundled. Closing the session returns to whichever page opened it (`App::session_return_page`), so Scrollback results and Deep Dive positions both survive the drill-down.
 - **Config** (`Page::Config`): currency override, local data refresh actions (rates, pricing books, Claude/Copilot limit sidecars), and clear-data archive rebuild. The desktop frontend adds native-only controls for open-at-login and Dock/taskbar visibility on its Config page without changing the TUI state machine.
 - **Project picker, Currency picker, Session picker** (`*Modal` structs): each holds `options`, a typeable `query`, and a `filtered: Vec<usize>` mapping; all three share the same case-insensitive substring filter pattern. The project picker pins `All` regardless of query.
 - **Report picker** (`ExportModal`): report chooser for format, period, project/all-projects scope, and redaction. It defaults to the current period and project, always includes all tools, and writes HTML, PDF, SVG, PNG, JSON, Excel, or a CSV folder.
@@ -188,11 +194,12 @@ The modal state is checked in priority order in `App::handle_key`: help, call de
 
 ### Desktop Router And Screens
 
-Desktop page state is owned by `desktop/src/lib/router.svelte.ts`; it is deliberately not serialized through `App::page`. The persistent sidebar links Overview, Analytics, Coach, Models, Projects, then Tools directly above every individual tool row, and Config. Direct tool rows sort by the numeric call counts in the rolling 24-hour Usage snapshot, while primary routes stay fixed. `Tab` cycles the seven primary sidebar screens in that order. Session is a sub-route opened from session rows on Analytics, the tool pages, and the project pages, or from the session picker; closing it returns to the route it was opened from and restores that page's scroll offset. Projects follows the same parent/sub-route shape as Tools: the parent route renders the full uncapped project index (`get_project_index`), and `Route.project` selects a per-project page (`get_project_page`) whose payload bundles the project-filtered dashboard, the full session-option list, discovered sources, and the Coach output/activity profile. Project rows on Overview, Analytics, and the tool pages route into those project pages.
+Desktop page state is owned by `desktop/src/lib/router.svelte.ts`; it is deliberately not serialized through `App::page`. The persistent sidebar links Overview, Analytics, Coach, Scrollback, Models, Projects, then Tools directly above every individual tool row, and Config. Direct tool rows sort by the numeric call counts in the rolling 24-hour Usage snapshot, while primary routes stay fixed. `Tab` cycles the eight primary sidebar screens in that order. Session is a sub-route opened from session rows on Analytics, the tool pages, the project pages, and Scrollback results, or from the session picker; closing it returns to the route it was opened from and restores that page's scroll offset. Projects follows the same parent/sub-route shape as Tools: the parent route renders the full uncapped project index (`get_project_index`), and `Route.project` selects a per-project page (`get_project_page`) whose payload bundles the project-filtered dashboard, the full session-option list, discovered sources, and the Coach output/activity profile. Project rows on Overview, Analytics, and the tool pages route into those project pages.
 
 - **Overview** uses the shared dashboard query for hero KPIs, current utilisation, activity, projects, and models.
 - **Analytics** combines shared ranked tables with `get_analytics` stacked daily/tool data, hour-by-weekday activity, and provider/tool shares.
-- **Coach** calls `get_coach` for practice scores, findings, flow/pace, AI code output, and the day list, plus `get_coach_timeline` for the selected day's session Gantt. Desktop-only; the TUI has no coach page. See [Coach engine](coach.md).
+- **Coach** calls `get_coach` for practice scores, findings, flow/pace, AI code output, and the day list, plus `get_coach_timeline` for the selected day's session Gantt. The TUI Coach page renders the same data and copy. See [Coach engine](coach.md).
+- **Scrollback** searches the archive's transcript index through the `search_transcripts` Tauri command, which runs `src/search.rs` on the blocking pool over its own read-only connection (deliberately skipping the shared `App` lock). Queries are debounced 300 ms as you type (minimum two characters; Enter searches immediately). Page state lives in a module store (`desktop/src/lib/scrollback.svelte.ts`, the router pattern) so drilling into a session and returning restores the query, filters, and results without refetching.
 - **Tools** renders the parent route as a fixed 24-hour overview from the shared usage snapshot — one KPI card per tool linking to its sub-route. A tool sub-route calls `get_tool_page` for period-aware KPIs, utilisation, projects, models, and sessions.
 - **Models** calls `get_model_catalog` for all five periods, groups canonical models by provider, and uses the active period for ranking and expanded per-tool splits.
 - **Projects** uses shared project/session rows and pure `get_session_detail` lookups for project-to-session-to-call drill-down.
@@ -215,7 +222,7 @@ Raw project strings come from each tool's local data. Before display, `tokenuse`
 
 ## Archive And Sync
 
-`src/archive.rs` owns the SQLite archive. Schema v6 stores full `ParsedCall` rows, append-only limit snapshots, and per-source fingerprints in `source_state`. The v4 migration added Coach enrichment (`is_canceled`, prompt/response chars, elapsed time, code blocks, and file lists); v5 adds `interaction_mode`, `token_quality`, and `timestamp_quality`. Existing timestamped rows migrate as exact, and source fingerprints are cleared once so surviving sources can reparse with stronger metadata. Re-inserted duplicate rows backfill previously empty enrichment/provenance without clobbering stronger archived data. Calls remain unique on `(tool, dedup_key)`.
+`src/archive.rs` owns the SQLite archive. Schema v7 stores full `ParsedCall` rows, append-only limit snapshots, per-source fingerprints in `source_state`, and the transcript store behind Scrollback search. The v4 migration added Coach enrichment (`is_canceled`, prompt/response chars, elapsed time, code blocks, and file lists); v5 adds `interaction_mode`, `token_quality`, and `timestamp_quality`. Existing timestamped rows migrate as exact, and source fingerprints are cleared once so surviving sources can reparse with stronger metadata. Re-inserted duplicate rows backfill previously empty enrichment/provenance without clobbering stronger archived data. Calls remain unique on `(tool, dedup_key)`.
 
 v6 adds `source_state.cursor_json`: an adapter-owned incremental-parse cursor persisted beside the fingerprint (purely additive — no forced re-parse). The `ToolAdapter::parse_with_cursor` hook receives the stored cursor and returns the next one; the default ignores cursors and parses fully. Claude Code is the only adapter that implements it: its session JSONL files are append-only, so grown files resume from a stored per-file byte offset instead of re-reading every session in the project directory (see the Claude Code tool doc for the mechanism and boundary caveats). The sync status line on both front-ends appends `· N tail-resumed` when any file resumed this way.
 
@@ -226,6 +233,14 @@ The source fingerprint hook defaults to file metadata for file-backed sources an
 Codex imports limit snapshots from the same rollout JSONL files as calls. Claude Code and Copilot import optional local sidecars from `<config dir>/tokenuse/limits/`: Claude Code reads a status-line JSON capture, while Copilot reads the local `copilot.json` written by the confirmed Config-page sync action. The opt-in `claude_subscription` and `codex_subscription` adapters write `claude_subscription.json` and `codex_subscription.json` sidecars from the same directory; they call Claude.ai's and ChatGPT's user-facing usage endpoints with a session cookie pulled from the OS keychain, and tag the resulting `LimitSnapshot` rows with the existing `claude-code` / `codex` tool IDs so gauges appear inside those sections.
 
 The old JSON ingest cache is now legacy seed input only. New runs do not write `~/.cache/tokenuse/ingest-cache.json`.
+
+### Transcript Store And Scrollback Search
+
+v7 adds the Scrollback transcript store, entirely inside `archive.db`: a `transcripts` table — one row per turn, unique on `(tool, dedup_key)`, with `session_id`, `project`, `timestamp`, `user_text`, `assistant_text`, and an `origin` of `'prompt'` or `'full'` — plus an external-content FTS5 table `transcripts_fts` (`unicode61` tokenizer with `remove_diacritics 2`) kept in sync by `AFTER INSERT`/`DELETE`/`UPDATE` triggers. All five parsers capture full user and assistant turn text through two archive-only `ParsedCall` fields (`transcript_user`, `transcript_assistant`); thinking/reasoning text is excluded everywhere. The fields are written to SQLite during sync and never loaded back — `load_calls()` leaves them `None` — so the resident dataset stays text-free and the display `user_message` stays truncated at 500 chars.
+
+The v7 migration seeds fallback rows from already-archived truncated prompts with `origin = 'prompt'`, so sessions whose source files were deleted before the upgrade stay prompt-searchable, then clears `source_state` to force one full re-parse that re-reads surviving sources with transcript capture and upgrades their rows to `origin = 'full'` (each adapter's fingerprint version, and Claude Code's incremental-cursor `PARSE_VERSION`, was bumped for the same reason). Transcript upserts are grow-only per column — a fresh parse of an append-only source is a superset of what was archived, so longer text wins and a weaker parse never clobbers captured text — with one exception: Claude tail-resumed continuations append their assistant blocks to the stored row, cooperating with the v6 cursor-based tail parsing. Superseded Cursor and Codex rows delete their transcript rows in the same transaction as their call rows.
+
+`src/search.rs` is the query side. `search_transcripts(paths, query, filters)` opens its own read-only SQLite connection per query, so callers on any thread — the TUI key handler, the desktop `search_transcripts` Tauri command, the MCP `scrollback` tool — never contend with the sync writer's connection and can never mutate the archive. Raw input is sanitised into a safe MATCH expression: each whitespace-separated token becomes a quoted phrase (neutralising FTS5 operators such as `-`, `OR`, and `NEAR(`), the final token matches by prefix, and terms are ANDed. Ranking uses bm25 with user text weighted 2:1 over assistant text (prose outranks code-heavy assistant output); results are grouped per session — 20 by default, capped at 50 — each with up to three snippets carrying highlight spans, a `prompt_only` flag for sessions whose only matches are migration-seeded prompt fallbacks, and the session's summed call cost. The project filter accepts a project identity and is expanded to every raw archived project string it groups. The unicode61 tokenizer means word/prefix matching only: no infix substring matches and weak CJK segmentation.
 
 ## Deduplication
 
@@ -313,7 +328,7 @@ Runtime settings live in the platform config directory under `tokenuse`:
 | File / directory | Purpose |
 | --- | --- |
 | `config.json` | User overrides, currently the display currency |
-| `archive.db` | Durable local usage archive loaded by the dashboard |
+| `archive.db` | Durable local usage archive and transcript index loaded by the dashboard |
 | `exchange-rates.json` | Locally downloaded copy of the published currency snapshot |
 | `rates.json` | Legacy local currency snapshot, accepted for older installs |
 | `pricing-upstream.json` | Locally downloaded broad pricing book |

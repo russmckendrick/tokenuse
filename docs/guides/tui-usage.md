@@ -12,7 +12,7 @@ Launch with `tokenuse --sample` to start with bundled sample data even when loca
 
 Two scriptable commands summarize the archive without launching the TUI. `tokenuse status` prints one line with rolling-24-hour and calendar-month totals (cost, calls, sessions). `tokenuse overview` prints a copy-pasteable summary of this month: totals, tokens, per-tool spend, top models, top projects, and a chronological daily table. Both use the configured display currency, emit plain deterministic text (no ANSI), sync the archive the same way `--list-projects` does, and accept `--json` — `status --json` carries raw numeric totals alongside display values, `overview --json` additionally embeds the full dashboard payload for piping into `jq`.
 
-`tokenuse mcp` runs a read-only MCP (Model Context Protocol) server over stdio for LLM clients such as Claude Code — newline-delimited JSON-RPC on stdin/stdout, no network, no extra process left behind. It exposes three tools: `status` (today and calendar-month totals), `overview` (this month's totals, per-tool split, activity categories, models, daily trend), and `projects` (this month's per-project spend). Project names are pseudonymised with a salted hash by default — the salt persists at `<config dir>/tokenuse/mcp-salt` so pseudonyms stay stable across restarts — and `--real-names` disables the mapping. Register it with an MCP client as command `tokenuse`, args `["mcp"]`. Data syncs the archive on first use and refreshes at most every 15 minutes for the lifetime of the server process.
+`tokenuse mcp` runs a read-only MCP (Model Context Protocol) server over stdio for LLM clients such as Claude Code — newline-delimited JSON-RPC on stdin/stdout, no network, no extra process left behind. It exposes four tools: `status` (today and calendar-month totals), `overview` (this month's totals, per-tool split, activity categories, models, daily trend), `projects` (this month's per-project spend), and `scrollback` (full-text search over archived session transcripts). `scrollback` takes a required `query` — terms are ANDed and the final term matches by prefix — plus optional `project` (a project name, a pseudonym from the `projects` tool, or a raw identity), `tool` (a tool id such as `claude-code` or `codex`), and `limit` (1–50 matching sessions, default 20). Results are grouped per session with the tool, project label, last timestamp, cost, match count, a prompt-only flag, and up to three plain-text snippets tagged with role and timestamp; a blank query is a tool error and never touches the archive. Project names are pseudonymised with a salted hash by default — the salt persists at `<config dir>/tokenuse/mcp-salt` so pseudonyms stay stable across restarts — and `--real-names` disables the mapping; `scrollback` project labels follow the same pseudonymisation, while its snippets are raw transcript text, since the client is reading its own local sessions. Register it with an MCP client as command `tokenuse`, args `["mcp"]`. Data syncs the archive on first use and refreshes at most every 15 minutes for the lifetime of the server process.
 
 When a tool shows zero (or a number that looks wrong), `tokenuse doctor` explains why. For every tool adapter it prints the locations it probes and whether they exist, the environment overrides in effect, how many session and limit sources discovery found, and whether a bounded parse sample (up to 8 sources) succeeds, ending in a verdict: `OK`, `NOTHING FOUND` (with the likely cause), `ERRORS` (with the first parse error), or `DISCOVERY FAILED`. It runs read-only and never touches the archive; add `--json` for machine-readable output.
 
@@ -37,6 +37,7 @@ Press `g` to cycle the dashboard sort mode between spend, latest date, and token
 - **Usage**: rolling 24-hour per-tool consoles with a prominent pulse graph, calls/tokens/cost/last-seen totals, optional rate-limit gauges, and top models. When a subscription price is known (a `plan_prices` entry in `config.json` mapping tool id to monthly USD price, or a detected ChatGPT/Copilot self-paid plan), the console header adds a plan-value line comparing the month's API-equivalent spend against the plan price. Opening this tab automatically selects the 24 Hours period so the visible filter matches the console window.
 - **Session**: drill into one `tool:session_id`, inspect per-call timestamp, model, cost, token buckets, tools, and prompt snippet, then open a call detail modal for the full stored prompt, cache price rates, and metadata.
 - **Coach**: the practice report card — overall grade, per-group scores (Prompt Quality, Session Hygiene, Code Review, Tool Mastery), the triggered findings with their occurrence lines, and the advisory Setup panel. The same data and copy as the desktop Coach page, honouring the active period, tool, and project filters.
+- **Scrollback**: full-text search across every archived session transcript. Press `/` to open it with the search input focused, type a phrase, and press Enter; results group per session with highlighted snippets, and Enter drills into the matching session. See [Scrollback](#scrollback).
 - **Config**: display currency, confirmed local downloads for currency rates and pricing books, and a confirmed clear-data action that rebuilds the archive.
 
 ## Tab Guide
@@ -64,11 +65,12 @@ The keyboard reference, footer hints, and TUI shortcut behavior come from the em
 | `g` | Cycle sort mode: spend, latest date, token use |
 | `Shift-D` | Toggle between live and sample data |
 | `p` | Open project picker |
-| `Tab` / `Shift-Tab` | Cycle Overview, Deep Dive, Usage, and Coach |
+| `Tab` / `Shift-Tab` | Cycle Overview, Deep Dive, Usage, Coach, and Scrollback |
 | `o` | Open Overview |
 | `d` | Open Deep Dive |
 | `u` | Open Usage / rate limits |
 | `k` | Open the Coach practice report |
+| `/` | Open Scrollback transcript search |
 | `c` | Open Configuration |
 | `s` | Open session picker and drill into a single session |
 | `e` | Generate a project or all-projects report |
@@ -76,7 +78,7 @@ The keyboard reference, footer hints, and TUI shortcut behavior come from the em
 | `r` | Sync the local archive in place |
 | `h` or `?` | Open the keybinding reference |
 
-In the session page, use `Up` / `Down`, `PgUp` / `PgDn`, `Home` / `End` to move through calls, `Enter` or a mouse click to open call details, and `Esc` or `d` to return to Deep Dive. On Deep Dive, a mouse click on a Top Sessions row opens that session's page directly. In pickers and configuration, use `Up` / `Down`, `Home` / `End`, `Enter`, and `Esc`.
+In the session page, use `Up` / `Down`, `PgUp` / `PgDn`, `Home` / `End` to move through calls, `Enter` or a mouse click to open call details, and `Esc` or `d` to return to the page that opened the session — Deep Dive for its Top Sessions rows and the `s` picker, Scrollback for search results. On Deep Dive, a mouse click on a Top Sessions row opens that session's page directly. In pickers and configuration, use `Up` / `Down`, `Home` / `End`, `Enter`, and `Esc`.
 
 ## Usage Page
 
@@ -88,6 +90,18 @@ Each tool section includes:
 - One 24-hour pulse graph plus calls, tokens, cost, and last seen time.
 - Zero or more limit gauge rows from imported `LimitSnapshot` records. Codex imports snapshots from rollout JSONL; Claude Code and Copilot import optional local sidecars from the tokenuse config directory. Copilot AI Credits rows show the exact used and remaining/total credit counts, reset time, plan, and whether additional usage is enabled.
 - Up to three top model rows for that tool's 24-hour slice.
+
+## Scrollback
+
+Scrollback searches the full text of every archived session transcript — your prompts and the assistant's replies, across all five tools. Press `/` from any page (or Tab-cycle to the fifth tab) to open it with the search input focused; it is the TUI's only page-level text input. Type a phrase and press `Enter` to run the search — nothing searches as you type. Matching is word-based: terms are ANDed, the final term matches by prefix (`lifeti` finds `lifetimes`), and there is no substring matching inside words.
+
+While the input is focused, `Backspace` edits, `Ctrl+U` clears the query, and `Esc` leaves the input so the page keys work. With the input unfocused, `/` or `Esc` refocuses it, `Up` / `Down` (plus `PgUp` / `PgDn`, `Home` / `End`) move through the result groups, and `Enter` opens the selected session's page. `Esc` from the session returns to Scrollback with the query and results intact — session pages return to whichever page opened them.
+
+Results group per matching session, ranked best match first, with the project, tool, date, session cost, and match count in the header and up to three snippets below it, each tagged `you` or `assistant` with the matched terms highlighted; `+N more matches in this session` counts the rest. A `prompt only` badge marks sessions whose source files were already gone when transcript capture landed — only their stored 500-char prompts are searchable.
+
+The search honours the global tool and project filters: `t` cycles the tool and `p` opens the project picker, and the filters apply the next time you run the search (press `/` then `Enter` to re-run). Searches read the live archive even in sample-data mode — the sample dataset has no transcript index, and the page notes this.
+
+Transcript text lives in `archive.db` alongside the usage rows; the Config page's Clear Data action is the way to purge it.
 
 ## Configuration
 
@@ -112,7 +126,7 @@ The Config page lists the published rates and pricing book URLs next to the loca
 
 Pressing Enter on **Claude.ai subscription quota** or **ChatGPT (Codex) subscription quota** opens a Subscription cookie modal. Paste a `sessionKey` (Claude) or the two `__Secure-next-auth.session-token` shards plus optional extras (Codex), then pick **Save & sync**, **Sync with stored cookie**, or **Clear stored cookie**. Bracketed paste is enabled so long cookies arrive as a single chunk, the input is masked to `•`, and the sync runs on a worker thread so the TUI stays responsive. See [docs/development/tools/claude-subscription.md](../development/tools/claude-subscription.md) and [docs/development/tools/codex-subscription.md](../development/tools/codex-subscription.md).
 
-The Config page's clear-data action asks for confirmation, deletes `archive.db`, and immediately reimports from local tool history. Config, exchange rates, pricing books, limit sidecars, legacy pricing snapshots, and reports are kept. Archive-only rows disappear if the original source files are gone, and rebuilt rows use the current configured pricing.
+The Config page's clear-data action asks for confirmation, deletes `archive.db`, and immediately reimports from local tool history. Config, exchange rates, pricing books, limit sidecars, legacy pricing snapshots, and reports are kept. Archive-only rows disappear if the original source files are gone, and rebuilt rows use the current configured pricing. Once `archive.db` exists, the row's value leads with its current size (for example `Archive 12.3 MiB incl. transcript index`) — the archive also holds the Scrollback transcript index, and clearing data is the way to purge captured transcript text.
 
 ## Reports
 

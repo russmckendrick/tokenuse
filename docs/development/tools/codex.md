@@ -186,7 +186,11 @@ The parser also consumes four `event_msg` inner types that never produce a `Pars
 
 `apply_patch` function-call arguments are **not** parsed for file paths — `patch_apply_end` carries the authoritative applied result, including files the patch actually touched. Rollouts old enough to lack these events simply leave the enrichment fields `NULL`/empty.
 
-The adapter's fingerprint prefix is `codex-v6-fork-aware-dedup`; bumping it forces archived rollouts back through the parser after an extraction change. Version 6 re-keys every call onto lineage-addressed dedup keys (see [Deduplication and forked sessions](#deduplication-and-forked-sessions)) and retires the legacy path-based rows via supersession.
+The adapter's fingerprint prefix is `codex-v7-transcripts`; bumping it forces archived rollouts back through the parser after an extraction change. Version 6 re-keyed every call onto lineage-addressed dedup keys (see [Deduplication and forked sessions](#deduplication-and-forked-sessions)) and retires the legacy path-based rows via supersession; version 7 adds transcript capture.
+
+## Transcript capture (archive v7)
+
+Each emitted call also stores its full turn text for Scrollback search: the latest `user_message` text untruncated (unlike the 500-char display field) and the accumulated `agent_message` text since the last emitted call. `agent_reasoning` text stays excluded, mirroring `response_chars` and Claude thinking blocks. The text rides the two archive-only `ParsedCall` fields (`transcript_user` / `transcript_assistant`) into the archive's `transcripts` table during sync and is never loaded back into memory. When the v6 re-keying retires a legacy path-based row, that row's transcript entry is deleted in the same transaction. The `codex-v7-transcripts` fingerprint bump forces the one-time re-parse that backfills full text into existing archives.
 
 ## Known limitations
 

@@ -116,6 +116,10 @@ Canonical keys are stable and path-independent:
 
 Each reconstructed call carries transient exact legacy keys for the bubble rows, `cursor:agentKv:<request-id>`, and old path-based transcripts it replaces. Archive insertion and deletion share one transaction. Only those listed rows are deleted after the canonical row is accepted; old rows whose source turn cannot be reconstructed remain untouched.
 
+## Transcript capture (archive v7)
+
+Every reconstructed turn also stores its full user message and assistant response text for Scrollback search, via the two archive-only `ParsedCall` fields (`transcript_user` / `transcript_assistant`) written to the archive's `transcripts` table during sync and never loaded back into memory; the display `user_message` stays truncated at 500 chars. Reasoning and redacted-reasoning blocks accumulate in their own buffer and are excluded from the captured assistant text (note that Cursor's `response_chars` *does* count reasoning length — the transcript does not). When a canonical row supersedes legacy bubble/AgentKv/transcript rows, the superseded rows' transcript entries are deleted in the same transaction. The adapter's fingerprint version is `cursor-v5-transcripts`; the v5 bump forces the one-time re-parse that backfills full text into existing archives.
+
 ## Coach
 
 Cursor supports conversational-session and file-reference capabilities. It contributes to prompt quality, session shape, model use, tool loops, code output, project activity, and file-context findings whenever those fields exist.
