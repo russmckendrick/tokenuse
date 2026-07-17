@@ -67,6 +67,9 @@ pub(crate) fn mark_quitting<R: Runtime>(app_handle: &tauri::AppHandle<R>) {
     if let Ok(mut state) = state.inner().lock() {
         state.quitting = true;
     }
+    // Join the listener's threads before exit instead of aborting them
+    // mid-request; the process teardown would close the socket anyway.
+    crate::mcp_http::stop();
 }
 
 pub(crate) fn is_quitting<R: Runtime>(app_handle: &tauri::AppHandle<R>) -> bool {

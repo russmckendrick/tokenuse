@@ -11,6 +11,8 @@ pub const CURRENCY_RATES_URL: &str =
     "https://raw.githubusercontent.com/russmckendrick/tokenuse/refs/heads/main/costs/exchange-rates.json";
 pub const FRANKFURTER_RATES_URL: &str = "https://api.frankfurter.dev/v2/rates?base=USD";
 
+pub const DEFAULT_MCP_HTTP_PORT: u16 = 20151;
+
 pub const DEFAULT_BACKGROUND_ALERT_MIN_COST_USD: f64 = 1.0;
 pub const DEFAULT_BACKGROUND_ALERT_MIN_TOKENS: i64 = 100_000;
 pub const DEFAULT_BACKGROUND_ALERT_MIN_CALLS: i64 = 25;
@@ -24,6 +26,7 @@ const LOCAL_PRICING_OVERRIDES_FILE_NAME: &str = "pricing-overrides.json";
 const LEGACY_LOCAL_PRICING_FILE_NAME: &str = "pricing-snapshot.json";
 const ARCHIVE_DB_FILE_NAME: &str = "archive.db";
 const MCP_SALT_FILE_NAME: &str = "mcp-salt";
+const MCP_TOKEN_FILE_NAME: &str = "mcp-token";
 const TOKEN_USE_APP_DIR_NAME: &str = "Token Use App";
 const LIMITS_DIR_NAME: &str = "limits";
 const CLAUDE_CODE_LIMITS_FILE_NAME: &str = "claude-code.json";
@@ -42,6 +45,7 @@ pub struct ConfigPaths {
     pub pricing_snapshot_file: PathBuf,
     pub archive_db_file: PathBuf,
     pub mcp_salt_file: PathBuf,
+    pub mcp_token_file: PathBuf,
     pub token_use_app_dir: PathBuf,
     pub limits_dir: PathBuf,
     pub claude_code_limits_file: PathBuf,
@@ -62,6 +66,7 @@ impl ConfigPaths {
             pricing_snapshot_file: dir.join(LEGACY_LOCAL_PRICING_FILE_NAME),
             archive_db_file: dir.join(ARCHIVE_DB_FILE_NAME),
             mcp_salt_file: dir.join(MCP_SALT_FILE_NAME),
+            mcp_token_file: dir.join(MCP_TOKEN_FILE_NAME),
             token_use_app_dir: dir.join(TOKEN_USE_APP_DIR_NAME),
             claude_code_limits_file: limits_dir.join(CLAUDE_CODE_LIMITS_FILE_NAME),
             copilot_limits_file: limits_dir.join(COPILOT_LIMITS_FILE_NAME),
@@ -96,6 +101,8 @@ pub struct UserConfig {
     pub background_alerts: BackgroundAlertsConfig,
     #[serde(default)]
     pub desktop: DesktopConfig,
+    #[serde(default)]
+    pub mcp: McpConfig,
     /// Monthly subscription price per tool id (USD). Powers the plan-value
     /// line on Usage consoles; absent tools fall back to a detected-SKU
     /// default where one exists, otherwise show no plan value.
@@ -111,6 +118,7 @@ impl Default for UserConfig {
             currency: DEFAULT_CURRENCY.into(),
             background_alerts: BackgroundAlertsConfig::default(),
             desktop: DesktopConfig::default(),
+            mcp: McpConfig::default(),
             plan_prices: BTreeMap::new(),
             overrides: BTreeMap::new(),
         }
@@ -130,6 +138,31 @@ impl Default for DesktopConfig {
         Self {
             open_at_login: false,
             show_dock_or_taskbar_icon: default_show_dock_or_taskbar_icon(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct McpConfig {
+    #[serde(default)]
+    pub http_enabled: bool,
+    #[serde(default = "default_mcp_http_port")]
+    pub http_port: u16,
+}
+
+impl Default for McpConfig {
+    fn default() -> Self {
+        Self {
+            http_enabled: false,
+            http_port: DEFAULT_MCP_HTTP_PORT,
+        }
+    }
+}
+
+impl McpConfig {
+    fn normalize(&mut self) {
+        if self.http_port == 0 {
+            self.http_port = DEFAULT_MCP_HTTP_PORT;
         }
     }
 }
@@ -231,6 +264,7 @@ impl UserConfig {
         self.currency =
             normalize_currency_code(&self.currency).unwrap_or_else(|| DEFAULT_CURRENCY.into());
         self.background_alerts.normalize();
+        self.mcp.normalize();
         self.plan_prices
             .retain(|_, price| price.is_finite() && *price > 0.0);
     }
@@ -251,6 +285,10 @@ fn default_currency() -> String {
 
 fn default_background_alerts_enabled() -> bool {
     true
+}
+
+fn default_mcp_http_port() -> u16 {
+    DEFAULT_MCP_HTTP_PORT
 }
 
 fn default_show_dock_or_taskbar_icon() -> bool {
@@ -350,6 +388,60 @@ mod tests {
             config.background_alerts.cooldown_minutes,
             DEFAULT_BACKGROUND_ALERT_COOLDOWN_MINUTES
         );
+    }
+
+    #[test]
+    fn default_config_disables_mcp_http_on_the_default_port() {
+        let config = UserConfig::default();
+
+        assert!(!config.mcp.http_enabled);
+        assert_eq!(config.mcp.http_port, DEFAULT_MCP_HTTP_PORT);
+        assert_eq!(
+            temp_paths("mcp-token")
+                .mcp_token_file
+                .file_name()
+                .and_then(|name| name.to_str()),
+            Some("mcp-token")
+        );
+    }
+
+    #[test]
+    fn mcp_config_loads_from_file_and_normalizes_port_zero() {
+        let paths = temp_paths("custom-mcp");
+        paths.ensure_dir().unwrap();
+        std::fs::write(
+            &paths.config_file,
+            r#"{
+  "mcp": {
+    "http_enabled": true,
+    "http_port": 0
+  }
+}
+"#,
+        )
+        .unwrap();
+
+        let config = UserConfig::load(&paths).unwrap();
+
+        assert!(config.mcp.http_enabled);
+        assert_eq!(config.mcp.http_port, DEFAULT_MCP_HTTP_PORT);
+
+        let _ = std::fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn legacy_config_without_mcp_section_still_parses() {
+        let paths = temp_paths("legacy-no-mcp");
+        paths.ensure_dir().unwrap();
+        std::fs::write(&paths.config_file, "{\n  \"currency\": \"EUR\"\n}\n").unwrap();
+
+        let config = UserConfig::load(&paths).unwrap();
+
+        assert_eq!(config.currency, "EUR");
+        assert!(!config.mcp.http_enabled);
+        assert_eq!(config.mcp.http_port, DEFAULT_MCP_HTTP_PORT);
+
+        let _ = std::fs::remove_dir_all(paths.dir);
     }
 
     #[test]

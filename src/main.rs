@@ -118,8 +118,16 @@ fn handle_subcommand() -> Result<Option<DashboardOptions>> {
             overview::run_overview(json)?;
             Ok(None)
         }
-        CliAction::Mcp { real_names } => {
-            mcp::run(real_names)?;
+        CliAction::Mcp {
+            real_names,
+            http,
+            port,
+        } => {
+            if http {
+                mcp::http::run_foreground(real_names, port)?;
+            } else {
+                mcp::run(real_names)?;
+            }
             Ok(None)
         }
         CliAction::SetClaudeCookie(value) => {
@@ -150,10 +158,20 @@ enum CliAction {
     RefreshPrices,
     GenerateCurrencyJson,
     Report,
-    Doctor { json: bool },
-    Status { json: bool },
-    Overview { json: bool },
-    Mcp { real_names: bool },
+    Doctor {
+        json: bool,
+    },
+    Status {
+        json: bool,
+    },
+    Overview {
+        json: bool,
+    },
+    Mcp {
+        real_names: bool,
+        http: bool,
+        port: Option<u16>,
+    },
     SetClaudeCookie(String),
     ClearClaudeCookie,
     SetCodexCookie(String),
@@ -226,8 +244,15 @@ fn cli_action(args: &[String]) -> CliAction {
         if args.iter().skip(1).any(|arg| is_help_arg(arg)) {
             return CliAction::Help;
         }
+        let port = match flag_value(args, "--port").map(|value| value.parse::<u16>()) {
+            None => None,
+            Some(Ok(port)) => Some(port),
+            Some(Err(_)) => return CliAction::Help,
+        };
         return CliAction::Mcp {
             real_names: args.iter().skip(1).any(|arg| arg == "--real-names"),
+            http: args.iter().skip(1).any(|arg| arg == "--http"),
+            port,
         };
     }
 
@@ -341,7 +366,7 @@ fn print_help() {
     {name} doctor [--json]
     {name} status [--json]
     {name} overview [--json]
-    {name} mcp [--real-names]
+    {name} mcp [--http] [--port N] [--real-names]
 
 {commands}
     report                         {report_command}
@@ -349,6 +374,8 @@ fn print_help() {
     status                         {status_command}
     overview                       {overview_command}
     mcp                            {mcp_command}
+        --http                     {http_flag}
+        --port N                   {port_flag}
         --real-names               {real_names_flag}
 
 {flags}
@@ -371,6 +398,8 @@ fn print_help() {
         status_command = copy.cli.status_command,
         overview_command = copy.cli.overview_command,
         mcp_command = copy.cli.mcp_command,
+        http_flag = copy.cli.http_flag,
+        port_flag = copy.cli.port_flag,
         real_names_flag = copy.cli.real_names_flag,
         help_flag = copy.cli.help_flag,
         version_flag = copy.cli.version_flag,
@@ -616,13 +645,53 @@ mod tests {
     fn mcp_command_routes_to_stdio_server() {
         assert_eq!(
             cli_action(&args(&["mcp"])),
-            CliAction::Mcp { real_names: false }
+            CliAction::Mcp {
+                real_names: false,
+                http: false,
+                port: None,
+            }
         );
         assert_eq!(
             cli_action(&args(&["mcp", "--real-names"])),
-            CliAction::Mcp { real_names: true }
+            CliAction::Mcp {
+                real_names: true,
+                http: false,
+                port: None,
+            }
         );
         assert_eq!(cli_action(&args(&["mcp", "--help"])), CliAction::Help);
+    }
+
+    #[test]
+    fn mcp_http_flags_route_to_http_server() {
+        assert_eq!(
+            cli_action(&args(&["mcp", "--http"])),
+            CliAction::Mcp {
+                real_names: false,
+                http: true,
+                port: None,
+            }
+        );
+        assert_eq!(
+            cli_action(&args(&["mcp", "--http", "--port", "9999"])),
+            CliAction::Mcp {
+                real_names: false,
+                http: true,
+                port: Some(9999),
+            }
+        );
+        assert_eq!(
+            cli_action(&args(&["mcp", "--http", "--port=9999", "--real-names"])),
+            CliAction::Mcp {
+                real_names: true,
+                http: true,
+                port: Some(9999),
+            }
+        );
+        assert_eq!(
+            cli_action(&args(&["mcp", "--http", "--port", "banana"])),
+            CliAction::Help
+        );
     }
 
     #[test]

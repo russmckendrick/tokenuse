@@ -268,6 +268,80 @@ pub(crate) async fn set_show_dock_or_taskbar_icon(
 }
 
 #[tauri::command]
+pub(crate) async fn set_mcp_http_enabled(
+    enabled: bool,
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    with_app(state, move |app| {
+        if enabled {
+            // Bind before persisting: a port conflict leaves the saved
+            // config disabled so the toggle snaps back on the next poll.
+            let bound = crate::mcp_http::start(app.settings.mcp.http_port)?;
+            app.settings.mcp.http_enabled = true;
+            save_user_settings(app)?;
+            app.status = Some(AppStatus::new(
+                copy::template(
+                    &copy::copy().status.mcp_http_started,
+                    &[("port", bound.to_string())],
+                ),
+                StatusTone::Success,
+            ));
+        } else {
+            crate::mcp_http::stop();
+            app.settings.mcp.http_enabled = false;
+            save_user_settings(app)?;
+            app.status = Some(AppStatus::new(
+                copy::copy().status.mcp_http_stopped.clone(),
+                StatusTone::Success,
+            ));
+        }
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn set_mcp_http_port(
+    port: u16,
+    state: State<'_, SharedState>,
+) -> CommandResult<DesktopSnapshot> {
+    with_app(state, move |app| {
+        if port == 0 {
+            return Err(CommandError::Tokenuse(
+                copy::copy().status.mcp_http_port_invalid.clone(),
+            ));
+        }
+        app.settings.mcp.http_port = port;
+        save_user_settings(app)?;
+        if app.settings.mcp.http_enabled {
+            crate::mcp_http::start(port)?;
+        }
+        app.status = Some(AppStatus::new(
+            copy::template(
+                &copy::copy().status.mcp_http_port_set,
+                &[("port", port.to_string())],
+            ),
+            StatusTone::Success,
+        ));
+        Ok(snapshot(app))
+    })
+    .await
+}
+
+#[tauri::command]
+/// The bearer token never rides in the snapshot poll; the Config page asks
+/// for it on demand (reveal / copy buttons). Reads only the token file, so
+/// it skips the shared App lock like `get_doctor`.
+pub(crate) async fn reveal_mcp_token() -> CommandResult<String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        tokenuse::mcp::http::load_or_create_token(&tokenuse::config::ConfigPaths::default())
+            .map_err(|e| CommandError::Tokenuse(e.to_string()))
+    })
+    .await
+    .map_err(|e| CommandError::Join(e.to_string()))?
+}
+
+#[tauri::command]
 pub(crate) async fn toggle_data_source(
     state: State<'_, SharedState>,
 ) -> CommandResult<DesktopSnapshot> {

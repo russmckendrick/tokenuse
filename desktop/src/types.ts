@@ -631,6 +631,7 @@ export type CopyDeck = {
   };
   session: Record<string, string>;
   scrollback: Record<string, string>;
+  mcp: Record<string, string>;
   modals: Record<string, string>;
   actions: Record<string, string>;
   desktop: Record<string, string>;
@@ -675,6 +676,15 @@ export type DesktopSnapshot = {
   report_dir: string;
   report_formats: OptionItem<ReportFormatId>[];
   subscription_cookies: SubscriptionCookieState;
+  mcp_http: McpHttpState;
+};
+
+export type McpHttpState = {
+  enabled: boolean;
+  port: number;
+  running: boolean;
+  endpoint: string;
+  last_error: string | null;
 };
 
 export type SubscriptionCookieState = {

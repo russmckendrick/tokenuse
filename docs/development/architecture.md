@@ -242,6 +242,17 @@ The v7 migration seeds fallback rows from already-archived truncated prompts wit
 
 `src/search.rs` is the query side. `search_transcripts(paths, query, filters)` opens its own read-only SQLite connection per query, so callers on any thread — the TUI key handler, the desktop `search_transcripts` Tauri command, the MCP `scrollback` tool — never contend with the sync writer's connection and can never mutate the archive. Raw input is sanitised into a safe MATCH expression: each whitespace-separated token becomes a quoted phrase (neutralising FTS5 operators such as `-`, `OR`, and `NEAR(`), the final token matches by prefix, and terms are ANDed. Ranking uses bm25 with user text weighted 2:1 over assistant text (prose outranks code-heavy assistant output); results are grouped per session — 20 by default, capped at 50 — each with up to three snippets carrying highlight spans, a `prompt_only` flag for sessions whose only matches are migration-seeded prompt fallbacks, and the session's summed call cost. The project filter accepts a project identity and is expanded to every raw archived project string it groups. The unicode61 tokenizer means word/prefix matching only: no infix substring matches and weak CJK segmentation.
 
+## MCP Server
+
+`src/mcp.rs` is a read-only MCP server with a transport-agnostic core: `McpServer::handle_line(&str) -> Option<Value>` parses one JSON-RPC message and returns the response (`None` for notifications), with a 15-minute-TTL data cache fed by `archive::sync_and_load`. Two transports front it:
+
+- **stdio** (`tokenuse mcp`): newline-delimited JSON-RPC on stdin/stdout, spawned per client session. No network, no async runtime.
+- **Streamable HTTP** (`src/mcp/http.rs`; `tokenuse mcp --http`, or the desktop app's Config-page toggle): a hand-rolled `std::net::TcpListener` bound to `127.0.0.1` only — still no async runtime and no new dependencies. `POST /mcp` carries one JSON-RPC message per request and answers `application/json` (HTTP 202 for notifications); `GET` is 405 and no `Mcp-Session-Id` is issued, which is the spec's stateless mode. Every request must present `Authorization: Bearer <token>` — the token lives beside the pseudonym salt at `<config dir>/tokenuse/mcp-token` (0600 on Unix; created on first use, deleted to rotate) — and `Host`/`Origin` headers must be localhost, so browsers and DNS-rebinding pages cannot reach the endpoint. One shared `Mutex<McpServer>` serves all connections (thread-per-connection, `Connection: close`), so the TTL cache is shared and tool calls serialize. Shutdown raises an `AtomicBool` and self-connects to unblock the blocking `accept()`.
+
+The desktop backend hosts the listener via `desktop/src-tauri/src/mcp_http.rs` (process-global handle; started at launch when `config.json`'s `mcp.http_enabled` is set, toggled by the `set_mcp_http_enabled` / `set_mcp_http_port` commands). The snapshot carries only `{enabled, port, running, endpoint, last_error}`; the token is fetched on demand by `reveal_mcp_token` and never rides the 3-second poll. The desktop endpoint always pseudonymises project names; `--real-names` exists only on the CLI transports.
+
+See [MCP server](mcp-server.md) for the full transport internals (request lifecycle, security-gate matrix, shutdown, data-freshness cache) and the four tools' input and output schemas, with diagrams.
+
 ## Deduplication
 
 A single shared `HashSet<String>` is passed through every adapter during a run. Each parser creates a stable `dedup_key` for the call shape it understands:
@@ -334,6 +345,8 @@ Runtime settings live in the platform config directory under `tokenuse`:
 | `pricing-upstream.json` | Locally downloaded broad pricing book |
 | `pricing-overrides.json` | Locally downloaded official overrides and aliases |
 | `pricing-snapshot.json` | Legacy local pricing snapshot, accepted for older installs |
+| `mcp-salt` | Persistent salt for MCP project-name pseudonyms |
+| `mcp-token` | Bearer token for the opt-in MCP HTTP endpoint (owner-readable only; delete to rotate) |
 | `reports/` | Fallback output directory when no Downloads folder can be resolved |
 
 USD is the default display currency. The dashboard still stores calculated spend as `cost_usd`; aggregation sums USD and formats the final display values through the active currency table.

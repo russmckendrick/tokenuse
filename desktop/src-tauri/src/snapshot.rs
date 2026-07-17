@@ -52,6 +52,18 @@ pub(crate) struct DesktopSnapshot {
     pub(crate) report_dir: String,
     pub(crate) report_formats: Vec<OptionItem>,
     pub(crate) subscription_cookies: SubscriptionCookieState,
+    pub(crate) mcp_http: McpHttpState,
+}
+
+/// Bearer token deliberately absent — the frontend fetches it on demand via
+/// `reveal_mcp_token`, mirroring the booleans-only cookie state below.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct McpHttpState {
+    pub(crate) enabled: bool,
+    pub(crate) port: u16,
+    pub(crate) running: bool,
+    pub(crate) endpoint: String,
+    pub(crate) last_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -230,6 +242,18 @@ pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
             })
             .collect(),
         subscription_cookies: subscription_cookie_state(),
+        mcp_http: mcp_http_state(app),
+    }
+}
+
+fn mcp_http_state(app: &App) -> McpHttpState {
+    let (running, last_error) = crate::mcp_http::status();
+    McpHttpState {
+        enabled: app.settings.mcp.http_enabled,
+        port: app.settings.mcp.http_port,
+        running,
+        endpoint: tokenuse::mcp::http::endpoint_url(app.settings.mcp.http_port),
+        last_error,
     }
 }
 

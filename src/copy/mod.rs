@@ -404,6 +404,7 @@ pub struct PanelCopy {
     pub money_and_data: String,
     pub tool_integrations: String,
     pub plan_value: String,
+    pub mcp_server: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -539,6 +540,7 @@ pub struct ConfigValuesCopy {
     pub build_archive_from_history: String,
     pub fallback_priced_models: String,
     pub mcp_hint: String,
+    pub mcp_hint_http: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -918,6 +920,9 @@ pub struct CliCopy {
     pub overview_command: String,
     pub mcp_command: String,
     pub real_names_flag: String,
+    pub http_flag: String,
+    pub port_flag: String,
+    pub mcp_http_listening: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -955,6 +960,21 @@ pub struct McpCopy {
     pub scrollback_arg_tool: String,
     pub scrollback_missing_query: String,
     pub unknown_tool: String,
+    pub http_hint: String,
+    pub http_toggle: String,
+    pub endpoint_label: String,
+    pub port_label: String,
+    pub status_label: String,
+    pub token_label: String,
+    pub running: String,
+    pub stopped: String,
+    pub reveal_token: String,
+    pub hide_token: String,
+    pub copy_token: String,
+    pub copy_snippet: String,
+    pub copied: String,
+    pub token_masked: String,
+    pub snippet: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -1069,6 +1089,11 @@ pub struct StatusCopy {
     pub export_folder_path_empty: String,
     pub background_usage_changed: String,
     pub background_usage_body: String,
+    pub mcp_http_started: String,
+    pub mcp_http_stopped: String,
+    pub mcp_http_start_failed: String,
+    pub mcp_http_port_set: String,
+    pub mcp_http_port_invalid: String,
 }
 
 pub fn copy() -> &'static CopyDeck {
@@ -1160,6 +1185,12 @@ impl CopyDeck {
         ensure_template(&self.modals.subscription_cookie.save_failed, &["error"])?;
         ensure_template(&self.modals.subscription_cookie.clear_failed, &["error"])?;
         ensure_template(&self.status.background_usage_body, &["summary"])?;
+        ensure_template(&self.status.mcp_http_started, &["port"])?;
+        ensure_template(&self.status.mcp_http_start_failed, &["error"])?;
+        ensure_template(&self.status.mcp_http_port_set, &["port"])?;
+        ensure_template(&self.config.values.mcp_hint_http, &["port"])?;
+        ensure_template(&self.cli.mcp_http_listening, &["endpoint"])?;
+        ensure_template(&self.mcp.snippet, &["endpoint", "token"])?;
         ensure_template(&self.report_cli.prompt, &["label", "default"])?;
         ensure_template(&self.report_cli.invalid_number, &["max"])?;
         ensure_template(&self.report_cli.wrote, &["format", "path"])?;

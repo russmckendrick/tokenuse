@@ -53,6 +53,10 @@ export const api = {
   }) => invoke<ScrollbackResults>('search_transcripts', args),
   setOpenAtLogin: (enabled: boolean) =>
     invoke<DesktopSnapshot>('set_open_at_login', { enabled }),
+  setMcpHttpEnabled: (enabled: boolean) =>
+    invoke<DesktopSnapshot>('set_mcp_http_enabled', { enabled }),
+  setMcpHttpPort: (port: number) => invoke<DesktopSnapshot>('set_mcp_http_port', { port }),
+  revealMcpToken: () => invoke<string>('reveal_mcp_token'),
   setShowDockOrTaskbarIcon: (enabled: boolean) =>
     invoke<DesktopSnapshot>('set_show_dock_or_taskbar_icon', { enabled }),
   refreshArchive: () => invoke<DesktopSnapshot>('refresh_archive'),

@@ -474,7 +474,8 @@
     "local_files": "Local Files",
     "money_and_data": "Money & Data",
     "tool_integrations": "Tool Integrations",
-    "plan_value": "Plan Value"
+    "plan_value": "Plan Value",
+    "mcp_server": "MCP Server"
   },
   "tables": {
     "blank": "",
@@ -613,7 +614,8 @@
       "archive_size": "Archive {size} incl. transcript index",
       "build_archive_from_history": "Build archive.db from local history",
       "fallback_priced_models": "fallback pricing in use for {models} — add a pricing alias or override so their cost is real",
-      "mcp_hint": "tokenuse mcp · stdio · projects pseudonymised"
+      "mcp_hint": "tokenuse mcp · stdio · projects pseudonymised",
+      "mcp_hint_http": "tokenuse mcp · HTTP on 127.0.0.1:{port} · projects pseudonymised"
     },
     "paths": {
       "config_dir": "Config dir",
@@ -983,7 +985,10 @@
     "status_command": "Print one line with 24-hour and month totals",
     "overview_command": "Print a copy-pasteable summary of this month",
     "mcp_command": "Run a read-only MCP stdio server for LLM clients",
-    "real_names_flag": "Expose real project names over MCP (default: pseudonymised)"
+    "real_names_flag": "Expose real project names over MCP (default: pseudonymised)",
+    "http_flag": "Serve MCP over HTTP on 127.0.0.1 instead of stdio",
+    "port_flag": "Port for --http (overrides the configured port)",
+    "mcp_http_listening": "MCP HTTP server listening on {endpoint}"
   },
   "overview": {
     "status_line": "24h {today_cost} ({today_calls} calls, {today_sessions} sessions) | month {month_cost} ({month_calls} calls, {month_sessions} sessions)",
@@ -1000,7 +1005,22 @@
     "scrollback_arg_project": "Restrict to one project: a project name or pseudonym from the projects tool",
     "scrollback_arg_tool": "Restrict to one tool id, e.g. claude-code, codex, cursor, copilot, or gemini",
     "scrollback_missing_query": "The scrollback tool needs a non-empty query argument",
-    "unknown_tool": "Unknown tool: {name}"
+    "unknown_tool": "Unknown tool: {name}",
+    "http_hint": "Serve the same read-only MCP tools over HTTP on 127.0.0.1 while the app is running. Clients connect with the endpoint and bearer token below; nothing is reachable from other machines.",
+    "http_toggle": "Serve over HTTP",
+    "endpoint_label": "Endpoint",
+    "port_label": "Port",
+    "status_label": "Status",
+    "token_label": "Bearer token",
+    "running": "Running",
+    "stopped": "Stopped",
+    "reveal_token": "Reveal",
+    "hide_token": "Hide",
+    "copy_token": "Copy token",
+    "copy_snippet": "Copy command",
+    "copied": "Copied",
+    "token_masked": "••••••••••••",
+    "snippet": "claude mcp add --transport http tokenuse {endpoint} --header \"Authorization: Bearer {token}\""
   },
   "categories": {
     "brainstorming": "Brainstorming",
@@ -1647,6 +1667,11 @@
     "taskbar_visibility_failed": "Taskbar visibility failed · {error}",
     "export_folder_path_empty": "Report folder path is empty",
     "background_usage_changed": "Usage changed",
-    "background_usage_body": "Usage jumped by {summary} since the last alert baseline."
+    "background_usage_body": "Usage jumped by {summary} since the last alert baseline.",
+    "mcp_http_started": "MCP HTTP server started · port {port}",
+    "mcp_http_stopped": "MCP HTTP server stopped",
+    "mcp_http_start_failed": "MCP HTTP server failed · {error}",
+    "mcp_http_port_set": "MCP HTTP port set · {port}",
+    "mcp_http_port_invalid": "MCP HTTP port must be between 1 and 65535"
   }
 }

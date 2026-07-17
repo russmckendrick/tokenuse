@@ -9,6 +9,11 @@
 //! (`ConfigPaths::mcp_salt_file`) so pseudonyms stay stable across server
 //! restarts without being derivable by a client that has never seen the
 //! real names. `--real-names` disables the mapping.
+//!
+//! The optional loopback HTTP transport (`tokenuse mcp --http`, desktop
+//! toggle) lives in [`http`] and fronts the same [`McpServer`] dispatcher.
+
+pub mod http;
 
 use std::fs;
 use std::io::{self, BufRead, Write};

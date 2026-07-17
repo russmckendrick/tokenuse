@@ -12,6 +12,7 @@
 
 - [Development overview](development/README.md): source layout and what to read before changing the project.
 - [Architecture](development/architecture.md): archive, sync, aggregation, pricing, reports, and frontend state flow.
+- [MCP server](development/mcp-server.md): the read-only MCP server — stdio and loopback HTTP transports, the four tools and their schemas, the HTTP security model, and desktop hosting.
 - [Coach engine](development/coach.md): the desktop Coach page's rule catalog, scoring, flow/pace/timeline/output algorithms, and attribution.
 - [Model normalisation](development/models.md): shared registry schema, resolution order, provider grouping, and contributor workflow.
 - [Pricing and cache rates](development/pricing.md): evidence, provider cache-read rates, parser caveats, and pricing refresh behavior.

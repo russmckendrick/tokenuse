@@ -552,6 +552,18 @@
     void commit(() => api.setShowDockOrTaskbarIcon(enabled));
   }
 
+  function setMcpHttpEnabledFromEvent(event: Event) {
+    const enabled = (event.currentTarget as HTMLInputElement).checked;
+    void commit(() => api.setMcpHttpEnabled(enabled));
+  }
+
+  function setMcpHttpPortFromEvent(event: Event) {
+    const parsed = Number((event.currentTarget as HTMLInputElement).value.trim());
+    if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 65535) {
+      void commit(() => api.setMcpHttpPort(parsed));
+    }
+  }
+
   function setPlanPriceFromEvent(id: string, event: Event) {
     const raw = (event.currentTarget as HTMLInputElement).value.trim();
     const parsed = raw === '' ? Number.NaN : Number(raw);
@@ -1006,6 +1018,8 @@
                 {setOpenAtLoginFromEvent}
                 {setShowDockOrTaskbarIconFromEvent}
                 {setPlanPriceFromEvent}
+                {setMcpHttpEnabledFromEvent}
+                {setMcpHttpPortFromEvent}
               />
             {:else if router.route.page === 'session'}
               <SessionView

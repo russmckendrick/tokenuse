@@ -17,6 +17,7 @@ use tokenuse::{
 
 mod commands;
 mod ids;
+mod mcp_http;
 mod menu;
 mod notifications;
 mod snapshot;
@@ -65,8 +66,24 @@ fn setup_desktop_runtime<R: Runtime>(
 ) -> tauri::Result<()> {
     setup_tray(app)?;
     apply_saved_desktop_settings(app.handle(), &state);
+    start_mcp_http_if_enabled(&state);
     spawn_background_monitor(app.handle().clone(), state);
     Ok(())
+}
+
+fn start_mcp_http_if_enabled(state: &SharedState) {
+    let mcp = match state.lock() {
+        Ok(state) => state.app.settings.mcp.clone(),
+        Err(_) => return,
+    };
+    if !mcp.http_enabled {
+        return;
+    }
+    if let Err(e) = mcp_http::start(mcp.http_port) {
+        if let Ok(mut state) = state.lock() {
+            state.app.status = Some(AppStatus::new(e.to_string(), StatusTone::Warning));
+        }
+    }
 }
 
 fn setup_tray<R: Runtime>(app: &mut tauri::App<R>) -> tauri::Result<()> {
@@ -439,6 +456,15 @@ mod tests {
         assert_eq!(snapshot.copy.brand.name, copy::copy().brand.name);
         assert_eq!(snapshot.config_rows[0].id, "currency_override");
         assert_eq!(snapshot.config_rows[1].id, "rates_json");
+
+        assert!(!snapshot.mcp_http.enabled);
+        assert!(!snapshot.mcp_http.running);
+        assert_eq!(snapshot.mcp_http.port, snapshot.mcp_http.port.max(1));
+        assert_eq!(
+            snapshot.mcp_http.endpoint,
+            format!("http://127.0.0.1:{}/mcp", snapshot.mcp_http.port)
+        );
+        assert_eq!(snapshot.mcp_http.last_error, None);
     }
 
     #[test]
@@ -561,6 +587,9 @@ pub fn run() {
             commands::get_session_detail,
             commands::set_open_at_login,
             commands::set_show_dock_or_taskbar_icon,
+            commands::set_mcp_http_enabled,
+            commands::set_mcp_http_port,
+            commands::reveal_mcp_token,
             commands::toggle_data_source,
             commands::refresh_archive,
             commands::clear_data,

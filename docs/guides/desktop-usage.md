@@ -131,6 +131,8 @@ When any model in the archive is billed at the fallback pricing rate, the pricin
 
 The Local Data panel also shows the launch hint for the bundled MCP server (`tokenuse mcp` — stdio, project names pseudonymised); see the TUI usage guide for the full command reference.
 
+The **MCP Server** panel hosts the HTTP variant of the same server. Flipping **Serve over HTTP** starts a loopback-only listener at `http://127.0.0.1:<port>/mcp` (default port 20151, editable in the panel) that runs for as long as the app does and stops when the toggle is turned off or the app quits; the saved setting restarts it on the next launch. Every request needs the bearer token shown masked in the panel — **Reveal** fetches it on demand, **Copy token** copies it, and **Copy command** copies a ready-to-paste `claude mcp add --transport http …` registration including the token. If the port is already taken, the toggle fails with the bind error and nothing is persisted. The endpoint serves the same four read-only tools as stdio with project names always pseudonymised, and accepts no connections from other machines or browser pages. See the [MCP server](../development/mcp-server.md) reference for the tool schemas and security model.
+
 ## Keyboard
 
 Desktop navigation is resolved in the Svelte shell; data actions call typed Rust commands directly. Shortcuts are ignored while typing in an input, select, or text area, except for `Esc`.

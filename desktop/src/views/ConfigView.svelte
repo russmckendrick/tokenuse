@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Database, Download, FolderOpen, RefreshCw, Stethoscope, Trash2 } from 'lucide-svelte';
+  import { Copy, Database, Download, Eye, EyeOff, FolderOpen, RefreshCw, Stethoscope, Trash2 } from 'lucide-svelte';
   import { api } from '../api';
   import Badge from '../components/Badge.svelte';
   import { reveal } from '../motion';
@@ -34,6 +34,8 @@
   export let setOpenAtLoginFromEvent: (event: Event) => void;
   export let setShowDockOrTaskbarIconFromEvent: (event: Event) => void;
   export let setPlanPriceFromEvent: (id: string, event: Event) => void;
+  export let setMcpHttpEnabledFromEvent: (event: Event) => void;
+  export let setMcpHttpPortFromEvent: (event: Event) => void;
 
   const GROUPS: Record<string, string[]> = {
     money: ['currency_override', 'rates_json', 'litellm_prices'],
@@ -165,6 +167,46 @@
     return tool.sampled_sources > 0 || tool.sampled_limit_snapshots > 0 || tool.parse_errors > 0;
   }
 
+  // The bearer token never rides in the snapshot poll: it is fetched on
+  // demand, held only in component state, and forgotten on navigation.
+  let mcpToken: string | null = null;
+  let mcpCopied: 'token' | 'snippet' | null = null;
+  let mcpError: string | null = null;
+
+  async function toggleMcpToken() {
+    if (mcpToken !== null) {
+      mcpToken = null;
+      return;
+    }
+    try {
+      mcpToken = await api.revealMcpToken();
+      mcpError = null;
+    } catch (error) {
+      mcpError = String(error);
+    }
+  }
+
+  function mcpSnippet(token: string): string {
+    return template(snapshot.copy.mcp.snippet, {
+      endpoint: snapshot.mcp_http.endpoint,
+      token
+    });
+  }
+
+  async function copyMcp(kind: 'token' | 'snippet') {
+    try {
+      const token = mcpToken ?? (await api.revealMcpToken());
+      await navigator.clipboard.writeText(kind === 'token' ? token : mcpSnippet(token));
+      mcpError = null;
+      mcpCopied = kind;
+      setTimeout(() => {
+        mcpCopied = null;
+      }, 1500);
+    } catch (error) {
+      mcpError = String(error);
+    }
+  }
+
   // The shared pricing row appends the fallback-pricing warning to its value
   // (all-time scope). Tone the row from its own text — via the copy template
   // prefix — so the treatment can never disagree with what the row says.
@@ -284,6 +326,73 @@
             <Trash2 size={14} /> {row.action}
           </button>
         {/each}
+      </div>
+    </Panel>
+
+    <Panel title={snapshot.copy.panels.mcp_server} tone="magenta">
+      <p class="plan-hint">{snapshot.copy.mcp.http_hint}</p>
+      <div class="toggle-list">
+        <label class="toggle-row">
+          <span>
+            <strong>{snapshot.copy.mcp.http_toggle}</strong>
+            <small>{snapshot.mcp_http.running ? snapshot.copy.mcp.running : snapshot.copy.mcp.stopped}</small>
+          </span>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={snapshot.mcp_http.enabled}
+            onchange={setMcpHttpEnabledFromEvent}
+          />
+          <i aria-hidden="true"></i>
+        </label>
+      </div>
+      <div class="config-facts">
+        <div><span>{snapshot.copy.mcp.endpoint_label}</span><strong>{snapshot.mcp_http.endpoint}</strong></div>
+        <div>
+          <span>{snapshot.copy.mcp.status_label}</span>
+          <strong class:value-warn={snapshot.mcp_http.last_error !== null}>
+            {snapshot.mcp_http.running ? snapshot.copy.mcp.running : snapshot.copy.mcp.stopped}
+          </strong>
+        </div>
+        <div>
+          <span>{snapshot.copy.mcp.token_label}</span>
+          <strong>{mcpToken ?? snapshot.copy.mcp.token_masked}</strong>
+        </div>
+      </div>
+      {#if snapshot.mcp_http.last_error}
+        <div class="update-status">{snapshot.mcp_http.last_error}</div>
+      {/if}
+      {#if mcpError}
+        <div class="update-status">{mcpError}</div>
+      {/if}
+      <div class="plan-price-rows">
+        <label class="plan-price-row">
+          <span>{snapshot.copy.mcp.port_label}</span>
+          <input
+            type="number"
+            min="1"
+            max="65535"
+            step="1"
+            inputmode="numeric"
+            value={snapshot.mcp_http.port}
+            onchange={setMcpHttpPortFromEvent}
+          />
+        </label>
+      </div>
+      <div class="button-row">
+        <button type="button" onclick={() => void toggleMcpToken()}>
+          {#if mcpToken !== null}<EyeOff size={15} />{:else}<Eye size={15} />{/if}
+          {mcpToken !== null ? snapshot.copy.mcp.hide_token : snapshot.copy.mcp.reveal_token}
+        </button>
+        <button type="button" onclick={() => void copyMcp('token')}>
+          <Copy size={15} /> {mcpCopied === 'token' ? snapshot.copy.mcp.copied : snapshot.copy.mcp.copy_token}
+        </button>
+        <button type="button" onclick={() => void copyMcp('snippet')}>
+          <Copy size={15} /> {mcpCopied === 'snippet' ? snapshot.copy.mcp.copied : snapshot.copy.mcp.copy_snippet}
+        </button>
+      </div>
+      <div class="update-status mono mcp-snippet">
+        {mcpSnippet(mcpToken ?? snapshot.copy.mcp.token_masked)}
       </div>
     </Panel>
 
@@ -505,6 +614,11 @@
 
   .value-warn {
     color: var(--color-warning);
+  }
+
+  .mcp-snippet {
+    overflow-wrap: anywhere;
+    user-select: all;
   }
 
   .plan-hint {

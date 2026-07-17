@@ -965,7 +965,14 @@ fn render_config_paths(frame: &mut Frame<'_>, area: Rect, app: &App) {
         ),
         path_line(
             copy.config.paths.mcp_server.as_str(),
-            copy.config.values.mcp_hint.clone(),
+            if app.settings.mcp.http_enabled {
+                template(
+                    &copy.config.values.mcp_hint_http,
+                    &[("port", app.settings.mcp.http_port.to_string())],
+                )
+            } else {
+                copy.config.values.mcp_hint.clone()
+            },
         ),
     ]);
     lines.push(Line::from(vec![
