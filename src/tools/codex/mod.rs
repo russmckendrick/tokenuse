@@ -43,6 +43,21 @@ impl ToolAdapter for Codex {
             fingerprint_source(source)?
         ))
     }
+
+    fn probe_roots(&self) -> Vec<super::ProbeRoot> {
+        let mut roots = Vec::new();
+        if let Some(sessions) = config::sessions_root() {
+            roots.push(super::ProbeRoot::new("sessions", sessions));
+        }
+        if let Some(archived) = config::archived_sessions_root() {
+            roots.push(super::ProbeRoot::new("archived sessions", archived));
+        }
+        roots
+    }
+
+    fn env_overrides(&self) -> &'static [&'static str] {
+        &[config::ENV_OVERRIDE]
+    }
 }
 
 #[cfg(test)]

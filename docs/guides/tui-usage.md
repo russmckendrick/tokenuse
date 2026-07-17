@@ -10,6 +10,10 @@ If no local sessions are found, or archive sync fails before any calls are loade
 
 Launch with `tokenuse --sample` to start with bundled sample data even when local sessions exist. The live snapshot remains cached, so `Shift-D` switches back to it without another startup load.
 
+Two scriptable commands summarize the archive without launching the TUI. `tokenuse status` prints one line with rolling-24-hour and calendar-month totals (cost, calls, sessions). `tokenuse overview` prints a copy-pasteable summary of this month: totals, tokens, per-tool spend, top models, top projects, and a chronological daily table. Both use the configured display currency, emit plain deterministic text (no ANSI), sync the archive the same way `--list-projects` does, and accept `--json` — `status --json` carries raw numeric totals alongside display values, `overview --json` additionally embeds the full dashboard payload for piping into `jq`.
+
+When a tool shows zero (or a number that looks wrong), `tokenuse doctor` explains why. For every tool adapter it prints the locations it probes and whether they exist, the environment overrides in effect, how many session and limit sources discovery found, and whether a bounded parse sample (up to 8 sources) succeeds, ending in a verdict: `OK`, `NOTHING FOUND` (with the likely cause), `ERRORS` (with the first parse error), or `DISCOVERY FAILED`. It runs read-only and never touches the archive; add `--json` for machine-readable output.
+
 ## Dashboard
 
 The dashboard shows:

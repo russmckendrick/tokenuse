@@ -6,11 +6,13 @@ pub mod config;
 pub mod copy;
 pub mod currency;
 pub mod data;
+pub mod doctor;
 pub mod export;
 pub mod ingest;
 pub mod ingest_cache;
 pub mod keymap;
 pub mod models;
+pub mod overview;
 pub mod pricing;
 #[cfg(feature = "quota-sync")]
 pub mod quota_sync;

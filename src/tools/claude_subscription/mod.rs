@@ -46,4 +46,10 @@ impl ToolAdapter for ClaudeSubscription {
         }
         Ok(Vec::new())
     }
+
+    fn probe_roots(&self) -> Vec<super::ProbeRoot> {
+        config::limit_sidecar()
+            .map(|sidecar| vec![super::ProbeRoot::new("limits sidecar", sidecar)])
+            .unwrap_or_default()
+    }
 }

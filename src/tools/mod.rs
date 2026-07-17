@@ -22,6 +22,21 @@ pub use types::{
     SessionSource, SessionSourceKind, Speed, TimestampQuality, TokenQuality,
 };
 
+/// A candidate data location `tokenuse doctor` reports on. The label is a
+/// short lowercase identifier for the kind of location (matching how the
+/// adapter's config names it), not display prose.
+#[derive(Debug, Clone)]
+pub struct ProbeRoot {
+    pub label: &'static str,
+    pub path: std::path::PathBuf,
+}
+
+impl ProbeRoot {
+    pub fn new(label: &'static str, path: std::path::PathBuf) -> Self {
+        Self { label, path }
+    }
+}
+
 pub trait ToolAdapter: Send + Sync {
     fn id(&self) -> &'static str;
     fn display_name(&self) -> &'static str;
@@ -40,6 +55,16 @@ pub trait ToolAdapter: Send + Sync {
 
     fn tool_display(&self, tool: &str) -> String {
         tool.to_string()
+    }
+
+    /// Candidate data locations for diagnostics (`tokenuse doctor`).
+    fn probe_roots(&self) -> Vec<ProbeRoot> {
+        Vec::new()
+    }
+
+    /// Environment variables that change where this adapter looks for data.
+    fn env_overrides(&self) -> &'static [&'static str] {
+        &[]
     }
 }
 

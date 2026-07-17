@@ -85,6 +85,37 @@ impl ToolAdapter for Copilot {
         }
         Ok(fingerprint)
     }
+
+    fn probe_roots(&self) -> Vec<super::ProbeRoot> {
+        let mut roots = Vec::new();
+        if let Some(legacy) = config::legacy_root() {
+            roots.push(super::ProbeRoot::new("cli session state", legacy));
+        }
+        if let Some(cli) = config::cli_root() {
+            roots.push(super::ProbeRoot::new(
+                "cli session store",
+                cli.join(config::CLI_SESSION_STORE_FILE),
+            ));
+            roots.push(super::ProbeRoot::new(
+                "cli data store",
+                cli.join(config::CLI_DATA_STORE_FILE),
+            ));
+        }
+        for storage in config::vscode_storage_roots() {
+            roots.push(super::ProbeRoot::new(
+                "otel span store",
+                config::otel_trace_db(&storage),
+            ));
+            roots.push(super::ProbeRoot::new(
+                "workspace storage",
+                storage.workspace_storage,
+            ));
+        }
+        if let Some(sidecar) = config::limit_sidecar() {
+            roots.push(super::ProbeRoot::new("limits sidecar", sidecar));
+        }
+        roots
+    }
 }
 
 #[cfg(test)]

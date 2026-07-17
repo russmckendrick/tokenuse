@@ -19,7 +19,7 @@ use tokenuse::{
     archive,
     config::ConfigPaths,
     copy::{copy, template},
-    ingest, runtime, ui,
+    doctor, ingest, overview, runtime, ui,
 };
 
 mod report_cli;
@@ -106,6 +106,18 @@ fn handle_subcommand() -> Result<Option<DashboardOptions>> {
             report_cli::run()?;
             Ok(None)
         }
+        CliAction::Doctor { json } => {
+            doctor::run(json)?;
+            Ok(None)
+        }
+        CliAction::Status { json } => {
+            overview::run_status(json)?;
+            Ok(None)
+        }
+        CliAction::Overview { json } => {
+            overview::run_overview(json)?;
+            Ok(None)
+        }
         CliAction::SetClaudeCookie(value) => {
             set_subscription_cookie(SubscriptionCookie::Claude, &value)?;
             Ok(None)
@@ -134,6 +146,9 @@ enum CliAction {
     RefreshPrices,
     GenerateCurrencyJson,
     Report,
+    Doctor { json: bool },
+    Status { json: bool },
+    Overview { json: bool },
     SetClaudeCookie(String),
     ClearClaudeCookie,
     SetCodexCookie(String),
@@ -173,6 +188,33 @@ fn cli_action(args: &[String]) -> CliAction {
             return CliAction::Help;
         }
         return CliAction::Report;
+    }
+
+    if args.first().is_some_and(|arg| arg == "doctor") {
+        if args.iter().skip(1).any(|arg| is_help_arg(arg)) {
+            return CliAction::Help;
+        }
+        return CliAction::Doctor {
+            json: args.iter().skip(1).any(|arg| arg == "--json"),
+        };
+    }
+
+    if args.first().is_some_and(|arg| arg == "status") {
+        if args.iter().skip(1).any(|arg| is_help_arg(arg)) {
+            return CliAction::Help;
+        }
+        return CliAction::Status {
+            json: args.iter().skip(1).any(|arg| arg == "--json"),
+        };
+    }
+
+    if args.first().is_some_and(|arg| arg == "overview") {
+        if args.iter().skip(1).any(|arg| is_help_arg(arg)) {
+            return CliAction::Help;
+        }
+        return CliAction::Overview {
+            json: args.iter().skip(1).any(|arg| arg == "--json"),
+        };
     }
 
     if args.iter().any(|arg| arg == "--version" || arg == "-V") {
@@ -282,9 +324,15 @@ fn print_help() {
 {usage}
     {name} [FLAGS]
     {name} report
+    {name} doctor [--json]
+    {name} status [--json]
+    {name} overview [--json]
 
 {commands}
     report                         {report_command}
+    doctor                         {doctor_command}
+    status                         {status_command}
+    overview                       {overview_command}
 
 {flags}
     -h, --help                     {help_flag}
@@ -302,6 +350,9 @@ fn print_help() {
         commands = copy.cli.commands,
         flags = copy.cli.flags,
         report_command = copy.cli.report_command,
+        doctor_command = copy.cli.doctor_command,
+        status_command = copy.cli.status_command,
+        overview_command = copy.cli.overview_command,
         help_flag = copy.cli.help_flag,
         version_flag = copy.cli.version_flag,
         sample_flag = copy.cli.sample_flag,

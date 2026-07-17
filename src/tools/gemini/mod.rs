@@ -37,6 +37,16 @@ impl ToolAdapter for Gemini {
             fingerprint_source(source)?
         ))
     }
+
+    fn probe_roots(&self) -> Vec<super::ProbeRoot> {
+        config::gemini_tmp_root()
+            .map(|root| vec![super::ProbeRoot::new("sessions", root)])
+            .unwrap_or_default()
+    }
+
+    fn env_overrides(&self) -> &'static [&'static str] {
+        &[config::ENV_OVERRIDE]
+    }
 }
 
 #[cfg(test)]

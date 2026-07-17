@@ -54,4 +54,28 @@ impl ToolAdapter for Cursor {
             hasher.finish()
         ))
     }
+
+    fn probe_roots(&self) -> Vec<super::ProbeRoot> {
+        let mut roots = Vec::new();
+        if let Some(state) = config::state_db_path() {
+            roots.push(super::ProbeRoot::new("state database", state));
+        }
+        if let Some(agent) = config::agent_home() {
+            roots.push(super::ProbeRoot::new("agent home", agent));
+        }
+        if let Some(tracking) = config::agent_tracking_db_path() {
+            roots.push(super::ProbeRoot::new("ai tracking database", tracking));
+        }
+        if let Some(chats) = config::chats_dir() {
+            roots.push(super::ProbeRoot::new("chat stores", chats));
+        }
+        if let Some(workspaces) = config::workspace_storage_root() {
+            roots.push(super::ProbeRoot::new("workspace storage", workspaces));
+        }
+        roots
+    }
+
+    fn env_overrides(&self) -> &'static [&'static str] {
+        &[config::AGENT_HOME_ENV]
+    }
 }

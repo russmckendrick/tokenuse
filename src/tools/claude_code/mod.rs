@@ -51,6 +51,24 @@ impl ToolAdapter for ClaudeCode {
             fingerprint_source(source)?
         ))
     }
+
+    fn probe_roots(&self) -> Vec<super::ProbeRoot> {
+        let mut roots: Vec<super::ProbeRoot> = config::projects_dirs()
+            .into_iter()
+            .map(|path| super::ProbeRoot::new("projects", path))
+            .collect();
+        if let Some(desktop) = config::desktop_sessions_dir() {
+            roots.push(super::ProbeRoot::new("desktop sessions", desktop));
+        }
+        if let Some(sidecar) = config::limit_sidecar() {
+            roots.push(super::ProbeRoot::new("limits sidecar", sidecar));
+        }
+        roots
+    }
+
+    fn env_overrides(&self) -> &'static [&'static str] {
+        &[config::ENV_OVERRIDE, config::XDG_CONFIG_OVERRIDE]
+    }
 }
 
 #[cfg(test)]
