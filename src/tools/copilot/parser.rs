@@ -30,16 +30,30 @@ pub fn parse_session(
             Some(config::CLI_DATA_STORE_FILE) => {
                 return Ok(parse_data_store(path, source, seen));
             }
+            Some(config::OTEL_TRACES_FILE) => {
+                return Ok(parse_otel_traces(path, source, seen));
+            }
             _ => {}
         }
     }
     if path.is_dir() {
+        let is_chat_sessions =
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| {
+                    name == config::CHAT_SESSIONS_DIR
+                        || name == config::EMPTY_WINDOW_CHAT_SESSIONS_DIR
+                });
         let mut calls = Vec::new();
         if let Ok(entries) = fs::read_dir(path) {
             for entry in entries.flatten() {
                 let p = entry.path();
                 if p.is_file() && p.extension().and_then(|s| s.to_str()) == Some("jsonl") {
-                    calls.extend(parse_file(&p, source, seen));
+                    if is_chat_sessions {
+                        calls.extend(parse_chat_session_file(&p, source, seen));
+                    } else {
+                        calls.extend(parse_file(&p, source, seen));
+                    }
                 }
             }
         }
@@ -164,11 +178,97 @@ fn parse_legacy(
                 call.cost_usd = pricing::cost(&current_model, &call, Speed::Standard);
                 calls.push(call);
             }
+            "session.shutdown" => {
+                calls.extend(shutdown_rollup_calls(&event, session_id, project, seen));
+            }
             _ => {}
         }
     }
 
     calls
+}
+
+/// `session.shutdown` carries the only real input/cache token counts a legacy
+/// CLI session records, as per-model rollups. `usage.inputTokens` is written
+/// cache-inclusive (input + cache reads + cache writes), so the pure input is
+/// recovered by subtraction. One supplementary input-only call is emitted per
+/// model; output stays with the per-turn `assistant.message` records so
+/// nothing double counts.
+fn shutdown_rollup_calls(
+    event: &Value,
+    session_id: &str,
+    project: &str,
+    seen: &mut HashSet<String>,
+) -> Vec<ParsedCall> {
+    let Some(metrics) = event
+        .pointer("/data/modelMetrics")
+        .and_then(|v| v.as_object())
+    else {
+        return Vec::new();
+    };
+    let timestamp = event
+        .get("timestamp")
+        .and_then(|v| v.as_str())
+        .and_then(parse_timestamp)
+        .or_else(|| {
+            event
+                .pointer("/data/sessionStartTime")
+                .and_then(|v| v.as_i64())
+                .and_then(epoch_to_datetime)
+        });
+
+    let mut calls = Vec::new();
+    for (model, entry) in metrics {
+        let usage = entry.get("usage");
+        let field = |key: &str| {
+            usage
+                .and_then(|u| u.get(key))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+        };
+        let cache_read = field("cacheReadTokens");
+        let cache_write = field("cacheWriteTokens");
+        let input = field("inputTokens").saturating_sub(cache_read + cache_write);
+        if input == 0 && cache_read == 0 && cache_write == 0 {
+            continue;
+        }
+
+        let dedup_key = format!("copilot:{session_id}:shutdown:{model}");
+        if !seen.insert(dedup_key.clone()) {
+            continue;
+        }
+
+        let mut call = ParsedCall {
+            tool: config::TOOL_ID,
+            model: model.clone(),
+            input_tokens: input,
+            output_tokens: 0,
+            cache_creation_input_tokens: cache_write,
+            cache_read_input_tokens: cache_read,
+            speed: Speed::Standard,
+            timestamp,
+            dedup_key,
+            session_id: session_id.to_string(),
+            project: project.to_string(),
+            token_quality: crate::tools::TokenQuality::Exact,
+            ..ParsedCall::default()
+        };
+        call.cost_usd = pricing::cost(model, &call, Speed::Standard);
+        calls.push(call);
+    }
+    calls
+}
+
+fn epoch_to_datetime(raw: i64) -> Option<DateTime<Utc>> {
+    // Accept seconds, milliseconds, or nanoseconds since the epoch.
+    let millis = if raw > 1_000_000_000_000_000 {
+        raw / 1_000_000
+    } else if raw > 100_000_000_000 {
+        raw
+    } else {
+        raw.checked_mul(1000)?
+    };
+    DateTime::from_timestamp_millis(millis)
 }
 
 fn workspace_cwd(path: &Path) -> Option<String> {
@@ -312,14 +412,18 @@ struct StoreCopy {
 
 impl StoreCopy {
     fn new(path: &Path) -> Option<Self> {
+        // The counter keeps concurrent copies (parallel tests, several stores
+        // in one sync) from landing in the same nanosecond-named directory.
+        static COPY_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let file_name = path.file_name()?.to_string_lossy().to_string();
         let dir = std::env::temp_dir().join(format!(
-            "tokenuse-copilot-store-{}-{}",
+            "tokenuse-copilot-store-{}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .ok()?
-                .as_nanos()
+                .as_nanos(),
+            COPY_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));
         fs::create_dir_all(&dir).ok()?;
         let db = dir.join(&file_name);
@@ -345,6 +449,485 @@ impl Drop for StoreCopy {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.dir);
     }
+}
+
+/// Copilot Chat's OpenTelemetry span store (`agent-traces.db`): `chat` spans
+/// carry real GenAI-convention token counts including both cache buckets;
+/// `execute_tool` spans in the same trace carry the turn's tool calls;
+/// `invoke_agent` spans with a parent chat session mark subagent delegation.
+fn parse_otel_traces(
+    path: &Path,
+    source: &SessionSource,
+    seen: &mut HashSet<String>,
+) -> Vec<ParsedCall> {
+    let Some(copy) = StoreCopy::new(path) else {
+        return Vec::new();
+    };
+    let Ok(conn) = copy.open() else {
+        return Vec::new();
+    };
+    otel_calls(&conn, source, seen).unwrap_or_default()
+}
+
+struct OtelSpan {
+    span_id: String,
+    trace_id: String,
+    operation: String,
+    start_ms: i64,
+    response_model: Option<String>,
+    attrs: HashMap<String, String>,
+}
+
+fn otel_calls(
+    conn: &Connection,
+    source: &SessionSource,
+    seen: &mut HashSet<String>,
+) -> rusqlite::Result<Vec<ParsedCall>> {
+    let mut attrs: HashMap<String, HashMap<String, String>> = HashMap::new();
+    {
+        let mut stmt = conn.prepare("SELECT span_id, key, value FROM span_attributes")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
+        })?;
+        for row in rows.flatten() {
+            let (span_id, key, value) = row;
+            attrs
+                .entry(span_id)
+                .or_default()
+                .insert(key, value.unwrap_or_default());
+        }
+    }
+
+    let mut spans: Vec<OtelSpan> = Vec::new();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT span_id, trace_id, operation_name, start_time_ms, response_model
+             FROM spans ORDER BY start_time_ms, span_id",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, Option<String>>(4)?,
+            ))
+        })?;
+        for row in rows.flatten() {
+            let (span_id, trace_id, operation, start_ms, response_model) = row;
+            let span_attrs = attrs.remove(&span_id).unwrap_or_default();
+            spans.push(OtelSpan {
+                span_id,
+                trace_id,
+                operation: operation.unwrap_or_default(),
+                start_ms,
+                response_model,
+                attrs: span_attrs,
+            });
+        }
+    }
+
+    // A conversation's project comes from whichever of its spans carries the
+    // repository attribute.
+    let mut conversation_project: HashMap<String, String> = HashMap::new();
+    for span in &spans {
+        if let (Some(conv), Some(repo)) = (
+            span.attrs.get("gen_ai.conversation.id"),
+            span.attrs.get("github.copilot.git.repository"),
+        ) {
+            if !repo.is_empty() {
+                conversation_project
+                    .entry(conv.clone())
+                    .or_insert_with(|| repository_label(repo));
+            }
+        }
+    }
+
+    // Tool activity per trace, attached to the trace's chat span.
+    let mut trace_tools: HashMap<String, (Vec<String>, Vec<String>)> = HashMap::new();
+    for span in &spans {
+        let entry = trace_tools.entry(span.trace_id.clone()).or_default();
+        match span.operation.as_str() {
+            "execute_tool" => {
+                let Some(raw_name) = span.attrs.get("gen_ai.tool.name").filter(|n| !n.is_empty())
+                else {
+                    continue;
+                };
+                let name = normalize_tool(raw_name);
+                if name == "Bash" {
+                    if let Some(args) = span.attrs.get("gen_ai.tool.call.arguments") {
+                        entry.1.extend(otel_bash_commands(args));
+                    }
+                }
+                entry.0.push(name);
+            }
+            // The root agent has no parent chat session; only genuine
+            // subagent delegation counts.
+            "invoke_agent"
+                if span
+                    .attrs
+                    .contains_key("copilot_chat.parent_chat_session_id")
+                    && span
+                        .attrs
+                        .get("gen_ai.agent.name")
+                        .is_some_and(|n| !n.is_empty()) =>
+            {
+                entry.0.push("Agent".to_string());
+            }
+            _ => {}
+        }
+    }
+
+    let mut calls = Vec::new();
+    for span in &spans {
+        if span.operation != "chat" {
+            continue;
+        }
+        let attr_u64 = |key: &str| {
+            span.attrs
+                .get(key)
+                .and_then(|v| v.trim().parse::<u64>().ok())
+                .unwrap_or(0)
+        };
+        let input = attr_u64("gen_ai.usage.input_tokens");
+        let output = attr_u64("gen_ai.usage.output_tokens");
+        if input == 0 && output == 0 {
+            continue;
+        }
+        let cache_read = attr_u64("gen_ai.usage.cache_read.input_tokens");
+        let cache_write = attr_u64("gen_ai.usage.cache_creation.input_tokens");
+
+        let model = span
+            .attrs
+            .get("gen_ai.response.model")
+            .or_else(|| span.attrs.get("gen_ai.request.model"))
+            .filter(|m| !m.is_empty())
+            .cloned()
+            .or_else(|| span.response_model.clone().filter(|m| !m.is_empty()))
+            .unwrap_or_else(|| COPILOT_AUTO.to_string());
+
+        let conversation = span
+            .attrs
+            .get("gen_ai.conversation.id")
+            .filter(|c| !c.is_empty())
+            .cloned()
+            .unwrap_or_else(|| span.trace_id.clone());
+
+        let dedup_key = format!("{}{}", config::OTEL_DEDUP_PREFIX, span.span_id);
+        if !seen.insert(dedup_key.clone()) {
+            continue;
+        }
+        // The same turn may also exist in transcript/journal sources (written
+        // by the same extension). Claim its key so later sources skip it, and
+        // carry it as a superseded hint so previously archived estimate rows
+        // are zeroed.
+        let mut superseded = Vec::new();
+        if let Some(turn_id) = span
+            .attrs
+            .get("github.copilot.chat.turn.id")
+            .filter(|t| !t.is_empty())
+        {
+            let turn_key = format!("copilot:{conversation}:{turn_id}");
+            seen.insert(turn_key.clone());
+            superseded.push(turn_key);
+        }
+
+        let (tools, bash_commands) = trace_tools.get(&span.trace_id).cloned().unwrap_or_default();
+
+        let mut call = ParsedCall {
+            tool: config::TOOL_ID,
+            model: model.clone(),
+            input_tokens: input,
+            output_tokens: output,
+            cache_creation_input_tokens: cache_write,
+            cache_read_input_tokens: cache_read,
+            speed: Speed::Standard,
+            tools,
+            bash_commands,
+            timestamp: epoch_to_datetime(span.start_ms),
+            dedup_key,
+            session_id: conversation.clone(),
+            project: conversation_project
+                .get(&conversation)
+                .cloned()
+                .unwrap_or_else(|| source.project.clone()),
+            token_quality: crate::tools::TokenQuality::Exact,
+            superseded_dedup_keys: superseded,
+            ..ParsedCall::default()
+        };
+        call.cost_usd = pricing::cost(&model, &call, Speed::Standard);
+        calls.push(call);
+    }
+
+    Ok(calls)
+}
+
+/// OTel records full multi-line scripts; flatten newlines into separators so
+/// the shared splitter sees one command list.
+fn otel_bash_commands(raw_args: &str) -> Vec<String> {
+    let Ok(args) = serde_json::from_str::<Value>(raw_args) else {
+        return Vec::new();
+    };
+    let Some(command) = args
+        .get("command")
+        .or_else(|| args.get("cmd"))
+        .and_then(|v| v.as_str())
+    else {
+        return Vec::new();
+    };
+    jsonl::split_bash_commands(&command.replace('\n', ";"))
+}
+
+/// `github.copilot.git.repository` values look like `owner/repo` or a URL;
+/// keep the repository name.
+fn repository_label(repo: &str) -> String {
+    let trimmed = repo.trim().trim_end_matches('/');
+    let base = trimmed.rsplit('/').next().unwrap_or(trimmed);
+    base.trim_end_matches(".git").to_string()
+}
+
+/// VS Code core chat-session journal: a delta log where kind 0 sets the root
+/// object, kind 1 sets a value at a path, and kind 2 appends items to an
+/// array at a path (default `requests`). Requests carry real prompt/output
+/// token counts in `result.metadata`.
+fn parse_chat_session_file(
+    path: &Path,
+    source: &SessionSource,
+    seen: &mut HashSet<String>,
+) -> Vec<ParsedCall> {
+    let lines: Vec<String> = match jsonl::read_lines(path) {
+        Ok(it) => it.collect(),
+        Err(_) => return Vec::new(),
+    };
+
+    let mut root = Value::Null;
+    for line in &lines {
+        let Ok(entry) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        match entry.get("kind").and_then(|v| v.as_u64()) {
+            Some(0) => {
+                if let Some(v) = entry.get("v") {
+                    root = v.clone();
+                }
+            }
+            Some(1) => apply_journal_set(&mut root, entry.get("k"), entry.get("v")),
+            Some(2) => apply_journal_append(&mut root, entry.get("k"), entry.get("v")),
+            _ => {}
+        }
+    }
+
+    let session_id = root
+        .get("sessionId")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            path.file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default()
+        });
+    let creation_ts = root
+        .get("creationDate")
+        .and_then(|v| v.as_i64())
+        .and_then(epoch_to_datetime);
+
+    let Some(requests) = root.get("requests").and_then(|v| v.as_array()) else {
+        return Vec::new();
+    };
+
+    let mut calls = Vec::new();
+    for (idx, req) in requests.iter().enumerate() {
+        let prompt = req
+            .pointer("/result/metadata/promptTokens")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let output = req
+            .pointer("/result/metadata/outputTokens")
+            .and_then(|v| v.as_u64())
+            .filter(|n| *n > 0)
+            .or_else(|| req.get("completionTokens").and_then(|v| v.as_u64()))
+            .unwrap_or(0);
+        if prompt == 0 && output == 0 {
+            continue;
+        }
+
+        let model = req
+            .pointer("/result/metadata/resolvedModel")
+            .and_then(|v| v.as_str())
+            .filter(|m| !m.is_empty())
+            .map(str::to_string)
+            .or_else(|| {
+                req.get("modelId")
+                    .and_then(|v| v.as_str())
+                    .map(|m| m.strip_prefix("copilot/").unwrap_or(m))
+                    .filter(|m| !m.is_empty() && *m != "auto")
+                    .map(str::to_string)
+            })
+            .unwrap_or_else(|| COPILOT_AUTO.to_string());
+
+        let request_id = req
+            .get("requestId")
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("request-{idx}"));
+        let dedup_key = format!(
+            "{}{}:{}",
+            config::CHAT_SESSION_DEDUP_PREFIX,
+            session_id,
+            request_id
+        );
+        if !seen.insert(dedup_key.clone()) {
+            continue;
+        }
+
+        let tools = chat_session_tools(req);
+        let timestamp = req
+            .get("timestamp")
+            .and_then(|v| v.as_i64())
+            .and_then(epoch_to_datetime)
+            .or_else(|| {
+                req.get("timestamp")
+                    .and_then(|v| v.as_str())
+                    .and_then(parse_timestamp)
+            })
+            .or(creation_ts);
+        let user_message = req
+            .get("message")
+            .and_then(|m| m.get("text"))
+            .and_then(|v| v.as_str())
+            .map(|t| truncate(t, 500))
+            .unwrap_or_default();
+
+        let mut call = ParsedCall {
+            tool: config::TOOL_ID,
+            model: model.clone(),
+            input_tokens: prompt,
+            output_tokens: output,
+            speed: Speed::Standard,
+            tools,
+            timestamp,
+            dedup_key,
+            user_message,
+            session_id: session_id.clone(),
+            project: source.project.clone(),
+            token_quality: crate::tools::TokenQuality::Exact,
+            ..ParsedCall::default()
+        };
+        call.cost_usd = pricing::cost(&model, &call, Speed::Standard);
+        calls.push(call);
+    }
+    calls
+}
+
+fn apply_journal_set(root: &mut Value, path: Option<&Value>, value: Option<&Value>) {
+    let (Some(path), Some(value)) = (path, value) else {
+        return;
+    };
+    let Some(segments) = journal_path_segments(path) else {
+        return;
+    };
+    if let Some(target) = journal_walk(root, &segments[..segments.len().saturating_sub(1)]) {
+        if let (Some(last), Value::Object(map)) = (segments.last(), target) {
+            map.insert(last.clone(), value.clone());
+        }
+    }
+}
+
+fn apply_journal_append(root: &mut Value, path: Option<&Value>, value: Option<&Value>) {
+    let Some(value) = value else {
+        return;
+    };
+    let segments = path
+        .and_then(journal_path_segments_opt)
+        .unwrap_or_else(|| vec!["requests".to_string()]);
+    let Some(target) = journal_walk(root, &segments) else {
+        return;
+    };
+    if target.is_null() {
+        *target = Value::Array(Vec::new());
+    }
+    let Value::Array(items) = target else {
+        return;
+    };
+    match value {
+        Value::Array(new_items) => items.extend(new_items.iter().cloned()),
+        other => items.push(other.clone()),
+    }
+}
+
+fn journal_path_segments(path: &Value) -> Option<Vec<String>> {
+    journal_path_segments_opt(path)
+}
+
+fn journal_path_segments_opt(path: &Value) -> Option<Vec<String>> {
+    let arr = path.as_array()?;
+    let mut segments = Vec::with_capacity(arr.len());
+    for seg in arr {
+        match seg {
+            Value::String(s) => segments.push(s.clone()),
+            Value::Number(n) => segments.push(n.to_string()),
+            _ => return None,
+        }
+    }
+    Some(segments)
+}
+
+/// Walk (and create) the object path; numeric segments index into arrays.
+fn journal_walk<'a>(root: &'a mut Value, segments: &[String]) -> Option<&'a mut Value> {
+    let mut current = root;
+    for seg in segments {
+        if current.is_null() {
+            *current = Value::Object(serde_json::Map::new());
+        }
+        current = match current {
+            Value::Object(map) => map.entry(seg.clone()).or_insert(Value::Null),
+            Value::Array(items) => {
+                let idx: usize = seg.parse().ok()?;
+                items.get_mut(idx)?
+            }
+            _ => return None,
+        };
+    }
+    Some(current)
+}
+
+fn chat_session_tools(req: &Value) -> Vec<String> {
+    let Some(rounds) = req
+        .pointer("/result/metadata/toolCallRounds")
+        .and_then(|v| v.as_array())
+    else {
+        return Vec::new();
+    };
+    let mut tools = Vec::new();
+    for round in rounds {
+        for key in ["toolName", "name", "tool"] {
+            if let Some(name) = round.get(key).and_then(|v| v.as_str()) {
+                if !name.is_empty() {
+                    tools.push(normalize_tool(name));
+                    break;
+                }
+            }
+        }
+        for nested_key in ["tools", "toolCalls", "toolRequests"] {
+            if let Some(nested) = round.get(nested_key).and_then(|v| v.as_array()) {
+                for item in nested {
+                    for key in ["toolName", "name", "tool"] {
+                        if let Some(name) = item.get(key).and_then(|v| v.as_str()) {
+                            if !name.is_empty() {
+                                tools.push(normalize_tool(name));
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    tools
 }
 
 struct UsageEvent {
@@ -979,6 +1562,275 @@ mod tests {
         // dedup
         let again = parse_session(&source, &mut seen).unwrap();
         assert!(again.is_empty());
+    }
+
+    fn create_otel_db(path: &Path) -> Connection {
+        let conn = Connection::open(path).unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE spans (
+                span_id        TEXT    PRIMARY KEY NOT NULL,
+                trace_id       TEXT    NOT NULL,
+                operation_name TEXT,
+                start_time_ms  INTEGER NOT NULL DEFAULT 0,
+                response_model TEXT
+            );
+            CREATE TABLE span_attributes (
+                id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                span_id TEXT    NOT NULL,
+                key     TEXT    NOT NULL,
+                value   TEXT
+            );
+            ",
+        )
+        .unwrap();
+        conn
+    }
+
+    fn insert_span(
+        conn: &Connection,
+        span_id: &str,
+        trace_id: &str,
+        operation: &str,
+        start_ms: i64,
+        attrs: &[(&str, &str)],
+    ) {
+        conn.execute(
+            "INSERT INTO spans (span_id, trace_id, operation_name, start_time_ms, response_model)
+             VALUES (?1, ?2, ?3, ?4, NULL)",
+            rusqlite::params![span_id, trace_id, operation, start_ms],
+        )
+        .unwrap();
+        for (key, value) in attrs {
+            conn.execute(
+                "INSERT INTO span_attributes (span_id, key, value) VALUES (?1, ?2, ?3)",
+                rusqlite::params![span_id, key, value],
+            )
+            .unwrap();
+        }
+    }
+
+    #[test]
+    fn parses_otel_traces_with_real_token_counts() {
+        let dir = TempDir::new();
+        let db = dir.path().join(config::OTEL_TRACES_FILE);
+        {
+            let conn = create_otel_db(&db);
+            insert_span(
+                &conn,
+                "span-1",
+                "trace-1",
+                "chat",
+                1_780_157_113_020,
+                &[
+                    ("gen_ai.conversation.id", "conv-1"),
+                    ("gen_ai.response.model", "claude-sonnet-4-6"),
+                    ("gen_ai.usage.input_tokens", "1200"),
+                    ("gen_ai.usage.output_tokens", "340"),
+                    ("gen_ai.usage.cache_read.input_tokens", "5000"),
+                    ("gen_ai.usage.cache_creation.input_tokens", "900"),
+                    ("github.copilot.git.repository", "russmckendrick/tokens.git"),
+                    ("github.copilot.chat.turn.id", "turn-1"),
+                ],
+            );
+            insert_span(
+                &conn,
+                "span-2",
+                "trace-1",
+                "execute_tool",
+                1_780_157_114_000,
+                &[
+                    ("gen_ai.tool.name", "run_in_terminal"),
+                    (
+                        "gen_ai.tool.call.arguments",
+                        r#"{"command":"cargo fmt\ncargo test"}"#,
+                    ),
+                ],
+            );
+            insert_span(
+                &conn,
+                "span-3",
+                "trace-1",
+                "invoke_agent",
+                1_780_157_114_500,
+                &[
+                    ("gen_ai.agent.name", "test-writer"),
+                    ("copilot_chat.parent_chat_session_id", "conv-1"),
+                ],
+            );
+            // Zero-usage chat spans carry no billing.
+            insert_span(
+                &conn,
+                "span-4",
+                "trace-2",
+                "chat",
+                1_780_157_115_000,
+                &[
+                    ("gen_ai.conversation.id", "conv-1"),
+                    ("gen_ai.usage.input_tokens", "0"),
+                    ("gen_ai.usage.output_tokens", "0"),
+                ],
+            );
+        }
+
+        let source = SessionSource::session(db, config::OTEL_PROJECT_LABEL, config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source, &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 1, "zero-usage chat spans are skipped");
+        let call = &calls[0];
+        assert_eq!(call.input_tokens, 1200);
+        assert_eq!(call.output_tokens, 340);
+        assert_eq!(call.cache_read_input_tokens, 5000);
+        assert_eq!(call.cache_creation_input_tokens, 900);
+        assert_eq!(call.model, "claude-sonnet-4-6");
+        assert_eq!(call.session_id, "conv-1");
+        assert_eq!(call.project, "tokens", "repository attr, .git stripped");
+        assert_eq!(call.dedup_key, "copilot-otel:span-1");
+        assert_eq!(call.tools, vec!["Bash", "Agent"]);
+        assert_eq!(call.bash_commands, vec!["cargo fmt", "cargo test"]);
+        assert_eq!(
+            call.superseded_dedup_keys,
+            vec!["copilot:conv-1:turn-1".to_string()],
+            "the transcript-style key rides along for archive zeroing"
+        );
+        assert!(call.cost_usd > 0.0);
+        assert!(
+            seen.contains("copilot:conv-1:turn-1"),
+            "the matching transcript turn is claimed so later sources skip it"
+        );
+    }
+
+    #[test]
+    fn otel_suppresses_the_same_turn_arriving_via_transcripts() {
+        let dir = TempDir::new();
+        let db = dir.path().join(config::OTEL_TRACES_FILE);
+        {
+            let conn = create_otel_db(&db);
+            insert_span(
+                &conn,
+                "span-1",
+                "trace-1",
+                "chat",
+                1_780_157_113_020,
+                &[
+                    ("gen_ai.conversation.id", "conv-1"),
+                    ("gen_ai.response.model", "gpt-5"),
+                    ("gen_ai.usage.input_tokens", "100"),
+                    ("gen_ai.usage.output_tokens", "50"),
+                    ("github.copilot.chat.turn.id", "m1"),
+                ],
+            );
+        }
+        let transcript = dir.path().join("conv-1.jsonl");
+        write_lines(
+            &transcript,
+            &[
+                r#"{"type":"session.start","data":{"sessionId":"conv-1","producer":"copilot-agent","model":"gpt-5"}}"#,
+                r#"{"type":"user.message","data":{"content":"hello"}}"#,
+                r#"{"type":"assistant.message","data":{"messageId":"m1","content":"hi there","toolRequests":[{"toolCallId":"call_1","name":"read_file"}]}}"#,
+            ],
+        );
+
+        let mut seen = HashSet::new();
+        let otel_calls = parse_session(
+            &SessionSource::session(db, config::OTEL_PROJECT_LABEL, config::TOOL_ID),
+            &mut seen,
+        )
+        .unwrap();
+        let transcript_calls = parse_session(
+            &SessionSource::session(transcript, "demo", config::TOOL_ID),
+            &mut seen,
+        )
+        .unwrap();
+
+        assert_eq!(otel_calls.len(), 1);
+        assert!(
+            transcript_calls.is_empty(),
+            "the transcript's estimate of the same turn must not double count"
+        );
+    }
+
+    #[test]
+    fn parses_chat_session_journals() {
+        let dir = TempDir::new();
+        let chat_dir = dir.path().join(config::CHAT_SESSIONS_DIR);
+        let journal = chat_dir.join("chat-session-1.jsonl");
+        write_lines(
+            &journal,
+            &[
+                r#"{"kind":0,"v":{"version":3,"creationDate":1780157113020,"sessionId":"chat-session-1","requests":[]}}"#,
+                r#"{"kind":1,"k":["customTitle"],"v":"Fix the parser"}"#,
+                r#"{"kind":2,"k":["requests"],"v":[{"requestId":"request_8c8ce017","modelId":"copilot/claude-sonnet-4.6","completionTokens":490,"message":{"text":"fix the failing test"},"result":{"metadata":{"promptTokens":32543,"outputTokens":60,"resolvedModel":"claude-sonnet-4-6","toolCallRounds":[{"toolName":"read_file"}]}}}]}"#,
+                r#"{"kind":2,"v":[{"requestId":"request_zero","result":{"metadata":{"promptTokens":0,"outputTokens":0}}}]}"#,
+            ],
+        );
+
+        let source = SessionSource::session(chat_dir, "tokens", config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source, &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 1, "zero-token requests are skipped");
+        let call = &calls[0];
+        assert_eq!(call.input_tokens, 32543);
+        assert_eq!(
+            call.output_tokens, 60,
+            "metadata outputTokens wins over completionTokens"
+        );
+        assert_eq!(call.model, "claude-sonnet-4-6");
+        assert_eq!(
+            call.dedup_key,
+            "copilot-chatsession:chat-session-1:request_8c8ce017"
+        );
+        assert_eq!(call.session_id, "chat-session-1");
+        assert_eq!(call.project, "tokens");
+        assert_eq!(call.tools, vec!["Read"]);
+        assert_eq!(call.user_message, "fix the failing test");
+        assert!(call.timestamp.is_some(), "falls back to root creationDate");
+        assert!(call.cost_usd > 0.0);
+
+        let again = parse_session(&source, &mut seen).unwrap();
+        assert!(again.is_empty(), "request ids dedup across reparses");
+    }
+
+    #[test]
+    fn legacy_shutdown_rollup_emits_input_only_calls() {
+        let dir = TempDir::new();
+        let session_dir = dir.path().join("sess-roll");
+        let events = session_dir.join("events.jsonl");
+        write_lines(
+            &events,
+            &[
+                r#"{"type":"session.model_change","timestamp":"2026-04-15T10:00:00Z","data":{"newModel":"gpt-5"}}"#,
+                r#"{"type":"assistant.message","timestamp":"2026-04-15T10:00:10Z","data":{"messageId":"m1","outputTokens":220,"toolRequests":[]}}"#,
+                r#"{"type":"session.shutdown","timestamp":"2026-04-15T10:05:00Z","data":{"shutdownType":"routine","sessionStartTime":1784102040274,"modelMetrics":{"gpt-5":{"requests":{"count":1,"cost":1},"usage":{"inputTokens":1000,"outputTokens":999,"cacheReadTokens":300,"cacheWriteTokens":200,"reasoningTokens":0}},"idle-model":{"usage":{"inputTokens":0,"outputTokens":0,"cacheReadTokens":0,"cacheWriteTokens":0}}}}}"#,
+            ],
+        );
+
+        let source = SessionSource::session(events, "demo", config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source, &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 2, "per-turn output call plus one rollup");
+        let rollup = calls
+            .iter()
+            .find(|c| c.dedup_key == "copilot:sess-roll:shutdown:gpt-5")
+            .expect("shutdown rollup call");
+        assert_eq!(
+            rollup.input_tokens, 500,
+            "inputTokens is cache-inclusive: 1000 - 300 - 200"
+        );
+        assert_eq!(
+            rollup.output_tokens, 0,
+            "output stays with the per-turn call"
+        );
+        assert_eq!(rollup.cache_read_input_tokens, 300);
+        assert_eq!(rollup.cache_creation_input_tokens, 200);
+        assert!(rollup.cost_usd > 0.0);
+        assert!(
+            !calls.iter().any(|c| c.dedup_key.contains("idle-model")),
+            "all-zero model rollups are skipped"
+        );
     }
 
     #[test]

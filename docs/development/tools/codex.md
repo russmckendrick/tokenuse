@@ -9,6 +9,7 @@ OpenAI Codex writes one JSONL "rollout" file per session under a year/month/day 
 | Path | Notes |
 | --- | --- |
 | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | One file per session |
+| `~/.codex/archived_sessions/rollout-*.jsonl` | Sessions archived from the Codex UI (flat directory) |
 
 **Env var override:** `CODEX_HOME` replaces `~/.codex`.
 
@@ -126,13 +127,23 @@ Current bundled OpenAI/Codex cache-read rates are not uniformly 50%: GPT-5.x and
 
 **Reasoning tokens** are folded into `output_tokens` and priced at the output rate, matching the bundled snapshot schema (which has no separate reasoning rate). They are also preserved in `reasoning_tokens` for future per-rate breakouts.
 
-## Deduplication
+## Deduplication and forked sessions
 
-`dedup_key = format!("codex:{path}:{timestamp}:{total.input_tokens}+{total.output_tokens}")`
+Keys are addressed by **session lineage**, not file path:
 
-Including the cumulative totals from `total_token_usage` prevents two consecutive turns that share a timestamp from collapsing, while still catching re-reads of the same file.
+```text
+dedup_key = format!("codex:{root_id}:{in}:{cached}:{out}:{reasoning}:{total}")   // cumulative totals present
+dedup_key = format!("codex:{root_id}:last:{timestamp}:{in}:{cached}:{out}:{reasoning}")  // last-usage fallback
+```
+
+`root_id` is `session_meta.payload.forked_from_id` when present, else `payload.id`, else the file stem. Rollouts forked in the Codex UI replay the parent session's history into the new file with rewritten timestamps; because replays copy the cumulative totals verbatim, a content-addressed key under the parent's namespace collides with the parent's rows no matter which file carries the event. Two defenses work together:
+
+- **Fork cutoff:** in a forked rollout, `token_count` events stamped within 5 seconds of the `session_meta` timestamp are the replay being written out. They advance the cumulative delta state (so post-fork deltas stay correct) but emit nothing — this also covers replays whose parent file has been deleted.
+- **Key collision:** replayed events past the cutoff produce the parent's own keys and are dropped by the shared `seen` set or the archive's unique `(tool, dedup_key)` constraint.
 
 Duplicate `token_count` snapshots with unchanged cumulative totals are skipped before deduplication because their derived usage delta is zero. Skipped duplicate snapshots also clear pending tool buffers so tool attribution cannot leak into the next emitted call.
+
+**Archive migration:** every emitted call carries the legacy path-based key(s) it replaces (its own pre-v6 key plus any dropped replays') in the transient `superseded_dedup_keys` list. On insert, the archive deletes those legacy rows in the same transaction and — when the replaced row is the same event (token buckets match) — the fresh row inherits its import-time `cost_usd`, so re-keying never silently reprices history. A forked rollout that contains no post-fork usage emits nothing, and any legacy replay rows from such files remain until the fork does new work; this is rare and self-heals.
 
 ## Tools / bash extraction
 
@@ -175,7 +186,7 @@ The parser also consumes four `event_msg` inner types that never produce a `Pars
 
 `apply_patch` function-call arguments are **not** parsed for file paths — `patch_apply_end` carries the authoritative applied result, including files the patch actually touched. Rollouts old enough to lack these events simply leave the enrichment fields `NULL`/empty.
 
-The adapter's fingerprint prefix is `codex-v5-string-credit-balance`; bumping it forces archived rollouts back through the parser after an extraction change. Version 5 specifically reprocesses sessions that the string credit-balance schema caused earlier builds to mark as processed without recording their calls.
+The adapter's fingerprint prefix is `codex-v6-fork-aware-dedup`; bumping it forces archived rollouts back through the parser after an extraction change. Version 6 re-keys every call onto lineage-addressed dedup keys (see [Deduplication and forked sessions](#deduplication-and-forked-sessions)) and retires the legacy path-based rows via supersession.
 
 ## Known limitations
 

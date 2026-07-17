@@ -10,6 +10,17 @@ pub const LEGACY_EVENTS: &str = "events.jsonl";
 pub const WORKSPACE_FILE: &str = "workspace.yaml";
 pub const VSCODE_EXTENSION_DIR: &str = "GitHub.copilot-chat/transcripts";
 pub const VSCODE_PRODUCER: &str = "copilot-agent";
+// The Copilot Chat extension's OpenTelemetry span store: the one VS Code
+// source with real token counts (input, output, cache read, cache write).
+pub const OTEL_EXTENSION_DIR: &str = "github.copilot-chat";
+pub const OTEL_TRACES_FILE: &str = "agent-traces.db";
+pub const OTEL_DEDUP_PREFIX: &str = "copilot-otel:";
+pub const OTEL_PROJECT_LABEL: &str = "copilot-chat";
+// VS Code core chat-session journals: real prompt/output token counts kept
+// as a delta journal per workspace, plus a global "empty window" folder.
+pub const CHAT_SESSIONS_DIR: &str = "chatSessions";
+pub const EMPTY_WINDOW_CHAT_SESSIONS_DIR: &str = "emptyWindowChatSessions";
+pub const CHAT_SESSION_DEDUP_PREFIX: &str = "copilot-chatsession:";
 pub const CHARS_PER_TOKEN: f64 = 4.0;
 pub const LIMIT_SIDECAR_FILE: &str = "copilot.json";
 pub const COPILOT_INTERNAL_USER_URL: &str = "https://api.github.com/copilot_internal/user";
@@ -128,26 +139,55 @@ pub fn cli_root() -> Option<PathBuf> {
     paths::home().map(|h| h.join(CLI_DIR))
 }
 
-pub fn vscode_workspace_storage_dirs() -> Vec<PathBuf> {
+/// One VS Code variant's storage pair. `workspace_storage` holds per-project
+/// hash dirs (transcripts, chatSessions); `global_storage` holds the Copilot
+/// Chat extension's OTel span store and the empty-window chat journals.
+#[derive(Debug, Clone)]
+pub struct VsCodeStorage {
+    pub workspace_storage: PathBuf,
+    pub global_storage: PathBuf,
+}
+
+pub fn vscode_storage_roots() -> Vec<VsCodeStorage> {
+    vscode_user_dirs()
+        .into_iter()
+        .map(|user| VsCodeStorage {
+            workspace_storage: user.join("workspaceStorage"),
+            global_storage: user.join("globalStorage"),
+        })
+        .collect()
+}
+
+pub fn otel_trace_db(storage: &VsCodeStorage) -> PathBuf {
+    storage
+        .global_storage
+        .join(OTEL_EXTENSION_DIR)
+        .join(OTEL_TRACES_FILE)
+}
+
+fn vscode_user_dirs() -> Vec<PathBuf> {
     let Some(home) = paths::home() else {
         return Vec::new();
     };
     if cfg!(target_os = "macos") {
         return vec![
-            home.join("Library/Application Support/Code/User/workspaceStorage"),
-            home.join("Library/Application Support/Code - Insiders/User/workspaceStorage"),
+            home.join("Library/Application Support/Code/User"),
+            home.join("Library/Application Support/Code - Insiders/User"),
+            home.join("Library/Application Support/VSCodium/User"),
         ];
     }
     if cfg!(target_os = "windows") {
         return vec![
-            home.join("AppData/Roaming/Code/User/workspaceStorage"),
-            home.join("AppData/Roaming/Code - Insiders/User/workspaceStorage"),
+            home.join("AppData/Roaming/Code/User"),
+            home.join("AppData/Roaming/Code - Insiders/User"),
+            home.join("AppData/Roaming/VSCodium/User"),
         ];
     }
     vec![
-        home.join(".config/Code/User/workspaceStorage"),
-        home.join(".config/Code - Insiders/User/workspaceStorage"),
-        home.join(".vscode-server/data/User/workspaceStorage"),
+        home.join(".config/Code/User"),
+        home.join(".config/Code - Insiders/User"),
+        home.join(".config/VSCodium/User"),
+        home.join(".vscode-server/data/User"),
     ]
 }
 

@@ -179,6 +179,10 @@ pub struct ParsedCall {
     pub input_tokens: u64,
     pub output_tokens: u64,
     pub cache_creation_input_tokens: u64,
+    /// 1-hour-TTL share of `cache_creation_input_tokens` (Anthropic bills it
+    /// at a premium). Import-time pricing input only — never persisted; the
+    /// archived row keeps the cost it produced.
+    pub cache_creation_1h_input_tokens: u64,
     pub cache_read_input_tokens: u64,
     pub cached_input_tokens: u64,
     pub reasoning_tokens: u64,

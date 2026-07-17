@@ -576,6 +576,11 @@ fn effective_date(timestamp: Option<DateTime<Utc>>) -> NaiveDate {
         .unwrap_or_else(|| Utc::now().date_naive())
 }
 
+/// Anthropic prices 1-hour cache writes at 2x the base input rate versus
+/// 1.25x for the default 5-minute TTL, i.e. 1.6x the 5-minute cache-write
+/// rate that the pricing books carry.
+const ONE_HOUR_CACHE_WRITE_PREMIUM: f64 = 1.6;
+
 pub fn cost(model: &str, call: &ParsedCall, speed: Speed) -> f64 {
     #[cfg(test)]
     let price = PriceTable::embedded().lookup_for(call.tool, model, call.timestamp);
@@ -591,6 +596,11 @@ pub fn cost(model: &str, call: &ParsedCall, speed: Speed) -> f64 {
     let input = call.input_tokens as f64;
     let output = call.output_tokens as f64;
     let cache_w = call.cache_creation_input_tokens as f64;
+    // The 1h share is inside `cache_creation_input_tokens`; it only adds the
+    // premium on top of the base cache-write rate already charged above.
+    let cache_w_1h = call
+        .cache_creation_1h_input_tokens
+        .min(call.cache_creation_input_tokens) as f64;
     let cache_r = call.cache_read_input_tokens as f64;
     let web = call.web_search_requests as f64;
 
@@ -598,6 +608,7 @@ pub fn cost(model: &str, call: &ParsedCall, speed: Speed) -> f64 {
         * (input * price.input
             + output * price.output
             + cache_w * price.cache_write
+            + cache_w_1h * price.cache_write * (ONE_HOUR_CACHE_WRITE_PREMIUM - 1.0)
             + cache_r * price.cache_read
             + web * price.web_search)
 }
@@ -624,10 +635,63 @@ mod tests {
     }
 
     #[test]
+    fn one_hour_cache_writes_carry_a_1_6x_premium() {
+        let mut base = call_at("claude-code", "claude-opus-4-7", (2026, 4, 29));
+        base.input_tokens = 0;
+        base.output_tokens = 0;
+        base.cache_read_input_tokens = 0;
+        base.cache_creation_input_tokens = 1_000_000;
+        let five_minute = cost("claude-opus-4-7", &base, Speed::Standard);
+        assert!(five_minute > 0.0);
+
+        let mut one_hour = base.clone();
+        one_hour.cache_creation_1h_input_tokens = 1_000_000;
+        let with_premium = cost("claude-opus-4-7", &one_hour, Speed::Standard);
+
+        assert!(
+            (with_premium - five_minute * ONE_HOUR_CACHE_WRITE_PREMIUM).abs() < 1e-9,
+            "1h writes must cost exactly {ONE_HOUR_CACHE_WRITE_PREMIUM}x the 5m write rate"
+        );
+
+        // The 1h share can never exceed the write total.
+        let mut clamped = base.clone();
+        clamped.cache_creation_1h_input_tokens = 2_000_000;
+        assert_eq!(
+            cost("claude-opus-4-7", &clamped, Speed::Standard),
+            with_premium
+        );
+    }
+
+    #[test]
     fn opus_47_resolves_with_date_suffix_and_pin() {
         let p = PriceTable::embedded().lookup("anthropic/claude-opus-4-7-20250514@v1");
         assert!(p.input > 0.0);
         assert_eq!(p.fast_multiplier, Some(6.0));
+    }
+
+    #[test]
+    fn composer_house_models_resolve_in_the_cursor_scope() {
+        let table = PriceTable::embedded();
+
+        // (model, input $/M, output $/M) from cursor.com/docs/models-and-pricing;
+        // composer-1.5 and composer-2 are retired upstream and pinned via the
+        // sources manifest.
+        for (model, input, output) in [
+            ("composer-1", 1.25, 10.0),
+            ("composer-1.5", 3.5, 17.5),
+            ("composer-2", 0.5, 2.5),
+            ("composer-2.5", 0.5, 2.5),
+        ] {
+            let p = table.lookup_for("cursor", model, None);
+            assert!(
+                (p.input * 1e6 - input).abs() < 0.001,
+                "{model} input rate must come from the Cursor scope, not the fallback"
+            );
+            assert!(
+                (p.output * 1e6 - output).abs() < 0.001,
+                "{model} output rate"
+            );
+        }
     }
 
     #[test]

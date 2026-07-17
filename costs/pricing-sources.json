@@ -186,6 +186,19 @@
           "web_search": 0.01
         },
         "rows": [
+          { "match": "Composer 1", "model": "composer-1" },
+          {
+            "match": "Composer 1",
+            "model": "composer-1.5",
+            "set": { "input": 0.0000035, "cache_read": 0.00000035, "output": 0.0000175 },
+            "note": "Composer 1.5 is retired from Cursor's pricing table; its published rates ($3.50/$17.50 per 1M, cache read $0.35) are pinned here, anchored to the Composer 1 row."
+          },
+          {
+            "match": "Composer 1",
+            "model": "composer-2",
+            "set": { "input": 0.0000005, "cache_read": 0.0000002, "output": 0.0000025 },
+            "note": "Composer 2 is retired from Cursor's pricing table; its published rates matched Composer 2.5 ($0.50/$2.50 per 1M, cache read $0.20) and are pinned here, anchored to the Composer 1 row."
+          },
           { "match": "Composer 2.5", "model": "composer-2.5" },
           {
             "match": "Composer 2.5",

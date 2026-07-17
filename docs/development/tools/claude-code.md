@@ -13,7 +13,7 @@ Claude Code records every assistant message — including token usage and tool c
 | Linux (Desktop, agent mode) | `~/.config/Claude/local-agent-mode-sessions/**/projects/<dir>/*.jsonl` |
 | Windows (Desktop, agent mode) | `%APPDATA%/Claude/local-agent-mode-sessions/**/projects/<dir>/*.jsonl` |
 
-Subagent transcripts live in a `subagents/` subdirectory under each project and are read in addition to the main `*.jsonl` files.
+Subagent transcripts live in a `subagents/` subdirectory under each project and are read in addition to the main `*.jsonl` files. The whole `subagents/` tree is walked: workflow and ultracode runs nest their agent transcripts as `subagents/workflows/<workflow>/agent-*.jsonl`. Newer Claude Code builds also scope subagent transcripts per session as `<project>/<session-id>/subagents/agent-*.jsonl`; those nested directories are walked the same way.
 
 **Env var override:** `CLAUDE_CONFIG_DIR` replaces the default CLI roots for the projects path. It can contain one path or a comma-separated list of config roots, each expected to contain a `projects/` directory. Without an override, `tokenuse` checks both `$XDG_CONFIG_HOME/claude/projects` (or `~/.config/claude/projects`) and `~/.claude/projects`.
 
@@ -90,7 +90,8 @@ Each `*.jsonl` is one JSON object per line. Two entry types matter:
 | --- | --- |
 | `input_tokens` | `message.usage.input_tokens` |
 | `output_tokens` | `message.usage.output_tokens` |
-| `cache_creation_input_tokens` | `message.usage.cache_creation_input_tokens` |
+| `cache_creation_input_tokens` | `max(usage.cache_creation_input_tokens, usage.cache_creation.ephemeral_5m_input_tokens + ephemeral_1h_input_tokens)` |
+| `cache_creation_1h_input_tokens` | `usage.cache_creation.ephemeral_1h_input_tokens`, capped by the total; transient pricing input, never persisted |
 | `cache_read_input_tokens` | `message.usage.cache_read_input_tokens` |
 | `cached_input_tokens` | `0` — Anthropic reports cache reads separately (not included in input) |
 | `reasoning_tokens` | `0` — Claude does not report a separate reasoning bucket |
@@ -101,11 +102,25 @@ Each `*.jsonl` is one JSON object per line. Two entry types matter:
 
 Anthropic-specific quirk: cache reads are billed at 10% of the input rate in current bundled rows, cache writes use the 5-minute 125% rate, and `cache_read_input_tokens` is **not** included in `input_tokens`. The pricing formula handles this directly — do **not** sum the buckets together before pricing. See [Pricing and cache rates](../pricing.md) for source evidence.
 
+**1-hour cache writes.** Newer transcripts split cache writes by TTL under `usage.cache_creation` (`ephemeral_5m_input_tokens` / `ephemeral_1h_input_tokens`). Anthropic bills 1h writes at 2x the base input rate versus 1.25x for 5m, so the pricing formula charges the 1h share a 1.6x premium over the books' cache-write rate. Sessions pinned to 1h caching (long-TTL prompt caching) were underpriced before this split was read.
+
+## Advisor calls
+
+Some messages carry `usage.iterations[]`: a `message`-type iteration mirrors the top-level usage (never separately counted), while each `advisor_message` iteration is its **own billed API call** with its own model (often a cheaper one) and its own token buckets, flat on the iteration object. The parser emits one extra `ParsedCall` per advisor iteration with `dedup_key = <message.id>:advisor:<ordinal>`, where the ordinal counts advisor entries only. Advisor calls carry no tools or enrichment; they share the parent message's timestamp, session, and project. `fallback_message` iterations are not accounted (semantics unknown; matches upstream observations).
+
+## Streamed content blocks
+
+Claude Code writes **one JSONL line per content block**: an assistant message with a text block and three `tool_use` blocks appears as four `type: "assistant"` lines, each repeating the same `message.id` and the same final `usage` payload. Same-id lines are not always adjacent — `tool_result` user lines interleave between them.
+
+The parser creates one `ParsedCall` from the first line of a message id and merges every later line of that id (within the same file) into it: tools, bash commands, edited/referenced files, code blocks, and response text accumulate; token counts, cost, and the timestamp stay from the first line. Observed usage is identical across a message's lines (audited across thousands of duplicate ids), so nothing is summed.
+
 ## Deduplication
 
 `dedup_key = message.id` if present, otherwise `claude:<timestamp>`.
 
-Re-reading the same JSONL across runs is normal; the shared `seen: &mut HashSet<String>` ensures every assistant message contributes once per process.
+Re-reading the same JSONL across runs is normal; the shared `seen: &mut HashSet<String>` ensures every assistant message contributes once per process. Within one file, later lines of an already-seen message id merge into its call (see above); across files (resumed sessions replay history), the first file parsed wins.
+
+On duplicate-key archive inserts, Claude Code rows replace their stored activity columns (tools, bash commands, code blocks, file lists) and never shrink `response_chars` — this migrates rows archived by the pre-merge parser to the complete activity on the fingerprint-bump reparse.
 
 ## Tools / bash extraction
 
@@ -138,7 +153,7 @@ Beyond token accounting, the parser extracts per-call signals for the desktop Co
 
 User lines that are slash-command wrappers (`<command-...>`, `<local-command-...>`) or interrupt markers never become `user_message`/`prompt_chars` — they are UI plumbing, not prompts.
 
-The adapter prefixes its source fingerprints with `claude-code-v2-coach-enrichment`; bumping that constant forces archived sessions back through the parser after an extraction change.
+The adapter prefixes its source fingerprints with `claude-code-v3-streamed-blocks`; bumping that constant forces archived sessions back through the parser after an extraction change.
 
 ## Known limitations
 

@@ -16,7 +16,7 @@ pub struct ClaudeCode;
 
 /// Bump when the parser learns to extract new fields so archived sessions
 /// re-parse through it on the next sync.
-const SOURCE_FINGERPRINT_VERSION: &str = "claude-code-v2-coach-enrichment";
+const SOURCE_FINGERPRINT_VERSION: &str = "claude-code-v3-streamed-blocks";
 
 impl ToolAdapter for ClaudeCode {
     fn id(&self) -> &'static str {

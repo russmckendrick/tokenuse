@@ -10,7 +10,11 @@ pub mod parser;
 
 pub struct Codex;
 
-const SOURCE_FINGERPRINT_VERSION: &str = "codex-v5-string-credit-balance";
+/// Bump when the parser changes what it extracts so archived rollouts
+/// re-parse on the next sync. Version 6 re-keys every call onto
+/// lineage-addressed dedup keys (fork-aware) and retires the legacy
+/// path-based rows via supersession.
+const SOURCE_FINGERPRINT_VERSION: &str = "codex-v6-fork-aware-dedup";
 
 impl ToolAdapter for Codex {
     fn id(&self) -> &'static str {

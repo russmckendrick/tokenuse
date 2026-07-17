@@ -34,6 +34,8 @@ Data is merged in this precedence:
 5. JSONL/TXT: prompt, assistant text, and tools only when a richer source lacks them.
 6. `ai-code-tracking.db`: model, mode, project, edited-file, and session-time fallback.
 
+Project attribution additionally consults the per-workspace storage tree (`<User>/workspaceStorage/<hash>/`): each hash pairs a `workspace.json` folder URI with a per-workspace `state.vscdb` whose ItemTable (`composer.composerData`, renamed `composer.composerHeaders` in newer builds) lists the composers opened in that workspace. `file://` folders decode to plain absolute paths so the shared git-root project folding applies; multi-root and folderless windows have no `folder` key and keep the existing fallback chain. The mapping sits between the store-session project and the discovery fallback.
+
 Model precedence is narrower and intentional:
 
 1. AgentKv assistant block `providerOptions.cursor.modelName`
@@ -82,6 +84,17 @@ Composer modes map to `agent`, `chat`, `plan`, or `unknown` using `forceMode`, `
 
 Explicit bubble totals are preferred. A missing input or output side alone is estimated as `ceil(chars / 4)`; cache buckets stay zero because Cursor does not expose reliable local cache counts.
 
+### Context-meter input credits
+
+Current Cursor builds write `{0,0}` per-bubble token counts, so chars/4 was the only input signal. The composer's own context meter — `composerData.promptTokenBreakdown.totalUsedTokens`, falling back to `contextTokensUsed` — is Cursor's real input figure for the conversation. When the meter is present and **no** bubble in the conversation carries explicit tokens:
+
+- per-turn chars/4 **input** estimates are dropped (turns keep their output side), and
+- one **input credit** call is emitted per conversation: `dedup_key = cursor:composer-input:<composer-id>`, anchored at `composerData.createdAt` (`timestamp_quality = session`) so the credited day stays stable across re-parses, `token_quality = estimated`.
+
+The meter is the *latest* context-window snapshot, not a per-turn sum: growth after the anchor stays uncounted. This undercounts versus the Cursor admin console but never double counts. Any explicit bubble tokens (older builds) win outright and disable the credit.
+
+On duplicate-key archive inserts, Cursor rows refresh their token columns (and the cost computed from them) when the counts changed — reconstruction is authoritative, so a reparse that moves input onto the meter credit, or picks up token counts Cursor filled in after the fact, updates the archived row in place.
+
 Archive v5 records provenance:
 
 | Field | Cursor values |
@@ -98,7 +111,8 @@ Canonical keys are stable and path-independent:
 
 - state-backed: `cursor:composer:<composer-id>:<request-id-or-user-bubble-id>`;
 - store-backed: `cursor:chat:<conversation-id>:<request-id-or-turn-index>`;
-- transcript-only: `cursor:transcript:<conversation-id>:<turn-index>`.
+- transcript-only: `cursor:transcript:<conversation-id>:<turn-index>`;
+- context-meter credit: `cursor:composer-input:<composer-id>` (one per conversation).
 
 Each reconstructed call carries transient exact legacy keys for the bubble rows, `cursor:agentKv:<request-id>`, and old path-based transcripts it replaces. Archive insertion and deletion share one transaction. Only those listed rows are deleted after the canonical row is accepted; old rows whose source turn cannot be reconstructed remain untouched.
 

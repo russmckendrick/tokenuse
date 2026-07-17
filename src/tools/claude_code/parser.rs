@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
@@ -6,6 +6,7 @@ use chrono::{DateTime, Utc};
 use color_eyre::Result;
 use serde::Deserialize;
 use serde_json::Value;
+use walkdir::WalkDir;
 
 use crate::pricing;
 use crate::tools::{jsonl, CodeBlock, ParsedCall, SessionSource, Speed};
@@ -55,6 +56,45 @@ struct Usage {
     #[serde(default)]
     cache_read_input_tokens: u64,
     #[serde(default)]
+    cache_creation: Option<CacheCreation>,
+    #[serde(default)]
+    speed: Option<String>,
+    #[serde(default)]
+    server_tool_use: Option<ServerToolUse>,
+    /// Advisor runs bill separately: each `advisor_message` iteration is its
+    /// own API call with its own model and usage. A `message` iteration
+    /// mirrors the top-level usage and must not be double counted.
+    #[serde(default)]
+    iterations: Option<Vec<AdvisorIteration>>,
+}
+
+/// Per-TTL cache-write split; the flat `cache_creation_input_tokens` field
+/// remains as the total.
+#[derive(Debug, Deserialize, Default)]
+struct CacheCreation {
+    #[serde(default)]
+    ephemeral_5m_input_tokens: u64,
+    #[serde(default)]
+    ephemeral_1h_input_tokens: u64,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct AdvisorIteration {
+    #[serde(default, rename = "type")]
+    kind: String,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    input_tokens: u64,
+    #[serde(default)]
+    output_tokens: u64,
+    #[serde(default)]
+    cache_creation_input_tokens: u64,
+    #[serde(default)]
+    cache_read_input_tokens: u64,
+    #[serde(default)]
+    cache_creation: Option<CacheCreation>,
+    #[serde(default)]
     speed: Option<String>,
     #[serde(default)]
     server_tool_use: Option<ServerToolUse>,
@@ -64,6 +104,16 @@ struct Usage {
 struct ServerToolUse {
     #[serde(default)]
     web_search_requests: u64,
+}
+
+/// `total = max(flat legacy field, 5m + 1h)` guards against either field
+/// lagging the other; the 1h share is capped by the total.
+fn cache_creation_buckets(legacy: u64, per_ttl: Option<&CacheCreation>) -> (u64, u64) {
+    let (five_m, one_h) = per_ttl
+        .map(|c| (c.ephemeral_5m_input_tokens, c.ephemeral_1h_input_tokens))
+        .unwrap_or((0, 0));
+    let total = legacy.max(five_m + one_h);
+    (total, one_h.min(total))
 }
 
 pub fn parse_session(
@@ -76,6 +126,12 @@ pub fn parse_session(
         let mut last_user_chars: Option<u64> = None;
         let mut last_user_ts: Option<DateTime<Utc>> = None;
         let file_start_index = calls.len();
+        // Claude Code streams one JSONL line per content block; every line of
+        // a message repeats the message id and the final usage payload. Later
+        // lines of an id already seen in this file merge their activity into
+        // the call the first line created (tool_result lines interleave, so
+        // same-id lines are not always adjacent).
+        let mut file_calls_by_id: HashMap<String, usize> = HashMap::new();
         let mut project = source.project.clone();
         let lines = match jsonl::read_lines(&path) {
             Ok(l) => l,
@@ -132,16 +188,22 @@ pub fn parse_session(
                     let Some(msg) = entry.message.as_ref() else {
                         continue;
                     };
+
+                    let dedup_key = msg.id.clone().unwrap_or_else(|| {
+                        format!("claude:{}", entry.timestamp.clone().unwrap_or_default())
+                    });
+
+                    if let Some(&idx) = file_calls_by_id.get(&dedup_key) {
+                        merge_streamed_line(&mut calls[idx], msg.content.as_ref());
+                        continue;
+                    }
+
                     let Some(model) = msg.model.clone() else {
                         continue;
                     };
                     let Some(usage) = msg.usage.as_ref() else {
                         continue;
                     };
-
-                    let dedup_key = msg.id.clone().unwrap_or_else(|| {
-                        format!("claude:{}", entry.timestamp.clone().unwrap_or_default())
-                    });
 
                     if !seen.insert(dedup_key.clone()) {
                         continue;
@@ -159,13 +221,31 @@ pub fn parse_session(
 
                     let timestamp = entry.timestamp.as_deref().and_then(parse_timestamp);
                     let elapsed_ms = jsonl::turn_elapsed_ms(timestamp, last_user_ts);
+                    let (cache_creation_total, cache_creation_1h) = cache_creation_buckets(
+                        usage.cache_creation_input_tokens,
+                        usage.cache_creation.as_ref(),
+                    );
+
+                    // Advisor iterations are separately billed API calls that
+                    // ride inside this message's usage. Emit them first so the
+                    // interrupt marker's "previous call" stays the main call.
+                    calls.extend(advisor_calls(
+                        usage,
+                        &dedup_key,
+                        &model,
+                        timestamp,
+                        entry.session_id.as_deref().unwrap_or(&session_id),
+                        &project,
+                        seen,
+                    ));
 
                     let mut call = ParsedCall {
                         tool: config::TOOL_ID,
                         model: model.clone(),
                         input_tokens: usage.input_tokens,
                         output_tokens: usage.output_tokens,
-                        cache_creation_input_tokens: usage.cache_creation_input_tokens,
+                        cache_creation_input_tokens: cache_creation_total,
+                        cache_creation_1h_input_tokens: cache_creation_1h,
                         cache_read_input_tokens: usage.cache_read_input_tokens,
                         web_search_requests: usage
                             .server_tool_use
@@ -193,6 +273,7 @@ pub fn parse_session(
                     };
 
                     call.cost_usd = pricing::cost(&model, &call, speed);
+                    file_calls_by_id.insert(call.dedup_key.clone(), calls.len());
                     calls.push(call);
                 }
                 _ => {}
@@ -201,6 +282,106 @@ pub fn parse_session(
     }
 
     Ok(calls)
+}
+
+/// Later streamed lines of a message repeat its id and usage but carry the
+/// next content block, so only activity accumulates; token counts and cost
+/// stay from the first line (observed usage is identical across rewrites).
+fn merge_streamed_line(call: &mut ParsedCall, content: Option<&Value>) {
+    let activity = extract_activity(content);
+    let response_text = extract_response_text(content);
+
+    call.tools.extend(activity.tools);
+    call.bash_commands.extend(activity.bash_commands);
+
+    if !response_text.is_empty() || !activity.code_blocks.is_empty() {
+        let mut blocks = std::mem::take(&mut call.code_blocks);
+        blocks.extend(jsonl::extract_code_fences(&response_text));
+        blocks.extend(activity.code_blocks);
+        call.code_blocks = jsonl::merge_code_blocks(blocks);
+    }
+    if !response_text.is_empty() {
+        call.response_chars =
+            Some(call.response_chars.unwrap_or(0) + response_text.chars().count() as u64);
+    }
+    if !activity.edited_files.is_empty() {
+        let mut files = std::mem::take(&mut call.edited_files);
+        files.extend(activity.edited_files);
+        call.edited_files = jsonl::dedup_files(files);
+    }
+    if !activity.referenced_files.is_empty() {
+        let mut files = std::mem::take(&mut call.referenced_files);
+        files.extend(activity.referenced_files);
+        call.referenced_files = jsonl::dedup_files(files);
+    }
+}
+
+/// Each `advisor_message` iteration inside `usage.iterations` is a separately
+/// billed API call with its own model and usage; `message` and
+/// `fallback_message` iterations mirror the top-level usage and are skipped.
+/// The dedup ordinal counts advisor entries only, so the key is stable even
+/// when other iteration types move around.
+fn advisor_calls(
+    usage: &Usage,
+    base_key: &str,
+    main_model: &str,
+    timestamp: Option<DateTime<Utc>>,
+    session_id: &str,
+    project: &str,
+    seen: &mut HashSet<String>,
+) -> Vec<ParsedCall> {
+    let Some(iterations) = usage.iterations.as_ref() else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut ordinal = 0usize;
+    for iter in iterations {
+        if iter.kind != "advisor_message" {
+            continue;
+        }
+        let model = iter
+            .model
+            .as_deref()
+            .filter(|m| !m.is_empty())
+            .unwrap_or(main_model)
+            .to_string();
+        let dedup_key = format!("{base_key}:advisor:{ordinal}");
+        ordinal += 1;
+        if !seen.insert(dedup_key.clone()) {
+            continue;
+        }
+        let speed = match iter.speed.as_deref().or(usage.speed.as_deref()) {
+            Some("fast") => Speed::Fast,
+            _ => Speed::Standard,
+        };
+        let (cache_total, cache_1h) = cache_creation_buckets(
+            iter.cache_creation_input_tokens,
+            iter.cache_creation.as_ref(),
+        );
+        let mut call = ParsedCall {
+            tool: config::TOOL_ID,
+            model: model.clone(),
+            input_tokens: iter.input_tokens,
+            output_tokens: iter.output_tokens,
+            cache_creation_input_tokens: cache_total,
+            cache_creation_1h_input_tokens: cache_1h,
+            cache_read_input_tokens: iter.cache_read_input_tokens,
+            web_search_requests: iter
+                .server_tool_use
+                .as_ref()
+                .map(|s| s.web_search_requests)
+                .unwrap_or(0),
+            speed,
+            timestamp,
+            dedup_key,
+            session_id: session_id.to_string(),
+            project: project.to_string(),
+            ..ParsedCall::default()
+        };
+        call.cost_usd = pricing::cost(&model, &call, speed);
+        out.push(call);
+    }
+    out
 }
 
 fn collect_jsonl(dir: &Path) -> Vec<std::path::PathBuf> {
@@ -216,20 +397,30 @@ fn collect_jsonl(dir: &Path) -> Vec<std::path::PathBuf> {
         {
             files.push(path);
         } else if path.is_dir() && entry.file_name() == config::SUBAGENTS_DIR {
-            if let Ok(sub_entries) = fs::read_dir(&path) {
-                for sub in sub_entries.flatten() {
-                    let sub_path = sub.path();
-                    if sub_path.is_file()
-                        && sub_path.extension().and_then(|s| s.to_str())
-                            == Some(config::SESSION_GLOB_EXT)
-                    {
-                        files.push(sub_path);
-                    }
-                }
+            collect_subagent_jsonl(&path, &mut files);
+        } else if path.is_dir() {
+            // Newer Claude Code builds scope subagent transcripts per
+            // session: <project>/<session-id>/subagents/agent-*.jsonl.
+            let nested = path.join(config::SUBAGENTS_DIR);
+            if nested.is_dir() {
+                collect_subagent_jsonl(&nested, &mut files);
             }
         }
     }
     files
+}
+
+/// Walk the whole subagents tree: workflow/ultracode runs nest their agent
+/// transcripts as subagents/workflows/<workflow>/agent-*.jsonl.
+fn collect_subagent_jsonl(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
+    for sub in WalkDir::new(dir).follow_links(false).into_iter().flatten() {
+        let sub_path = sub.path();
+        if sub.file_type().is_file()
+            && sub_path.extension().and_then(|s| s.to_str()) == Some(config::SESSION_GLOB_EXT)
+        {
+            files.push(sub_path.to_path_buf());
+        }
+    }
 }
 
 fn parse_timestamp(s: &str) -> Option<DateTime<Utc>> {
@@ -409,9 +600,12 @@ mod tests {
             SessionSource::session(dir.path().to_path_buf(), "test/project", config::TOOL_ID);
         let mut seen = HashSet::new();
         let calls = parse_session(&source, &mut seen).unwrap();
-        assert_eq!(calls.len(), 2, "duplicate msg.id should be dropped");
+        assert_eq!(calls.len(), 2, "duplicate msg.id lines merge into one call");
         let call = &calls[0];
-        assert_eq!(call.input_tokens, 100);
+        assert_eq!(
+            call.input_tokens, 100,
+            "token counts stay from the first line of a message"
+        );
         assert_eq!(call.output_tokens, 50);
         assert_eq!(call.cache_creation_input_tokens, 1000);
         assert_eq!(call.cache_read_input_tokens, 5000);
@@ -463,6 +657,168 @@ mod tests {
         assert_eq!(second.response_chars, Some(4));
         assert!(!second.is_canceled);
         assert!(second.code_blocks.is_empty());
+    }
+
+    #[test]
+    fn streamed_content_block_lines_merge_into_one_call() {
+        let dir = tempfile_lite::TempDir::new();
+        let path = dir.path().join("session.jsonl");
+        let mut f = std::fs::File::create(&path).unwrap();
+        // Claude Code writes one line per content block: same message id and
+        // usage on every line, tool_result user lines interleaved between the
+        // non-adjacent block lines.
+        for line in [
+            r#"{"type":"user","timestamp":"2026-04-26T10:00:00Z","sessionId":"s1","message":{"role":"user","content":"add a helper"}}"#,
+            r#"{"type":"assistant","timestamp":"2026-04-26T10:00:01Z","sessionId":"s1","message":{"role":"assistant","id":"msg_a","model":"claude-opus-4-7","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"text","text":"On it."}]}}"#,
+            r#"{"type":"assistant","timestamp":"2026-04-26T10:00:02Z","sessionId":"s1","message":{"role":"assistant","id":"msg_a","model":"claude-opus-4-7","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","name":"Bash","input":{"command":"cargo check"}}]}}"#,
+            r#"{"type":"user","timestamp":"2026-04-26T10:00:03Z","sessionId":"s1","message":{"role":"user","content":[{"type":"tool_result","content":"ok"}]}}"#,
+            r#"{"type":"assistant","timestamp":"2026-04-26T10:00:04Z","sessionId":"s1","message":{"role":"assistant","id":"msg_a","model":"claude-opus-4-7","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"src/lib.rs","new_string":"fn helper() {}"}},{"type":"text","text":"Done."}]}}"#,
+        ] {
+            writeln!(f, "{}", line).unwrap();
+        }
+
+        let source = SessionSource::session(dir.path().to_path_buf(), "p", config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source, &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 1, "all block lines fold into one call");
+        let call = &calls[0];
+        assert_eq!(call.input_tokens, 100);
+        assert_eq!(call.output_tokens, 50);
+        assert_eq!(
+            call.tools,
+            vec!["Bash", "Edit"],
+            "tool_use blocks on later lines must not be lost"
+        );
+        assert_eq!(call.bash_commands, vec!["cargo check"]);
+        assert_eq!(call.edited_files, vec!["src/lib.rs"]);
+        assert_eq!(
+            call.response_chars,
+            Some(("On it.".chars().count() + "Done.".chars().count()) as u64),
+            "text blocks on later lines accumulate"
+        );
+        assert_eq!(call.code_blocks.len(), 1, "Edit payload counts as output");
+        assert_eq!(
+            call.user_message, "add a helper",
+            "tool_result user lines never become prompts"
+        );
+        assert_eq!(
+            call.timestamp,
+            parse_timestamp("2026-04-26T10:00:01Z"),
+            "merged call keeps the first line's timestamp"
+        );
+    }
+
+    #[test]
+    fn workflow_subagent_transcripts_are_collected() {
+        let dir = tempfile_lite::TempDir::new();
+        let write_session = |rel: &str, id: &str| {
+            let path = dir.path().join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            let mut f = std::fs::File::create(&path).unwrap();
+            writeln!(
+                f,
+                r#"{{"type":"assistant","timestamp":"2026-04-26T10:00:01Z","sessionId":"{id}","message":{{"role":"assistant","id":"{id}","model":"claude-opus-4-7","usage":{{"input_tokens":1,"output_tokens":1}}}}}}"#
+            )
+            .unwrap();
+        };
+        write_session("session.jsonl", "msg_main");
+        write_session("subagents/agent-1.jsonl", "msg_sub");
+        write_session("subagents/workflows/wf-1/agent-2.jsonl", "msg_wf");
+        write_session(
+            "cb62da0c-3a12-4572-8a4e-4f8c9e37343f/subagents/agent-3.jsonl",
+            "msg_session_scoped",
+        );
+
+        let source = SessionSource::session(dir.path().to_path_buf(), "p", config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source, &mut seen).unwrap();
+
+        let mut ids: Vec<_> = calls.iter().map(|c| c.dedup_key.as_str()).collect();
+        ids.sort_unstable();
+        assert_eq!(
+            ids,
+            vec!["msg_main", "msg_session_scoped", "msg_sub", "msg_wf"],
+            "nested workflow and session-scoped subagent transcripts must be ingested"
+        );
+    }
+
+    #[test]
+    fn advisor_iterations_emit_separate_calls() {
+        let dir = tempfile_lite::TempDir::new();
+        let path = dir.path().join("session.jsonl");
+        let mut f = std::fs::File::create(&path).unwrap();
+        // The "message" iteration mirrors the top-level usage (never double
+        // counted); the advisor_message iteration is its own billed call.
+        writeln!(
+            f,
+            r#"{{"type":"assistant","timestamp":"2026-04-26T10:00:01Z","sessionId":"s1","message":{{"role":"assistant","id":"msg_adv","model":"claude-opus-4-7","usage":{{"input_tokens":9118,"output_tokens":344,"cache_read_input_tokens":15874,"iterations":[{{"type":"message","input_tokens":9118,"output_tokens":344}},{{"type":"advisor_message","model":"claude-haiku-4-5","input_tokens":1200,"output_tokens":80,"cache_read_input_tokens":500}}]}}}}}}"#
+        )
+        .unwrap();
+
+        let source = SessionSource::session(dir.path().to_path_buf(), "p", config::TOOL_ID);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source, &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 2, "advisor iteration becomes its own call");
+        let advisor = &calls[0];
+        assert_eq!(advisor.dedup_key, "msg_adv:advisor:0");
+        assert_eq!(advisor.model, "claude-haiku-4-5");
+        assert_eq!(advisor.input_tokens, 1200);
+        assert_eq!(advisor.output_tokens, 80);
+        assert_eq!(advisor.cache_read_input_tokens, 500);
+        assert!(advisor.cost_usd > 0.0);
+        let main = &calls[1];
+        assert_eq!(main.dedup_key, "msg_adv");
+        assert_eq!(main.input_tokens, 9118);
+
+        let second = parse_session(&source, &mut seen).unwrap();
+        assert!(second.is_empty(), "advisor keys dedup across reparses");
+    }
+
+    #[test]
+    fn one_hour_cache_writes_are_extracted_and_priced_at_a_premium() {
+        let build = |name: &str, cache_creation: &str| {
+            let dir = tempfile_lite::TempDir::new();
+            let path = dir.path().join(name);
+            let mut f = std::fs::File::create(&path).unwrap();
+            writeln!(
+                f,
+                r#"{{"type":"assistant","timestamp":"2026-04-26T10:00:01Z","sessionId":"s1","message":{{"role":"assistant","id":"{name}","model":"claude-opus-4-7","usage":{{"input_tokens":10,"output_tokens":5,"cache_creation_input_tokens":6304,"cache_creation":{cache_creation}}}}}}}"#
+            )
+            .unwrap();
+            dir
+        };
+
+        let five_m = build(
+            "five.jsonl",
+            r#"{"ephemeral_5m_input_tokens":6304,"ephemeral_1h_input_tokens":0}"#,
+        );
+        let one_h = build(
+            "hour.jsonl",
+            r#"{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":6304}"#,
+        );
+
+        let mut seen = HashSet::new();
+        let five_calls = parse_session(
+            &SessionSource::session(five_m.path().to_path_buf(), "p", config::TOOL_ID),
+            &mut seen,
+        )
+        .unwrap();
+        let hour_calls = parse_session(
+            &SessionSource::session(one_h.path().to_path_buf(), "p", config::TOOL_ID),
+            &mut seen,
+        )
+        .unwrap();
+
+        assert_eq!(five_calls[0].cache_creation_input_tokens, 6304);
+        assert_eq!(five_calls[0].cache_creation_1h_input_tokens, 0);
+        assert_eq!(hour_calls[0].cache_creation_input_tokens, 6304);
+        assert_eq!(hour_calls[0].cache_creation_1h_input_tokens, 6304);
+        assert!(
+            hour_calls[0].cost_usd > five_calls[0].cost_usd,
+            "1h cache writes must price above the 5m rate"
+        );
     }
 
     #[test]

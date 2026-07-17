@@ -428,6 +428,9 @@ impl Archive {
                 input_tokens: i64_to_u64(row.get(2)?),
                 output_tokens: i64_to_u64(row.get(3)?),
                 cache_creation_input_tokens: i64_to_u64(row.get(4)?),
+                // Import-time pricing input only; the archived row keeps the
+                // cost it produced.
+                cache_creation_1h_input_tokens: 0,
                 cache_read_input_tokens: i64_to_u64(row.get(5)?),
                 cached_input_tokens: i64_to_u64(row.get(6)?),
                 reasoning_tokens: i64_to_u64(row.get(7)?),
@@ -560,6 +563,7 @@ fn insert_call(tx: &Transaction<'_>, call: &ParsedCall) -> Result<bool> {
     )?;
     if inserted == 0 {
         update_existing_cursor_project(tx, call)?;
+        update_existing_cursor_tokens(tx, call)?;
         update_existing_copilot_cli_totals(tx, call)?;
         update_existing_codex_tool_activity(tx, call, &tools_json, &bash_json)?;
         update_existing_call_enrichment(
@@ -569,11 +573,114 @@ fn insert_call(tx: &Transaction<'_>, call: &ParsedCall) -> Result<bool> {
             &edited_files_json,
             &referenced_files_json,
         )?;
+        update_existing_claude_tool_activity(
+            tx,
+            call,
+            &tools_json,
+            &bash_json,
+            &code_blocks_json,
+            &edited_files_json,
+            &referenced_files_json,
+        )?;
     } else {
         zero_superseded_copilot_estimates(tx, call)?;
     }
     remove_superseded_cursor_rows(tx, call)?;
+    remove_superseded_codex_rows(tx, call, inserted > 0)?;
+    zero_superseded_copilot_turn_estimates(tx, call)?;
     Ok(inserted > 0)
+}
+
+/// A Copilot OTel span row carries the transcript-style key of the same turn
+/// as a superseded hint. Zero that row's token and cost fields (keeping its
+/// message metadata) so archives that ingested the estimate before the OTel
+/// store was read stop double counting.
+fn zero_superseded_copilot_turn_estimates(tx: &Transaction<'_>, call: &ParsedCall) -> Result<()> {
+    if call.tool != crate::tools::copilot::config::TOOL_ID
+        || call.superseded_dedup_keys.is_empty()
+        || !call
+            .dedup_key
+            .starts_with(crate::tools::copilot::config::OTEL_DEDUP_PREFIX)
+    {
+        return Ok(());
+    }
+    for dedup_key in &call.superseded_dedup_keys {
+        if dedup_key == &call.dedup_key {
+            continue;
+        }
+        tx.execute(
+            "
+            UPDATE calls
+            SET input_tokens = 0, output_tokens = 0,
+                cache_creation_input_tokens = 0, cache_read_input_tokens = 0,
+                cached_input_tokens = 0, reasoning_tokens = 0, cost_usd = 0
+            WHERE tool = ?1
+              AND dedup_key = ?2
+            ",
+            params![call.tool, dedup_key],
+        )?;
+    }
+    Ok(())
+}
+
+/// Codex v6 re-keyed calls onto lineage-addressed dedup keys. Each reparsed
+/// call carries the legacy path-based key(s) it replaces: its own pre-v6 row
+/// plus any replayed-history rows a forked rollout had double-counted. When
+/// the replaced row is the same event (token buckets match), the fresh row
+/// inherits its import-time cost so history is never silently repriced; every
+/// legacy row is then deleted.
+fn remove_superseded_codex_rows(
+    tx: &Transaction<'_>,
+    call: &ParsedCall,
+    inherit_cost: bool,
+) -> Result<()> {
+    if call.tool != crate::tools::codex::config::TOOL_ID || call.superseded_dedup_keys.is_empty() {
+        return Ok(());
+    }
+
+    for dedup_key in &call.superseded_dedup_keys {
+        if dedup_key == &call.dedup_key {
+            continue;
+        }
+        if inherit_cost {
+            let old: Option<(f64, i64, i64, i64, i64)> = tx
+                .query_row(
+                    "
+                    SELECT cost_usd, input_tokens, output_tokens,
+                           cache_read_input_tokens, reasoning_tokens
+                    FROM calls WHERE tool = ?1 AND dedup_key = ?2
+                    ",
+                    params![call.tool, dedup_key],
+                    |row| {
+                        Ok((
+                            row.get(0)?,
+                            row.get(1)?,
+                            row.get(2)?,
+                            row.get(3)?,
+                            row.get(4)?,
+                        ))
+                    },
+                )
+                .optional()?;
+            if let Some((cost_usd, input, output, cache_read, reasoning)) = old {
+                if input == u64_to_i64(call.input_tokens)
+                    && output == u64_to_i64(call.output_tokens)
+                    && cache_read == u64_to_i64(call.cache_read_input_tokens)
+                    && reasoning == u64_to_i64(call.reasoning_tokens)
+                {
+                    tx.execute(
+                        "UPDATE calls SET cost_usd = ?1 WHERE tool = ?2 AND dedup_key = ?3",
+                        params![cost_usd, call.tool, call.dedup_key],
+                    )?;
+                }
+            }
+        }
+        tx.execute(
+            "DELETE FROM calls WHERE tool = ?1 AND dedup_key = ?2",
+            params![call.tool, dedup_key],
+        )?;
+    }
+    Ok(())
 }
 
 fn effective_timestamp_quality(call: &ParsedCall) -> TimestampQuality {
@@ -711,6 +818,48 @@ fn zero_superseded_copilot_estimates(tx: &Transaction<'_>, call: &ParsedCall) ->
     Ok(())
 }
 
+/// Claude Code rows archived before the streamed-content-block merge carry
+/// only the first block line's activity. A reparse (forced by the adapter's
+/// fingerprint bump) emits the same dedup key with the full merged activity,
+/// so replace the activity columns outright and never shrink the response
+/// length. Token and cost columns are untouched: usage is identical across a
+/// message's streamed lines.
+fn update_existing_claude_tool_activity(
+    tx: &Transaction<'_>,
+    call: &ParsedCall,
+    tools_json: &str,
+    bash_json: &str,
+    code_blocks_json: &str,
+    edited_files_json: &str,
+    referenced_files_json: &str,
+) -> Result<()> {
+    if call.tool != crate::tools::claude_code::config::TOOL_ID {
+        return Ok(());
+    }
+
+    tx.execute(
+        "
+        UPDATE calls
+        SET tools_json = ?1, bash_commands_json = ?2, code_blocks_json = ?3,
+            edited_files_json = ?4, referenced_files_json = ?5,
+            response_chars = COALESCE(MAX(response_chars, ?6), ?6)
+        WHERE tool = ?7
+          AND dedup_key = ?8
+        ",
+        params![
+            tools_json,
+            bash_json,
+            code_blocks_json,
+            edited_files_json,
+            referenced_files_json,
+            call.response_chars.map(u64_to_i64),
+            call.tool,
+            call.dedup_key,
+        ],
+    )?;
+    Ok(())
+}
+
 fn update_existing_codex_tool_activity(
     tx: &Transaction<'_>,
     call: &ParsedCall,
@@ -774,6 +923,38 @@ fn update_existing_copilot_cli_totals(tx: &Transaction<'_>, call: &ParsedCall) -
             u64_to_i64(call.reasoning_tokens),
             call.cost_usd,
             datetime_to_db(call.timestamp),
+            call.tool,
+            call.dedup_key,
+        ],
+    )?;
+    Ok(())
+}
+
+/// Cursor reconstruction is authoritative for its canonical rows: a reparse
+/// may move a conversation's input onto the composer-level meter credit, or
+/// real token counts may appear on bubbles that previously carried zeros.
+/// Refresh the token columns when they changed; cost and quality follow the
+/// tokens they were computed from. Rows whose source no longer reparses are
+/// untouched.
+fn update_existing_cursor_tokens(tx: &Transaction<'_>, call: &ParsedCall) -> Result<()> {
+    if call.tool != crate::tools::cursor::config::TOOL_ID {
+        return Ok(());
+    }
+
+    tx.execute(
+        "
+        UPDATE calls
+        SET input_tokens = ?1, output_tokens = ?2, cost_usd = ?3,
+            token_quality = ?4
+        WHERE tool = ?5
+          AND dedup_key = ?6
+          AND (input_tokens != ?1 OR output_tokens != ?2)
+        ",
+        params![
+            u64_to_i64(call.input_tokens),
+            u64_to_i64(call.output_tokens),
+            call.cost_usd,
+            call.token_quality.as_str(),
             call.tool,
             call.dedup_key,
         ],
@@ -968,6 +1149,7 @@ mod tests {
             input_tokens: 100,
             output_tokens: 50,
             cache_creation_input_tokens: 7,
+            cache_creation_1h_input_tokens: 0,
             cache_read_input_tokens: 11,
             cached_input_tokens: 11,
             reasoning_tokens: 5,
@@ -1431,6 +1613,201 @@ mod tests {
                 loaded.calls[0].cost_usd,
             ),
             (&reparsed.tools, &reparsed.bash_commands, first.cost_usd,)
+        );
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn duplicate_claude_calls_upgrade_streamed_activity() {
+        let paths = temp_paths("claude-streamed-upgrade");
+        let mut archive = Archive::open(&paths).unwrap();
+
+        // Row archived by a parser that only saw the first streamed block
+        // line: partial activity, but real usage and enrichment.
+        let mut legacy = sample_call("msg_a");
+        legacy.tool = crate::tools::claude_code::config::TOOL_ID;
+        legacy.tools = vec!["Bash".into()];
+        legacy.bash_commands = vec!["ls".into()];
+        legacy.edited_files = Vec::new();
+        legacy.code_blocks = Vec::new();
+        legacy.response_chars = Some(6);
+
+        // The fingerprint-bump reparse merges every block line.
+        let mut reparsed = legacy.clone();
+        reparsed.tools = vec!["Bash".into(), "Edit".into()];
+        reparsed.bash_commands = vec!["ls".into(), "cargo check".into()];
+        reparsed.edited_files = vec!["src/lib.rs".into()];
+        reparsed.code_blocks = vec![crate::tools::CodeBlock {
+            language: "rust".into(),
+            loc: 3,
+        }];
+        reparsed.response_chars = Some(11);
+        reparsed.cost_usd = 999.0;
+
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![legacy.clone()],
+                limits: Vec::new(),
+            })
+            .unwrap();
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![reparsed.clone()],
+                limits: Vec::new(),
+            })
+            .unwrap();
+
+        let loaded = archive.load().unwrap();
+        let call = &loaded.calls[0];
+        assert_eq!(call.tools, reparsed.tools);
+        assert_eq!(call.bash_commands, reparsed.bash_commands);
+        assert_eq!(call.edited_files, reparsed.edited_files);
+        assert_eq!(call.code_blocks, reparsed.code_blocks);
+        assert_eq!(call.response_chars, Some(11));
+        assert_eq!(
+            call.cost_usd, legacy.cost_usd,
+            "usage and cost keep the archived values"
+        );
+
+        // The response length never shrinks below the archived value.
+        let mut weaker = legacy.clone();
+        weaker.response_chars = Some(3);
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![weaker],
+                limits: Vec::new(),
+            })
+            .unwrap();
+        let loaded = archive.load().unwrap();
+        assert_eq!(loaded.calls[0].response_chars, Some(11));
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn duplicate_cursor_calls_refresh_reconstructed_tokens() {
+        let paths = temp_paths("cursor-token-refresh");
+        let mut archive = Archive::open(&paths).unwrap();
+
+        // Archived before the meter existed: chars/4 input estimate.
+        let mut estimated = sample_call("cursor:composer:c1:r1");
+        estimated.tool = crate::tools::cursor::config::TOOL_ID;
+        estimated.input_tokens = 250;
+        estimated.token_quality = crate::tools::TokenQuality::Estimated;
+
+        // The reparse moves input to the composer credit; the turn keeps its
+        // output side only.
+        let mut reparsed = estimated.clone();
+        reparsed.input_tokens = 0;
+        reparsed.cost_usd = 0.05;
+
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![estimated.clone()],
+                limits: Vec::new(),
+            })
+            .unwrap();
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![reparsed.clone()],
+                limits: Vec::new(),
+            })
+            .unwrap();
+
+        let loaded = archive.load().unwrap();
+        assert_eq!(
+            loaded.calls[0].input_tokens, 0,
+            "reconstruction is authoritative"
+        );
+        assert_eq!(loaded.calls[0].cost_usd, 0.05);
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn otel_rows_zero_superseded_transcript_estimates() {
+        let paths = temp_paths("copilot-otel-zero");
+        let mut archive = Archive::open(&paths).unwrap();
+
+        // A transcript estimate of a turn, archived before the OTel store
+        // was read.
+        let mut estimate = sample_call("copilot:conv-1:turn-1");
+        estimate.tool = crate::tools::copilot::config::TOOL_ID;
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![estimate],
+                limits: Vec::new(),
+            })
+            .unwrap();
+
+        // The OTel span for the same turn carries the transcript key as a
+        // superseded hint.
+        let mut otel = sample_call("copilot-otel:span-1");
+        otel.tool = crate::tools::copilot::config::TOOL_ID;
+        otel.superseded_dedup_keys = vec!["copilot:conv-1:turn-1".into()];
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![otel],
+                limits: Vec::new(),
+            })
+            .unwrap();
+
+        let loaded = archive.load().unwrap();
+        assert_eq!(loaded.calls.len(), 2, "the estimate row keeps its metadata");
+        let old = loaded
+            .calls
+            .iter()
+            .find(|c| c.dedup_key == "copilot:conv-1:turn-1")
+            .unwrap();
+        assert_eq!(
+            (old.input_tokens, old.output_tokens, old.cost_usd),
+            (0, 0, 0.0),
+            "superseded estimate is zeroed, not deleted"
+        );
+        assert_eq!(old.user_message, "build the thing");
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn codex_supersession_retires_legacy_rows_and_inherits_cost() {
+        let paths = temp_paths("codex-supersede");
+        let mut archive = Archive::open(&paths).unwrap();
+
+        // Rows written by the pre-v6 parser: the event's own path-keyed row
+        // and a fork-replay duplicate of another event.
+        let mut own_legacy = sample_call("codex:/old/rollout.jsonl:t1:1100+10");
+        own_legacy.cost_usd = 0.5;
+        let mut replay_dup = sample_call("codex:/fork/rollout.jsonl:t2:700+0");
+        replay_dup.input_tokens = 700;
+        replay_dup.output_tokens = 0;
+        replay_dup.cache_read_input_tokens = 0;
+        replay_dup.reasoning_tokens = 0;
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![own_legacy.clone(), replay_dup],
+                limits: Vec::new(),
+            })
+            .unwrap();
+
+        // The v6 reparse emits the same event under its lineage key, priced
+        // with whatever the pricing books say today.
+        let mut reparsed = sample_call("codex:sess-1:1100:11:10:5:1121");
+        reparsed.cost_usd = 999.0;
+        reparsed.superseded_dedup_keys = vec![
+            "codex:/fork/rollout.jsonl:t2:700+0".into(),
+            "codex:/old/rollout.jsonl:t1:1100+10".into(),
+        ];
+        archive
+            .insert_ingested(&Ingested {
+                calls: vec![reparsed.clone()],
+                limits: Vec::new(),
+            })
+            .unwrap();
+
+        let loaded = archive.load().unwrap();
+        assert_eq!(loaded.calls.len(), 1, "legacy rows are retired");
+        assert_eq!(loaded.calls[0].dedup_key, reparsed.dedup_key);
+        assert_eq!(
+            loaded.calls[0].cost_usd, 0.5,
+            "the same event keeps its import-time cost instead of being repriced"
         );
         let _ = fs::remove_dir_all(paths.dir);
     }

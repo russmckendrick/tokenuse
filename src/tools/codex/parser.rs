@@ -28,9 +28,15 @@ struct Entry {
 #[derive(Debug, Deserialize, Default)]
 struct SessionMeta {
     #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
     cwd: Option<String>,
     #[serde(default)]
     originator: Option<String>,
+    /// Present when this rollout was forked from another session; the file
+    /// then replays the parent's history before any new work.
+    #[serde(default)]
+    forked_from_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -94,6 +100,8 @@ struct TokenUsage {
     output_tokens: u64,
     #[serde(default)]
     reasoning_output_tokens: u64,
+    #[serde(default)]
+    total_tokens: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -191,6 +199,27 @@ pub fn parse_session(
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_default();
+    // Dedup keys are addressed by the session lineage, not the file path: a
+    // forked rollout replays the parent's history verbatim, so keying the
+    // fork by its parent id makes every replayed event collide with the
+    // parent's rows regardless of which file carries it.
+    let root_id = [meta.forked_from_id.as_deref(), meta.id.as_deref()]
+        .into_iter()
+        .flatten()
+        .find(|s| !s.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| session_id.clone());
+    // Usage stamped within 5s of a fork's creation is the replay being
+    // written out, even when the parent's rows are no longer around to
+    // collide with.
+    let fork_cutoff = match meta.forked_from_id.as_deref() {
+        Some(id) if !id.is_empty() => first
+            .timestamp
+            .as_deref()
+            .and_then(parse_timestamp)
+            .map(|ts| ts + chrono::Duration::seconds(5)),
+        _ => None,
+    };
     let project = meta
         .cwd
         .filter(|s| !s.is_empty())
@@ -206,6 +235,11 @@ pub fn parse_session(
     let mut last_user_chars: Option<u64> = None;
     let mut last_user_ts: Option<DateTime<Utc>> = None;
     let mut previous_total_usage: Option<TokenUsage> = None;
+    // Legacy path-based dedup keys of events that no longer emit (fork
+    // replays, cross-file duplicates) plus each emitted call's own prior key;
+    // the next emitted call carries them so the archive retires the rows the
+    // pre-v6 parser wrote.
+    let mut pending_superseded: Vec<String> = Vec::new();
     let mut calls: Vec<ParsedCall> = Vec::new();
 
     for line in iter {
@@ -309,14 +343,56 @@ pub fn parse_session(
                 }
 
                 let timestamp_str = entry.timestamp.clone().unwrap_or_default();
-                let dedup_key = format!(
+                // The key the pre-v6 parser gave this event; carried on the
+                // next emitted call so the archive retires that row.
+                let legacy_key = format!(
                     "codex:{}:{}:{}+{}",
                     source.path.display(),
                     timestamp_str,
                     total.input_tokens,
                     total.output_tokens
                 );
+                let timestamp = parse_timestamp(&timestamp_str);
+
+                if let Some(cutoff) = fork_cutoff {
+                    if timestamp.is_some_and(|ts| ts < cutoff) {
+                        // Replayed parent history: the delta state above has
+                        // already absorbed it, so post-fork deltas stay
+                        // correct; nothing is emitted.
+                        pending_superseded.push(legacy_key);
+                        pending_tools.clear();
+                        pending_bash.clear();
+                        pending_code_blocks.clear();
+                        pending_edited.clear();
+                        pending_response_chars = None;
+                        continue;
+                    }
+                }
+
+                // Cumulative totals are copied verbatim into replays, so a
+                // content-addressed key collides across files and rewritten
+                // timestamps. Only the last-usage fallback, which has no
+                // cumulative totals to address, still needs the timestamp.
+                let dedup_key = if info.total_token_usage.is_some() {
+                    format!(
+                        "codex:{root_id}:{}:{}:{}:{}:{}",
+                        total.input_tokens,
+                        total.cached_input_tokens,
+                        total.output_tokens,
+                        total.reasoning_output_tokens,
+                        total.total_tokens
+                    )
+                } else {
+                    format!(
+                        "codex:{root_id}:last:{timestamp_str}:{}:{}:{}:{}",
+                        usage.input_tokens,
+                        usage.cached_input_tokens,
+                        usage.output_tokens,
+                        usage.reasoning_output_tokens
+                    )
+                };
                 if !seen.insert(dedup_key.clone()) {
+                    pending_superseded.push(legacy_key);
                     pending_tools.clear();
                     pending_bash.clear();
                     pending_code_blocks.clear();
@@ -334,7 +410,11 @@ pub fn parse_session(
                 let input_tokens = usage.input_tokens.saturating_sub(usage.cached_input_tokens);
                 let output_tokens = usage.output_tokens + usage.reasoning_output_tokens;
 
-                let timestamp = parse_timestamp(&timestamp_str);
+                let superseded_dedup_keys = {
+                    let mut keys = mem::take(&mut pending_superseded);
+                    keys.push(legacy_key);
+                    keys
+                };
                 let mut call = ParsedCall {
                     tool: config::TOOL_ID,
                     model: model.clone(),
@@ -356,6 +436,7 @@ pub fn parse_session(
                     elapsed_ms: jsonl::turn_elapsed_ms(timestamp, last_user_ts),
                     code_blocks: jsonl::merge_code_blocks(mem::take(&mut pending_code_blocks)),
                     edited_files: jsonl::dedup_files(mem::take(&mut pending_edited)),
+                    superseded_dedup_keys,
                     ..ParsedCall::default()
                 };
 
@@ -491,6 +572,7 @@ impl TokenUsage {
             reasoning_output_tokens: self
                 .reasoning_output_tokens
                 .saturating_sub(previous.reasoning_output_tokens),
+            total_tokens: self.total_tokens.saturating_sub(previous.total_tokens),
         }
     }
 }
@@ -1123,6 +1205,141 @@ mod tests {
         assert_eq!(first.len(), 1);
         let second = parse_session(&source_for(f.path().to_path_buf()), &mut seen).unwrap();
         assert!(second.is_empty(), "second pass must dedup against `seen`");
+    }
+
+    fn token_total_only(ts: &str, input: u64, output: u64, total: u64) -> String {
+        format!(
+            r#"{{"timestamp":"{ts}","type":"event_msg","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":{input},"output_tokens":{output},"total_tokens":{total}}}}}}}}}"#
+        )
+    }
+
+    fn fork_meta(ts: &str, forked_from: &str) -> String {
+        format!(
+            r#"{{"timestamp":"{ts}","type":"session_meta","payload":{{"id":"sess-fork","cwd":"/Users/me/proj","originator":"Codex Desktop","forked_from_id":"{forked_from}"}}}}"#
+        )
+    }
+
+    fn parent_meta(ts: &str) -> String {
+        format!(
+            r#"{{"timestamp":"{ts}","type":"session_meta","payload":{{"id":"sess-parent","cwd":"/Users/me/proj","originator":"Codex Desktop"}}}}"#
+        )
+    }
+
+    fn write_session_owned(lines: &[String]) -> tempfile_lite::TempFile {
+        let refs: Vec<&str> = lines.iter().map(|s| s.as_str()).collect();
+        write_session(&refs)
+    }
+
+    #[test]
+    fn fork_replay_within_cutoff_is_dropped_and_superseded() {
+        let f = write_session_owned(&[
+            fork_meta("2026-03-29T15:10:00Z", "sess-parent"),
+            token_total_only("2026-03-29T15:10:01Z", 700, 0, 700),
+            token_total_only("2026-03-29T15:10:03Z", 1100, 0, 1100),
+            token_total_only("2026-03-29T15:10:30Z", 1500, 0, 1500),
+        ]);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source_for(f.path().to_path_buf()), &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 1, "replayed history must not emit");
+        assert_eq!(
+            calls[0].input_tokens, 400,
+            "delta state must advance through the dropped replay"
+        );
+        assert_eq!(
+            calls[0].superseded_dedup_keys.len(),
+            3,
+            "two replay legacy keys plus the call's own legacy key"
+        );
+        let path = f.path().display().to_string();
+        assert!(calls[0]
+            .superseded_dedup_keys
+            .contains(&format!("codex:{path}:2026-03-29T15:10:01Z:700+0")));
+        assert!(calls[0]
+            .superseded_dedup_keys
+            .contains(&format!("codex:{path}:2026-03-29T15:10:30Z:1500+0")));
+    }
+
+    #[test]
+    fn fork_replay_past_cutoff_collides_with_parent() {
+        let parent = write_session_owned(&[
+            parent_meta("2026-03-29T15:00:00Z"),
+            token_total_only("2026-03-29T15:00:01Z", 700, 0, 700),
+            token_total_only("2026-03-29T15:00:02Z", 1100, 0, 1100),
+        ]);
+        // The fork replays the parent's events with rewritten timestamps well
+        // past the 5s cutoff, then adds genuine work.
+        let fork = write_session_owned(&[
+            fork_meta("2026-03-29T15:10:00Z", "sess-parent"),
+            token_total_only("2026-03-29T15:20:00Z", 700, 0, 700),
+            token_total_only("2026-03-29T15:20:01Z", 1100, 0, 1100),
+            token_total_only("2026-03-29T15:20:30Z", 1500, 0, 1500),
+        ]);
+
+        let mut seen = HashSet::new();
+        let parent_calls =
+            parse_session(&source_for(parent.path().to_path_buf()), &mut seen).unwrap();
+        let fork_calls = parse_session(&source_for(fork.path().to_path_buf()), &mut seen).unwrap();
+
+        assert_eq!(parent_calls.len(), 2);
+        assert_eq!(
+            fork_calls.len(),
+            1,
+            "replays keyed by lineage collide with the parent's rows"
+        );
+        assert_eq!(fork_calls[0].input_tokens, 400);
+    }
+
+    #[test]
+    fn divergent_fork_usage_sharing_a_cumulative_total_is_kept() {
+        let parent = write_session_owned(&[
+            parent_meta("2026-03-29T15:00:00Z"),
+            token_total_only("2026-03-29T15:00:01Z", 700, 0, 700),
+            token_total_only("2026-03-29T15:00:02Z", 1100, 0, 1100),
+            token_total_only("2026-03-29T15:00:03Z", 1600, 0, 1600),
+        ]);
+        // Genuinely different post-fork work that happens to reach the same
+        // cumulative total as the parent, but via output tokens.
+        let fork = write_session_owned(&[
+            fork_meta("2026-03-29T15:10:00Z", "sess-parent"),
+            token_total_only("2026-03-29T15:20:00Z", 700, 0, 700),
+            token_total_only("2026-03-29T15:20:01Z", 1100, 0, 1100),
+            token_total_only("2026-03-29T15:20:30Z", 1100, 500, 1600),
+        ]);
+
+        let mut seen = HashSet::new();
+        let parent_calls =
+            parse_session(&source_for(parent.path().to_path_buf()), &mut seen).unwrap();
+        let fork_calls = parse_session(&source_for(fork.path().to_path_buf()), &mut seen).unwrap();
+
+        assert_eq!(parent_calls.len(), 3);
+        assert_eq!(
+            fork_calls.len(),
+            1,
+            "the key is the full cumulative breakdown, not the bare total"
+        );
+        assert_eq!(fork_calls[0].output_tokens, 500);
+    }
+
+    #[test]
+    fn emitted_calls_carry_their_legacy_path_key() {
+        let f = write_session(&[META_OK, TURN_GPT5, TOKEN_FIRST]);
+        let mut seen = HashSet::new();
+        let calls = parse_session(&source_for(f.path().to_path_buf()), &mut seen).unwrap();
+
+        assert_eq!(calls.len(), 1);
+        assert_eq!(
+            calls[0].superseded_dedup_keys,
+            vec![format!(
+                "codex:{}:2026-03-29T15:04:10.090Z:18193+371",
+                f.path().display()
+            )],
+            "the pre-v6 key rides along so the archive can retire that row"
+        );
+        assert!(
+            calls[0].dedup_key.starts_with("codex:sess-1:"),
+            "keys are addressed by session lineage, not file path"
+        );
     }
 
     #[test]

@@ -45,7 +45,15 @@ pub fn parse_session(
     let mut state_sessions = HashSet::new();
     if let Some(state_path) = config::state_db_path().filter(|path| path.exists()) {
         if let Some(conn) = open_sqlite_read_only(&state_path) {
-            let reconstructed = reconstruct_state(&conn, source, &transcripts, &tracking, &stores)?;
+            let workspace_projects = load_workspace_projects(config::workspace_storage_root());
+            let reconstructed = reconstruct_state(
+                &conn,
+                source,
+                &transcripts,
+                &tracking,
+                &stores,
+                &workspace_projects,
+            )?;
             state_sessions.extend(reconstructed.iter().map(|call| call.session_id.clone()));
             calls.extend(reconstructed);
         }
@@ -193,6 +201,13 @@ struct Composer {
     model: Option<String>,
     mode: InteractionMode,
     aborted: bool,
+    created_at: Option<DateTime<Utc>>,
+    /// Cursor's own per-conversation context meter
+    /// (`promptTokenBreakdown.totalUsedTokens`, falling back to
+    /// `contextTokensUsed`): the latest context-window snapshot, not a
+    /// per-turn sum. On current builds it is the only real input-token
+    /// figure the local database carries.
+    meter_tokens: u64,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -236,6 +251,7 @@ fn reconstruct_state(
     transcripts: &HashMap<String, TranscriptSession>,
     tracking: &HashMap<String, TrackingSession>,
     stores: &HashMap<String, StoreSession>,
+    workspace_projects: &HashMap<String, String>,
 ) -> Result<Vec<ParsedCall>> {
     if conn
         .query_row::<i64, _, _>(config::VALIDATE_STATE_QUERY, [], |row| row.get(0))
@@ -276,6 +292,22 @@ fn reconstruct_state(
         let transcript = transcripts.get(&composer_id);
         let store = stores.get(&composer_id);
         let tracking_session = tracking.get(&composer_id);
+
+        // Current Cursor builds write {0,0} per-bubble token counts; the
+        // composer's context meter is then the only real input figure. When
+        // it is present and no bubble carries explicit tokens, per-turn
+        // chars/4 input estimates are dropped and the meter is credited once
+        // per conversation below. Any explicit bubble tokens (older builds)
+        // win outright.
+        let has_explicit_bubble_tokens = turns.iter().any(|turn| {
+            std::iter::once(&turn.user)
+                .chain(turn.assistants.iter())
+                .any(|bubble| bubble.input_tokens > 0 || bubble.output_tokens > 0)
+        });
+        let meter_active = composer.meter_tokens > 0 && !has_explicit_bubble_tokens;
+        let mut credit_context: Option<(String, String)> = None;
+        let mut first_turn_ts: Option<DateTime<Utc>> = None;
+
         for (idx, state_turn) in turns.iter().enumerate() {
             let mut rich = rich_from_state_turn(state_turn);
             let request_id = state_turn.user.request_id.clone().or_else(|| {
@@ -336,7 +368,8 @@ fn reconstruct_state(
                 .or_else(|| non_negative_elapsed(timestamp, state_turn.user.timestamp))
                 .or(rich.elapsed_ms);
 
-            let (input_tokens, output_tokens, token_quality) = state_tokens(state_turn, &rich);
+            let (input_tokens, output_tokens, token_quality) =
+                state_tokens(state_turn, &rich, meter_active);
             let bubble_model = state_turn
                 .assistants
                 .iter()
@@ -358,8 +391,14 @@ fn reconstruct_state(
                         .unwrap_or_default(),
                 )
                 .or_known(store.map(|session| session.mode).unwrap_or_default());
-            let project =
-                project_for_state(&rich, transcript, tracking_session, store, &source.project);
+            let project = project_for_state(
+                &rich,
+                transcript,
+                tracking_session,
+                store,
+                workspace_projects.get(&composer_id).map(String::as_str),
+                &source.project,
+            );
             let identity = request_id
                 .clone()
                 .unwrap_or_else(|| state_turn.user.id.clone());
@@ -400,8 +439,53 @@ fn reconstruct_state(
                 superseded_dedup_keys: superseded,
                 ..ParsedCall::default()
             };
+            if credit_context.is_none() {
+                credit_context = Some((call.project.clone(), model.clone()));
+            }
+            if first_turn_ts.is_none() {
+                first_turn_ts = timestamp;
+            }
+
             call.cost_usd = pricing::cost(&model, &call, call.speed);
             calls.push(call);
+        }
+
+        // One input credit per conversation from Cursor's own context meter,
+        // anchored at the conversation's creation so the credited day stays
+        // stable across re-parses. The meter is the LATEST context size, not
+        // a per-turn sum: growth after the anchor stays uncounted — an
+        // undercount versus the Cursor admin console, never a double count.
+        if meter_active {
+            let (project, model) = credit_context.unwrap_or_else(|| {
+                (
+                    source.project.clone(),
+                    composer
+                        .model
+                        .clone()
+                        .unwrap_or_else(|| COST_MODEL_FALLBACK.to_string()),
+                )
+            });
+            let timestamp = composer.created_at.or(first_turn_ts);
+            let mut credit = ParsedCall {
+                tool: config::TOOL_ID,
+                model: model.clone(),
+                input_tokens: composer.meter_tokens,
+                timestamp,
+                speed: speed_from_model(&model),
+                dedup_key: format!("{}{}", config::COMPOSER_INPUT_DEDUP_PREFIX, composer.id),
+                session_id: composer.id.clone(),
+                project,
+                interaction_mode: composer.mode,
+                token_quality: TokenQuality::Estimated,
+                timestamp_quality: if timestamp.is_some() {
+                    TimestampQuality::Session
+                } else {
+                    TimestampQuality::Unknown
+                },
+                ..ParsedCall::default()
+            };
+            credit.cost_usd = pricing::cost(&model, &credit, credit.speed);
+            calls.push(credit);
         }
     }
     Ok(calls)
@@ -439,6 +523,9 @@ fn load_composers(conn: &Connection) -> HashMap<String, Composer> {
         let unified_mode: Option<String> = row.get(5)?;
         let is_agentic: Option<bool> = row.get(6)?;
         let status: Option<String> = row.get(7)?;
+        let created_raw = column_as_string(row, 8)?;
+        let meter_used = column_as_string(row, 9)?;
+        let meter_context = column_as_string(row, 10)?;
         Ok((
             key_id,
             json_id,
@@ -448,12 +535,20 @@ fn load_composers(conn: &Connection) -> HashMap<String, Composer> {
             unified_mode,
             is_agentic,
             status,
+            created_raw,
+            meter_used,
+            meter_context,
         ))
     }) else {
         return out;
     };
     for row in rows.flatten() {
         let id = row.1.filter(|id| !id.is_empty()).unwrap_or(row.0);
+        // A stored zero `totalUsedTokens` falls through to
+        // `contextTokensUsed`.
+        let meter_tokens = meter_value(row.9.as_deref())
+            .or_else(|| meter_value(row.10.as_deref()))
+            .unwrap_or(0);
         out.insert(
             id.clone(),
             Composer {
@@ -462,10 +557,21 @@ fn load_composers(conn: &Connection) -> HashMap<String, Composer> {
                 model: row.3,
                 mode: interaction_mode(row.4.as_deref(), row.5.as_deref(), row.6, false),
                 aborted: row.7.as_deref() == Some("aborted"),
+                created_at: row.8.as_deref().and_then(parse_timestamp),
+                meter_tokens,
             },
         );
     }
     out
+}
+
+fn meter_value(raw: Option<&str>) -> Option<u64> {
+    let tokens = raw?.trim().parse::<f64>().ok()?;
+    if tokens.is_finite() && tokens >= 1.0 {
+        Some(tokens as u64)
+    } else {
+        None
+    }
 }
 
 fn parse_header_order(raw: Option<&str>) -> Vec<String> {
@@ -886,7 +992,11 @@ fn find_duration_ms(value: &Value) -> Option<u64> {
     }
 }
 
-fn state_tokens(turn: &StateTurn, rich: &RichTurn) -> (u64, u64, TokenQuality) {
+fn state_tokens(
+    turn: &StateTurn,
+    rich: &RichTurn,
+    input_covered_by_meter: bool,
+) -> (u64, u64, TokenQuality) {
     let explicit_input = turn
         .assistants
         .iter()
@@ -899,6 +1009,11 @@ fn state_tokens(turn: &StateTurn, rich: &RichTurn) -> (u64, u64, TokenQuality) {
         .map(|bubble| bubble.output_tokens)
         .chain(std::iter::once(turn.user.output_tokens))
         .sum::<u64>();
+    if input_covered_by_meter {
+        // The conversation-level meter credit accounts for input; the turn
+        // keeps its output side only.
+        return token_totals(0, explicit_output, 0, rich.response_chars());
+    }
     token_totals(
         explicit_input,
         explicit_output,
@@ -954,13 +1069,120 @@ fn project_for_state(
     transcript: Option<&TranscriptSession>,
     tracking: Option<&TrackingSession>,
     store: Option<&StoreSession>,
+    workspace: Option<&str>,
     fallback: &str,
 ) -> String {
     extract_workspace_path(&rich.user_message)
         .or_else(|| transcript.and_then(|session| session.project.clone()))
         .or_else(|| tracking.and_then(|session| session.project.clone()))
         .or_else(|| store.and_then(|session| session.project.clone()))
+        .or_else(|| workspace.map(str::to_string))
         .unwrap_or_else(|| fallback.to_string())
+}
+
+/// Map composer ids to workspace folder paths: each `workspaceStorage/<hash>`
+/// pairs a `workspace.json` folder URI with a per-workspace `state.vscdb`
+/// whose ItemTable lists the composers opened in that workspace. Roughly a
+/// third of composers are unmapped (multi-root workspaces, "no folder"
+/// windows, deleted workspaces) and keep the existing fallback chain.
+fn load_workspace_projects(root: Option<PathBuf>) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    let Some(root) = root else {
+        return out;
+    };
+    let Ok(entries) = std::fs::read_dir(&root) else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let hash_dir = entry.path();
+        if !hash_dir.is_dir() {
+            continue;
+        }
+        let Some(folder) = workspace_folder_path(&hash_dir) else {
+            continue;
+        };
+        let db = hash_dir.join(config::STATE_DB);
+        if !db.is_file() {
+            continue;
+        }
+        let Some(conn) = open_sqlite_read_only(&db) else {
+            continue;
+        };
+        for composer_id in workspace_composer_ids(&conn) {
+            out.entry(composer_id).or_insert_with(|| folder.clone());
+        }
+    }
+    out
+}
+
+/// `workspace.json` `folder` is a URI. `file://` folders decode to a plain
+/// absolute path (so project-identity git-root folding applies, matching how
+/// Claude Code cwd values behave); other schemes (`vscode-remote://…`) keep
+/// the decoded remainder as a label. Multi-root workspaces have no `folder`
+/// key and are skipped.
+fn workspace_folder_path(hash_dir: &Path) -> Option<String> {
+    let raw = std::fs::read_to_string(hash_dir.join("workspace.json")).ok()?;
+    let value: Value = serde_json::from_str(&raw).ok()?;
+    let folder = value.get("folder").and_then(|v| v.as_str())?;
+    let decoded = percent_decode(folder.strip_prefix("file://").unwrap_or(folder));
+    if decoded.trim().is_empty() {
+        None
+    } else {
+        Some(decoded)
+    }
+}
+
+fn workspace_composer_ids(conn: &Connection) -> Vec<String> {
+    let mut ids = Vec::new();
+    let Ok(mut stmt) = conn.prepare(config::WORKSPACE_COMPOSER_QUERY) else {
+        return ids;
+    };
+    let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) else {
+        return ids;
+    };
+    for raw in rows.flatten() {
+        let Ok(value) = serde_json::from_str::<Value>(&raw) else {
+            continue;
+        };
+        let Some(composers) = value.get("allComposers").and_then(|v| v.as_array()) else {
+            continue;
+        };
+        for composer in composers {
+            if let Some(id) = composer.get("composerId").and_then(|v| v.as_str()) {
+                if !id.is_empty() {
+                    ids.push(id.to_string());
+                }
+            }
+        }
+    }
+    ids
+}
+
+fn percent_decode(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(hi), Some(lo)) = (hex_digit(bytes[i + 1]), hex_digit(bytes[i + 2])) {
+                out.push((hi << 4) | lo);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).to_string()
+}
+
+fn hex_digit(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
 }
 
 fn legacy_state_keys(turn: &StateTurn) -> Vec<String> {
@@ -1833,6 +2055,10 @@ mod tests {
             fs::create_dir_all(&path).unwrap();
             Self(path)
         }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
     }
 
     impl Drop for TempDir {
@@ -1889,6 +2115,7 @@ mod tests {
             &HashMap::new(),
             &HashMap::new(),
             &HashMap::new(),
+            &HashMap::new(),
         )
         .unwrap();
         assert_eq!(calls.len(), 1);
@@ -1898,6 +2125,159 @@ mod tests {
         assert_eq!(calls[0].bash_commands, vec!["cargo test"]);
         assert_eq!(calls[0].timestamp_quality, TimestampQuality::Exact);
         assert_eq!(calls[0].token_quality, TokenQuality::Exact);
+    }
+
+    #[test]
+    fn context_meter_credits_input_once_per_conversation() {
+        let conn = seed_state();
+        insert(
+            &conn,
+            "composerData:composer-m",
+            r#"{"composerId":"composer-m","createdAt":1780157113020,"promptTokenBreakdown":{"totalUsedTokens":32000},"fullConversationHeadersOnly":[{"bubbleId":"u1","type":1},{"bubbleId":"a1","type":2}],"modelConfig":{"modelName":"claude-4.5-sonnet"},"forceMode":"agent","status":"completed"}"#,
+        );
+        // Current builds: bubbles carry {0,0} token counts.
+        insert(
+            &conn,
+            "bubbleId:composer-m:u1",
+            r#"{"bubbleId":"u1","type":1,"requestId":"request-1","createdAt":"2026-07-01T10:00:00Z","text":"fix the bug","tokenCount":{"inputTokens":0,"outputTokens":0}}"#,
+        );
+        insert(
+            &conn,
+            "bubbleId:composer-m:a1",
+            r#"{"bubbleId":"a1","type":2,"requestId":"request-1","createdAt":"2026-07-01T10:00:02Z","text":"Done.","tokenCount":{"inputTokens":0,"outputTokens":0}}"#,
+        );
+
+        let source = SessionSource::session(PathBuf::from("unused"), "workspace", config::TOOL_ID);
+        let calls = reconstruct_state(
+            &conn,
+            &source,
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+
+        assert_eq!(calls.len(), 2, "one turn call plus the meter credit");
+        let turn = &calls[0];
+        assert_eq!(
+            turn.input_tokens, 0,
+            "per-turn chars/4 input estimates are dropped when the meter covers input"
+        );
+        assert!(turn.output_tokens > 0, "output side stays with the turn");
+        assert_eq!(turn.token_quality, TokenQuality::Estimated);
+
+        let credit = &calls[1];
+        assert_eq!(credit.dedup_key, "cursor:composer-input:composer-m");
+        assert_eq!(credit.input_tokens, 32000, "Cursor's own context meter");
+        assert_eq!(credit.output_tokens, 0);
+        assert_eq!(credit.session_id, "composer-m");
+        assert_eq!(credit.token_quality, TokenQuality::Estimated);
+        assert_eq!(
+            credit.timestamp_quality,
+            TimestampQuality::Session,
+            "anchored at conversation creation, not a message time"
+        );
+        assert!(credit.timestamp.is_some());
+        assert!(credit.cost_usd > 0.0);
+    }
+
+    #[test]
+    fn explicit_bubble_tokens_disable_the_meter_credit() {
+        let conn = seed_state();
+        insert(
+            &conn,
+            "composerData:composer-x",
+            r#"{"composerId":"composer-x","createdAt":1780157113020,"promptTokenBreakdown":{"totalUsedTokens":32000},"fullConversationHeadersOnly":[{"bubbleId":"u1","type":1},{"bubbleId":"a1","type":2}],"status":"completed"}"#,
+        );
+        insert(
+            &conn,
+            "bubbleId:composer-x:u1",
+            r#"{"bubbleId":"u1","type":1,"requestId":"request-1","createdAt":"2026-07-01T10:00:00Z","text":"fix","tokenCount":{"inputTokens":0,"outputTokens":0}}"#,
+        );
+        insert(
+            &conn,
+            "bubbleId:composer-x:a1",
+            r#"{"bubbleId":"a1","type":2,"requestId":"request-1","createdAt":"2026-07-01T10:00:02Z","text":"Done.","tokenCount":{"inputTokens":100,"outputTokens":20}}"#,
+        );
+
+        let source = SessionSource::session(PathBuf::from("unused"), "workspace", config::TOOL_ID);
+        let calls = reconstruct_state(
+            &conn,
+            &source,
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+
+        assert_eq!(calls.len(), 1, "explicit bubble tokens win outright");
+        assert_eq!(calls[0].input_tokens, 100);
+        assert_eq!(calls[0].output_tokens, 20);
+    }
+
+    #[test]
+    fn workspace_folder_maps_composers_to_projects() {
+        let dir = TempDir::new();
+        let hash = dir.path().join("abc123");
+        std::fs::create_dir_all(&hash).unwrap();
+        std::fs::write(
+            hash.join("workspace.json"),
+            r#"{"folder":"file:///Users/me/Code/my%20app"}"#,
+        )
+        .unwrap();
+        {
+            let ws_conn = Connection::open(hash.join(config::STATE_DB)).unwrap();
+            ws_conn
+                .execute(
+                    "CREATE TABLE ItemTable (key TEXT PRIMARY KEY, value TEXT)",
+                    [],
+                )
+                .unwrap();
+            ws_conn
+                .execute(
+                    "INSERT INTO ItemTable(key, value) VALUES ('composer.composerHeaders', ?1)",
+                    [r#"{"allComposers":[{"composerId":"composer-w"}]}"#],
+                )
+                .unwrap();
+        }
+
+        let map = load_workspace_projects(Some(dir.path().to_path_buf()));
+        assert_eq!(
+            map.get("composer-w").map(String::as_str),
+            Some("/Users/me/Code/my app"),
+            "file:// folders decode to plain absolute paths"
+        );
+
+        // The mapping slots in ahead of the source fallback.
+        let conn = seed_state();
+        insert(
+            &conn,
+            "composerData:composer-w",
+            r#"{"composerId":"composer-w","fullConversationHeadersOnly":[{"bubbleId":"u1","type":1},{"bubbleId":"a1","type":2}],"status":"completed"}"#,
+        );
+        insert(
+            &conn,
+            "bubbleId:composer-w:u1",
+            r#"{"bubbleId":"u1","type":1,"requestId":"request-1","createdAt":"2026-07-01T10:00:00Z","text":"hello","tokenCount":{"inputTokens":0,"outputTokens":0}}"#,
+        );
+        insert(
+            &conn,
+            "bubbleId:composer-w:a1",
+            r#"{"bubbleId":"a1","type":2,"requestId":"request-1","createdAt":"2026-07-01T10:00:02Z","text":"hi","tokenCount":{"inputTokens":1,"outputTokens":1}}"#,
+        );
+        let source = SessionSource::session(PathBuf::from("unused"), "workspace", config::TOOL_ID);
+        let calls = reconstruct_state(
+            &conn,
+            &source,
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &map,
+        )
+        .unwrap();
+        assert_eq!(calls[0].project, "/Users/me/Code/my app");
     }
 
     #[test]

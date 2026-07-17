@@ -216,7 +216,7 @@ Raw project strings come from each tool's local data. Before display, `tokenuse`
 
 `src/archive.rs` owns the SQLite archive. Schema v5 stores full `ParsedCall` rows, append-only limit snapshots, and per-source fingerprints in `source_state`. The v4 migration added Coach enrichment (`is_canceled`, prompt/response chars, elapsed time, code blocks, and file lists); v5 adds `interaction_mode`, `token_quality`, and `timestamp_quality`. Existing timestamped rows migrate as exact, and source fingerprints are cleared once so surviving sources can reparse with stronger metadata. Re-inserted duplicate rows backfill previously empty enrichment/provenance without clobbering stronger archived data. Calls remain unique on `(tool, dedup_key)`.
 
-Cursor canonical reconstruction is the only targeted deletion path. A new canonical turn may carry transient exact legacy dedup keys; after the canonical insert is accepted, those listed Cursor rows are deleted in the same transaction. Historical rows with missing/unreconstructable sources are never bulk-deleted. Ordinary source deletion remains append-preserving.
+Targeted deletion happens only through supersession, where a new call carries the transient exact legacy dedup keys it replaces and those listed rows are deleted in the same transaction after the insert is accepted. Cursor canonical reconstruction uses it to retire pre-reconstruction rows, and the Codex v6 re-keying uses it to retire legacy path-based rows (inheriting the replaced row's import-time cost when the token buckets match, so migration never reprices history). Historical rows with missing/unreconstructable sources are never bulk-deleted. Ordinary source deletion remains append-preserving.
 
 The source fingerprint hook defaults to file metadata for file-backed sources and recursive directory metadata for directory-backed sources. Sources are tagged as session or limit sources. Session sources must parse calls successfully before their fingerprint is advanced; limit sidecars must parse limit snapshots successfully before their fingerprint is advanced. When a source fingerprint has not changed, sync skips parsing it. When it changes, sync parses the source, inserts only new call keys, stores any new limit snapshots, and updates the fingerprint.
 
@@ -228,11 +228,11 @@ The old JSON ingest cache is now legacy seed input only. New runs do not write `
 
 A single shared `HashSet<String>` is passed through every adapter during a run. Each parser creates a stable `dedup_key` for the call shape it understands:
 
-- Claude Code: message id, falling back to timestamp
+- Claude Code: message id, falling back to timestamp; within a file, later streamed lines of the same message id merge into the first line's call instead of being dropped
 - Cursor bubbles: conversation id, timestamp, and token counts
 - Cursor Agent KV: request id
 - Cursor Agent transcripts: transcript path, conversation id, and turn index
-- Codex: rollout path, token event timestamp, and cumulative token totals
+- Codex: session lineage (the fork parent's session id when forked, else the session's own id) plus the cumulative token breakdown, so forked rollouts that replay parent history collide instead of double counting
 - Copilot: session id and message id
 - Gemini: session id and message id
 
@@ -269,12 +269,13 @@ cost = multiplier * (
     input_tokens * input_rate
   + output_tokens * output_rate
   + cache_creation_input_tokens * cache_write_rate
+  + cache_creation_1h_share * cache_write_rate * 0.6
   + cache_read_input_tokens * cache_read_rate
   + web_search_requests * web_search_rate
 )
 ```
 
-Claude Opus fast mode uses the model row's `fast_multiplier` when present. Cache-rate labels in the UI are derived from `cache_read_rate / input_rate`, not from observed cache-hit percentage. The maintainer CLI refresh command reads `pricing-sources.json`, fetches configured upstream feeds and official-source tables, then rewrites both checked-in books:
+Claude Opus fast mode uses the model row's `fast_multiplier` when present. The `cache_creation_1h_share` term is the 1-hour-TTL share of cache writes (currently only reported by Claude Code); Anthropic bills 1h writes at 2x base input versus 1.25x for 5m, so the share adds a 0.6x surcharge on top of the books' 5-minute cache-write rate already charged in the line above. The share is a transient import-time pricing input and is not persisted to the archive. Cache-rate labels in the UI are derived from `cache_read_rate / input_rate`, not from observed cache-hit percentage. The maintainer CLI refresh command reads `pricing-sources.json`, fetches configured upstream feeds and official-source tables, then rewrites both checked-in books:
 
 ```bash
 cargo run -- --refresh-prices

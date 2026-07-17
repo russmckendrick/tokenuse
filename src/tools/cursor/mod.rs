@@ -13,7 +13,8 @@ pub mod parser;
 
 pub struct Cursor;
 
-const SOURCE_FINGERPRINT_VERSION: &str = "cursor-v3-unified-reconstruction";
+/// v4: composer context-meter input credits, workspace project mapping.
+const SOURCE_FINGERPRINT_VERSION: &str = "cursor-v4-context-meter";
 
 impl ToolAdapter for Cursor {
     fn id(&self) -> &'static str {

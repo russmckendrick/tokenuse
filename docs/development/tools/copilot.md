@@ -1,6 +1,8 @@
 # GitHub Copilot
 
-Copilot has three supported on-disk layouts: the legacy CLI agent's `events.jsonl` under `~/.copilot/session-state/`, the newer CLI's central SQLite stores under `~/.copilot/`, and VS Code Copilot Chat transcripts under workspace storage. `tokenuse` reads all of them through `src/tools/copilot/`.
+Copilot has five supported on-disk layouts: the legacy CLI agent's `events.jsonl` under `~/.copilot/session-state/`, the newer CLI's central SQLite stores under `~/.copilot/`, and — per VS Code variant (Code, Code Insiders, VSCodium, plus `.vscode-server` on Linux) — the Copilot Chat extension's OpenTelemetry span store (`agent-traces.db`), VS Code core chat-session journals (`chatSessions/`), and Copilot Chat transcripts. `tokenuse` reads all of them through `src/tools/copilot/`.
+
+Per VS Code variant, sources are selected most-authoritative first to avoid double counting: when `agent-traces.db` exists it carries real token and cache counts for every recorded turn, so that variant's journals and transcripts are skipped entirely. Without it, a workspace's `chatSessions` journals (real prompt/output counts) win over its transcripts (chars/4 estimates); workspaces with only transcripts keep them.
 
 > Status: implemented.
 
@@ -31,22 +33,22 @@ The Copilot CLI stopped writing `events.jsonl` around May 2026. Newer builds kee
 
 Both stores run in WAL mode, so the parser copies the database plus any `-wal`/`-shm` sidecars to a private temp directory before opening; reading the live file with `immutable=1` would miss un-checkpointed rows. The adapter's source fingerprint also folds in the `-wal` file's metadata so archive syncs notice new turns before a checkpoint runs.
 
-### VS Code Extension
+### VS Code (per variant)
 
-| Platform | Workspace storage |
-| --- | --- |
-| macOS | `~/Library/Application Support/Code/User/workspaceStorage/<hash>/` |
-| macOS Insiders | `~/Library/Application Support/Code - Insiders/User/workspaceStorage/<hash>/` |
-| Linux | `~/.config/Code/User/workspaceStorage/<hash>/` |
-| Linux Insiders/server | `~/.config/Code - Insiders/User/workspaceStorage/<hash>/`, `~/.vscode-server/data/User/workspaceStorage/<hash>/` |
-| Windows | `%APPDATA%/Code/User/workspaceStorage/<hash>/` |
-| Windows Insiders | `%APPDATA%/Code - Insiders/User/workspaceStorage/<hash>/` |
-
-Inside each workspace hash directory:
+Each VS Code variant contributes a `User/` storage pair. Variants covered: `Code`, `Code - Insiders`, and `VSCodium` under the platform's application-support root (macOS `~/Library/Application Support/<variant>/User`, Linux `~/.config/<variant>/User`, Windows `%APPDATA%/<variant>/User`), plus `~/.vscode-server/data/User` on Linux.
 
 ```text
-GitHub.copilot-chat/transcripts/<session>.jsonl
+<User>/globalStorage/github.copilot-chat/agent-traces.db   -- OTel span store (preferred)
+<User>/globalStorage/emptyWindowChatSessions/*.jsonl       -- chat journals with no workspace
+<User>/workspaceStorage/<hash>/chatSessions/*.jsonl        -- VS Code core chat journals
+<User>/workspaceStorage/<hash>/GitHub.copilot-chat/transcripts/<session>.jsonl
 ```
+
+**OTel span store.** `agent-traces.db` is a WAL-mode SQLite database with `spans` (`span_id`, `trace_id`, `operation_name`, `start_time_ms`, `response_model`) and `span_attributes` (`span_id`, `key`, `value`) following the GenAI semantic conventions. `chat` spans carry real `gen_ai.usage.input_tokens`, `output_tokens`, `cache_read.input_tokens`, and `cache_creation.input_tokens`; the model comes from `gen_ai.response.model`, then `gen_ai.request.model`, then the `response_model` column; the conversation id from `gen_ai.conversation.id`; the project from `github.copilot.git.repository` (repository name, `.git` stripped). `execute_tool` spans in the same trace contribute tool names (`gen_ai.tool.name`, normalized) and shell commands (`gen_ai.tool.call.arguments` JSON `command`, newlines flattened to separators); `invoke_agent` spans with a `copilot_chat.parent_chat_session_id` mark subagent delegation as an `Agent` tool entry. Dedup key: `copilot-otel:<span_id>`. Each span also claims the transcript-style key `copilot:<conversation>:<turn.id>` from `github.copilot.chat.turn.id` and carries it as a superseded hint — the archive zeroes any previously ingested transcript estimate of the same turn (token and cost fields only; message metadata stays). VS Code prunes old spans; the archive is append-only, so history ingested before pruning survives.
+
+**Chat-session journals.** Each `chatSessions/*.jsonl` is a delta journal: `kind: 0` sets the root object, `kind: 1` sets a value at path `k`, `kind: 2` appends items to the array at path `k` (default `requests`). Reconstructed requests carry real token counts in `result.metadata.promptTokens` / `outputTokens` (falling back to `completionTokens`), the served model in `result.metadata.resolvedModel` (falling back to `modelId` with a leading `copilot/` stripped), tools in `metadata.toolCallRounds`, and the prompt in `message.text`. Requests with zero prompt and output tokens are skipped. Dedup key: `copilot-chatsession:<sessionId>:<requestId>`; timestamps fall back to the root `creationDate` (epoch ms). `emptyWindowChatSessions` journals parse identically under the `copilot-chat` project label.
+
+**Transcripts** remain the estimate-based fallback for workspaces with neither source:
 
 A transcript file only parses as Copilot when its first line has `type == "session.start"` and `data.producer == "copilot-agent"`. When that `session.start` event includes `data.context.cwd`, the cwd is the authoritative project path. If absent, `tokenuse` falls back to `workspace.yaml`, the VS Code `workspace.json` folder name, and then the workspace hash.
 
@@ -77,6 +79,8 @@ flowchart TD
 ### Legacy `events.jsonl`
 
 Legacy events store their payload under `data`. A legacy assistant message only emits a `ParsedCall` when the current model has been set by `session.model_change` and `data.outputTokens` is positive.
+
+**`session.shutdown` rollup.** The shutdown event's `data.modelMetrics.<model>.usage` carries the only real input and cache token counts a legacy CLI session records. `usage.inputTokens` is written cache-inclusive (input + cache reads + cache writes), so pure input is recovered by subtracting `cacheReadTokens` and `cacheWriteTokens`. One supplementary **input-only** call is emitted per model (`dedup_key = copilot:<session>:shutdown:<model>`, output kept at 0 so the per-turn `assistant.message` output is not double counted). This closes the old "legacy input tokens are always 0" limitation for sessions that shut down cleanly.
 
 ```jsonc
 { "type": "session.model_change",

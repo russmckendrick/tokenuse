@@ -81,9 +81,27 @@ SELECT key, json_extract(value, '$.composerId'),
        json_extract(value, '$.fullConversationHeadersOnly'),
        json_extract(value, '$.modelConfig.modelName'),
        json_extract(value, '$.forceMode'), json_extract(value, '$.unifiedMode'),
-       json_extract(value, '$.isAgentic'), json_extract(value, '$.status')
+       json_extract(value, '$.isAgentic'), json_extract(value, '$.status'),
+       json_extract(value, '$.createdAt'),
+       json_extract(value, '$.promptTokenBreakdown.totalUsedTokens'),
+       json_extract(value, '$.contextTokensUsed')
 FROM cursorDiskKV WHERE key LIKE 'composerData:%' ORDER BY rowid
 "#;
+
+/// Dedup key prefix for the once-per-conversation input credit taken from
+/// Cursor's own context meter.
+pub const COMPOSER_INPUT_DEDUP_PREFIX: &str = "cursor:composer-input:";
+
+/// Per-workspace composer inventory. Cursor renamed `composer.composerData`
+/// to `composer.composerHeaders` in newer builds, so both keys are read.
+pub const WORKSPACE_COMPOSER_QUERY: &str = "SELECT value FROM ItemTable WHERE key IN ('composer.composerData', 'composer.composerHeaders')";
+
+/// The per-workspace storage tree sibling to the global `state.vscdb`:
+/// `<User>/workspaceStorage/<hash>/{workspace.json,state.vscdb}`.
+pub fn workspace_storage_root() -> Option<PathBuf> {
+    let global_storage = state_db_path()?.parent()?.to_path_buf();
+    Some(global_storage.parent()?.join("workspaceStorage"))
+}
 
 pub const STATE_CONTEXT_QUERY: &str = r#"
 SELECT key, json_extract(value, '$.attachedFileCodeChunksMetadataOnly'),

@@ -40,7 +40,7 @@ The UI's `Cache` column remains observed cache-hit behavior from local usage dat
 
 Current important rows:
 
-- Claude prompt-cache reads are 10% of input; 5-minute cache writes are 125% of input.
+- Claude prompt-cache reads are 10% of input; 5-minute cache writes are 125% of input. 1-hour cache writes are 200% of input — the books carry the 5-minute rate and the pricing formula applies a fixed 1.6x premium to the 1h share reported under `usage.cache_creation` (see [Architecture — Pricing](architecture.md#pricing)).
 - Cursor Auto reads are 20% of input, and cache writes use the same rate as input.
 - Current OpenAI GPT-5.4/GPT-5.5/GPT-5.6 and Codex rows use 10% cached-input pricing; `codex-mini-latest` remains 25%.
 - Gemini rows are explicit overrides with source provenance because Gemini publishes prompt-length tiers that the parser cannot yet choose per call.

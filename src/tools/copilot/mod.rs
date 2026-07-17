@@ -16,8 +16,9 @@ const LIMIT_SOURCE_FINGERPRINT_VERSION: &str = "copilot-limit-schema:3";
 // stores reparse once (v2: assistant_usage_events supersede estimates).
 const CLI_STORE_FINGERPRINT_VERSION: &str = "copilot-cli-schema:2";
 // Bumped when the legacy-events/VS Code-transcript parsers change what they
-// emit, so archived transcripts reparse once (v2: coach enrichment fields).
-const TRANSCRIPT_FINGERPRINT_VERSION: &str = "copilot-transcript-schema:2";
+// emit, so archived transcripts reparse once (v3: session.shutdown rollups
+// recover real input/cache tokens for legacy CLI sessions).
+const TRANSCRIPT_FINGERPRINT_VERSION: &str = "copilot-transcript-schema:3";
 
 impl ToolAdapter for Copilot {
     fn id(&self) -> &'static str {
