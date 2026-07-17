@@ -1,8 +1,7 @@
 <script lang="ts">
   import { ChevronRight } from 'lucide-svelte';
   import { api } from '../api';
-  import RankBar from '../components/RankBar.svelte';
-  import { count } from '../format';
+  import { count, rankLabel, rankPercent } from '../format';
   import ProviderIcon from '../icons/ProviderIcon.svelte';
   import { staggeredReveal } from '../motion';
   import Panel from '../Panel.svelte';
@@ -108,7 +107,6 @@
       </svelte:fragment>
       <table class="data-table catalog-table">
         <colgroup>
-          <col class="rank-column" />
           <col class="model-column" />
           {#each snapshot.periods as _}<col class="range-column" />{/each}
           <col class="cache-column" />
@@ -116,7 +114,6 @@
         </colgroup>
         <thead>
           <tr>
-            <th></th>
             <th>{snapshot.copy.tables.model}</th>
             {#each snapshot.periods as period}
               <th class="range-heading">{period.label}</th>
@@ -128,19 +125,21 @@
         <tbody>
           {#each group.entries as entry}
             <tr
-              class="catalog-row"
+              class="catalog-row rank-row"
               class:expanded={expanded[entry.canonical_id]}
+              style:--rank-fill={`${rankPercent(entry.value)}%`}
+              title={rankLabel(snapshot.copy.timeline.relative_rank, entry.value)}
               tabindex="0"
               aria-expanded={expanded[entry.canonical_id] ?? false}
               onclick={() => toggle(entry.canonical_id)}
               onkeydown={(event) => handleRowKey(event, entry.canonical_id)}
             >
-              <td><RankBar value={entry.value} ariaLabel={`${entry.name} ${snapshot.copy.desktop.rank}`} /></td>
               <td>
                 <span class="catalog-model">
                   <ProviderIcon id={group.provider} size={14} />
                   {entry.name}
                   <small class="muted-cell">{entry.family}</small>
+                  <span class="sr-only">{rankLabel(snapshot.copy.timeline.relative_rank, entry.value)}</span>
                 </span>
               </td>
               {#each snapshot.periods as period}
@@ -160,7 +159,6 @@
             </tr>
             {#if expanded[entry.canonical_id]}
               <tr class="catalog-split">
-                <td></td>
                 <td colspan="8">
                   <div class="split-rows">
                     <span class="split-title">{snapshot.copy.desktop.per_tool_split}</span>
@@ -178,7 +176,7 @@
             {/if}
           {/each}
           {#if group.entries.length === 0}
-            <tr><td colspan="9" class="empty-cell">{snapshot.copy.empty.no_models}</td></tr>
+            <tr><td colspan="8" class="empty-cell">{snapshot.copy.empty.no_models}</td></tr>
           {/if}
         </tbody>
       </table>
@@ -192,10 +190,6 @@
   .catalog-table {
     width: 100%;
     table-layout: fixed;
-  }
-
-  .rank-column {
-    width: 132px;
   }
 
   .model-column {

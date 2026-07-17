@@ -16,6 +16,10 @@
   --color-neutral-hover: #2c3149;
   --color-bar-empty: #292d42;
 
+  /* Rank fills — ranked table rows carry magnitude as a row-background wash */
+  --color-rank-fill: color-mix(in srgb, var(--color-secondary) 12%, transparent);
+  --color-rank-edge: color-mix(in srgb, var(--color-secondary) 55%, transparent);
+
   --color-on-surface: #cbd4f2;
   --color-muted: #a1a7c3;
   --color-muted-2: #6e7492;

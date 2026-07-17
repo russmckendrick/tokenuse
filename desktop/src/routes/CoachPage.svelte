@@ -14,7 +14,7 @@
   import ScoreBar from '../components/ScoreBar.svelte';
   import Sparkline from '../components/Sparkline.svelte';
   import StatTile from '../components/StatTile.svelte';
-  import { count } from '../format';
+  import { count, rankLabel, rankPercent } from '../format';
   import { countUp, staggeredReveal } from '../motion';
   import Panel from '../Panel.svelte';
   import type {
@@ -628,7 +628,7 @@
               </div>
               <ul class="output-list">
                 {#each activeOutputRows as row (row.name)}
-                  <li><button type="button" class:selected={row.name === selectedOutputKey} onclick={() => (selectedOutputKey = row.name)}><RankBar value={row.value} ariaLabel={row.name} compact /><span class="output-name">{row.name}</span><span class="mono output-count">{count(row.calls)}</span></button></li>
+                  <li><button type="button" class="rank-row" class:selected={row.name === selectedOutputKey} style:--rank-fill={`${rankPercent(row.value)}%`} title={rankLabel(snapshot.copy.timeline.relative_rank, row.value)} onclick={() => (selectedOutputKey = row.name)}><span class="output-name">{row.name}<span class="sr-only">{rankLabel(snapshot.copy.timeline.relative_rank, row.value)}</span></span><span class="mono output-count">{count(row.calls)}</span></button></li>
                 {/each}
               </ul>
               {#if selectedOutput}<div class="output-selected"><span class="stat-label">{coachCopy.output.selected}</span><strong>{selectedOutput.name}</strong><span class="mono">{count(selectedOutput.calls)} · {selectedOutputShare}</span></div>{/if}
@@ -1858,13 +1858,13 @@
   .output-list button {
     width: 100%;
     display: grid;
-    grid-template-columns: 86px minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 8px;
     min-height: 28px;
     border: 0;
     border-left: 2px solid transparent;
-    background: transparent;
+    background-color: transparent;
     color: inherit;
     padding: 2px 6px;
     text-align: left;
@@ -1872,12 +1872,12 @@
   }
 
   .output-list button:hover {
-    background: color-mix(in srgb, var(--color-on-surface) 5%, transparent);
+    background-color: color-mix(in srgb, var(--color-on-surface) 5%, transparent);
   }
 
   .output-list button.selected {
     border-left-color: var(--color-magenta);
-    background: color-mix(in srgb, var(--color-magenta) 8%, transparent);
+    background-color: color-mix(in srgb, var(--color-magenta) 8%, transparent);
   }
 
   .output-name {

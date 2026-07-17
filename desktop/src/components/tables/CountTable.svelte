@@ -1,23 +1,21 @@
 <script lang="ts">
-  import { count } from '../../format';
+  import { count, rankLabel, rankPercent } from '../../format';
   import type { CopyDeck, CountMetric } from '../../types';
-  import RankBar from '../RankBar.svelte';
 
   export let rows: CountMetric[] = [];
   export let copy: CopyDeck;
 </script>
 
 <table class="data-table count-table">
-  <thead><tr><th></th><th>{copy.tables.name}</th><th>{copy.tables.calls}</th></tr></thead>
+  <thead><tr><th>{copy.tables.name}</th><th>{copy.tables.calls}</th></tr></thead>
   <tbody>
     {#each rows as row}
-      <tr>
-        <td><RankBar value={row.value} ariaLabel={`${row.name} ${copy.desktop.rank}`} /></td>
-        <td>{row.name}</td>
+      <tr class="rank-row" style:--rank-fill={`${rankPercent(row.value)}%`} title={rankLabel(copy.timeline.relative_rank, row.value)}>
+        <td>{row.name}<span class="sr-only">{rankLabel(copy.timeline.relative_rank, row.value)}</span></td>
         <td>{count(row.calls)}</td>
       </tr>
     {:else}
-      <tr><td colspan="3" class="empty-cell">{copy.empty.no_rows}</td></tr>
+      <tr><td colspan="2" class="empty-cell">{copy.empty.no_rows}</td></tr>
     {/each}
   </tbody>
 </table>

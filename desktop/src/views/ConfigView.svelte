@@ -33,6 +33,7 @@
   export let toggleSampleData: () => void;
   export let setOpenAtLoginFromEvent: (event: Event) => void;
   export let setShowDockOrTaskbarIconFromEvent: (event: Event) => void;
+  export let setPlanPriceFromEvent: (id: string, event: Event) => void;
 
   const GROUPS: Record<string, string[]> = {
     money: ['currency_override', 'rates_json', 'litellm_prices'],
@@ -234,6 +235,26 @@
       </Panel>
     {/if}
 
+    <Panel title={snapshot.copy.panels.plan_value} tone="orange">
+      <p class="plan-hint">{snapshot.copy.desktop.plan_prices_hint}</p>
+      <div class="plan-price-rows">
+        {#each snapshot.desktop_settings.plan_prices as row (row.id)}
+          <label class="plan-price-row">
+            <span>{row.label}</span>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              inputmode="decimal"
+              placeholder={snapshot.copy.desktop.plan_price_placeholder}
+              value={row.price ?? ''}
+              onchange={(event) => setPlanPriceFromEvent(row.id, event)}
+            />
+          </label>
+        {/each}
+      </div>
+    </Panel>
+
     <Panel title={snapshot.copy.panels.local_data} tone="green">
       <div class="toggle-list">
         <label class="toggle-row">
@@ -253,6 +274,7 @@
       <div class="config-facts">
         <div><span>{snapshot.copy.tables.currency}</span><strong>{snapshot.currency}</strong></div>
         <div><span>{snapshot.copy.tables.exports}</span><strong>{snapshot.report_dir}</strong></div>
+        <div><span>{snapshot.copy.config.paths.mcp_server}</span><strong>{snapshot.copy.config.values.mcp_hint}</strong></div>
       </div>
       <div class="button-row">
         <button type="button" onclick={refreshArchive}><Database size={15} /> {snapshot.copy.actions.refresh}</button>
@@ -483,5 +505,47 @@
 
   .value-warn {
     color: var(--color-warning);
+  }
+
+  .plan-hint {
+    margin: 0;
+    font-size: 12px;
+    color: var(--color-muted);
+  }
+
+  .plan-price-rows {
+    display: grid;
+    gap: 0;
+    border-top: 1px solid var(--color-border-row);
+  }
+
+  .plan-price-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 130px;
+    align-items: center;
+    gap: var(--space-lg);
+    padding: 7px var(--space-lg);
+    border-bottom: 1px solid var(--color-border-row);
+  }
+
+  .plan-price-row:last-child {
+    border-bottom: 0;
+  }
+
+  .plan-price-row span {
+    font-family: var(--font-ui);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-on-surface);
+  }
+
+  .plan-price-row input {
+    width: 100%;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    background: transparent;
+    color: var(--color-on-surface);
+    border: 1px solid var(--color-border-row);
+    padding: 4px 6px;
   }
 </style>

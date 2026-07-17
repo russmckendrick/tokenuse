@@ -9,7 +9,9 @@ import type {
   DoctorReport,
   ModelCatalogEntry,
   PeriodId,
+  ProjectIndexRow,
   ProjectOption,
+  ProjectPageData,
   ReportFormatId,
   ReportResponse,
   SessionDetailView,
@@ -29,9 +31,13 @@ export const api = {
   setSort: (sort: SortId) => invoke<DesktopSnapshot>('set_sort', { sort }),
   setProject: (identity: string | null) => invoke<DesktopSnapshot>('set_project', { identity }),
   setCurrency: (code: string) => invoke<DesktopSnapshot>('set_currency', { code }),
+  setPlanPrice: (tool: string, price: number | null) =>
+    invoke<DesktopSnapshot>('set_plan_price', { tool, price }),
   getModelCatalog: (period: PeriodId) =>
     invoke<ModelCatalogEntry[]>('get_model_catalog', { period }),
   getToolPage: (tool: ToolId) => invoke<ToolPageData>('get_tool_page', { tool }),
+  getProjectIndex: () => invoke<ProjectIndexRow[]>('get_project_index'),
+  getProjectPage: (identity: string) => invoke<ProjectPageData>('get_project_page', { identity }),
   getAnalytics: (period: PeriodId) => invoke<AnalyticsData>('get_analytics', { period }),
   getCoach: (period: PeriodId) => invoke<CoachData>('get_coach', { period }),
   getCoachTimeline: (day: string) =>

@@ -16,10 +16,12 @@ export type Route = {
   page: RoutePage;
   tool?: RouteToolId;
   sessionKey?: string;
+  /** Projects: set for the per-project sub-route, absent on the index. */
+  project?: { identity: string; label: string };
 };
 
 /** Pages reachable from the sidebar, in nav (and Tab-cycle) order. */
-export const NAV_PAGES: RoutePage[] = ['overview', 'analytics', 'coach', 'tools', 'models', 'projects', 'config'];
+export const NAV_PAGES: RoutePage[] = ['overview', 'analytics', 'coach', 'models', 'projects', 'tools', 'config'];
 
 let route = $state<Route>({ page: 'overview' });
 

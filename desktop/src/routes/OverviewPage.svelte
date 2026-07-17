@@ -9,6 +9,7 @@
   import type { DesktopSnapshot, LimitMetric } from '../types';
 
   export let snapshot: DesktopSnapshot;
+  export let openProject: (name: string) => void;
 
   type UtilisationTool = {
     id: string;
@@ -132,7 +133,7 @@
 
   <section class="duo-grid">
     <Panel title={snapshot.copy.desktop.top_projects} tone="yellow" scrollable>
-      <ProjectTable rows={snapshot.dashboard.projects} copy={snapshot.copy} />
+      <ProjectTable rows={snapshot.dashboard.projects} copy={snapshot.copy} {openProject} />
     </Panel>
     <Panel title={snapshot.copy.desktop.top_models} tone="magenta" scrollable>
       <ModelTable rows={snapshot.dashboard.models} copy={snapshot.copy} />

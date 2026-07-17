@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { fly } from 'svelte/transition';
   import { Channel } from '@tauri-apps/api/core';
   import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -21,6 +21,7 @@
   import ToolsPage from './routes/ToolsPage.svelte';
   import AnalyticsPage from './routes/AnalyticsPage.svelte';
   import ConfigView from './views/ConfigView.svelte';
+  import ProjectPage from './routes/ProjectPage.svelte';
   import SessionView from './views/SessionView.svelte';
   import type {
     ConfigRow,
@@ -153,6 +154,7 @@
   }
 
   function navigate(next: Route) {
+    cancelScrollRestore();
     router.go(next);
   }
 
@@ -181,7 +183,7 @@
       case 'models':
         return nav.models;
       case 'projects':
-        return nav.projects;
+        return route.project?.label ?? nav.projects;
       case 'config':
         return nav.config;
       case 'session':
@@ -339,12 +341,54 @@
     }
   }
 
+  /** Where the session view returns to on close: the page it was opened from. */
+  let sessionReturn: Route = { page: 'analytics' };
+  let sessionReturnScroll = 0;
+  let sessionReturnHeight = 0;
+  let pageScrollEl: HTMLElement | null = null;
+  let scrollRestoreObserver: ResizeObserver | null = null;
+
+  function cancelScrollRestore() {
+    scrollRestoreObserver?.disconnect();
+    scrollRestoreObserver = null;
+  }
+
+  /** The return page loads parts of its content async. Applying the saved
+   * offset against a partially-built layout would pin the wrong content (and
+   * scroll anchoring then keeps it wrong), so wait until the page has grown
+   * back to the height the offset was saved against. */
+  function restorePageScroll(top: number, height: number) {
+    cancelScrollRestore();
+    const el = pageScrollEl;
+    if (!el) return;
+    const apply = () => {
+      if (el.scrollHeight < height - 8) return false;
+      el.scrollTop = top;
+      return true;
+    };
+    if (apply()) return;
+    const content = el.firstElementChild;
+    if (!content) return;
+    const observer = new ResizeObserver(() => {
+      if (apply() && scrollRestoreObserver === observer) cancelScrollRestore();
+    });
+    observer.observe(content);
+    scrollRestoreObserver = observer;
+  }
+
   async function openSession(key: string) {
     busy = true;
     error = null;
     try {
       sessionDetail = await api.getSessionDetail(key);
+      if (router.route.page !== 'session') {
+        sessionReturn = { ...router.route };
+        sessionReturnScroll = pageScrollEl?.scrollTop ?? 0;
+        sessionReturnHeight = pageScrollEl?.scrollHeight ?? 0;
+      }
       navigate({ page: 'session', sessionKey: key });
+      await tick();
+      pageScrollEl?.scrollTo({ top: 0 });
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -352,9 +396,24 @@
     }
   }
 
-  function closeSession() {
+  async function closeSession() {
     sessionDetail = null;
-    navigate({ page: 'analytics' });
+    navigate(sessionReturn);
+    await tick();
+    restorePageScroll(sessionReturnScroll, sessionReturnHeight);
+  }
+
+  /** Open a project's page from a ranked-table row, which only carries the
+   * display label; resolve the identity via the snapshot's project options. */
+  async function openProject(name: string) {
+    const option = snapshot?.projects.find((project) => project.identity !== null && project.label === name);
+    await openProjectPage(option?.identity ?? null, name);
+  }
+
+  async function openProjectPage(identity: string | null, label: string) {
+    navigate(identity ? { page: 'projects', project: { identity, label } } : { page: 'projects' });
+    await tick();
+    pageScrollEl?.scrollTo({ top: 0 });
   }
 
   /** Client-side navigation keys; everything else falls through to the shared keymap. */
@@ -486,6 +545,13 @@
   function setShowDockOrTaskbarIconFromEvent(event: Event) {
     const enabled = (event.currentTarget as HTMLInputElement).checked;
     void commit(() => api.setShowDockOrTaskbarIcon(enabled));
+  }
+
+  function setPlanPriceFromEvent(id: string, event: Event) {
+    const raw = (event.currentTarget as HTMLInputElement).value.trim();
+    const parsed = raw === '' ? Number.NaN : Number(raw);
+    const price = Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    void commit(() => api.setPlanPrice(id, price));
   }
 
   function filteredProjects(): ProjectOption[] {
@@ -892,7 +958,7 @@
         showPeriod={router.route.page !== 'config' && router.route.page !== 'session' && (router.route.page !== 'tools' || router.route.tool !== undefined)}
         showTool={router.route.page === 'overview' || router.route.page === 'analytics' || router.route.page === 'coach'}
         showSort={router.route.page !== 'config' && router.route.page !== 'session' && router.route.page !== 'models' && router.route.page !== 'coach'}
-        showProject={router.route.page === 'overview' || router.route.page === 'analytics' || router.route.page === 'coach' || router.route.page === 'projects'}
+        showProject={router.route.page === 'overview' || router.route.page === 'analytics' || router.route.page === 'coach' || (router.route.page === 'projects' && !router.route.project)}
         {setPeriod}
         setTool={setToolFromEvent}
         setSort={setSortFromEvent}
@@ -901,21 +967,25 @@
         openReport={() => openModal('report')}
       />
 
-      <main class="page-scroll">
-        {#key `${router.route.page}:${router.route.tool ?? ''}`}
+      <main class="page-scroll" bind:this={pageScrollEl}>
+        {#key `${router.route.page}:${router.route.tool ?? ''}:${router.route.project?.identity ?? ''}`}
           <div class="route-view" use:pageTransition>
             {#if router.route.page === 'overview'}
-              <OverviewPage {snapshot} />
+              <OverviewPage {snapshot} {openProject} />
             {:else if router.route.page === 'analytics'}
-              <AnalyticsPage {snapshot} openSessionPicker={() => openModal('session')} />
+              <AnalyticsPage {snapshot} openSessionPicker={() => openModal('session')} {openSession} {openProject} />
             {:else if router.route.page === 'coach'}
               <CoachPage {snapshot} />
             {:else if router.route.page === 'tools'}
-              <ToolsPage {snapshot} tool={router.route.tool} {usageTone} />
+              <ToolsPage {snapshot} tool={router.route.tool} {usageTone} {navigate} {openSession} {openProject} />
             {:else if router.route.page === 'models'}
               <ModelsPage {snapshot} />
             {:else if router.route.page === 'projects'}
-              <ProjectsPage {snapshot} {openCallDetail} {handleCallRowKey} />
+              {#if router.route.project}
+                <ProjectPage {snapshot} project={router.route.project} {openSession} />
+              {:else}
+                <ProjectsPage {snapshot} {openProjectPage} />
+              {/if}
             {:else if router.route.page === 'config'}
               <ConfigView
                 {snapshot}
@@ -928,11 +998,13 @@
                 toggleSampleData={() => void commit(() => api.toggleDataSource())}
                 {setOpenAtLoginFromEvent}
                 {setShowDockOrTaskbarIconFromEvent}
+                {setPlanPriceFromEvent}
               />
             {:else if router.route.page === 'session'}
               <SessionView
                 {snapshot}
                 session={sessionDetail}
+                backLabel={pageTitle(sessionReturn, snapshot)}
                 {closeSession}
                 {openCallDetail}
                 {handleCallRowKey}

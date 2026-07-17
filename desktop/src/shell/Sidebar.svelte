@@ -97,18 +97,6 @@
     <button
       type="button"
       class="sidebar-item"
-      class:active={route.page === 'tools' && route.tool === undefined}
-      aria-current={route.page === 'tools' && route.tool === undefined ? 'page' : undefined}
-      title={copy.nav.tools}
-      onclick={() => navigate({ page: 'tools' })}
-    >
-      <Wrench size={16} />
-      {#if !collapsed}<span>{copy.nav.tools}</span>{/if}
-    </button>
-
-    <button
-      type="button"
-      class="sidebar-item"
       class:active={isActive('models')}
       aria-current={isActive('models') ? 'page' : undefined}
       title={copy.nav.models}
@@ -128,6 +116,18 @@
     >
       <FolderGit2 size={16} />
       {#if !collapsed}<span>{copy.nav.projects}</span>{/if}
+    </button>
+
+    <button
+      type="button"
+      class="sidebar-item"
+      class:active={route.page === 'tools' && route.tool === undefined}
+      aria-current={route.page === 'tools' && route.tool === undefined ? 'page' : undefined}
+      title={copy.nav.tools}
+      onclick={() => navigate({ page: 'tools' })}
+    >
+      <Wrench size={16} />
+      {#if !collapsed}<span>{copy.nav.tools}</span>{/if}
     </button>
 
     {#each toolEntries as tool}

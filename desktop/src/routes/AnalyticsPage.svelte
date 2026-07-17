@@ -16,6 +16,8 @@
 
   export let snapshot: DesktopSnapshot;
   export let openSessionPicker: () => void;
+  export let openSession: (key: string) => void;
+  export let openProject: (name: string) => void;
 
   let analytics: AnalyticsData | null = null;
   let analyticsKey = '';
@@ -42,6 +44,12 @@
       // Keep the previous analytics render on transient errors.
     }
   }
+
+  // The rolling 24 Hours period stacks by hour, so the card renames itself.
+  $: spendByToolTitle =
+    snapshot.period === 'today'
+      ? snapshot.copy.desktop.hourly_by_tool
+      : snapshot.copy.desktop.daily_by_tool;
 </script>
 
 <section class="page-flow" use:staggeredReveal={{ selector: ':scope > *', y: 5, stagger: 0.035 }}>
@@ -51,10 +59,10 @@
 
   {#if analytics}
     <section class="duo-grid">
-      <Panel title={snapshot.copy.desktop.daily_by_tool} tone="orange">
+      <Panel title={spendByToolTitle} tone="orange">
         <StackedBars
           rows={analytics.daily_by_tool}
-          ariaLabel={snapshot.copy.desktop.daily_by_tool}
+          ariaLabel={spendByToolTitle}
           emptyLabel={snapshot.copy.empty.no_data}
         />
       </Panel>
@@ -92,7 +100,7 @@
 
   <section class="duo-grid">
     <Panel title={snapshot.copy.panels.by_project} tone="green" scrollable>
-      <ProjectTable rows={snapshot.dashboard.projects} copy={snapshot.copy} />
+      <ProjectTable rows={snapshot.dashboard.projects} copy={snapshot.copy} {openProject} />
     </Panel>
     <Panel title={snapshot.copy.panels.model_efficiency} tone="magenta" scrollable>
       <ModelTable rows={snapshot.dashboard.models} copy={snapshot.copy} />
@@ -105,7 +113,7 @@
 
   <Panel title={snapshot.copy.panels.top_sessions} tone="red" scrollable>
     <button class="panel-command" type="button" onclick={openSessionPicker}>{snapshot.copy.actions.open_session_picker}</button>
-    <SessionTable rows={snapshot.dashboard.sessions} copy={snapshot.copy} />
+    <SessionTable rows={snapshot.dashboard.sessions} copy={snapshot.copy} {openSession} />
   </Panel>
 
   <Panel title={snapshot.copy.panels.project_spend_by_tool} tone="yellow" scrollable>

@@ -53,6 +53,8 @@ export type ProjectToolMetric = {
 };
 
 export type SessionMetric = {
+  /** Drill-down key for the session view; empty when the row is display-only. */
+  key: string;
   date: string;
   project: string;
   cost: string;
@@ -324,6 +326,14 @@ export type ToolLimitSection = {
   limits: LimitMetric[];
   usage: RecentUsageMetric;
   models: RecentModelMetric[];
+  plan_value: PlanValueMetric | null;
+};
+
+/** API-equivalent month spend vs the tool's subscription price. */
+export type PlanValueMetric = {
+  price: string;
+  month_cost: string;
+  multiple: string;
 };
 
 export type LimitsData = {
@@ -433,6 +443,13 @@ export type ConfigLink = {
 export type DesktopSettingsState = {
   open_at_login: boolean;
   show_dock_or_taskbar_icon: boolean;
+  plan_prices: PlanPriceRow[];
+};
+
+export type PlanPriceRow = {
+  id: string;
+  label: string;
+  price: number | null;
 };
 
 export type DesktopUpdateState = {
@@ -651,4 +668,52 @@ export type ReportResponse = {
 export type ToolPageData = {
   dashboard: DashboardData;
   usage: LimitsData;
+};
+
+/** Mirrors `ProjectIndexRow` in `src/data/mod.rs`. */
+export type ProjectIndexRow = {
+  identity: string;
+  name: string;
+  cost: string;
+  avg_per_session: string;
+  sessions: number;
+  calls: number;
+  last_active: string;
+  tool_mix: string;
+  value: number;
+};
+
+/** Mirrors `ProjectInventoryRow` in `src/ingest/pipeline.rs`. */
+export type ProjectSourceRow = {
+  identity: string;
+  project: string;
+  tool: string;
+  raw_project: string;
+  calls: number;
+  sessions: number;
+  cost: string;
+};
+
+/** Mirrors `ProjectToolSplit` in `src/data/mod.rs`. */
+export type ProjectToolSplit = {
+  key: string;
+  label: string;
+  cost: string;
+  avg_per_session: string;
+  calls: number;
+  sessions: number;
+  cost_value: number;
+  avg_value: number;
+};
+
+/** Mirrors `ProjectPageData` in `desktop/src-tauri/src/snapshot.rs`. */
+export type ProjectPageData = {
+  identity: string;
+  name: string;
+  dashboard: DashboardData;
+  sessions: SessionOption[];
+  sources: ProjectSourceRow[];
+  tool_split: ProjectToolSplit[];
+  output: OutputSummary;
+  activity: CoachProjectActivity | null;
 };

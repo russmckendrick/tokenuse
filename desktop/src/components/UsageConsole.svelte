@@ -1,7 +1,7 @@
 <script lang="ts">
   import Panel from '../Panel.svelte';
   import { staggeredReveal } from '../motion';
-  import type { CopyDeck, RecentModelMetric, ToolLimitSection } from '../types';
+  import type { CopyDeck, PlanValueMetric, RecentModelMetric, ToolLimitSection } from '../types';
   import GaugeBar from './GaugeBar.svelte';
   import RankBar from './RankBar.svelte';
   import UsageActivityChart from './UsageActivityChart.svelte';
@@ -25,6 +25,16 @@
   function credit(value: number) {
     return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
   }
+
+  function planValueLine(planValue: PlanValueMetric) {
+    return copy.usage.plan_value_line
+      .split('{month_cost}')
+      .join(planValue.month_cost)
+      .split('{price}')
+      .join(planValue.price)
+      .split('{multiple}')
+      .join(planValue.multiple);
+  }
 </script>
 
 <Panel title={copy.usage.console_title.replace('{tool}', section.tool)} {tone}>
@@ -41,6 +51,13 @@
         <div><span>{copy.usage.seen}</span><strong>{section.usage.last_seen}</strong></div>
       </div>
     </div>
+
+    {#if section.plan_value}
+      <div class="console-plan-value">
+        <span>{copy.usage.plan_value}</span>
+        <strong>{planValueLine(section.plan_value)}</strong>
+      </div>
+    {/if}
 
     <div class="console-table">
       <div class="console-row console-labels">
@@ -152,6 +169,30 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .console-plan-value {
+    min-width: 0;
+    border: 1px solid var(--color-border-row);
+    padding: 6px 7px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .console-plan-value span {
+    color: var(--color-muted);
+    text-transform: uppercase;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .console-plan-value strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
   }
 
   .console-table {

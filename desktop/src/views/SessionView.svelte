@@ -7,6 +7,7 @@
 
   export let snapshot: DesktopSnapshot;
   export let session: SessionDetailView | null;
+  export let backLabel: string;
   export let closeSession: () => void;
   export let openCallDetail: (call: SessionDetail) => void;
   export let handleCallRowKey: (event: KeyboardEvent, call: SessionDetail) => void;
@@ -14,7 +15,7 @@
 
 <section class="session-page" use:reveal={{ y: 5 }}>
   <div class="session-head">
-    <button type="button" onclick={closeSession}><ArrowLeft size={15} /> {snapshot.copy.nav.analytics}</button>
+    <button type="button" onclick={closeSession}><ArrowLeft size={15} /> {backLabel}</button>
     {#if session}
       <div>
         <strong>{session.project}</strong>

@@ -207,6 +207,33 @@ th:first-child {
   width: 86px;
 }
 
+/* Rank fills — ranked rows paint their magnitude across the row background.
+   Hard-stop wash + 1px terminus edge; no gradient fade (DESIGN.md). */
+@property --rank-fill {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
+.rank-row {
+  background-image: linear-gradient(
+    to right,
+    var(--color-rank-fill) 0,
+    var(--color-rank-fill) var(--rank-fill),
+    var(--color-rank-edge) var(--rank-fill),
+    var(--color-rank-edge) calc(var(--rank-fill) + 1px),
+    transparent calc(var(--rank-fill) + 1px)
+  );
+  background-repeat: no-repeat;
+  transition: --rank-fill var(--motion-slow) var(--ease-standard);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rank-row {
+    transition: none;
+  }
+}
+
 .click-row {
   cursor: default;
   transition: background var(--motion-fast) var(--ease-standard);
@@ -288,47 +315,48 @@ th:first-child {
   font-family: var(--font-ui);
 }
 
+/* Ranked tables lead with the entity name over the row fill — no meter column */
 .data-table th:first-child,
 .data-table td:first-child {
-  width: 100px;
+  width: auto;
 }
 
+.project-table th:nth-child(2),
+.project-table td:nth-child(2),
 .project-table th:nth-child(3),
 .project-table td:nth-child(3),
+.project-tool-table th:nth-child(3),
+.project-tool-table td:nth-child(3),
+.project-tool-table th:nth-child(6),
+.project-tool-table td:nth-child(6),
+.model-table th:nth-child(2),
+.model-table td:nth-child(2) {
+  width: 104px;
+}
+
 .project-table th:nth-child(4),
 .project-table td:nth-child(4),
 .project-tool-table th:nth-child(4),
 .project-tool-table td:nth-child(4),
-.project-tool-table th:nth-child(7),
-.project-tool-table td:nth-child(7),
-.model-table th:nth-child(3),
-.model-table td:nth-child(3) {
-  width: 104px;
-}
-
-.project-table th:nth-child(5),
-.project-table td:nth-child(5),
 .project-tool-table th:nth-child(5),
 .project-tool-table td:nth-child(5),
-.project-tool-table th:nth-child(6),
-.project-tool-table td:nth-child(6),
+.model-table th:nth-child(3),
+.model-table td:nth-child(3),
 .model-table th:nth-child(4),
 .model-table td:nth-child(4),
 .model-table th:nth-child(5),
 .model-table td:nth-child(5),
-.model-table th:nth-child(6),
-.model-table td:nth-child(6),
-.session-table th:nth-child(5),
-.session-table td:nth-child(5),
-.count-table th:nth-child(3),
-.count-table td:nth-child(3) {
+.session-table th:last-child,
+.session-table td:last-child,
+.count-table th:nth-child(n + 2),
+.count-table td:nth-child(n + 2) {
   width: 86px;
 }
 
-.session-table th:nth-child(2),
-.session-table td:nth-child(2),
-.project-tool-table th:nth-child(3),
-.project-tool-table td:nth-child(3) {
+.session-table th:first-child,
+.session-table td:first-child,
+.project-tool-table th:nth-child(2),
+.project-tool-table td:nth-child(2) {
   width: 118px;
 }
 
