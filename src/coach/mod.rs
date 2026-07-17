@@ -13,6 +13,7 @@ pub mod projects;
 pub mod rules;
 pub mod score;
 pub mod sessions;
+pub mod setup;
 pub mod signals;
 pub mod text;
 pub mod timeline;
@@ -114,6 +115,7 @@ pub fn coach_data(
     calendar_calls: &[&ParsedCall],
     period: Period,
     now: DateTime<Local>,
+    setup_scan: Option<&setup::SetupScan>,
 ) -> crate::data::CoachData {
     let ctx = CoachContext::new(calls);
     // Dashboard-consistent short labels: the same period-filtered peer set
@@ -300,6 +302,9 @@ pub fn coach_data(
         overall,
         practice_groups,
         findings,
+        setup: setup_scan
+            .map(|scan| setup::findings(calls, scan))
+            .unwrap_or_default(),
         flow,
         pace,
         output,
@@ -447,12 +452,12 @@ mod tests {
         let refs = ctx_calls(&calls);
         let now = last_local_time(&calls);
 
-        let data = coach_data(&refs, &refs, Period::Week, now);
+        let data = coach_data(&refs, &refs, Period::Week, now, None);
         assert_eq!(data.timeline_grid.len(), 2);
         assert!(!data.timeline_grid[0].in_period, "ten-day-old context day");
         assert!(data.timeline_grid[1].in_period);
 
-        let all_time = coach_data(&refs, &refs, Period::AllTime, now);
+        let all_time = coach_data(&refs, &refs, Period::AllTime, now, None);
         assert!(all_time.timeline_grid.iter().all(|d| d.in_period));
     }
 
@@ -468,7 +473,7 @@ mod tests {
         let refs = ctx_calls(&calls);
         let now = last_local_time(&calls);
 
-        let data = coach_data(&refs, &refs, Period::AllTime, now);
+        let data = coach_data(&refs, &refs, Period::AllTime, now, None);
         assert_eq!(data.output.by_project.len(), 1);
         assert_eq!(data.output.by_project[0].name, "proj");
         assert_eq!(data.projects.len(), 1);

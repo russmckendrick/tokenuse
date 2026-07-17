@@ -226,6 +226,24 @@ impl PriceTable {
         rate_label(price.cache_write, price.input)
     }
 
+    /// True when `(tool, model)` matches no tool-scoped or global pricing row
+    /// (including aliases and prefix rows) and is therefore billed at the
+    /// book's fallback model rates — usually a proxy-renamed model that needs
+    /// an alias or override.
+    pub fn uses_fallback(&self, tool: &str, model: &str, timestamp: Option<DateTime<Utc>>) -> bool {
+        let date = effective_date(timestamp);
+        let tool_key = tool.trim().to_ascii_lowercase();
+        let canonical = canonicalize(model);
+        let tool_target = self
+            .tool_aliases
+            .get(&tool_key)
+            .and_then(|aliases| aliases.get(&canonical))
+            .map(String::as_str)
+            .unwrap_or(canonical.as_str());
+        self.lookup_tool(&tool_key, tool_target, date).is_none()
+            && self.lookup_global(tool_target, date).is_none()
+    }
+
     pub fn local_from_paths(paths: &crate::config::ConfigPaths) -> Result<Self, String> {
         if paths.pricing_upstream_file.exists() || paths.pricing_overrides_file.exists() {
             if !paths.pricing_upstream_file.exists() {
@@ -581,6 +599,15 @@ fn effective_date(timestamp: Option<DateTime<Utc>>) -> NaiveDate {
 /// rate that the pricing books carry.
 const ONE_HOUR_CACHE_WRITE_PREMIUM: f64 = 1.6;
 
+/// Whether `(tool, model)` would be billed at the fallback model's rates by
+/// the configured pricing table. See [`PriceTable::uses_fallback`].
+pub fn uses_fallback(tool: &str, model: &str, timestamp: Option<DateTime<Utc>>) -> bool {
+    #[cfg(test)]
+    return PriceTable::embedded().uses_fallback(tool, model, timestamp);
+    #[cfg(not(test))]
+    with_configured(|table| table.uses_fallback(tool, model, timestamp))
+}
+
 pub fn cost(model: &str, call: &ParsedCall, speed: Speed) -> f64 {
     #[cfg(test)]
     let price = PriceTable::embedded().lookup_for(call.tool, model, call.timestamp);
@@ -667,6 +694,28 @@ mod tests {
         let p = PriceTable::embedded().lookup("anthropic/claude-opus-4-7-20250514@v1");
         assert!(p.input > 0.0);
         assert_eq!(p.fast_multiplier, Some(6.0));
+    }
+
+    #[test]
+    fn fallback_detection_respects_tool_scope_and_aliases() {
+        let table = PriceTable::embedded();
+
+        assert!(
+            table.uses_fallback("claude-code", "my-proxy-model-9000", None),
+            "unknown models fall through to the fallback row"
+        );
+        assert!(
+            !table.uses_fallback("cursor", "composer-1.5", None),
+            "tool-scoped rows resolve"
+        );
+        assert!(
+            table.uses_fallback("codex", "composer-1.5", None),
+            "another tool's scoped row does not leak"
+        );
+        assert!(
+            !table.uses_fallback("claude-code", "claude-opus-4-7-20250514", None),
+            "canonicalization and global rows resolve"
+        );
     }
 
     #[test]

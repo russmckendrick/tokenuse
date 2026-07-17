@@ -47,6 +47,10 @@ Current important rows:
 - Claude Sonnet 5 carries introductory pricing in the upstream book; a dated override switches it to standard pricing from September 1, 2026 (`effective_from: "2026-09-01"`).
 - Claude Code fast mode is modelled as `fast_multiplier` on the base row: 2x for Opus 4.8, 6x for Opus 4.7 (deprecated upstream, removal scheduled July 24, 2026) and the historical Opus 4.6 rows.
 
+## Fallback Visibility
+
+A `(tool, model)` pair that matches no tool-scoped or global row (including aliases and prefix rows) is billed at the book's fallback model. That silent fallback is now surfaced: `pricing::uses_fallback` reports it, the dashboard collects the distinct affected pairs into `DashboardData.fallback_priced_models` (all-time scope on the Config pages so the warning cannot hide behind a period filter), and report metadata carries the same list. Synthetic placeholder models (`<synthetic>`) are excluded — they carry no tokens.
+
 ## Maintainer Refresh
 
 Refresh the checked-in books with:

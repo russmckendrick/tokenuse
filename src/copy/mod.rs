@@ -29,6 +29,9 @@ pub struct CopyDeck {
     pub reports: ReportCopy,
     pub report_cli: ReportCliCopy,
     pub cli: CliCopy,
+    pub overview: OverviewCopy,
+    pub categories: BTreeMap<String, String>,
+    pub doctor: DoctorCopy,
     pub keymap: KeymapCopy,
     pub status: StatusCopy,
 }
@@ -68,6 +71,7 @@ pub struct CoachCopy {
     pub groups: CoachGroupsCopy,
     pub score: CoachScoreCopy,
     pub findings: CoachFindingsCopy,
+    pub setup: CoachSetupCopy,
     pub flow: CoachFlowCopy,
     pub pace: CoachPaceCopy,
     pub timeline: CoachTimelineCopy,
@@ -508,6 +512,7 @@ pub struct ConfigValuesCopy {
     pub quota_snapshot_missing: String,
     pub delete_archive_then_rebuild: String,
     pub build_archive_from_history: String,
+    pub fallback_priced_models: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -879,6 +884,48 @@ pub struct CliCopy {
     pub wrote_path: String,
     pub refresh_prices_requires_feature: String,
     pub generate_currency_requires_feature: String,
+    pub doctor_command: String,
+    pub status_command: String,
+    pub overview_command: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CoachSetupCopy {
+    pub heading: String,
+    pub subtitle: String,
+    pub savings: String,
+    pub empty: String,
+    pub unused_mcp_title: String,
+    pub unused_mcp_detail: String,
+    pub claude_md_title: String,
+    pub claude_md_detail: String,
+    pub rereads_title: String,
+    pub rereads_detail: String,
+    pub junk_title: String,
+    pub junk_detail: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct OverviewCopy {
+    pub status_line: String,
+    pub totals_heading: String,
+    pub by_tool_heading: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DoctorCopy {
+    pub env_not_set: String,
+    pub root_found: String,
+    pub root_missing: String,
+    pub sources_line: String,
+    pub sample_line: String,
+    pub verdict_ok: String,
+    pub verdict_nothing_found: String,
+    pub verdict_errors: String,
+    pub verdict_discovery_failed: String,
+    pub detail_override_missing: String,
+    pub detail_no_roots: String,
+    pub detail_roots_empty: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

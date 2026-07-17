@@ -1915,6 +1915,23 @@ impl App {
         } else {
             pricing_source.clone()
         };
+        // Surface models silently billed at the fallback rate: without an
+        // alias or override their cost is a guess, not a price. All-time
+        // scope so the warning does not disappear with the period filter.
+        let fallback_models = self
+            .dashboard_for(Period::AllTime, Tool::All, &ProjectFilter::All, self.sort)
+            .fallback_priced_models;
+        let pricing_value = if fallback_models.is_empty() {
+            pricing_value
+        } else {
+            format!(
+                "{pricing_value} · {}",
+                crate::copy::template(
+                    &copy.config.values.fallback_priced_models,
+                    &[("models", fallback_models.join(", "))],
+                )
+            )
+        };
         let clear_value = if self.paths.archive_db_file.exists() {
             copy.config.values.delete_archive_then_rebuild.clone()
         } else {

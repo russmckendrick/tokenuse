@@ -230,7 +230,8 @@
       "quota_snapshot_found": "Local quota snapshot",
       "quota_snapshot_missing": "No local quota snapshot",
       "delete_archive_then_rebuild": "Delete archive.db, then rebuild",
-      "build_archive_from_history": "Build archive.db from local history"
+      "build_archive_from_history": "Build archive.db from local history",
+      "fallback_priced_models": "fallback pricing in use for {models} — add a pricing alias or override so their cost is real"
     },
     "paths": {
       "config_dir": "Config dir",
@@ -570,7 +571,45 @@
     "project_inventory_summary": "{projects} projects, {raw_projects} raw variants, {rows} project-tool rows, {calls} calls",
     "wrote_path": "Wrote   {path}",
     "refresh_prices_requires_feature": "--refresh-prices requires the refresh-prices feature",
-    "generate_currency_requires_feature": "--generate-currency-json requires the refresh-currency feature"
+    "generate_currency_requires_feature": "--generate-currency-json requires the refresh-currency feature",
+    "doctor_command": "Diagnose per-tool data discovery and parsing",
+    "status_command": "Print one line with 24-hour and month totals",
+    "overview_command": "Print a copy-pasteable summary of this month"
+  },
+  "overview": {
+    "status_line": "24h {today_cost} ({today_calls} calls, {today_sessions} sessions) | month {month_cost} ({month_calls} calls, {month_sessions} sessions)",
+    "totals_heading": "Totals",
+    "by_tool_heading": "By Tool"
+  },
+  "categories": {
+    "coding": "Coding",
+    "debugging": "Debugging",
+    "feature": "Feature Dev",
+    "refactoring": "Refactoring",
+    "testing": "Testing",
+    "exploration": "Exploration",
+    "planning": "Planning",
+    "delegation": "Delegation",
+    "git": "Git Ops",
+    "build_deploy": "Build & Deploy",
+    "brainstorming": "Brainstorming",
+    "conversation": "Conversation",
+    "general": "General",
+    "heading": "By Activity"
+  },
+  "doctor": {
+    "env_not_set": "not set",
+    "root_found": "found",
+    "root_missing": "missing",
+    "sources_line": "{sessions} session, {limits} limit",
+    "sample_line": "{sources} sources parsed: {calls} calls, {snapshots} limit snapshots, {errors} errors",
+    "verdict_ok": "OK",
+    "verdict_nothing_found": "NOTHING FOUND",
+    "verdict_errors": "ERRORS",
+    "verdict_discovery_failed": "DISCOVERY FAILED",
+    "detail_override_missing": "{name} is set but no probed location exists",
+    "detail_no_roots": "no probed location exists; the tool is likely not installed",
+    "detail_roots_empty": "locations exist but no session or limit data was found"
   },
   "coach": {
     "report": {
@@ -642,6 +681,20 @@
         "medium": "Medium",
         "low": "Low"
       }
+    },
+    "setup": {
+      "heading": "Setup",
+      "subtitle": "Advisory findings from your local Claude Code configuration and read patterns. Estimates are heuristics; these never move your grade.",
+      "savings": "~{tokens} tokens",
+      "empty": "No setup waste detected.",
+      "unused_mcp_title": "{count} configured MCP servers never invoked",
+      "unused_mcp_detail": "{names} — every session pays for their tool schemas; remove them or scope them to the projects that use them",
+      "claude_md_title": "CLAUDE.md over {threshold} lines after imports",
+      "claude_md_detail": "{files} — long instruction files ride into every session's context",
+      "rereads_title": "{count} repeated file reads inside sessions",
+      "rereads_detail": "The same files are read again and again within a session; keeping stable facts in CLAUDE.md or asking for a summary once avoids the re-reads",
+      "junk_title": "{count} file reads inside build or dependency directories",
+      "junk_detail": "{dirs} — reads under dependency and build output directories burn context on generated files"
     },
     "flow": {
       "title": "Flow",

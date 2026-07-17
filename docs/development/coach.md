@@ -76,6 +76,21 @@ Groups: prompt-quality 8, session-hygiene 9, code-review 5, tool-mastery 5. User
 
 Reference rules whose inputs tokens does not ingest (most flagged `requiresIdeContext` upstream): yolo-mode, no-plan-mode, no-skills, no-slash-commands, no-custom-instructions, auto-approve-terminal, agent-mode-for-asks, no-devcontainer, auto-avoidance, no-file-context, instruction-bloat, context-engineering-gaps, no-spec-driven-development, no-spec-structure, low-markdown-ratio, agentic-no-tools — those signals only exist in VS Code chat logs (tool confirmations, agent modes, instruction files) or presume IDE-style sessions. **profanity** is skipped as a judgment call: scanning prompts for swearing reads as surveillance in a usage dashboard. All LLM-dependent reference features (Skill Finder, Learning Center, Context Health AI review) are permanently out of scope under the no-network rule.
 
+## Setup findings (`src/coach/setup.rs`)
+
+Advisory findings about the machine's Claude Code configuration, shown in their own Coach panel and **deliberately unscored** — they describe the setup as it is now, not practice over time, so they never move the grade or the weekly trends. Live data only; sample mode shows none.
+
+Inputs: a bounded filesystem scan (`setup::scan`) over `~/.claude.json` (top-level and per-project `mcpServers`), `~/.claude/settings.json`, and — for up to 25 recently active project roots taken from the archived calls — `.mcp.json`, `CLAUDE.md`, and `.claude/CLAUDE.md`. CLAUDE.md line counts inline `@import`ed files (depth ≤ 5, cycle-guarded). The scan runs inside the memoized coach query, so config edits surface on the next data refresh.
+
+| id | trigger | savings heuristic |
+| --- | --- | --- |
+| unused-mcp-servers | configured server never appears as `mcp__<server>__*` in the period's calls (names compared case-insensitively with `-`/`_` folded) | unused × 5 tools × 400 tokens × sessions |
+| claude-md-bloat | expanded CLAUDE.md over 200 lines | excess lines × 13 tokens |
+| redundant-rereads | ≥5 repeat reads of the same file within a session (from `referenced_files`, junk paths excluded) | extras × 600 tokens |
+| junk-directory-reads | ≥3 reads under `node_modules`, `.git`, `dist`, `target` and similar | reads × 600 tokens |
+
+The per-unit token costs are upstream-observed heuristics and every estimate is labelled as such (`~N tokens`). Ghost agents/skills/slash-commands detection needs invocation signals (subagent types, skill names, command names) the archive does not yet store and is deferred.
+
 ## Flow, pace, timeline, output
 
 - **Flow** (`flow.rs`): per session (≥3 timestamped turns) `score = 0.40·rapid-follow-up rate (≤30s) + 0.30·median-gap band + 0.15·duration band + 0.15·density band`; labels deep ≥70 / moderate ≥45 / shallow ≥25 / else fragmented. Days merge session spans into work blocks split at >15 min gaps. The summary counts deep (≥70) and fragmented (<25) days; both counts and the daily scores ship in the payload for the KPI panel and recent-flow sparkline.

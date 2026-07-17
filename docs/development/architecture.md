@@ -109,6 +109,7 @@ The dashboard panels are built from the filtered call set:
 - Core Tools: normalized assistant tool calls.
 - Shell Commands: first word of split Bash commands.
 - MCP Servers: tool names shaped like `mcp__server__tool`, grouped by server.
+- By Activity: thirteen deterministic task categories (coding, debugging, feature, refactoring, testing, exploration, planning, delegation, git, build/deploy, brainstorming, conversation, general) classified per call in `src/categories.rs` — tool patterns first, then keyword refinement on the stored prompt prefix using first-match-by-position. No LLM; the same call always lands in the same category. Rendered on the desktop Analytics page and in `tokenuse overview`.
 
 `App::sort` is a runtime-only `SortMode` (`Spend`, `Date`, `Tokens`) and defaults to spend on launch. Aggregators carry cost, activity tokens (`input + output + cache_creation + cache_read`), and latest timestamp until rows are ordered; count-style tables split a call's cost/tokens evenly across the row occurrences they emit while keeping occurrence counts unchanged. Dashboard views serialize as `DashboardData`. Desktop-specific pure queries additionally build `AnalyticsData`, the cross-tool `ModelCatalogEntry` list, `ToolPageData`, and `SessionDetailView`. Reports build a separate `ReportDataset` from raw `Ingested` calls and limits.
 

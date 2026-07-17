@@ -21,6 +21,13 @@ pub struct DashboardData {
     pub tools: Vec<CountMetric>,
     pub commands: Vec<CountMetric>,
     pub mcp_servers: Vec<CountMetric>,
+    /// Deterministic task categories (coding, debugging, exploration, …)
+    /// classified per call from tool usage and the stored prompt prefix.
+    pub by_activity: Vec<ActivityMetric>,
+    /// Distinct `tool · model` pairs in the visible period whose pricing fell
+    /// through to the book's fallback model — usually proxy-renamed models
+    /// that need an alias or override before their cost is real.
+    pub fallback_priced_models: Vec<&'static str>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -195,6 +202,10 @@ pub struct CoachData {
     pub overall: CoachOverall,
     pub practice_groups: Vec<PracticeGroupScore>,
     pub findings: Vec<CoachFinding>,
+    /// Advisory configuration findings (unused MCP servers, CLAUDE.md bloat,
+    /// wasteful reads). Deliberately unscored: they describe the setup as it
+    /// is now, so they never move the practice grade.
+    pub setup: Vec<CoachSetupFinding>,
     pub flow: FlowSummary,
     pub pace: PaceSummary,
     pub output: OutputSummary,
@@ -260,6 +271,17 @@ pub struct PracticeGroupScore {
     pub total_rules: u64,
     /// Rule id of the heaviest triggered rule; empty when clean.
     pub top_rule_id: &'static str,
+}
+
+/// One advisory setup finding with a heuristic token-savings estimate.
+#[derive(Debug, Clone, Serialize)]
+pub struct CoachSetupFinding {
+    pub id: &'static str,
+    pub title: &'static str,
+    pub detail: &'static str,
+    pub savings_tokens: u64,
+    /// Pre-formatted estimate, e.g. "~1.2M tokens".
+    pub savings_label: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -857,6 +879,10 @@ impl From<WireDashboardData> for DashboardData {
             tools: wire.tools.into_iter().map(Into::into).collect(),
             commands: wire.commands.into_iter().map(Into::into).collect(),
             mcp_servers: wire.mcp_servers.into_iter().map(Into::into).collect(),
+            // Bundled sample data carries no per-call classification signals
+            // and never exercises the pricing fallback.
+            by_activity: Vec::new(),
+            fallback_priced_models: Vec::new(),
         }
     }
 }
@@ -1517,6 +1543,8 @@ pub fn coach_sample(period: Period) -> CoachData {
             score: 87,
             grade_id: "b_plus",
         },
+        // Setup findings scan the local machine; sample mode shows none.
+        setup: Vec::new(),
         practice_groups: vec![
             PracticeGroupScore {
                 id: "prompt_quality",

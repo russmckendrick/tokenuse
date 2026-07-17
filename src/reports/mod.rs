@@ -159,6 +159,10 @@ pub struct ReportMetadata {
     pub project: String,
     pub redacted: bool,
     pub sample_note: Option<String>,
+    /// `tool · model` pairs in scope whose cost fell through to the fallback
+    /// pricing row; their figures are guesses until an alias or override is
+    /// added.
+    pub fallback_priced_models: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -471,7 +475,8 @@ fn build_ingested_dataset(
 
     let labels = project_label_lookup(filtered.iter().map(|call| call.project.as_str()));
     let mut redactor = Redactor::new(request.redacted);
-    let metadata = report_metadata(request, currency, source_label, stamp, None);
+    let mut metadata = report_metadata(request, currency, source_label, stamp, None);
+    metadata.fallback_priced_models = fallback_priced_models(&filtered);
     let summary = summarize_calls(&filtered, currency);
     let activity = aggregate_report_activity(&filtered, currency);
     let projects = aggregate_report_projects(&filtered, &labels, currency, &mut redactor);
@@ -669,7 +674,26 @@ fn report_metadata(
         project: request.scope.redacted_label(request.redacted),
         redacted: request.redacted,
         sample_note,
+        fallback_priced_models: Vec::new(),
     }
+}
+
+fn fallback_priced_models(calls: &[&ParsedCall]) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut rows = Vec::new();
+    for call in calls {
+        if call.model.is_empty() || call.model.starts_with('<') {
+            continue;
+        }
+        if !seen.insert((call.tool, call.model.clone())) {
+            continue;
+        }
+        if crate::pricing::uses_fallback(call.tool, &call.model, call.timestamp) {
+            rows.push(format!("{} · {}", call.tool, call.model));
+        }
+    }
+    rows.sort();
+    rows
 }
 
 fn summarize_calls(calls: &[&ParsedCall], currency: &CurrencyFormatter) -> ReportSummary {
@@ -1543,6 +1567,10 @@ fn metadata_csv(metadata: &ReportMetadata) -> CsvRows {
             vec![
                 "sample_note".into(),
                 metadata.sample_note.clone().unwrap_or_default(),
+            ],
+            vec![
+                "fallback_priced_models".into(),
+                metadata.fallback_priced_models.join(", "),
             ],
         ],
     }

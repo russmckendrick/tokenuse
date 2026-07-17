@@ -63,7 +63,55 @@ pub fn load() -> Result<Ingested> {
     Ok(Ingested { calls, limits })
 }
 
+/// Raw numeric totals for one period — the scriptable-CLI counterpart of the
+/// display-formatted dashboard summary.
+#[derive(Debug, Clone, Copy, Default, serde::Serialize)]
+pub struct PeriodTotals {
+    pub cost_usd: f64,
+    pub calls: u64,
+    pub sessions: u64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_read_tokens: u64,
+    pub cache_write_tokens: u64,
+}
+
 impl Ingested {
+    pub fn period_totals(&self, period: Period) -> PeriodTotals {
+        let now = Local::now();
+        let calls: Vec<&ParsedCall> = self
+            .calls
+            .iter()
+            .filter(|c| in_period(c, period, now))
+            .collect();
+        totals_for(&calls)
+    }
+
+    /// Per-tool totals for one period, sorted by cost. Labels are the short
+    /// display labels the dashboard uses.
+    pub fn tool_totals(&self, period: Period) -> Vec<(&'static str, PeriodTotals)> {
+        let now = Local::now();
+        let mut by_tool: std::collections::BTreeMap<&'static str, Vec<&ParsedCall>> =
+            std::collections::BTreeMap::new();
+        for call in self.calls.iter().filter(|c| in_period(c, period, now)) {
+            by_tool
+                .entry(super::projects::tool_short_label(call.tool))
+                .or_default()
+                .push(call);
+        }
+        let mut rows: Vec<(&'static str, PeriodTotals)> = by_tool
+            .into_iter()
+            .map(|(label, calls)| (label, totals_for(&calls)))
+            .collect();
+        rows.sort_by(|a, b| {
+            b.1.cost_usd
+                .partial_cmp(&a.1.cost_usd)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.0.cmp(b.0))
+        });
+        rows
+    }
+
     pub fn dashboard(
         &self,
         period: Period,
@@ -165,7 +213,10 @@ impl Ingested {
             .copied()
             .filter(|c| in_period(c, period, now))
             .collect();
-        crate::coach::coach_data(&filtered, &calendar, period, now)
+        // Advisory setup findings scan the local config files of recently
+        // active project roots (live data only; sample mode never gets here).
+        let scan = crate::coach::setup::scan(&active_project_roots(&calendar));
+        crate::coach::coach_data(&filtered, &calendar, period, now, Some(&scan))
     }
 
     pub fn coach_timeline(
@@ -858,6 +909,8 @@ fn build_dashboard(
     let tools = aggregate_tools(calls, sort);
     let commands = aggregate_commands(calls, sort);
     let mcp_servers = aggregate_mcp(calls, sort);
+    let by_activity = aggregate_activity_categories(calls, sort, currency);
+    let fallback_priced_models = fallback_priced_models(calls);
 
     DashboardData {
         summary,
@@ -870,7 +923,85 @@ fn build_dashboard(
         tools,
         commands,
         mcp_servers,
+        by_activity,
+        fallback_priced_models,
     }
+}
+
+/// Every call lands in exactly one deterministic task category; rows carry
+/// summed cost and call counts, ordered by the active sort mode.
+fn aggregate_activity_categories(
+    calls: &[&ParsedCall],
+    sort: SortMode,
+    currency: &CurrencyFormatter,
+) -> Vec<ActivityMetric> {
+    let mut buckets: HashMap<crate::categories::TaskCategory, (f64, u64, u64)> = HashMap::new();
+    for call in calls {
+        let entry = buckets
+            .entry(crate::categories::classify(call))
+            .or_default();
+        entry.0 += call.cost_usd;
+        entry.1 += 1;
+        entry.2 += activity_tokens(call);
+    }
+    let mut rows: Vec<(crate::categories::TaskCategory, (f64, u64, u64))> =
+        buckets.into_iter().collect();
+    rows.sort_by(|a, b| match sort {
+        SortMode::Tokens => b.1 .2.cmp(&a.1 .2).then_with(|| a.0.cmp(&b.0)),
+        _ => {
+            b.1 .0
+                .partial_cmp(&a.1 .0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.0.cmp(&b.0))
+        }
+    });
+    // Relative 0-100 bar values against the largest row's primary metric.
+    let primary = |row: &(f64, u64, u64)| match sort {
+        SortMode::Tokens => row.2 as f64,
+        _ => row.0,
+    };
+    let max_primary = rows
+        .iter()
+        .map(|(_, stats)| primary(stats))
+        .fold(0.0_f64, f64::max);
+    rows.into_iter()
+        .map(|(category, stats)| ActivityMetric {
+            label: category.label(),
+            cost: leak(currency.format_money(stats.0)),
+            calls: stats.1,
+            value: if max_primary > 0.0 {
+                ((primary(&stats) / max_primary) * 100.0).round() as u64
+            } else {
+                0
+            },
+        })
+        .collect()
+}
+
+/// Distinct `tool · model` pairs whose cost fell through to the fallback
+/// pricing row. Synthetic placeholder models (`<synthetic>`) carry no tokens
+/// and are noise, not a pricing gap.
+fn fallback_priced_models(calls: &[&ParsedCall]) -> Vec<&'static str> {
+    let mut seen_pairs = HashSet::new();
+    let mut rows = Vec::new();
+    for call in calls {
+        if call.model.is_empty() || call.model.starts_with('<') {
+            continue;
+        }
+        if !seen_pairs.insert((call.tool, call.model.clone())) {
+            continue;
+        }
+        if crate::pricing::uses_fallback(call.tool, &call.model, call.timestamp) {
+            rows.push(format!(
+                "{} · {}",
+                super::projects::tool_short_label(call.tool),
+                call.model
+            ));
+        }
+    }
+    rows.sort();
+    rows.dedup();
+    rows.into_iter().map(leak).collect()
 }
 
 fn empty_dashboard(currency: &CurrencyFormatter) -> DashboardData {
@@ -894,6 +1025,8 @@ fn empty_dashboard(currency: &CurrencyFormatter) -> DashboardData {
         tools: Vec::new(),
         commands: Vec::new(),
         mcp_servers: Vec::new(),
+        by_activity: Vec::new(),
+        fallback_priced_models: Vec::new(),
     }
 }
 
@@ -1911,6 +2044,49 @@ fn top_counts(counts: HashMap<String, CountAcc>, sort: SortMode, limit: usize) -
         .collect()
 }
 
+/// Distinct absolute project roots seen in the calls, newest first, bounded
+/// so the setup scan stays a handful of small file reads.
+fn active_project_roots(calls: &[&ParsedCall]) -> Vec<std::path::PathBuf> {
+    const MAX_ROOTS: usize = 25;
+    let mut newest: HashMap<&str, Option<chrono::DateTime<chrono::Utc>>> = HashMap::new();
+    for call in calls {
+        if !call.project.starts_with('/') && !call.project.contains(":\\") {
+            continue;
+        }
+        let entry = newest.entry(call.project.as_str()).or_default();
+        if call.timestamp > *entry {
+            *entry = call.timestamp;
+        }
+    }
+    let mut roots: Vec<(&str, Option<chrono::DateTime<chrono::Utc>>)> =
+        newest.into_iter().collect();
+    roots.sort_by_key(|root| std::cmp::Reverse(root.1));
+    roots
+        .into_iter()
+        .take(MAX_ROOTS)
+        .map(|(project, _)| std::path::PathBuf::from(project))
+        .filter(|path| path.is_dir())
+        .collect()
+}
+
+fn totals_for(calls: &[&ParsedCall]) -> PeriodTotals {
+    let mut totals = PeriodTotals::default();
+    let mut sessions = std::collections::HashSet::new();
+    for call in calls {
+        totals.cost_usd += call.cost_usd;
+        totals.calls += 1;
+        totals.input_tokens += call.input_tokens;
+        totals.output_tokens += call.output_tokens;
+        totals.cache_read_tokens += call.cache_read_input_tokens;
+        totals.cache_write_tokens += call.cache_creation_input_tokens;
+        if let Some(key) = session_key(call) {
+            sessions.insert(key);
+        }
+    }
+    totals.sessions = sessions.len() as u64;
+    totals
+}
+
 pub(crate) fn session_key(call: &ParsedCall) -> Option<String> {
     if call.session_id.is_empty() {
         None
@@ -2004,6 +2180,56 @@ mod tests {
             model: "claude-opus-4-7".into(),
             ..ParsedCall::default()
         }
+    }
+
+    #[test]
+    fn fallback_priced_models_flag_unknown_models_and_skip_synthetic() {
+        let now = chrono::Utc::now().to_rfc3339();
+        let known = mk_call("claude-code", &now, 1.0);
+        let mut unknown = mk_call("claude-code", &now, 1.0);
+        unknown.model = "my-proxy-model-9000".into();
+        let mut synthetic = mk_call("claude-code", &now, 0.0);
+        synthetic.model = "<synthetic>".into();
+
+        let calls = [&known, &unknown, &synthetic];
+        let rows = super::fallback_priced_models(&calls);
+
+        assert_eq!(rows, vec!["Claude · my-proxy-model-9000"]);
+    }
+
+    #[test]
+    fn period_totals_sum_numeric_buckets_and_tool_qualified_sessions() {
+        let now = chrono::Utc::now();
+        let mut recent = mk_call("claude-code", &now.to_rfc3339(), 1.5);
+        recent.input_tokens = 100;
+        recent.output_tokens = 50;
+        recent.cache_read_input_tokens = 1000;
+        recent.cache_creation_input_tokens = 20;
+        let mut codex_recent = mk_call("codex", &now.to_rfc3339(), 0.5);
+        codex_recent.input_tokens = 10;
+        // Same raw session id as the claude call: sessions stay tool-qualified.
+        codex_recent.session_id = "s1".into();
+        let old = mk_call("claude-code", "2020-01-01T00:00:00Z", 99.0);
+
+        let ingested = Ingested {
+            calls: vec![recent, codex_recent, old],
+            limits: Vec::new(),
+        };
+
+        let totals = ingested.period_totals(Period::Today);
+        assert_eq!(totals.calls, 2, "old call is outside the rolling window");
+        assert!((totals.cost_usd - 2.0).abs() < 1e-9);
+        assert_eq!(totals.sessions, 2, "sessions are tool-qualified");
+        assert_eq!(totals.input_tokens, 110);
+        assert_eq!(totals.output_tokens, 50);
+        assert_eq!(totals.cache_read_tokens, 1000);
+        assert_eq!(totals.cache_write_tokens, 20);
+
+        let by_tool = ingested.tool_totals(Period::Today);
+        assert_eq!(by_tool.len(), 2);
+        assert_eq!(by_tool[0].0, "Claude", "sorted by cost descending");
+        assert!((by_tool[0].1.cost_usd - 1.5).abs() < 1e-9);
+        assert_eq!(by_tool[1].0, "Codex");
     }
 
     fn mk_project_call(

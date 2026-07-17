@@ -4,6 +4,9 @@ Changes that should be included in the next release go here. Keep this file curr
 
 ## Added
 
+- The desktop Coach page gains an advisory Setup panel: unused configured MCP servers, CLAUDE.md files over 200 lines after `@import` expansion, repeated file re-reads inside sessions, and reads under build/dependency directories — each with a heuristic token-savings estimate. Setup findings never affect the practice grade.
+- Spend is now broken down by activity: every call is classified into one of thirteen deterministic task categories (coding, debugging, feature dev, refactoring, testing, exploration, planning, delegation, git ops, build & deploy, brainstorming, conversation, general) from its tool usage and prompt — no LLM involved. A "By Activity" panel appears on the desktop Analytics page and in `tokenuse overview`.
+- Models silently billed at the fallback pricing rate are now surfaced instead of blending in: the Config page (TUI and desktop) warns with the affected `tool · model` pairs and the fix hint, and report metadata (JSON, Excel, CSV) carries a `fallback_priced_models` row.
 - Codex sessions archived from the Codex UI (`~/.codex/archived_sessions/`) are now discovered and ingested, so archiving a session no longer removes its history from the dashboard.
 - Copilot in VS Code now reads the Copilot Chat extension's OpenTelemetry span store (`agent-traces.db`) — the one VS Code source with real input, output, and cache token counts — plus VS Code core chat-session journals (`chatSessions/`, real prompt/output counts) and the global empty-window journals. Per VS Code variant the most authoritative source wins, so estimates never double count real data. VSCodium storage paths are now covered alongside VS Code and VS Code Insiders.
 - Legacy Copilot CLI sessions now recover real input and cache token counts from their `session.shutdown` per-model rollups; previously those sessions reported input as 0 and their cost was output-only.
