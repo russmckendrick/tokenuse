@@ -211,7 +211,7 @@ sequenceDiagram
     participant C as Client
     participant A as Accept loop
     participant W as Connection thread
-    participant S as Mutex&lt;McpServer&gt;
+    participant S as Mutex#lt;McpServer#gt;
 
     C->>A: TCP connect
     A->>W: spawn thread-per-connection
