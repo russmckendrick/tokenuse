@@ -10,6 +10,7 @@
 
   export let snapshot: DesktopSnapshot;
   export let openProject: (name: string) => void;
+  export let openModel: (id: string, name: string) => void;
 
   type UtilisationTool = {
     id: string;
@@ -136,7 +137,7 @@
       <ProjectTable rows={snapshot.dashboard.projects} copy={snapshot.copy} {openProject} />
     </Panel>
     <Panel title={snapshot.copy.desktop.top_models} tone="magenta" scrollable>
-      <ModelTable rows={snapshot.dashboard.models} copy={snapshot.copy} />
+      <ModelTable rows={snapshot.dashboard.models} copy={snapshot.copy} {openModel} />
     </Panel>
   </section>
 </section>

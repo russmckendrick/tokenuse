@@ -55,6 +55,9 @@
       "id": "open_project_picker"
     },
     {
+      "id": "open_model_picker"
+    },
+    {
       "id": "open_session_picker"
     },
     {
@@ -223,6 +226,13 @@
         "p"
       ],
       "action": "open_project_picker"
+    },
+    {
+      "context": "dashboard",
+      "keys": [
+        "m"
+      ],
+      "action": "open_model_picker"
     },
     {
       "context": "dashboard",
@@ -699,6 +709,62 @@
     },
     {
       "context": "project_picker",
+      "keys": [
+        "Enter"
+      ],
+      "action": "confirm"
+    },
+    {
+      "context": "model_picker",
+      "keys": [
+        "Esc"
+      ],
+      "action": "cancel"
+    },
+    {
+      "context": "model_picker",
+      "keys": [
+        "Up"
+      ],
+      "action": "move_up"
+    },
+    {
+      "context": "model_picker",
+      "keys": [
+        "Down"
+      ],
+      "action": "move_down"
+    },
+    {
+      "context": "model_picker",
+      "keys": [
+        "Home"
+      ],
+      "action": "move_home"
+    },
+    {
+      "context": "model_picker",
+      "keys": [
+        "End"
+      ],
+      "action": "move_end"
+    },
+    {
+      "context": "model_picker",
+      "keys": [
+        "Backspace"
+      ],
+      "action": "query_backspace"
+    },
+    {
+      "context": "model_picker",
+      "keys": [
+        "Ctrl+U"
+      ],
+      "action": "query_clear"
+    },
+    {
+      "context": "model_picker",
       "keys": [
         "Enter"
       ],

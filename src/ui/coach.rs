@@ -12,7 +12,8 @@ use ratatui::{
 };
 
 use super::sections::{
-    render_currency_modal, render_footer, render_project_modal, render_title_bar,
+    render_currency_modal, render_footer, render_model_modal, render_project_modal,
+    render_title_bar,
 };
 use crate::app::App;
 use crate::copy::{copy, template, CopyDeck};
@@ -47,6 +48,7 @@ pub(super) fn render_coach(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &
     }
     render_footer(frame, sections[4], app);
     render_project_modal(frame, root, app);
+    render_model_modal(frame, root, app);
     render_currency_modal(frame, root, app);
 }
 

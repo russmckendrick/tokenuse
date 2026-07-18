@@ -18,8 +18,9 @@ use crate::config::{ConfigPaths, UserConfig};
 use crate::copy::{self, copy, CopyDeck};
 use crate::currency::{CurrencyFormatter, CurrencyTable};
 use crate::data::{
-    AnalyticsData, CoachTimelineDay, DashboardData, LimitsData, ModelCatalogEntry, ProjectIndexRow,
-    ProjectOption, ProjectToolSplit, SessionDetail, SessionDetailView, SessionOption,
+    AnalyticsData, CoachTimelineDay, DashboardData, LimitsData, ModelCatalogEntry, ModelOption,
+    ModelPageDetail, ProjectIndexRow, ProjectOption, ProjectToolSplit, SessionDetail,
+    SessionDetailView, SessionOption,
 };
 use crate::ingest::Ingested;
 use crate::keymap;
@@ -251,6 +252,86 @@ impl ProjectFilter {
             },
             None => Self::All,
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum ModelFilter {
+    #[default]
+    All,
+    Selected {
+        canonical_id: String,
+        label: String,
+    },
+}
+
+impl ModelFilter {
+    pub fn label(&self) -> &str {
+        match self {
+            Self::All => copy().tools.all.as_str(),
+            Self::Selected { label, .. } => label,
+        }
+    }
+
+    pub fn canonical_id(&self) -> Option<&str> {
+        match self {
+            Self::All => None,
+            Self::Selected { canonical_id, .. } => Some(canonical_id),
+        }
+    }
+
+    fn canonical_key(&self) -> Option<String> {
+        self.canonical_id().map(str::to_string)
+    }
+
+    fn from_option(option: &ModelOption) -> Self {
+        match &option.canonical_id {
+            Some(canonical_id) => Self::Selected {
+                canonical_id: canonical_id.clone(),
+                label: option.label.clone(),
+            },
+            None => Self::All,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ModelModal {
+    pub options: Vec<ModelOption>,
+    pub filtered: Vec<usize>,
+    pub query: String,
+    pub selected: usize,
+}
+
+impl ModelModal {
+    pub fn refilter(&mut self) {
+        let needle = self.query.to_lowercase();
+        self.filtered = self
+            .options
+            .iter()
+            .enumerate()
+            .filter(|(_, option)| {
+                if option.canonical_id.is_none() {
+                    return true;
+                }
+                if needle.is_empty() {
+                    return true;
+                }
+                option.label.to_lowercase().contains(&needle)
+            })
+            .map(|(idx, _)| idx)
+            .collect();
+        if self.filtered.is_empty() {
+            self.selected = 0;
+        } else {
+            let last = self.filtered.len() - 1;
+            self.selected = self.selected.min(last);
+        }
+    }
+
+    pub fn current_option(&self) -> Option<&ModelOption> {
+        let idx = *self.filtered.get(self.selected)?;
+        self.options.get(idx)
     }
 }
 
@@ -1138,9 +1219,21 @@ impl Refresher {
 #[derive(Default)]
 struct QueryCache {
     generation: u64,
-    dashboard: HashMap<(Period, Tool, Option<String>, SortMode, String), DashboardData>,
+    #[allow(clippy::type_complexity)]
+    dashboard: HashMap<
+        (
+            Period,
+            Tool,
+            Option<String>,
+            Option<String>,
+            SortMode,
+            String,
+        ),
+        DashboardData,
+    >,
     usage: HashMap<(Tool, SortMode, String), LimitsData>,
     model_catalog: HashMap<(Period, String), Vec<ModelCatalogEntry>>,
+    model_detail: HashMap<(Period, String, String), Option<ModelPageDetail>>,
     analytics: HashMap<(Period, Tool, Option<String>, String), AnalyticsData>,
     coach: HashMap<(Period, Tool, Option<String>), crate::data::CoachData>,
     coach_timeline: HashMap<(String, Tool, Option<String>, String), Option<CoachTimelineDay>>,
@@ -1152,6 +1245,7 @@ impl QueryCache {
             self.dashboard.clear();
             self.usage.clear();
             self.model_catalog.clear();
+            self.model_detail.clear();
             self.analytics.clear();
             self.coach.clear();
             self.coach_timeline.clear();
@@ -1167,6 +1261,8 @@ pub struct App {
     pub sort: SortMode,
     pub project_filter: ProjectFilter,
     pub project_modal: Option<ProjectModal>,
+    pub model_filter: ModelFilter,
+    pub model_modal: Option<ModelModal>,
     pub currency_modal: Option<CurrencyModal>,
     pub subscription_cookie_modal: Option<SubscriptionCookieModal>,
     pub download_confirm: Option<ConfigDownload>,
@@ -1216,6 +1312,8 @@ impl Default for App {
             sort: SortMode::Spend,
             project_filter: ProjectFilter::All,
             project_modal: None,
+            model_filter: ModelFilter::All,
+            model_modal: None,
             currency_modal: None,
             subscription_cookie_modal: None,
             download_confirm: None,
@@ -1300,7 +1398,13 @@ impl App {
     }
 
     pub fn dashboard(&self) -> DashboardData {
-        self.dashboard_for(self.period, self.tool, &self.project_filter, self.sort)
+        self.dashboard_for(
+            self.period,
+            self.tool,
+            &self.project_filter,
+            &self.model_filter,
+            self.sort,
+        )
     }
 
     pub fn data_generation(&self) -> u64 {
@@ -1319,12 +1423,14 @@ impl App {
         period: Period,
         tool: Tool,
         project_filter: &ProjectFilter,
+        model_filter: &ModelFilter,
         sort: SortMode,
     ) -> DashboardData {
         let key = (
             period,
             tool,
             project_filter.identity_key(),
+            model_filter.canonical_key(),
             sort,
             self.settings.currency.clone(),
         );
@@ -1339,11 +1445,16 @@ impl App {
         let currency = self.currency();
         let data = match &self.source {
             DataSource::Live(ingested) => {
-                ingested.dashboard(period, tool, project_filter, sort, &currency)
+                ingested.dashboard(period, tool, project_filter, model_filter, sort, &currency)
             }
-            DataSource::Sample => {
-                crate::data::dashboard_data(period, tool, project_filter, sort, &currency)
-            }
+            DataSource::Sample => crate::data::dashboard_data(
+                period,
+                tool,
+                project_filter,
+                model_filter,
+                sort,
+                &currency,
+            ),
         };
         self.query_cache
             .borrow_mut()
@@ -1370,6 +1481,65 @@ impl App {
         self.query_cache
             .borrow_mut()
             .model_catalog
+            .insert(key, data.clone());
+        data
+    }
+
+    /// Options for the model picker: an "All" row followed by every canonical
+    /// model active in the current period, straight from the model catalog.
+    pub fn model_options(&self) -> Vec<ModelOption> {
+        let entries = self.model_catalog(self.period);
+        let unfiltered = self.dashboard_for(
+            self.period,
+            Tool::All,
+            &ProjectFilter::All,
+            &ModelFilter::All,
+            self.sort,
+        );
+        let mut options = vec![ModelOption::all(
+            unfiltered.summary.cost.into(),
+            entries.iter().map(|entry| entry.calls).sum(),
+        )];
+        options.extend(entries.iter().map(|entry| {
+            ModelOption::selected(
+                entry.canonical_id.into(),
+                entry.name.into(),
+                entry.cost.into(),
+                entry.calls,
+            )
+        }));
+        options
+    }
+
+    /// Model-page extras for one canonical model: token composition and
+    /// pricing. `None` when the model has no calls in the active period.
+    pub fn model_detail(&self, model_filter: &ModelFilter) -> Option<ModelPageDetail> {
+        let canonical_id = model_filter.canonical_id()?;
+        let key = (
+            self.period,
+            canonical_id.to_string(),
+            self.settings.currency.clone(),
+        );
+        {
+            let mut cache = self.query_cache.borrow_mut();
+            cache.sync_generation(self.data_generation);
+            if let Some(data) = cache.model_detail.get(&key) {
+                return data.clone();
+            }
+        }
+
+        let currency = self.currency();
+        let data = match &self.source {
+            DataSource::Live(ingested) => {
+                ingested.model_detail(self.period, canonical_id, &currency)
+            }
+            DataSource::Sample => {
+                crate::data::model_detail_data(self.period, canonical_id, &currency)
+            }
+        };
+        self.query_cache
+            .borrow_mut()
+            .model_detail
             .insert(key, data.clone());
         data
     }
@@ -1737,7 +1907,13 @@ impl App {
     }
 
     pub fn session_options(&self) -> Vec<SessionOption> {
-        self.session_options_for(self.period, self.tool, &self.project_filter, self.sort)
+        self.session_options_for(
+            self.period,
+            self.tool,
+            &self.project_filter,
+            &self.model_filter,
+            self.sort,
+        )
     }
 
     pub fn session_options_for(
@@ -1745,14 +1921,22 @@ impl App {
         period: Period,
         tool: Tool,
         project_filter: &ProjectFilter,
+        model_filter: &ModelFilter,
         sort: SortMode,
     ) -> Vec<SessionOption> {
         let currency = self.currency();
         match &self.source {
-            DataSource::Live(ingested) => {
-                ingested.session_options(period, tool, project_filter, sort, &currency)
+            DataSource::Live(ingested) => ingested.session_options(
+                period,
+                tool,
+                project_filter,
+                model_filter,
+                sort,
+                &currency,
+            ),
+            DataSource::Sample => {
+                crate::data::session_options(period, tool, model_filter, sort, &currency)
             }
-            DataSource::Sample => crate::data::session_options(period, tool, sort, &currency),
         }
     }
 
@@ -1959,6 +2143,7 @@ impl App {
                         request.period,
                         Tool::All,
                         &request.scope.project_filter(),
+                        &ModelFilter::All,
                         SortMode::Spend,
                     );
                     crate::reports::write_sample_to_dir(
@@ -2044,7 +2229,13 @@ impl App {
         // alias or override their cost is a guess, not a price. All-time
         // scope so the warning does not disappear with the period filter.
         let fallback_models = self
-            .dashboard_for(Period::AllTime, Tool::All, &ProjectFilter::All, self.sort)
+            .dashboard_for(
+                Period::AllTime,
+                Tool::All,
+                &ProjectFilter::All,
+                &ModelFilter::All,
+                self.sort,
+            )
             .fallback_priced_models;
         let pricing_value = if fallback_models.is_empty() {
             pricing_value
@@ -2224,6 +2415,10 @@ impl App {
             return keymap::CONTEXT_PROJECT_PICKER;
         }
 
+        if self.model_modal.is_some() {
+            return keymap::CONTEXT_MODEL_PICKER;
+        }
+
         if self.session_modal.is_some() {
             return keymap::CONTEXT_SESSION_PICKER;
         }
@@ -2268,6 +2463,7 @@ impl App {
             keymap::ACTION_CYCLE_SORT => self.cycle_sort(),
             keymap::ACTION_TOGGLE_DATA_SOURCE => self.toggle_data_source(),
             keymap::ACTION_OPEN_PROJECT_PICKER => self.open_project_modal(),
+            keymap::ACTION_OPEN_MODEL_PICKER => self.open_model_modal(),
             keymap::ACTION_OPEN_SESSION_PICKER => self.open_session_modal(),
             keymap::ACTION_OPEN_EXPORT_PICKER => self.open_export_modal(),
             keymap::ACTION_OPEN_EXPORT_FOLDER_PICKER => self.open_export_dir_picker(),
@@ -2361,6 +2557,8 @@ impl App {
             self.download_confirm = None;
         } else if self.project_modal.is_some() {
             self.project_modal = None;
+        } else if self.model_modal.is_some() {
+            self.model_modal = None;
         } else if self.session_modal.is_some() {
             self.session_modal = None;
         } else if self.export_dir_picker.is_some() {
@@ -2383,6 +2581,8 @@ impl App {
             self.confirm_currency_picker();
         } else if self.project_modal.is_some() {
             self.confirm_project_picker();
+        } else if self.model_modal.is_some() {
+            self.confirm_model_picker();
         } else if self.session_modal.is_some() {
             self.confirm_session_picker();
         } else if self.export_dir_picker.is_some() {
@@ -2413,6 +2613,18 @@ impl App {
         }
         self.project_modal = None;
         self.refresh_scrollback_after_filter_change();
+    }
+
+    fn confirm_model_picker(&mut self) {
+        let selected = self
+            .model_modal
+            .as_ref()
+            .and_then(|modal| modal.current_option())
+            .cloned();
+        if let Some(option) = selected {
+            self.model_filter = ModelFilter::from_option(&option);
+        }
+        self.model_modal = None;
     }
 
     fn confirm_session_picker(&mut self) {
@@ -2491,6 +2703,8 @@ impl App {
             move_index(&mut modal.selected, modal.filtered.len(), delta);
         } else if let Some(modal) = self.project_modal.as_mut() {
             move_index(&mut modal.selected, modal.filtered.len(), delta);
+        } else if let Some(modal) = self.model_modal.as_mut() {
+            move_index(&mut modal.selected, modal.filtered.len(), delta);
         } else if let Some(modal) = self.session_modal.as_mut() {
             move_index(&mut modal.selected, modal.filtered.len(), delta);
         } else if let Some(picker) = self.export_dir_picker.as_mut() {
@@ -2544,6 +2758,8 @@ impl App {
             modal.selected = 0;
         } else if let Some(modal) = self.project_modal.as_mut() {
             modal.selected = 0;
+        } else if let Some(modal) = self.model_modal.as_mut() {
+            modal.selected = 0;
         } else if let Some(modal) = self.session_modal.as_mut() {
             modal.selected = 0;
         } else if let Some(picker) = self.export_dir_picker.as_mut() {
@@ -2563,6 +2779,8 @@ impl App {
         if let Some(modal) = self.currency_modal.as_mut() {
             modal.selected = modal.filtered.len().saturating_sub(1);
         } else if let Some(modal) = self.project_modal.as_mut() {
+            modal.selected = modal.filtered.len().saturating_sub(1);
+        } else if let Some(modal) = self.model_modal.as_mut() {
             modal.selected = modal.filtered.len().saturating_sub(1);
         } else if let Some(modal) = self.session_modal.as_mut() {
             modal.selected = modal.filtered.len().saturating_sub(1);
@@ -2883,6 +3101,9 @@ impl App {
         } else if let Some(modal) = self.project_modal.as_mut() {
             modal.query.pop();
             modal.refilter();
+        } else if let Some(modal) = self.model_modal.as_mut() {
+            modal.query.pop();
+            modal.refilter();
         } else if let Some(modal) = self.session_modal.as_mut() {
             modal.query.pop();
             modal.refilter();
@@ -2903,6 +3124,9 @@ impl App {
             modal.query.clear();
             modal.refilter();
         } else if let Some(modal) = self.project_modal.as_mut() {
+            modal.query.clear();
+            modal.refilter();
+        } else if let Some(modal) = self.model_modal.as_mut() {
             modal.query.clear();
             modal.refilter();
         } else if let Some(modal) = self.session_modal.as_mut() {
@@ -2927,6 +3151,10 @@ impl App {
             modal.refilter();
             true
         } else if let Some(modal) = self.project_modal.as_mut() {
+            modal.query.push(c);
+            modal.refilter();
+            true
+        } else if let Some(modal) = self.model_modal.as_mut() {
             modal.query.push(c);
             modal.refilter();
             true
@@ -3008,6 +3236,7 @@ impl App {
     fn any_modal_open(&self) -> bool {
         self.help_open
             || self.project_modal.is_some()
+            || self.model_modal.is_some()
             || self.currency_modal.is_some()
             || self.clear_data_modal.is_some()
             || self.session_modal.is_some()
@@ -3282,6 +3511,33 @@ impl App {
         let selected = filtered.iter().position(|&i| i == initial).unwrap_or(0);
 
         self.project_modal = Some(ProjectModal {
+            options,
+            filtered,
+            query: String::new(),
+            selected,
+        });
+    }
+
+    fn open_model_modal(&mut self) {
+        let mut options = self.model_options();
+        if options.is_empty() {
+            options.push(ModelOption::all("$0.00".into(), 0));
+        }
+
+        let initial = self
+            .model_filter
+            .canonical_id()
+            .and_then(|canonical_id| {
+                options
+                    .iter()
+                    .position(|option| option.canonical_id.as_deref() == Some(canonical_id))
+            })
+            .unwrap_or(0);
+
+        let filtered: Vec<usize> = (0..options.len()).collect();
+        let selected = filtered.iter().position(|&i| i == initial).unwrap_or(0);
+
+        self.model_modal = Some(ModelModal {
             options,
             filtered,
             query: String::new(),
@@ -3695,6 +3951,7 @@ impl App {
                 let calls = ingested.calls.len();
                 let limits = ingested.limits.len();
                 self.project_filter = ProjectFilter::All;
+                self.model_filter = ModelFilter::All;
                 self.session_view = None;
                 self.session_scroll = 0;
                 self.session_selected = 0;
@@ -4661,6 +4918,75 @@ mod tests {
         app.handle_key(key(KeyCode::Char('q')));
 
         assert!(app.should_quit());
+    }
+
+    #[test]
+    fn model_modal_selects_model_and_scopes_the_dashboard() {
+        let mut app = App::default();
+        let unfiltered = app.dashboard();
+
+        app.handle_key(key(KeyCode::Char('m')));
+        assert!(app.model_modal.is_some());
+        assert_eq!(
+            app.model_modal.as_ref().unwrap().options[0].label,
+            copy().tools.all
+        );
+
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Enter));
+
+        assert!(app.model_modal.is_none());
+        assert!(matches!(app.model_filter, ModelFilter::Selected { .. }));
+
+        // The scoped summary equals the selected model's catalog row.
+        let canonical_id = app.model_filter.canonical_id().unwrap().to_string();
+        let entry = app
+            .model_catalog(app.period)
+            .into_iter()
+            .find(|entry| entry.canonical_id == canonical_id)
+            .expect("picked model exists in catalog");
+        let scoped = app.dashboard();
+        assert_eq!(scoped.summary.cost, entry.cost);
+        assert_ne!(scoped.summary.cost, unfiltered.summary.cost);
+        assert!(!app.should_quit());
+    }
+
+    #[test]
+    fn model_modal_escape_keeps_existing_filter() {
+        let mut app = App {
+            model_filter: ModelFilter::Selected {
+                canonical_id: "gpt-5".into(),
+                label: "GPT-5".into(),
+            },
+            ..App::default()
+        };
+
+        app.handle_key(key(KeyCode::Char('m')));
+        assert!(app.model_modal.is_some());
+        app.handle_key(key(KeyCode::Esc));
+
+        assert!(app.model_modal.is_none());
+        assert!(
+            matches!(&app.model_filter, ModelFilter::Selected { canonical_id, .. } if canonical_id == "gpt-5")
+        );
+    }
+
+    #[test]
+    fn model_filter_gets_its_own_dashboard_cache_entry() {
+        let mut app = App::default();
+        let _ = app.dashboard();
+        assert_eq!(app.query_cache.borrow().dashboard.len(), 1);
+
+        app.model_filter = ModelFilter::Selected {
+            canonical_id: "gpt-5".into(),
+            label: "GPT-5".into(),
+        };
+        let _ = app.dashboard();
+        assert_eq!(app.query_cache.borrow().dashboard.len(), 2);
+
+        // Same filter again reuses the entry instead of growing the cache.
+        let _ = app.dashboard();
+        assert_eq!(app.query_cache.borrow().dashboard.len(), 2);
     }
 
     #[test]

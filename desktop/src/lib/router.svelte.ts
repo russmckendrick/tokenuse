@@ -19,6 +19,8 @@ export type Route = {
   sessionKey?: string;
   /** Projects: set for the per-project sub-route, absent on the index. */
   project?: { identity: string; label: string };
+  /** Models: set for the per-model sub-route, absent on the index. */
+  model?: { id: string; label: string };
 };
 
 /** Pages reachable from the sidebar, in nav (and Tab-cycle) order. */

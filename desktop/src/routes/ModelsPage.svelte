@@ -12,6 +12,7 @@
   };
 
   export let snapshot: DesktopSnapshot;
+  export let openModelPage: (id: string, label: string) => Promise<void>;
 
   type ProviderGroup = {
     provider: string;
@@ -21,7 +22,6 @@
 
   let catalog: CatalogRow[] = [];
   let catalogKey = '';
-  let expanded: Record<string, boolean> = {};
 
   $: {
     const key = [snapshot.period, snapshot.data_generation, snapshot.currency].join('|');
@@ -85,14 +85,10 @@
     return grouped;
   }
 
-  function toggle(id: string) {
-    expanded = { ...expanded, [id]: !expanded[id] };
-  }
-
-  function handleRowKey(event: KeyboardEvent, id: string) {
+  function handleRowKey(event: KeyboardEvent, entry: CatalogRow) {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      toggle(id);
+      void openModelPage(entry.canonical_id, entry.name);
     }
   }
 
@@ -125,14 +121,12 @@
         <tbody>
           {#each group.entries as entry}
             <tr
-              class="catalog-row rank-row"
-              class:expanded={expanded[entry.canonical_id]}
+              class="catalog-row rank-row click-row"
               style:--rank-fill={`${rankPercent(entry.value)}%`}
               title={rankLabel(snapshot.copy.timeline.relative_rank, entry.value)}
               tabindex="0"
-              aria-expanded={expanded[entry.canonical_id] ?? false}
-              onclick={() => toggle(entry.canonical_id)}
-              onkeydown={(event) => handleRowKey(event, entry.canonical_id)}
+              onclick={() => void openModelPage(entry.canonical_id, entry.name)}
+              onkeydown={(event) => handleRowKey(event, entry)}
             >
               <td>
                 <span class="catalog-model">
@@ -157,23 +151,6 @@
                 <ChevronRight size={13} />
               </td>
             </tr>
-            {#if expanded[entry.canonical_id]}
-              <tr class="catalog-split">
-                <td colspan="8">
-                  <div class="split-rows">
-                    <span class="split-title">{snapshot.copy.desktop.per_tool_split}</span>
-                    {#each entry.per_tool as split}
-                      <span class="split-row">
-                        <ProviderIcon id={split.tool} kind="tool" size={13} />
-                        {split.tool_label}
-                        <em class="mono money">{split.cost}</em>
-                        <em class="mono">{count(split.calls)} {snapshot.copy.metrics.calls}</em>
-                      </span>
-                    {/each}
-                  </div>
-                </td>
-              </tr>
-            {/if}
           {/each}
           {#if group.entries.length === 0}
             <tr><td colspan="8" class="empty-cell">{snapshot.copy.empty.no_models}</td></tr>
@@ -250,47 +227,5 @@
     padding-right: 0;
     text-align: center;
     color: var(--color-muted-2);
-  }
-
-  .catalog-row.expanded .expander :global(svg) {
-    transform: rotate(90deg);
-  }
-
-  .expander :global(svg) {
-    transition: transform var(--motion-fast) var(--ease-standard);
-  }
-
-  .catalog-split td {
-    padding-top: 0;
-  }
-
-  .split-rows {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    padding: 4px 0 8px;
-  }
-
-  .split-title {
-    font-family: var(--font-ui);
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--color-muted-2);
-  }
-
-  .split-row {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    font-family: var(--font-ui);
-    font-size: 12px;
-    color: var(--color-muted);
-  }
-
-  .split-row em {
-    font-style: normal;
-    color: var(--color-on-surface);
   }
 </style>

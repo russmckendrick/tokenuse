@@ -112,11 +112,11 @@ The dashboard panels are built from the filtered call set:
 - MCP Servers: tool names shaped like `mcp__server__tool`, grouped by server.
 - By Activity: thirteen deterministic task categories (coding, debugging, feature, refactoring, testing, exploration, planning, delegation, git, build/deploy, brainstorming, conversation, general) classified per call in `src/categories.rs` — tool patterns first, then keyword refinement on the stored prompt prefix using first-match-by-position. No LLM; the same call always lands in the same category. Rendered on the desktop Analytics page and in `tokenuse overview`.
 
-`App::sort` is a runtime-only `SortMode` (`Spend`, `Date`, `Tokens`) and defaults to spend on launch. Aggregators carry cost, activity tokens (`input + output + cache_creation + cache_read`), and latest timestamp until rows are ordered; count-style tables split a call's cost/tokens evenly across the row occurrences they emit while keeping occurrence counts unchanged. Dashboard views serialize as `DashboardData`. Desktop-specific pure queries additionally build `AnalyticsData`, the cross-tool `ModelCatalogEntry` list, `ToolPageData`, and `SessionDetailView`. Reports build a separate `ReportDataset` from raw `Ingested` calls and limits.
+`App::sort` is a runtime-only `SortMode` (`Spend`, `Date`, `Tokens`) and defaults to spend on launch. Aggregators carry cost, activity tokens (`input + output + cache_creation + cache_read`), and latest timestamp until rows are ordered; count-style tables split a call's cost/tokens evenly across the row occurrences they emit while keeping occurrence counts unchanged. Dashboard views serialize as `DashboardData`. Desktop-specific pure queries additionally build `AnalyticsData`, the cross-tool `ModelCatalogEntry` list, `ModelPageDetail`, `ToolPageData`, and `SessionDetailView`. Reports build a separate `ReportDataset` from raw `Ingested` calls and limits.
 
 ### Query Cache And Desktop Polling
 
-`App` owns a `QueryCache` keyed by every input that can affect a result: period, tool, project identity, sort mode, and currency as appropriate. It memoizes dashboard, Usage, model-catalog, and Analytics queries. `data_generation` increments when source data, source selection, currency, pricing, clear-data results, or refresh results change; the next query drops the old generation's entries before rebuilding.
+`App` owns a `QueryCache` keyed by every input that can affect a result: period, tool, project identity, model canonical id, sort mode, and currency as appropriate. It memoizes dashboard, Usage, model-catalog, model-detail, and Analytics queries. `data_generation` increments when source data, source selection, currency, pricing, clear-data results, or refresh results change; the next query drops the old generation's entries before rebuilding.
 
 This cache is load-bearing for the desktop. The Svelte shell polls `get_snapshot` every three seconds, but an unchanged filter set reuses the prior aggregate and its leaked `&'static str` display values rather than rebuilding and leaking a new dashboard every poll. Page components request heavier data only when their reactive key changes.
 
@@ -126,11 +126,13 @@ flowchart LR
     Route[Svelte client route] --> Q{page query}
     Q -->|Analytics| A[get_analytics]
     Q -->|Models| M[get_model_catalog]
+    Q -->|model page| MP[get_model_page]
     Q -->|dedicated tool| TP[get_tool_page]
     Q -->|session| S[get_session_detail]
     Snap --> Cache[App QueryCache]
     A --> Cache
     M --> Cache
+    MP --> Cache
     TP --> Cache
     Cache --> Ingested[Live Ingested or bundled Sample]
     S --> Ingested
@@ -165,6 +167,8 @@ flowchart LR
     Sess -- Esc/d --> Ret[page that opened it]
     O -- p --> Pick[Project picker]
     DD -- p --> Pick
+    O -- m --> MPick[Model picker]
+    DD -- m --> MPick
     O -- e --> Exp[Report picker]
     DD -- e --> Exp
     Exp -- f/b --> FPick[Report folder picker]
@@ -180,12 +184,12 @@ flowchart LR
 
 - **Overview** (`Page::Overview`): default command-center landing page. Compact KPI strip plus a chronological activity pulse, models, project/tool spend, shell commands, and MCP servers. Acts as the at-a-glance landing for everyday use.
 - **Deep Dive** (`Page::DeepDive`): analysis workbench with every panel listed under [Aggregation](#aggregation), including a larger chronological activity trend, top sessions, model efficiency, and core tool counts that are not on Overview.
-- **Usage** (`Page::Usage`): per-tool 24-hour console with an activity pulse, optional plan-side rate limit gauges, and top-3 models per tool. Built from `Ingested::limits` over the same `ParsedCall` set plus `LimitSnapshot` records. Entering Usage normalizes the visible period to `Period::Today`, the rolling 24-hour window; project filters are deliberately ignored, while sort mode controls section/model order. See [TUI usage](../guides/tui-usage.md#usage-page).
+- **Usage** (`Page::Usage`): per-tool 24-hour console with an activity pulse, optional plan-side rate limit gauges, and top-3 models per tool. Built from `Ingested::limits` over the same `ParsedCall` set plus `LimitSnapshot` records. Entering Usage normalizes the visible period to `Period::Today`, the rolling 24-hour window; project and model filters are deliberately ignored, while sort mode controls section/model order. See [TUI usage](../guides/tui-usage.md#usage-page).
 - **Coach** (`Page::Coach`): the practice report card — overall grade, per-group scores, triggered findings, and the advisory Setup panel, sharing the desktop Coach page's data and copy. See [Coach engine](coach.md).
 - **Scrollback** (`Page::Scrollback`): full-text transcript search over the archive (see [Archive And Sync](#archive-and-sync)). `/` from the other pages opens it with the query input focused — the TUI's only page-level text input. Enter runs the search synchronously (FTS5 answers in single-digit milliseconds, so the key handler needs no async plumbing) honouring the global tool and project filters; results group per session, Enter drills into the Session page, and results survive the round trip because `ScrollbackState` lives on `App`. Sample mode still searches the live archive — the sample dataset has no transcript index.
 - **Session** (`Page::Session`): drill-down for one `tool:session_id`. Rendered from `SessionDetailView`, computed by filtering `Ingested.calls` by `session_key(call) == key` and sorting calls with the active sort mode. Live data shows per-call timestamp, model, cost, in/out tokens, cache, tools used, and a 120-char single-line prompt snippet; selecting a call opens a modal with the full stored prompt plus reasoning/web-search counts, bash commands, interaction mode, token quality, and timestamp quality. Sample mode shows a privacy note since per-call records are not bundled. Closing the session returns to whichever page opened it (`App::session_return_page`), so Scrollback results and Deep Dive positions both survive the drill-down.
 - **Config** (`Page::Config`): currency override, local data refresh actions (rates, pricing books, Claude/Copilot limit sidecars), and clear-data archive rebuild. The desktop frontend adds native-only controls for open-at-login and Dock/taskbar visibility on its Config page without changing the TUI state machine.
-- **Project picker, Currency picker, Session picker** (`*Modal` structs): each holds `options`, a typeable `query`, and a `filtered: Vec<usize>` mapping; all three share the same case-insensitive substring filter pattern. The project picker pins `All` regardless of query.
+- **Project picker, Model picker, Currency picker, Session picker** (`*Modal` structs): each holds `options`, a typeable `query`, and a `filtered: Vec<usize>` mapping; all share the same case-insensitive substring filter pattern. The project and model pickers pin `All` regardless of query; a selected model becomes a `ModelFilter` that scopes the dashboard and session queries alongside the tool and project filters.
 - **Report picker** (`ExportModal`): report chooser for format, period, project/all-projects scope, and redaction. It defaults to the current period and project, always includes all tools, and writes HTML, PDF, SVG, PNG, JSON, Excel, or a CSV folder.
 - **Report folder picker** (`FolderPickerModal`): directory-only picker rooted at the current report folder. `Use this folder` updates `App::export_dir` for the running session; `Esc` cancels without saving to `config.json`.
 - **Help** (`help_open: bool`): full keybinding reference rendered from the shared keymap, openable from any page with `h` or `?`. Closes with `h`, `?`, or `Esc`.
@@ -194,14 +198,14 @@ The modal state is checked in priority order in `App::handle_key`: help, call de
 
 ### Desktop Router And Screens
 
-Desktop page state is owned by `desktop/src/lib/router.svelte.ts`; it is deliberately not serialized through `App::page`. The persistent sidebar links Overview, Analytics, Coach, Scrollback, Models, Projects, then Tools directly above every individual tool row, and Config. Direct tool rows sort by the numeric call counts in the rolling 24-hour Usage snapshot, while primary routes stay fixed. `Tab` cycles the eight primary sidebar screens in that order. Session is a sub-route opened from session rows on Analytics, the tool pages, the project pages, and Scrollback results, or from the session picker; closing it returns to the route it was opened from and restores that page's scroll offset. Projects follows the same parent/sub-route shape as Tools: the parent route renders the full uncapped project index (`get_project_index`), and `Route.project` selects a per-project page (`get_project_page`) whose payload bundles the project-filtered dashboard, the full session-option list, discovered sources, and the Coach output/activity profile. Project rows on Overview, Analytics, and the tool pages route into those project pages.
+Desktop page state is owned by `desktop/src/lib/router.svelte.ts`; it is deliberately not serialized through `App::page`. The persistent sidebar links Overview, Analytics, Coach, Scrollback, Models, Projects, then Tools directly above every individual tool row, and Config. Direct tool rows sort by the numeric call counts in the rolling 24-hour Usage snapshot, while primary routes stay fixed. `Tab` cycles the eight primary sidebar screens in that order. Session is a sub-route opened from session rows on Analytics, the tool pages, the project pages, and Scrollback results, or from the session picker; closing it returns to the route it was opened from and restores that page's scroll offset. Projects follows the same parent/sub-route shape as Tools: the parent route renders the full uncapped project index (`get_project_index`), and `Route.project` selects a per-project page (`get_project_page`) whose payload bundles the project-filtered dashboard, the full session-option list, discovered sources, and the Coach output/activity profile. Project rows on Overview, Analytics, and the tool pages route into those project pages, and model rows route into model pages from every shared model table. Drill-in opens push the originating route and scroll position onto a return trail; the detail pages' back chip and `Esc` pop it (after call detail, modals, and session), while plain navigation clears it.
 
 - **Overview** uses the shared dashboard query for hero KPIs, current utilisation, activity, projects, and models.
 - **Analytics** combines shared ranked tables with `get_analytics` stacked daily/tool data, hour-by-weekday activity, and provider/tool shares.
 - **Coach** calls `get_coach` for practice scores, findings, flow/pace, AI code output, and the day list, plus `get_coach_timeline` for the selected day's session Gantt. The TUI Coach page renders the same data and copy. See [Coach engine](coach.md).
 - **Scrollback** searches the archive's transcript index through the `search_transcripts` Tauri command, which runs `src/search.rs` on the blocking pool over its own read-only connection (deliberately skipping the shared `App` lock). Queries are debounced 300 ms as you type (minimum two characters; Enter searches immediately). Page state lives in a module store (`desktop/src/lib/scrollback.svelte.ts`, the router pattern) so drilling into a session and returning restores the query, filters, and results without refetching.
 - **Tools** renders the parent route as a fixed 24-hour overview from the shared usage snapshot — one KPI card per tool linking to its sub-route. A tool sub-route calls `get_tool_page` for period-aware KPIs, utilisation, projects, models, and sessions.
-- **Models** calls `get_model_catalog` for all five periods, groups canonical models by provider, and uses the active period for ranking and expanded per-tool splits.
+- **Models** follows the same parent/sub-route shape as Projects: the parent route calls `get_model_catalog` for all five periods, groups canonical models by provider, and uses the active period for ranking; `Route.model` selects a per-model page (`get_model_page`) whose payload bundles the model-filtered dashboard, the model's session options, its per-tool split, and a token-composition/pricing detail block.
 - **Projects** uses shared project/session rows and pure `get_session_detail` lookups for project-to-session-to-call drill-down.
 - **Config** operates on the shared `App` plus desktop settings, updater state, and the live/sample toggle.
 

@@ -31,7 +31,7 @@ Use **Collapse** at the bottom of the sidebar to reduce it to an icon rail. The 
 
 Tools sits directly above the five direct tool rows as the group's summary entry. The tool rows dynamically order themselves from highest to lowest rolling 24-hour call activity, so the tools currently driving usage stay closest to their summary. Primary screen and Config positions never move.
 
-The header holds the controls that apply to the current screen in one toolbar: title, period, contextual tool/project/sort filters, refresh, then report. At compact window widths the filter labels collapse to icons while their current values remain visible. Overview and Analytics expose period, tool, sort, and project filters. Dedicated tool pages expose period and sort. Models uses the active period for ranking and details while keeping all five ranges visible in its table. Projects exposes period, sort, and project. The parent Tools screen is a fixed rolling 24-hour capacity view, so its period control is intentionally hidden. Scrollback hides the period and sort controls too — its search box and tool/project selects live in the page's own toolbar.
+The header holds the controls that apply to the current screen in one toolbar: title, period, contextual tool/project/sort filters, refresh, then report. At compact window widths the filter labels collapse to icons while their current values remain visible. Overview and Analytics expose period, tool, sort, and project filters. Dedicated tool pages expose period and sort. The Models catalog uses the active period for ranking while keeping all five ranges visible in its table; a model's dedicated page adds the sort control. Projects exposes period, sort, and project. The parent Tools screen is a fixed rolling 24-hour capacity view, so its period control is intentionally hidden. Scrollback hides the period and sort controls too — its search box and tool/project selects live in the page's own toolbar.
 
 The footer shows live or sample source, currency, and context-sensitive shortcut hints. Refresh, report, configuration, and sync results appear as temporary bottom-right toasts instead of permanently consuming header space.
 
@@ -56,7 +56,7 @@ Analytics is the time and distribution workspace. It includes:
 - cache efficiency;
 - ranked projects, models, sessions, project/tool rows, core tools, shell commands, and MCP servers.
 
-Top Sessions rows are links: select one (click, `Enter`, or `Space`) to open that session in the full session view, alongside the existing session picker. Closing the session view returns to the page it was opened from, at the scroll position you left. Project rows link too: selecting one on Overview, Analytics, or a tool page opens that project's dedicated page.
+Top Sessions rows are links: select one (click, `Enter`, or `Space`) to open that session in the full session view, alongside the existing session picker. Closing the session view returns to the page it was opened from, at the scroll position you left. Project rows link too: selecting one on Overview, Analytics, or a tool page opens that project's dedicated page. Model rows behave the same, opening that model's page.
 
 Charts use the same token-driven colors and relative ranking language as the TUI. Hovered chart values are exact for that bucket; bars, heat intensity, and row rank fills are relative to the visible dataset. Ranked tables carry that relative magnitude as a muted wash across each row's background (hover a row for the exact percentage) rather than a meter column, so the full project and model names keep the space.
 
@@ -95,13 +95,17 @@ Copilot AI Credits rows show exact used and remaining/total credits, reset time,
 
 ### Models
 
-Models is a provider-grouped catalog across every tool. Each model row carries its canonical display name, family, cache hit rate, and cost/call totals for 24 Hours, 7 Days, 30 Days, This Month, and All Time.
+Models is a two-level drill-down, mirroring Projects. The page itself is a provider-grouped catalog across every tool. Each model row carries its canonical display name, family, cache hit rate, and cost/call totals for 24 Hours, 7 Days, 30 Days, This Month, and All Time. Equivalent dated ids and vendor paths fold into one row; automatic routers retain their actual provider attribution, such as **OpenAI (auto)** or **Anthropic (auto)**. The active header period controls row ranking. Selecting a row with a click, `Enter`, or `Space` opens that model's dedicated page.
 
-The active header period controls row ranking and the expanded details. Select a row with a click, `Enter`, or `Space` to reveal the per-tool split for that period. Equivalent dated ids and vendor paths fold into one row; automatic routers retain their actual provider attribution, such as **OpenAI (auto)** or **Anthropic (auto)**.
+Model rows are links everywhere the shared model table appears — Overview's Top Models, Analytics, the tool pages, and a project page's Top Models all open the model's page.
+
+The model page scopes everything to that one canonical model across all tools, honouring the period and sort selectors: a KPI band (cost, calls, sessions, cache hit, average cost per call, and output tokens), the chronological activity pulse, the model's session list, a token-composition panel (input, output, cache-read, and cache-write totals), the per-tool split donut, a pricing panel with the model's effective per-Mtok rates, cache rates, and average cost per call, plus which projects and By Activity task categories its spend comes from. When the model's cost was computed via the pricing book's fallback row, the pricing panel says so — the numbers are estimates until a pricing alias lands. Session rows open the full session view; project rows jump to the project page.
 
 ### Projects
 
 Projects is a two-level drill-down. The page itself is a full index of every project in the selected period — one row per project with cost, avg/session, sessions, calls, last-active date, and tool mix, uncapped unlike the top-10 dashboard panels. Selecting a row (or a project row anywhere else in the app) opens that project's dedicated page.
+
+Project and model pages open with a back chip showing the page you came from; clicking it (or pressing `Esc`) returns there with your scroll position restored, unwinding chained drill-ins (project → model → project) one step at a time. Navigating via the sidebar or nav keys ends the trail.
 
 The project page scopes everything to that one project across all tools, honouring the period and sort selectors: a KPI band (cost, calls, sessions, cache hit, AI code output, and estimated active hours with the observed work pattern), the chronological activity pulse, the full session list, a per-tool split donut (switchable between cost, calls, sessions, and avg/session), top models, By Activity task categories, core tools, shell commands, MCP servers, and a Sources panel listing the raw per-tool paths discovery found. The session list renders incrementally as you scroll, and each row opens the full session view — call details there include the full stored prompt, model, token buckets, pricing rates, tools, reasoning/web-search counts, shell commands, interaction mode, and exact/estimated timestamp and token quality when those fields were available locally. Modern Cursor Agent sessions appear as one call per user request rather than separate overlapping bubble, AgentKv, and transcript rows.
 

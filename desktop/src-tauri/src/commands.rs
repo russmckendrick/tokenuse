@@ -13,8 +13,8 @@ use crate::{
     ids::{parse_period, parse_report_format, parse_sort, parse_tool},
     restore_main_window,
     snapshot::{
-        project_page, snapshot, tray_snapshot, DesktopSnapshot, ProjectPageData, ReportResponse,
-        ToolPageData, TraySnapshot,
+        model_page, project_page, snapshot, tray_snapshot, DesktopSnapshot, ModelPageData,
+        ProjectPageData, ReportResponse, ToolPageData, TraySnapshot,
     },
     state::{save_user_settings, with_app, CommandError, CommandResult, SharedState},
     sync_open_at_login,
@@ -141,6 +141,7 @@ pub(crate) async fn get_tool_page(
                 app.period,
                 tool,
                 &tokenuse::app::ProjectFilter::All,
+                &tokenuse::app::ModelFilter::All,
                 app.sort,
             ),
             usage: app.usage_for(tool, app.sort),
@@ -162,6 +163,14 @@ pub(crate) async fn get_project_page(
     state: State<'_, SharedState>,
 ) -> CommandResult<ProjectPageData> {
     with_app(state, move |app| Ok(project_page(app, &identity))).await
+}
+
+#[tauri::command]
+pub(crate) async fn get_model_page(
+    canonical_id: String,
+    state: State<'_, SharedState>,
+) -> CommandResult<ModelPageData> {
+    with_app(state, move |app| Ok(model_page(app, &canonical_id))).await
 }
 
 #[tauri::command]

@@ -23,7 +23,7 @@ use sections::{
     render_activity_categories, render_activity_pulse, render_config, render_counts,
     render_currency_modal, render_daily_trend, render_export_dir_picker_modal, render_export_modal,
     render_footer, render_help_modal, render_kpi_strip, render_limits, render_model_efficiency,
-    render_models, render_project_modal, render_project_tools, render_projects,
+    render_model_modal, render_models, render_project_modal, render_project_tools, render_projects,
     render_session_modal, render_session_page, render_sessions, render_title_bar,
 };
 
@@ -106,6 +106,7 @@ fn render_overview(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
 
     render_footer(frame, sections[6], app);
     render_project_modal(frame, root, app);
+    render_model_modal(frame, root, app);
     render_currency_modal(frame, root, app);
     render_session_modal(frame, root, app);
     render_export_modal(frame, root, app);
@@ -173,6 +174,7 @@ fn render_dashboard(frame: &mut Frame<'_>, area: Rect, root: Rect, app: &App) {
     render_activity_categories(frame, bottom[2], &data.by_activity);
     render_footer(frame, sections[10], app);
     render_project_modal(frame, root, app);
+    render_model_modal(frame, root, app);
     render_currency_modal(frame, root, app);
     render_session_modal(frame, root, app);
     render_export_modal(frame, root, app);
@@ -587,6 +589,30 @@ mod tests {
             .collect::<String>();
 
         assert!(rendered.contains("Project 1/"));
+        assert!(rendered.contains(&copy().tools.all));
+        assert!(rendered.contains(&copy().tables.cost));
+        assert!(rendered.contains(&copy().tables.calls));
+    }
+
+    #[test]
+    fn model_modal_render_smoke_test() {
+        let backend = TestBackend::new(170, 80);
+        let mut terminal = Terminal::new(backend).expect("create terminal");
+        let mut app = App::default();
+        app.handle_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
+
+        terminal
+            .draw(|frame| render(frame, &app))
+            .expect("draw dashboard");
+
+        let buffer = terminal.backend().buffer();
+        let rendered = buffer
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+
+        assert!(rendered.contains("Model 1/"));
         assert!(rendered.contains(&copy().tools.all));
         assert!(rendered.contains(&copy().tables.cost));
         assert!(rendered.contains(&copy().tables.calls));

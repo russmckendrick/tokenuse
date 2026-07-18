@@ -382,6 +382,15 @@ Each section must have one clear question. If its title, hint, KPIs, and chart d
 - A click should reveal more precision, not merely repeat the visible label in a modal. Overlays are for transient actions; analytical detail stays in the page whenever space permits.
 - Selection is a view state, not a layout mode. Selecting an item must not resize neighboring rows, move controls, or collapse the comparison set.
 
+#### Entity drill-in routes
+
+Projects and Models are the reference implementations. When an entity (a project, a model, a session) earns its own detail page, the whole app follows one pattern:
+
+- **Every row that names the entity is a link.** A ranked table naming projects navigates to the project page; a table naming models navigates to the model page — on every page that renders the shared table component, not just the entity's own index. Cross-links are expected: the model page's By Project rows open project pages and vice versa.
+- **Detail pages open with an origin-aware back chip.** The first element of the page is the session-view back affordance (`←` + the originating page's title). Opening a drill-in records the current route and scroll position; back returns there and restores scroll — it does not dump the user on the entity's index when they arrived from Overview. Chained drill-ins (project → model → project) unwind step by step.
+- **`Esc` pops a drill-in** after call detail, modals, and session, in that order. Plain navigation (sidebar, tabs, nav keys) ends the trail; the session sub-route preserves it across its round trip.
+- **The index stays the canonical home.** The sidebar item always leads to the index; the drill-in is a sub-route of it (`Route.project`, `Route.model`), never a separate sidebar entry.
+
 #### Responsive behavior for expanded pages
 
 - Preserve the information hierarchy as width decreases. Collapse toolbar labels before removing context; reduce columns before hiding metrics.

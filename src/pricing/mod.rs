@@ -608,6 +608,17 @@ pub fn uses_fallback(tool: &str, model: &str, timestamp: Option<DateTime<Utc>>) 
     with_configured(|table| table.uses_fallback(tool, model, timestamp))
 }
 
+/// The effective price row for `(tool, model)` at `timestamp`, cloned from
+/// the configured pricing table. See [`PriceTable::lookup_for`].
+pub fn price_for(tool: &str, model: &str, timestamp: Option<DateTime<Utc>>) -> ModelPrice {
+    #[cfg(test)]
+    return PriceTable::embedded()
+        .lookup_for(tool, model, timestamp)
+        .clone();
+    #[cfg(not(test))]
+    with_configured(|table| table.lookup_for(tool, model, timestamp).clone())
+}
+
 pub fn cost(model: &str, call: &ParsedCall, speed: Speed) -> f64 {
     #[cfg(test)]
     let price = PriceTable::embedded().lookup_for(call.tool, model, call.timestamp);

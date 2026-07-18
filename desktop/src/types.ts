@@ -63,6 +63,7 @@ export type SessionMetric = {
 };
 
 export type ModelMetric = {
+  canonical_id: string;
   name: string;
   provider: string;
   provider_label: string;
@@ -758,4 +759,47 @@ export type ProjectPageData = {
   tool_split: ProjectToolSplit[];
   output: OutputSummary;
   activity: CoachProjectActivity | null;
+};
+
+/** Mirrors `TokenComposition` in `src/data/mod.rs`. */
+export type TokenComposition = {
+  input: number;
+  output: number;
+  cache_read: number;
+  cache_write: number;
+  input_label: string;
+  output_label: string;
+  cache_read_label: string;
+  cache_write_label: string;
+};
+
+/** Mirrors `ModelPricingInfo` in `src/data/mod.rs`. */
+export type ModelPricingInfo = {
+  input_per_mtok: string;
+  output_per_mtok: string;
+  cache_read_per_mtok: string;
+  cache_write_per_mtok: string;
+  cache_read_rate: string;
+  cache_write_rate: string;
+  avg_cost_per_call: string;
+  fallback: boolean;
+};
+
+/** Mirrors `ModelPageDetail` in `src/data/mod.rs`. */
+export type ModelPageDetail = {
+  composition: TokenComposition;
+  pricing: ModelPricingInfo;
+};
+
+/** Mirrors `ModelPageData` in `desktop/src-tauri/src/snapshot.rs`. */
+export type ModelPageData = {
+  canonical_id: string;
+  name: string;
+  provider: string;
+  provider_label: string;
+  family: string;
+  dashboard: DashboardData;
+  sessions: SessionOption[];
+  per_tool: ModelToolBreakdown[];
+  detail: ModelPageDetail | null;
 };

@@ -1,10 +1,10 @@
 use serde::Serialize;
 use tokenuse::{
-    app::{App, ConfigRowView, DataSource, Period, ProjectFilter, SortMode, Tool},
+    app::{App, ConfigRowView, DataSource, ModelFilter, Period, ProjectFilter, SortMode, Tool},
     copy::{self, CopyDeck},
     data::{
-        CoachProjectActivity, DashboardData, LimitsData, OutputSummary, ProjectOption,
-        ProjectToolSplit, SessionOption,
+        CoachProjectActivity, DashboardData, LimitsData, ModelCatalogEntry, ModelPageDetail,
+        ModelToolBreakdown, OutputSummary, ProjectOption, ProjectToolSplit, SessionOption,
     },
     ingest::ProjectInventoryRow,
     reports::ReportFormat,
@@ -157,14 +157,84 @@ pub(crate) fn project_page(app: &App, identity: &str) -> ProjectPageData {
     ProjectPageData {
         identity: identity.to_string(),
         name,
-        dashboard: app.dashboard_for(app.period, Tool::All, &filter, app.sort),
-        sessions: app.session_options_for(app.period, Tool::All, &filter, app.sort),
+        dashboard: app.dashboard_for(app.period, Tool::All, &filter, &ModelFilter::All, app.sort),
+        sessions: app.session_options_for(
+            app.period,
+            Tool::All,
+            &filter,
+            &ModelFilter::All,
+            app.sort,
+        ),
         sources,
         tool_split: app.project_tool_split(&filter),
         // The coach payload is scoped to this one project, so its output
         // block and single activity row are already project-specific.
         activity: coach.projects.first().cloned(),
         output: coach.output,
+    }
+}
+
+/// Payload for the per-model desktop page: the model-filtered dashboard for
+/// the active period across all tools, the model's session list, its
+/// per-tool split, and the token-composition/pricing extras.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ModelPageData {
+    pub(crate) canonical_id: String,
+    pub(crate) name: String,
+    pub(crate) provider: &'static str,
+    pub(crate) provider_label: &'static str,
+    pub(crate) family: &'static str,
+    pub(crate) dashboard: DashboardData,
+    pub(crate) sessions: Vec<SessionOption>,
+    pub(crate) per_tool: Vec<ModelToolBreakdown>,
+    pub(crate) detail: Option<ModelPageDetail>,
+}
+
+pub(crate) fn model_page(app: &App, canonical_id: &str) -> ModelPageData {
+    let find = |entries: Vec<ModelCatalogEntry>| {
+        entries
+            .into_iter()
+            .find(|entry| entry.canonical_id == canonical_id)
+    };
+    // The Models index lists all-time rows alongside the active period's, so
+    // a period-inactive model stays reachable: fall back to the all-time
+    // entry for its identity and per-tool split.
+    let entry = find(app.model_catalog(app.period)).or_else(|| find(app.model_catalog(Period::AllTime)));
+
+    let name = entry
+        .as_ref()
+        .map(|entry| entry.name.to_string())
+        .unwrap_or_else(|| canonical_id.to_string());
+    let filter = ModelFilter::Selected {
+        canonical_id: canonical_id.to_string(),
+        label: name.clone(),
+    };
+
+    ModelPageData {
+        canonical_id: canonical_id.to_string(),
+        name,
+        provider: entry.as_ref().map(|entry| entry.provider).unwrap_or(""),
+        provider_label: entry
+            .as_ref()
+            .map(|entry| entry.provider_label)
+            .unwrap_or("-"),
+        family: entry.as_ref().map(|entry| entry.family).unwrap_or(""),
+        dashboard: app.dashboard_for(
+            app.period,
+            Tool::All,
+            &ProjectFilter::All,
+            &filter,
+            app.sort,
+        ),
+        sessions: app.session_options_for(
+            app.period,
+            Tool::All,
+            &ProjectFilter::All,
+            &filter,
+            app.sort,
+        ),
+        per_tool: entry.map(|entry| entry.per_tool).unwrap_or_default(),
+        detail: app.model_detail(&filter),
     }
 }
 
@@ -312,6 +382,7 @@ pub(crate) fn tray_snapshot(app: &App) -> TraySnapshot {
             Period::Today,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Spend,
         ),
         usage: app.usage_for(Tool::All, SortMode::Spend),

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::currency::CurrencyFormatter;
 use crate::{
-    app::{Period, ProjectFilter, SortMode, Tool},
+    app::{ModelFilter, Period, ProjectFilter, SortMode, Tool},
     copy::copy,
 };
 
@@ -154,6 +154,8 @@ pub struct SessionMetric {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ModelMetric {
+    /// Registry fold key; rows navigate to the per-model page with it.
+    pub canonical_id: &'static str,
     pub name: &'static str,
     pub provider: &'static str,
     pub provider_label: &'static str,
@@ -196,6 +198,44 @@ pub struct ModelToolBreakdown {
     pub cost: &'static str,
     pub calls: u64,
     pub value: u64,
+}
+
+/// Raw token-bucket totals for one model plus compact display labels, so the
+/// UI can chart shares without parsing formatted strings.
+#[derive(Debug, Clone, Serialize)]
+pub struct TokenComposition {
+    pub input: u64,
+    pub output: u64,
+    pub cache_read: u64,
+    pub cache_write: u64,
+    pub input_label: &'static str,
+    pub output_label: &'static str,
+    pub cache_read_label: &'static str,
+    pub cache_write_label: &'static str,
+}
+
+/// Effective pricing for one model in the visible period: per-Mtok rates,
+/// cache-rate labels, and the blended average cost per call.
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelPricingInfo {
+    pub input_per_mtok: &'static str,
+    pub output_per_mtok: &'static str,
+    pub cache_read_per_mtok: &'static str,
+    pub cache_write_per_mtok: &'static str,
+    pub cache_read_rate: &'static str,
+    pub cache_write_rate: &'static str,
+    pub avg_cost_per_call: &'static str,
+    /// True when any (tool, raw model) pair in scope was priced via the
+    /// book's fallback row — the cost is a guess until an alias lands.
+    pub fallback: bool,
+}
+
+/// Model-page extras that a scoped dashboard cannot provide: the token
+/// composition split and the model's effective pricing.
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelPageDetail {
+    pub composition: TokenComposition,
+    pub pricing: ModelPricingInfo,
 }
 
 /// Time-explorer aggregates for the desktop Analytics page.
@@ -426,6 +466,15 @@ pub struct ShareMetric {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ProjectOption {
     pub identity: Option<String>,
+    pub label: String,
+    pub cost: String,
+    pub calls: u64,
+}
+
+/// One row of the model picker: `canonical_id` is `None` for the "All" row.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ModelOption {
+    pub canonical_id: Option<String>,
     pub label: String,
     pub cost: String,
     pub calls: u64,
@@ -707,6 +756,26 @@ impl ProjectOption {
     }
 }
 
+impl ModelOption {
+    pub fn all(cost: String, calls: u64) -> Self {
+        Self {
+            canonical_id: None,
+            label: copy().tools.all.clone(),
+            cost,
+            calls,
+        }
+    }
+
+    pub fn selected(canonical_id: String, label: String, cost: String, calls: u64) -> Self {
+        Self {
+            canonical_id: Some(canonical_id),
+            label,
+            cost,
+            calls,
+        }
+    }
+}
+
 fn sample_data() -> &'static SampleData {
     static SAMPLE: OnceLock<SampleData> = OnceLock::new();
     SAMPLE.get_or_init(|| {
@@ -739,36 +808,113 @@ impl From<WireSampleData> for SampleData {
     }
 }
 
-/// Sample-mode catalog rows: each sample model row belongs to one tool, so
-/// the per-tool split is that single tool at full width.
+/// Sample-mode catalog rows: wire model rows fold by canonical id exactly
+/// like the live pipeline, so a model used from several tools carries a real
+/// per-tool split (e.g. Sonnet under both Claude Code and Cursor).
 fn sample_catalog(models: &[WireModelMetric]) -> Vec<ModelCatalogEntry> {
-    models
-        .iter()
-        .map(|row| {
-            let identity = crate::models::resolve(&row.tool, &row.id);
-            let tool_label = crate::ingest::projects::tool_short_label(&row.tool);
-            let cost = leak(row.cost.clone());
-            ModelCatalogEntry {
-                canonical_id: leak(identity.canonical_id),
-                name: leak(identity.display),
-                provider: identity.provider.id(),
-                provider_label: identity.provider.label(),
-                family: leak(identity.family),
-                cost,
+    struct Acc {
+        identity: crate::models::ModelIdentity,
+        cost_units: u64,
+        calls: u64,
+        cache: String,
+        /// Cost units of the row the cache label came from, so the label of
+        /// the dominant tool wins when tools disagree.
+        cache_units: u64,
+        per_tool: Vec<(String, u64, u64)>,
+    }
+
+    let mut rows: Vec<Acc> = Vec::new();
+    for row in models {
+        let identity = crate::models::resolve(&row.tool, &row.id);
+        let units = parse_money_sort_value(&row.cost);
+        match rows
+            .iter_mut()
+            .find(|acc| acc.identity.canonical_id == identity.canonical_id)
+        {
+            Some(acc) => {
+                acc.cost_units += units;
+                acc.calls += row.calls;
+                if row.cache != "-" && units > acc.cache_units {
+                    acc.cache = row.cache.clone();
+                    acc.cache_units = units;
+                }
+                match acc.per_tool.iter_mut().find(|(tool, ..)| *tool == row.tool) {
+                    Some(split) => {
+                        split.1 += units;
+                        split.2 += row.calls;
+                    }
+                    None => acc.per_tool.push((row.tool.clone(), units, row.calls)),
+                }
+            }
+            None => rows.push(Acc {
+                cache_units: if row.cache == "-" { 0 } else { units },
+                cache: row.cache.clone(),
+                per_tool: vec![(row.tool.clone(), units, row.calls)],
+                identity,
+                cost_units: units,
                 calls: row.calls,
+            }),
+        }
+    }
+
+    rows.sort_by(|a, b| {
+        b.cost_units
+            .cmp(&a.cost_units)
+            .then_with(|| a.identity.display.cmp(&b.identity.display))
+    });
+    let max_units = rows.first().map(|acc| acc.cost_units).unwrap_or(0).max(1);
+    rows.into_iter()
+        .map(|mut acc| {
+            acc.per_tool
+                .sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+            let split_max = acc
+                .per_tool
+                .first()
+                .map(|split| split.1)
+                .unwrap_or(0)
+                .max(1);
+            let per_tool = acc
+                .per_tool
+                .iter()
+                .map(|(tool, units, calls)| ModelToolBreakdown {
+                    tool: leak(tool.clone()),
+                    tool_label: crate::ingest::projects::tool_short_label(tool),
+                    cost: leak(format!("${:.2}", *units as f64 / 10_000.0)),
+                    calls: *calls,
+                    value: (units * 100 / split_max).clamp(1, 100),
+                })
+                .collect();
+            ModelCatalogEntry {
+                canonical_id: leak(acc.identity.canonical_id),
+                name: leak(acc.identity.display),
+                provider: acc.identity.provider.id(),
+                provider_label: acc.identity.provider.label(),
+                family: leak(acc.identity.family),
+                cost: leak(format!("${:.2}", acc.cost_units as f64 / 10_000.0)),
+                calls: acc.calls,
                 tokens: "-",
-                cache_hit: leak(row.cache.clone()),
-                value: row.value,
-                per_tool: vec![ModelToolBreakdown {
-                    tool: leak(row.tool.clone()),
-                    tool_label,
-                    cost,
-                    calls: row.calls,
-                    value: 100,
-                }],
+                cache_hit: leak(if acc.cache_units == 0 {
+                    "-".to_string()
+                } else {
+                    acc.cache.clone()
+                }),
+                value: (acc.cost_units * 100 / max_units).clamp(1, 100),
+                per_tool,
             }
         })
         .collect()
+}
+
+/// The bundled catalog rows for one period, in USD.
+fn sample_catalog_for(period: Period) -> &'static [ModelCatalogEntry] {
+    let samples = sample_data();
+    match period {
+        Period::Today => &samples.catalog_today,
+        Period::Week => &samples.catalog_week,
+        Period::ThirtyDays => &samples.catalog_thirty_days,
+        Period::Month => &samples.catalog_month,
+        Period::AllTime => &samples.catalog_all_time,
+    }
 }
 
 /// Sample-mode analytics: daily totals split across tools by the period's
@@ -783,7 +929,14 @@ pub fn analytics_data(
     // Aggregate in USD, then format each derived amount once with the real
     // currency, so converted sample strings are never parsed and re-converted.
     let usd = CurrencyFormatter::usd();
-    let data = dashboard_data(period, tool, project_filter, SortMode::Spend, &usd);
+    let data = dashboard_data(
+        period,
+        tool,
+        project_filter,
+        &ModelFilter::All,
+        SortMode::Spend,
+        &usd,
+    );
 
     let mut tool_totals: Vec<(&'static str, &'static str, u64, u64)> = Vec::new();
     for row in &data.project_tools {
@@ -901,14 +1054,7 @@ fn share_rows(
 }
 
 pub fn model_catalog_data(period: Period, currency: &CurrencyFormatter) -> Vec<ModelCatalogEntry> {
-    let samples = sample_data();
-    let mut entries = match period {
-        Period::Today => samples.catalog_today.clone(),
-        Period::Week => samples.catalog_week.clone(),
-        Period::ThirtyDays => samples.catalog_thirty_days.clone(),
-        Period::Month => samples.catalog_month.clone(),
-        Period::AllTime => samples.catalog_all_time.clone(),
-    };
+    let mut entries = sample_catalog_for(period).to_vec();
     if !currency.is_usd() {
         for entry in &mut entries {
             entry.cost = convert_money_text(entry.cost, currency, false);
@@ -918,6 +1064,106 @@ pub fn model_catalog_data(period: Period, currency: &CurrencyFormatter) -> Vec<M
         }
     }
     entries
+}
+
+/// Sample-mode model-page extras: the token composition comes from the
+/// model-scoped sample dashboard's summary buckets; pricing comes from the
+/// real books via the model's per-tool ids, so synthetic sample ids surface
+/// the genuine fallback note.
+pub fn model_detail_data(
+    period: Period,
+    canonical_id: &str,
+    currency: &CurrencyFormatter,
+) -> Option<ModelPageDetail> {
+    use std::collections::HashSet;
+
+    let entry = sample_catalog_for(period)
+        .iter()
+        .find(|entry| entry.canonical_id == canonical_id)?;
+
+    let filter = ModelFilter::Selected {
+        canonical_id: canonical_id.to_string(),
+        label: entry.name.to_string(),
+    };
+    let usd = CurrencyFormatter::usd();
+    let data = dashboard_data(
+        period,
+        Tool::All,
+        &ProjectFilter::All,
+        &filter,
+        SortMode::Spend,
+        &usd,
+    );
+    let input = parse_compact_sort_value(data.summary.input);
+    let output = parse_compact_sort_value(data.summary.output);
+    let cache_read = parse_compact_sort_value(data.summary.cached);
+    let cache_write = parse_compact_sort_value(data.summary.written);
+
+    let per_mtok = |rate: f64| -> String {
+        if rate <= 0.0 {
+            "-".into()
+        } else {
+            currency.format_money(rate * 1_000_000.0)
+        }
+    };
+    let uniform = |rates: HashSet<String>| -> String {
+        if rates.is_empty() {
+            "-".into()
+        } else if rates.len() == 1 {
+            rates.into_iter().next().unwrap_or_else(|| "-".into())
+        } else {
+            copy().metrics.mixed.clone()
+        }
+    };
+    let mut input_rates = HashSet::new();
+    let mut output_rates = HashSet::new();
+    let mut cache_read_prices = HashSet::new();
+    let mut cache_write_prices = HashSet::new();
+    let mut cache_read_rates = HashSet::new();
+    let mut cache_write_rates = HashSet::new();
+    let mut fallback = false;
+    for split in &entry.per_tool {
+        let price = crate::pricing::price_for(split.tool, canonical_id, None);
+        input_rates.insert(per_mtok(price.input));
+        output_rates.insert(per_mtok(price.output));
+        cache_read_prices.insert(per_mtok(price.cache_read));
+        cache_write_prices.insert(per_mtok(price.cache_write));
+        cache_read_rates.insert(crate::pricing::cache_read_rate_label_for(
+            split.tool,
+            canonical_id,
+            None,
+        ));
+        cache_write_rates.insert(crate::pricing::cache_write_rate_label_for(
+            split.tool,
+            canonical_id,
+            None,
+        ));
+        fallback |= crate::pricing::uses_fallback(split.tool, canonical_id, None);
+    }
+
+    let cost_usd = parse_money_sort_value(entry.cost) as f64 / 10_000.0;
+    Some(ModelPageDetail {
+        composition: TokenComposition {
+            input,
+            output,
+            cache_read,
+            cache_write,
+            input_label: leak(format_compact(input)),
+            output_label: leak(format_compact(output)),
+            cache_read_label: leak(format_compact(cache_read)),
+            cache_write_label: leak(format_compact(cache_write)),
+        },
+        pricing: ModelPricingInfo {
+            input_per_mtok: leak(uniform(input_rates)),
+            output_per_mtok: leak(uniform(output_rates)),
+            cache_read_per_mtok: leak(uniform(cache_read_prices)),
+            cache_write_per_mtok: leak(uniform(cache_write_prices)),
+            cache_read_rate: leak(uniform(cache_read_rates)),
+            cache_write_rate: leak(uniform(cache_write_rates)),
+            avg_cost_per_call: leak(currency.format_money(cost_usd / entry.calls.max(1) as f64)),
+            fallback,
+        },
+    })
 }
 
 impl From<WireDashboardData> for DashboardData {
@@ -1104,6 +1350,7 @@ impl From<WireModelMetric> for ModelMetric {
     fn from(wire: WireModelMetric) -> Self {
         let identity = crate::models::resolve(&wire.tool, &wire.id);
         Self {
+            canonical_id: leak(identity.canonical_id),
             name: leak(identity.display),
             provider: identity.provider.id(),
             provider_label: identity.provider.label(),
@@ -1305,6 +1552,7 @@ pub fn dashboard_data(
     period: Period,
     _tool: Tool,
     project_filter: &ProjectFilter,
+    model_filter: &ModelFilter,
     sort: SortMode,
     currency: &CurrencyFormatter,
 ) -> DashboardData {
@@ -1318,17 +1566,22 @@ pub fn dashboard_data(
     };
     rebase_dashboard_dates(&mut data, sample_base_date(), sample_date_delta());
 
+    // Keys are minted before any filter so a retained row keeps its unscoped
+    // index: `session_detail` always resolves against the unscoped list
+    // (matching live semantics, where a session drill-down shows the whole
+    // session regardless of the active filters).
+    for (idx, session) in data.sessions.iter_mut().enumerate() {
+        session.key = leak(format!("sample:{idx}"));
+    }
+
     apply_project_filter(&mut data, project_filter);
+    // Model scoping runs before the timeline and by-activity synthesis so
+    // both derive from the scoped daily rows and summary.
+    apply_model_filter(&mut data, model_filter, period);
     data.activity_timeline = sample_activity_timeline(&data.daily, period);
     data.by_activity = sample_by_activity(&data.summary);
     apply_sample_sort(&mut data, sort);
     apply_currency(&mut data, currency);
-
-    // Keys must line up with `session_options`, which enumerates this same
-    // sorted list to mint its `sample:{idx}` picker keys.
-    for (idx, session) in data.sessions.iter_mut().enumerate() {
-        session.key = leak(format!("sample:{idx}"));
-    }
 
     data
 }
@@ -1339,7 +1592,14 @@ pub fn project_options(
     sort: SortMode,
     currency: &CurrencyFormatter,
 ) -> Vec<ProjectOption> {
-    let data = dashboard_data(period, tool, &ProjectFilter::All, sort, currency);
+    let data = dashboard_data(
+        period,
+        tool,
+        &ProjectFilter::All,
+        &ModelFilter::All,
+        sort,
+        currency,
+    );
     let mut options = vec![ProjectOption::all(
         data.summary.cost.into(),
         parse_count(data.summary.calls),
@@ -1393,6 +1653,7 @@ pub fn project_tool_split(
         period,
         Tool::All,
         &ProjectFilter::All,
+        &ModelFilter::All,
         SortMode::Spend,
         currency,
     );
@@ -1424,7 +1685,14 @@ pub fn project_index(
     sort: SortMode,
     currency: &CurrencyFormatter,
 ) -> Vec<ProjectIndexRow> {
-    let data = dashboard_data(period, tool, &ProjectFilter::All, sort, currency);
+    let data = dashboard_data(
+        period,
+        tool,
+        &ProjectFilter::All,
+        &ModelFilter::All,
+        sort,
+        currency,
+    );
     data.projects
         .iter()
         .map(|project| {
@@ -1460,15 +1728,25 @@ pub fn project_index(
 pub fn session_options(
     period: Period,
     tool: Tool,
+    model_filter: &ModelFilter,
     sort: SortMode,
     currency: &CurrencyFormatter,
 ) -> Vec<SessionOption> {
-    let data = dashboard_data(period, tool, &ProjectFilter::All, sort, currency);
+    // The model filter is forwarded so the picker lists exactly the scoped
+    // dashboard's sessions; rows reuse the keys stamped by `dashboard_data`,
+    // which `session_detail` resolves against the unscoped list.
+    let data = dashboard_data(
+        period,
+        tool,
+        &ProjectFilter::All,
+        model_filter,
+        sort,
+        currency,
+    );
     data.sessions
         .iter()
-        .enumerate()
-        .map(|(idx, session)| SessionOption {
-            key: format!("sample:{idx}"),
+        .map(|session| SessionOption {
+            key: session.key.to_string(),
             date: session.date.into(),
             project: session.project.into(),
             tool: copy().tools.sample.as_str(),
@@ -1487,12 +1765,21 @@ pub fn session_detail(
 ) -> Option<SessionDetailView> {
     let idx: usize = key.strip_prefix("sample:")?.parse().ok()?;
 
-    // Resolve the exact picker row (project / date / cost) the key points at,
-    // computed in USD so the synthesized per-call ledger reconciles with the
-    // session list regardless of the display currency.
+    // Resolve the exact picker row (project / date / cost) the key points at
+    // by key match against the unscoped list (keys are minted before filters
+    // and sorting, so a scoped picker's key still resolves here), computed in
+    // USD so the synthesized per-call ledger reconciles with the session list
+    // regardless of the display currency.
     let usd = CurrencyFormatter::usd();
-    let data = dashboard_data(period, Tool::All, &ProjectFilter::All, sort, &usd);
-    let session = data.sessions.get(idx)?;
+    let data = dashboard_data(
+        period,
+        Tool::All,
+        &ProjectFilter::All,
+        &ModelFilter::All,
+        sort,
+        &usd,
+    );
+    let session = data.sessions.iter().find(|session| session.key == key)?;
     let total_usd = parse_money_sort_value(session.cost) as f64 / 10_000.0;
     // Match the picker row's call count so the ledger length, the "of {total}"
     // header, and the session KPI all agree (guarded against pathological rows;
@@ -1754,6 +2041,258 @@ fn apply_project_filter(data: &mut DashboardData, project_filter: &ProjectFilter
     data.projects.retain(|project| project.name == label);
     data.project_tools.retain(|row| row.project == label);
     data.sessions.retain(|row| row.project == label);
+}
+
+/// Sample-mode model scoping: keeps the selected model's rows and rescales
+/// every other panel deterministically so the scoped payload still
+/// reconciles (summary == sum of retained parts, remainders assigned to the
+/// largest row). Live data filters per call; sample data derives the same
+/// shape from the bundled rows.
+fn apply_model_filter(data: &mut DashboardData, model_filter: &ModelFilter, period: Period) {
+    let ModelFilter::Selected { canonical_id, .. } = model_filter else {
+        return;
+    };
+
+    let entry = sample_catalog_for(period)
+        .iter()
+        .find(|entry| entry.canonical_id == canonical_id.as_str());
+    // The model's tool short labels ("Claude", "Cursor") match the sample
+    // project_tools rows' tool column.
+    let tool_labels: Vec<&'static str> = entry
+        .map(|entry| {
+            entry
+                .per_tool
+                .iter()
+                .map(|split| split.tool_label)
+                .collect()
+        })
+        .unwrap_or_default();
+    let retained_units: u64 = data
+        .project_tools
+        .iter()
+        .filter(|row| tool_labels.contains(&row.tool))
+        .map(|row| parse_money_sort_value(row.cost))
+        .sum();
+    let (Some(entry), true) = (entry, retained_units > 0) else {
+        data.summary.cost = "$0.00";
+        data.summary.calls = "0";
+        data.summary.sessions = "0";
+        data.summary.cache_hit = "-";
+        data.summary.input = "0";
+        data.summary.output = "0";
+        data.summary.cached = "0";
+        data.summary.written = "0";
+        data.daily.clear();
+        data.projects.clear();
+        data.project_tools.clear();
+        data.sessions.clear();
+        data.models.clear();
+        data.tools.clear();
+        data.commands.clear();
+        data.mcp_servers.clear();
+        return;
+    };
+
+    let total_units = parse_money_sort_value(data.summary.cost).max(1);
+    let total_calls = parse_count(data.summary.calls).max(1);
+    let model_units = parse_money_sort_value(entry.cost).min(total_units);
+    let model_calls = entry.calls.min(total_calls);
+    let cost_ratio = model_units as f64 / total_units as f64;
+    let call_ratio = model_calls as f64 / total_calls as f64;
+
+    // Retain the model's tools' project rows and rescale their costs and
+    // calls so they sum exactly to the model row (remainder onto the largest
+    // row, so the invariant is exact by construction).
+    data.project_tools
+        .retain(|row| tool_labels.contains(&row.tool));
+    let retained_calls: u64 = data
+        .project_tools
+        .iter()
+        .map(|row| row.calls)
+        .sum::<u64>()
+        .max(1);
+    // Costs are floored to cent granularity so each row's formatted "$x.yz"
+    // string round-trips exactly; the sub-cent remainder joins the largest
+    // row along with the integer-division remainder.
+    let mut scaled: Vec<(u64, u64)> = data
+        .project_tools
+        .iter()
+        .map(|row| {
+            (
+                parse_money_sort_value(row.cost) * model_units / retained_units / 100 * 100,
+                row.calls * model_calls / retained_calls,
+            )
+        })
+        .collect();
+    let largest = data
+        .project_tools
+        .iter()
+        .enumerate()
+        .max_by_key(|(_, row)| parse_money_sort_value(row.cost))
+        .map(|(idx, _)| idx)
+        .unwrap_or(0);
+    let unit_sum: u64 = scaled.iter().map(|(units, _)| units).sum();
+    let call_sum: u64 = scaled.iter().map(|(_, calls)| calls).sum();
+    scaled[largest].0 += model_units - unit_sum.min(model_units);
+    scaled[largest].1 += model_calls - call_sum.min(model_calls);
+    for (row, (units, calls)) in data.project_tools.iter_mut().zip(&scaled) {
+        row.cost = leak(format!("${:.2}", *units as f64 / 10_000.0));
+        row.calls = *calls;
+        row.avg_per_session = leak(format!(
+            "${:.2}",
+            *units as f64 / 10_000.0 / row.sessions.max(1) as f64
+        ));
+    }
+
+    // Rebuild the projects panel from the retained rows: a project used from
+    // several of the model's tools folds back into one row. Track each
+    // project's old/new cost so its sessions scale by the same ratio.
+    struct FoldedProject {
+        name: &'static str,
+        units: u64,
+        sessions: u64,
+        mix: Vec<(&'static str, u64)>,
+    }
+    let usd = CurrencyFormatter::usd();
+    let mut folded: Vec<FoldedProject> = Vec::new();
+    for row in &data.project_tools {
+        let units = parse_money_sort_value(row.cost);
+        match folded
+            .iter_mut()
+            .find(|project| project.name == row.project)
+        {
+            Some(project) => {
+                project.units += units;
+                project.sessions += row.sessions;
+                project.mix.push((row.tool, units));
+            }
+            None => folded.push(FoldedProject {
+                name: row.project,
+                units,
+                sessions: row.sessions,
+                mix: vec![(row.tool, units)],
+            }),
+        }
+    }
+    folded.sort_by(|a, b| b.units.cmp(&a.units).then_with(|| a.name.cmp(b.name)));
+    let project_max = folded
+        .first()
+        .map(|project| project.units)
+        .unwrap_or(0)
+        .max(1);
+    let old_project_units: Vec<(&'static str, u64)> = data
+        .projects
+        .iter()
+        .map(|project| (project.name, parse_money_sort_value(project.cost)))
+        .collect();
+    data.projects = folded
+        .iter()
+        .map(|project| {
+            let mut mix = project.mix.clone();
+            mix.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
+            let tool_mix = mix
+                .iter()
+                .take(3)
+                .map(|(tool, units)| {
+                    format!(
+                        "{tool} {}",
+                        usd.format_money_short(*units as f64 / 10_000.0)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("  ");
+            ProjectMetric {
+                name: project.name,
+                cost: leak(format!("${:.2}", project.units as f64 / 10_000.0)),
+                avg_per_session: leak(format!(
+                    "${:.2}",
+                    project.units as f64 / 10_000.0 / project.sessions.max(1) as f64
+                )),
+                sessions: project.sessions,
+                tool_mix: leak(tool_mix),
+                value: (project.units * 100 / project_max).clamp(1, 100),
+            }
+        })
+        .collect();
+
+    // Sessions: keep rows in the retained projects and scale each cost by
+    // its project's own before/after ratio.
+    data.sessions
+        .retain(|session| folded.iter().any(|project| project.name == session.project));
+    for session in &mut data.sessions {
+        let old = old_project_units
+            .iter()
+            .find(|(name, _)| *name == session.project)
+            .map(|(_, units)| *units)
+            .unwrap_or(0)
+            .max(1);
+        let new = folded
+            .iter()
+            .find(|project| project.name == session.project)
+            .map(|project| project.units)
+            .unwrap_or(0);
+        let units = parse_money_sort_value(session.cost) * new / old;
+        session.cost = leak(format!("${:.2}", units as f64 / 10_000.0));
+        session.calls = (session.calls as f64 * new as f64 / old as f64) as u64;
+    }
+    let session_max = data
+        .sessions
+        .iter()
+        .map(|session| parse_money_sort_value(session.cost))
+        .max()
+        .unwrap_or(0)
+        .max(1);
+    for session in &mut data.sessions {
+        session.value = (parse_money_sort_value(session.cost) * 100 / session_max).clamp(1, 100);
+    }
+
+    // Daily trend and the count panels scale by the model's overall share.
+    for day in &mut data.daily {
+        let units = (parse_money_sort_value(day.cost) as f64 * cost_ratio) as u64;
+        day.cost = leak(format!("${:.2}", units as f64 / 10_000.0));
+        day.calls = (day.calls as f64 * call_ratio) as u64;
+    }
+    for row in &mut data.tools {
+        row.calls = (row.calls as f64 * call_ratio) as u64;
+    }
+    for row in &mut data.commands {
+        row.calls = (row.calls as f64 * call_ratio) as u64;
+    }
+    for row in &mut data.mcp_servers {
+        row.calls = (row.calls as f64 * call_ratio) as u64;
+    }
+
+    // The By Model panel keeps only the selected model's per-tool rows.
+    data.models.retain(|model| model.name == entry.name);
+    let model_max = data
+        .models
+        .iter()
+        .map(|model| parse_money_sort_value(model.cost))
+        .max()
+        .unwrap_or(0)
+        .max(1);
+    for model in &mut data.models {
+        model.value = (parse_money_sort_value(model.cost) * 100 / model_max).clamp(1, 100);
+    }
+
+    data.summary.cost = leak(format!("${:.2}", model_units as f64 / 10_000.0));
+    data.summary.calls = leak(format_int(model_calls));
+    data.summary.sessions = leak(format_int(
+        folded.iter().map(|project| project.sessions).sum(),
+    ));
+    data.summary.cache_hit = entry.cache_hit;
+    data.summary.input = leak(format_compact(
+        (parse_compact_sort_value(data.summary.input) as f64 * cost_ratio) as u64,
+    ));
+    data.summary.output = leak(format_compact(
+        (parse_compact_sort_value(data.summary.output) as f64 * cost_ratio) as u64,
+    ));
+    data.summary.cached = leak(format_compact(
+        (parse_compact_sort_value(data.summary.cached) as f64 * cost_ratio) as u64,
+    ));
+    data.summary.written = leak(format_compact(
+        (parse_compact_sort_value(data.summary.written) as f64 * cost_ratio) as u64,
+    ));
 }
 
 fn apply_currency(data: &mut DashboardData, currency: &CurrencyFormatter) {
@@ -2385,6 +2924,7 @@ mod tests {
                 period,
                 Tool::All,
                 &ProjectFilter::All,
+                &ModelFilter::All,
                 SortMode::Spend,
                 &currency,
             );
@@ -2400,12 +2940,126 @@ mod tests {
     }
 
     #[test]
+    fn sample_model_filter_reconciles_summary_with_scoped_rows() {
+        let currency = CurrencyFormatter::usd();
+
+        for period in Period::ALL {
+            for entry in model_catalog_data(period, &currency) {
+                let filter = ModelFilter::Selected {
+                    canonical_id: entry.canonical_id.to_string(),
+                    label: entry.name.to_string(),
+                };
+                let data = dashboard_data(
+                    period,
+                    Tool::All,
+                    &ProjectFilter::All,
+                    &filter,
+                    SortMode::Spend,
+                    &currency,
+                );
+
+                // The scoped summary is exactly the catalog row's cost/calls.
+                assert_eq!(
+                    data.summary.cost, entry.cost,
+                    "period {period:?} model {}",
+                    entry.canonical_id
+                );
+                assert_eq!(parse_count(data.summary.calls), entry.calls);
+
+                // Reconcile invariant: retained project rows sum exactly to
+                // the scoped summary (remainders are assigned, not dropped).
+                let project_tool_sum: u64 = data
+                    .project_tools
+                    .iter()
+                    .map(|row| parse_money_sort_value(row.cost))
+                    .sum();
+                assert_eq!(
+                    project_tool_sum,
+                    parse_money_sort_value(data.summary.cost),
+                    "period {period:?} model {}",
+                    entry.canonical_id
+                );
+                let project_sum: u64 = data
+                    .projects
+                    .iter()
+                    .map(|row| parse_money_sort_value(row.cost))
+                    .sum();
+                assert_eq!(project_sum, project_tool_sum);
+
+                // Only the selected model's rows survive in the By Model panel.
+                assert!(!data.models.is_empty());
+                assert!(data.models.iter().all(|model| model.name == entry.name));
+            }
+        }
+    }
+
+    #[test]
+    fn sample_catalog_folds_shared_canonical_ids_across_tools() {
+        let currency = CurrencyFormatter::usd();
+        for period in Period::ALL {
+            let entries = model_catalog_data(period, &currency);
+            let mut seen = std::collections::HashSet::new();
+            for entry in &entries {
+                assert!(
+                    seen.insert(entry.canonical_id),
+                    "duplicate canonical id {} in {period:?} catalog",
+                    entry.canonical_id
+                );
+                // Each entry's per-tool split sums back to its own totals.
+                let split_calls: u64 = entry.per_tool.iter().map(|split| split.calls).sum();
+                assert_eq!(split_calls, entry.calls);
+                let split_cost: u64 = entry
+                    .per_tool
+                    .iter()
+                    .map(|split| parse_money_sort_value(split.cost))
+                    .sum();
+                assert_eq!(split_cost, parse_money_sort_value(entry.cost));
+            }
+        }
+        // The bundled week data uses Sonnet from two tools — the fold must
+        // produce one entry with a genuine multi-tool split.
+        assert!(model_catalog_data(Period::Week, &currency)
+            .iter()
+            .any(|entry| entry.per_tool.len() > 1));
+    }
+
+    #[test]
+    fn sample_model_detail_matches_scoped_summary_composition() {
+        let currency = CurrencyFormatter::usd();
+        let entries = model_catalog_data(Period::Week, &currency);
+        let entry = entries.first().expect("sample catalog has entries");
+
+        let detail = model_detail_data(Period::Week, entry.canonical_id, &currency)
+            .expect("catalog model has detail");
+        let filter = ModelFilter::Selected {
+            canonical_id: entry.canonical_id.to_string(),
+            label: entry.name.to_string(),
+        };
+        let data = dashboard_data(
+            Period::Week,
+            Tool::All,
+            &ProjectFilter::All,
+            &filter,
+            SortMode::Spend,
+            &currency,
+        );
+        assert_eq!(
+            detail.composition.input_label, data.summary.input,
+            "composition mirrors the scoped summary"
+        );
+        assert!(!detail.pricing.avg_cost_per_call.is_empty());
+
+        assert!(model_detail_data(Period::Week, "never-used-model", &currency).is_none());
+    }
+
+    #[test]
     fn sample_today_dates_are_relative_to_current_day() {
         let currency = CurrencyFormatter::usd();
         let data = dashboard_data(
             Period::Today,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Spend,
             &currency,
         );
@@ -2425,6 +3079,7 @@ mod tests {
             Period::Week,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Spend,
             &currency,
         );
@@ -2432,6 +3087,7 @@ mod tests {
             Period::Week,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Tokens,
             &currency,
         );

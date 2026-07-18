@@ -581,6 +581,7 @@ pub fn run() {
             commands::get_tool_page,
             commands::get_project_index,
             commands::get_project_page,
+            commands::get_model_page,
             commands::get_analytics,
             commands::get_coach,
             commands::get_coach_timeline,

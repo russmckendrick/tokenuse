@@ -32,7 +32,7 @@ pub(super) fn render_title_bar(frame: &mut Frame<'_>, area: Rect, app: &App) {
         .constraints([
             Constraint::Length(28),
             Constraint::Min(20),
-            Constraint::Length(58),
+            Constraint::Length(76),
         ])
         .split(inner);
 
@@ -74,6 +74,9 @@ pub(super) fn render_title_bar(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Span::styled("  ·  ", theme::dim()),
         Span::styled("[p] ", theme::key()),
         Span::styled(app.project_filter.label().to_string(), theme::muted()),
+        Span::styled("  ·  ", theme::dim()),
+        Span::styled("[m] ", theme::key()),
+        Span::styled(app.model_filter.label().to_string(), theme::muted()),
         Span::styled("  ·  ", theme::dim()),
         Span::styled("[g] ", theme::key()),
         Span::styled(app.sort.label(), theme::muted()),
@@ -588,6 +591,7 @@ pub(super) fn render_limits(frame: &mut Frame<'_>, area: Rect, root: Rect, app: 
 
     render_footer(frame, sections[3], app);
     render_project_modal(frame, root, app);
+    render_model_modal(frame, root, app);
     render_currency_modal(frame, root, app);
 }
 
@@ -1020,6 +1024,7 @@ pub(super) fn render_session_page(frame: &mut Frame<'_>, area: Rect, root: Rect,
     render_session_modal(frame, root, app);
     render_currency_modal(frame, root, app);
     render_project_modal(frame, root, app);
+    render_model_modal(frame, root, app);
     render_call_detail_modal(frame, root, app);
 }
 
@@ -2253,6 +2258,89 @@ pub(super) fn render_project_modal(frame: &mut Frame<'_>, area: Rect, app: &App)
     .header(Row::new(vec![
         Cell::from(""),
         Cell::from(copy.tables.project.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.cost.as_str()).style(theme::dim()),
+        Cell::from(copy.tables.calls.as_str()).style(theme::dim()),
+    ]))
+    .column_spacing(1);
+
+    frame.render_widget(table, table_area);
+}
+
+pub(super) fn render_model_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
+    let Some(modal) = app.model_modal.as_ref() else {
+        return;
+    };
+
+    let width = 76.min(area.width.saturating_sub(4)).max(48);
+    let height = (modal.filtered.len() as u16 + 4)
+        .min(area.height.saturating_sub(4))
+        .max(8);
+    let modal_area = centered_rect(width, height, area);
+    Clear.render(modal_area, frame.buffer_mut());
+
+    let copy = copy();
+    let title = picker_title(
+        copy.modals.model.as_str(),
+        modal.selected,
+        modal.filtered.len(),
+        modal.options.len(),
+        modal.query.is_empty(),
+    );
+    let block = theme::panel_block(&title, theme::MAGENTA);
+    let inner = block.inner(modal_area);
+    block.render(modal_area, frame.buffer_mut());
+
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1)])
+        .split(inner);
+
+    render_filter_input(frame, layout[0], &modal.query);
+
+    let table_area = layout[1];
+    let row_capacity = table_area.height.saturating_sub(1).max(1) as usize;
+    let selected = modal.selected.min(modal.filtered.len().saturating_sub(1));
+    let start = selected.saturating_add(1).saturating_sub(row_capacity);
+    let end = (start + row_capacity).min(modal.filtered.len());
+
+    let rows = modal.filtered[start..end]
+        .iter()
+        .enumerate()
+        .map(|(offset, &option_idx)| {
+            let idx = start + offset;
+            let option = &modal.options[option_idx];
+            let is_selected = idx == modal.selected;
+            let bg = if is_selected {
+                theme::SURFACE
+            } else {
+                theme::BACKGROUND
+            };
+            let marker = if is_selected { ">" } else { " " };
+
+            Row::new(vec![
+                Cell::from(marker).style(theme::key().bg(bg)),
+                Cell::from(option.label.as_str()).style(if is_selected {
+                    theme::key().bg(bg)
+                } else {
+                    theme::muted().bg(bg)
+                }),
+                Cell::from(option.cost.as_str()).style(theme::money().bg(bg)),
+                Cell::from(option.calls.to_string()).style(theme::base().bg(bg)),
+            ])
+        });
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(2),
+            Constraint::Min(30),
+            Constraint::Length(10),
+            Constraint::Length(8),
+        ],
+    )
+    .header(Row::new(vec![
+        Cell::from(""),
+        Cell::from(copy.tables.model.as_str()).style(theme::dim()),
         Cell::from(copy.tables.cost.as_str()).style(theme::dim()),
         Cell::from(copy.tables.calls.as_str()).style(theme::dim()),
     ]))

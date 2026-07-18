@@ -18,6 +18,7 @@
   export let openSessionPicker: () => void;
   export let openSession: (key: string) => void;
   export let openProject: (name: string) => void;
+  export let openModel: (id: string, name: string) => void;
 
   let analytics: AnalyticsData | null = null;
   let analyticsKey = '';
@@ -103,7 +104,7 @@
       <ProjectTable rows={snapshot.dashboard.projects} copy={snapshot.copy} {openProject} />
     </Panel>
     <Panel title={snapshot.copy.panels.model_efficiency} tone="magenta" scrollable>
-      <ModelTable rows={snapshot.dashboard.models} copy={snapshot.copy} />
+      <ModelTable rows={snapshot.dashboard.models} copy={snapshot.copy} {openModel} />
     </Panel>
   </section>
 

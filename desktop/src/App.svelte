@@ -23,6 +23,7 @@
   import AnalyticsPage from './routes/AnalyticsPage.svelte';
   import ConfigView from './views/ConfigView.svelte';
   import ProjectPage from './routes/ProjectPage.svelte';
+  import ModelPage from './routes/ModelPage.svelte';
   import SessionView from './views/SessionView.svelte';
   import type {
     ConfigRow,
@@ -156,6 +157,11 @@
 
   function navigate(next: Route) {
     cancelScrollRestore();
+    // Jumping to a plain route (sidebar, tabs, nav keys) ends any drill-in
+    // trail; drill targets and the session sub-route keep it alive.
+    if (!next.model && !next.project && next.page !== 'session') {
+      drillReturns = [];
+    }
     router.go(next);
   }
 
@@ -182,7 +188,7 @@
         return nav.tools;
       }
       case 'models':
-        return nav.models;
+        return route.model?.label ?? nav.models;
       case 'scrollback':
         return nav.scrollback;
       case 'projects':
@@ -414,10 +420,72 @@
   }
 
   async function openProjectPage(identity: string | null, label: string) {
-    navigate(identity ? { page: 'projects', project: { identity, label } } : { page: 'projects' });
+    if (identity) {
+      await openDrill({ page: 'projects', project: { identity, label } });
+    } else {
+      navigate({ page: 'projects' });
+      await tick();
+      pageScrollEl?.scrollTo({ top: 0 });
+    }
+  }
+
+  async function openModelPage(id: string, label: string) {
+    await openDrill({ page: 'models', model: { id, label } });
+  }
+
+  /** Drill-in navigation (model and project detail pages): remember where we
+   * came from — route plus scroll — so the back chip and Esc return there.
+   * Plain `navigate` to a non-drill route clears the trail; sessions keep
+   * their own single-slot return and leave the trail intact. */
+  type DrillReturn = { route: Route; scroll: number; height: number };
+  let drillReturns: DrillReturn[] = [];
+
+  function sameDrillTarget(a: Route, b: Route): boolean {
+    return (
+      a.page === b.page &&
+      a.model?.id === b.model?.id &&
+      a.project?.identity === b.project?.identity
+    );
+  }
+
+  async function openDrill(target: Route) {
+    if (!sameDrillTarget(router.route, target)) {
+      drillReturns = [
+        ...drillReturns,
+        {
+          route: { ...router.route },
+          scroll: pageScrollEl?.scrollTop ?? 0,
+          height: pageScrollEl?.scrollHeight ?? 0
+        }
+      ];
+    }
+    navigate(target);
     await tick();
     pageScrollEl?.scrollTo({ top: 0 });
   }
+
+  async function popDrill() {
+    const prev = drillReturns[drillReturns.length - 1];
+    drillReturns = drillReturns.slice(0, -1);
+    if (!prev) {
+      // No recorded origin (shouldn't happen in practice): fall back to the
+      // drill-in's own index page.
+      navigate({ page: router.route.page });
+      return;
+    }
+    navigate(prev.route);
+    await tick();
+    restorePageScroll(prev.scroll, prev.height);
+  }
+
+  $: drillBackTarget = drillReturns[drillReturns.length - 1]?.route ?? null;
+  $: drillBackLabel = snapshot
+    ? drillBackTarget
+      ? pageTitle(drillBackTarget, snapshot)
+      : router.route.model
+        ? snapshot.copy.nav.models
+        : snapshot.copy.nav.projects
+    : '';
 
   /** Client-side navigation keys; everything else falls through to the shared keymap. */
   function clientNavTarget(event: KeyboardEvent): Route | null {
@@ -461,6 +529,7 @@
       if (callDetail) closeCallDetail();
       else if (modal) closeModal();
       else if (router.route.page === 'session') closeSession();
+      else if (router.route.model || router.route.project) void popDrill();
       return;
     }
 
@@ -974,7 +1043,7 @@
         {snapshot}
         showPeriod={router.route.page !== 'config' && router.route.page !== 'session' && router.route.page !== 'scrollback' && (router.route.page !== 'tools' || router.route.tool !== undefined)}
         showTool={router.route.page === 'overview' || router.route.page === 'analytics' || router.route.page === 'coach'}
-        showSort={router.route.page !== 'config' && router.route.page !== 'session' && router.route.page !== 'models' && router.route.page !== 'coach' && router.route.page !== 'scrollback'}
+        showSort={router.route.page !== 'config' && router.route.page !== 'session' && (router.route.page !== 'models' || router.route.model !== undefined) && router.route.page !== 'coach' && router.route.page !== 'scrollback'}
         showProject={router.route.page === 'overview' || router.route.page === 'analytics' || router.route.page === 'coach' || (router.route.page === 'projects' && !router.route.project)}
         {setPeriod}
         setTool={setToolFromEvent}
@@ -985,23 +1054,27 @@
       />
 
       <main class="page-scroll" bind:this={pageScrollEl}>
-        {#key `${router.route.page}:${router.route.tool ?? ''}:${router.route.project?.identity ?? ''}`}
+        {#key `${router.route.page}:${router.route.tool ?? ''}:${router.route.project?.identity ?? ''}:${router.route.model?.id ?? ''}`}
           <div class="route-view" use:pageTransition>
             {#if router.route.page === 'overview'}
-              <OverviewPage {snapshot} {openProject} />
+              <OverviewPage {snapshot} {openProject} openModel={openModelPage} />
             {:else if router.route.page === 'analytics'}
-              <AnalyticsPage {snapshot} openSessionPicker={() => openModal('session')} {openSession} {openProject} />
+              <AnalyticsPage {snapshot} openSessionPicker={() => openModal('session')} {openSession} {openProject} openModel={openModelPage} />
             {:else if router.route.page === 'coach'}
               <CoachPage {snapshot} />
             {:else if router.route.page === 'scrollback'}
               <ScrollbackPage {snapshot} {openSession} />
             {:else if router.route.page === 'tools'}
-              <ToolsPage {snapshot} tool={router.route.tool} {usageTone} {navigate} {openSession} {openProject} />
+              <ToolsPage {snapshot} tool={router.route.tool} {usageTone} {navigate} {openSession} {openProject} openModel={openModelPage} />
             {:else if router.route.page === 'models'}
-              <ModelsPage {snapshot} />
+              {#if router.route.model}
+                <ModelPage {snapshot} model={router.route.model} {openSession} {openProject} backLabel={drillBackLabel} goBack={popDrill} />
+              {:else}
+                <ModelsPage {snapshot} {openModelPage} />
+              {/if}
             {:else if router.route.page === 'projects'}
               {#if router.route.project}
-                <ProjectPage {snapshot} project={router.route.project} {openSession} />
+                <ProjectPage {snapshot} project={router.route.project} {openSession} openModel={openModelPage} backLabel={drillBackLabel} goBack={popDrill} />
               {:else}
                 <ProjectsPage {snapshot} {openProjectPage} />
               {/if}

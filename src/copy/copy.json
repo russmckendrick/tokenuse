@@ -432,6 +432,10 @@
     "cache_write": "Cache Write",
     "cache_read_price": "Cache Read Price",
     "cache_write_price": "Cache Write Price",
+    "input_price": "Input Price",
+    "output_price": "Output Price",
+    "per_mtok": "per Mtok",
+    "avg_cost_per_call": "Avg Cost / Call",
     "input": "Input",
     "output": "Output",
     "in": "In",
@@ -676,6 +680,7 @@
   "modals": {
     "help_title": "Help · keybindings",
     "project": "Project",
+    "model": "Model",
     "currency": "Currency",
     "session": "Session",
     "export": "Report",
@@ -829,6 +834,9 @@
     "by_provider": "By provider",
     "by_tool": "By tool",
     "per_tool_split": "Per-tool split",
+    "token_composition": "Token Composition",
+    "pricing": "Pricing",
+    "pricing_fallback_note": "Fallback pricing in use — costs for this model are estimates until a pricing alias lands.",
     "hour_heatmap": "Activity by hour",
     "daily_by_tool": "Daily spend by tool",
     "hourly_by_tool": "Hourly spend by tool",
@@ -1080,6 +1088,7 @@
       "open_export_folder_picker": "browse report folder",
       "open_export_picker": "open report generator",
       "open_help": "open help",
+      "open_model_picker": "model picker",
       "open_project_picker": "project picker",
       "open_session_picker": "session picker",
       "page_coach": "Coach",
@@ -1168,6 +1177,11 @@
             "keys": "p",
             "label": "project picker (typeable)",
             "action": "open_project_picker"
+          },
+          {
+            "keys": "m",
+            "label": "model picker (typeable)",
+            "action": "open_model_picker"
           }
         ]
       },

@@ -4,15 +4,16 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, TimeZone, Timelike, Utc};
 use color_eyre::Result;
 
-use crate::app::{Period, ProjectFilter, SortMode, Tool};
+use crate::app::{ModelFilter, Period, ProjectFilter, SortMode, Tool};
 use crate::copy::copy;
 use crate::currency::CurrencyFormatter;
 use crate::data::{
     ActivityMetric, AnalyticsData, CountMetric, DailyMetric, DashboardData, LimitMetric,
-    LimitsData, ModelCatalogEntry, ModelMetric, ModelToolBreakdown, PlanValueMetric,
-    ProjectIndexRow, ProjectMetric, ProjectOption, ProjectToolMetric, ProjectToolSplit,
-    RecentModelMetric, RecentUsageMetric, SessionDetail, SessionDetailView, SessionMetric,
-    SessionOption, ShareMetric, StackSegment, StackedDayMetric, Summary, ToolLimitSection,
+    LimitsData, ModelCatalogEntry, ModelMetric, ModelPageDetail, ModelPricingInfo,
+    ModelToolBreakdown, PlanValueMetric, ProjectIndexRow, ProjectMetric, ProjectOption,
+    ProjectToolMetric, ProjectToolSplit, RecentModelMetric, RecentUsageMetric, SessionDetail,
+    SessionDetailView, SessionMetric, SessionOption, ShareMetric, StackSegment, StackedDayMetric,
+    Summary, TokenComposition, ToolLimitSection,
 };
 use crate::pricing;
 use crate::tools::{self, LimitSnapshot, LimitWindow, ParsedCall};
@@ -138,6 +139,7 @@ impl Ingested {
         period: Period,
         tool: Tool,
         project_filter: &ProjectFilter,
+        model_filter: &ModelFilter,
         sort: SortMode,
         currency: &CurrencyFormatter,
     ) -> DashboardData {
@@ -148,6 +150,7 @@ impl Ingested {
             .filter(|c| {
                 matches_tool(c, tool)
                     && matches_project(c, project_filter)
+                    && matches_model(c, model_filter)
                     && in_period(c, period, now)
             })
             .collect();
@@ -194,6 +197,30 @@ impl Ingested {
             .filter(|c| in_period(c, period, now))
             .collect();
         build_model_catalog(&filtered, currency)
+    }
+
+    /// Model-page extras for one canonical model: token composition and
+    /// effective pricing. `None` when the model has no calls in the period.
+    pub fn model_detail(
+        &self,
+        period: Period,
+        canonical_id: &str,
+        currency: &CurrencyFormatter,
+    ) -> Option<ModelPageDetail> {
+        let filter = ModelFilter::Selected {
+            canonical_id: canonical_id.to_string(),
+            label: String::new(),
+        };
+        let now = Local::now();
+        let filtered: Vec<&ParsedCall> = self
+            .calls
+            .iter()
+            .filter(|c| matches_model(c, &filter) && in_period(c, period, now))
+            .collect();
+        if filtered.is_empty() {
+            return None;
+        }
+        Some(build_model_detail(&filtered, currency))
     }
 
     /// Time-explorer aggregates: per-day per-tool stacks, an hour-by-weekday
@@ -286,6 +313,7 @@ impl Ingested {
         period: Period,
         tool: Tool,
         project_filter: &ProjectFilter,
+        model_filter: &ModelFilter,
         sort: SortMode,
         currency: &CurrencyFormatter,
     ) -> Vec<SessionOption> {
@@ -296,6 +324,7 @@ impl Ingested {
             .filter(|c| {
                 matches_tool(c, tool)
                     && matches_project(c, project_filter)
+                    && matches_model(c, model_filter)
                     && in_period(c, period, now)
             })
             .collect();
@@ -512,6 +541,15 @@ fn matches_project(call: &ParsedCall, project_filter: &ProjectFilter) -> bool {
     match project_filter {
         ProjectFilter::All => true,
         ProjectFilter::Selected { identity, .. } => project_identity(&call.project) == *identity,
+    }
+}
+
+fn matches_model(call: &ParsedCall, model_filter: &ModelFilter) -> bool {
+    match model_filter {
+        ModelFilter::All => true,
+        ModelFilter::Selected { canonical_id, .. } => {
+            crate::models::resolve(call.tool, &call.model).canonical_id == *canonical_id
+        }
     }
 }
 
@@ -1991,7 +2029,8 @@ fn aggregate_models(
 
     rows.into_iter()
         .enumerate()
-        .map(|(idx, (_, acc))| ModelMetric {
+        .map(|(idx, (canonical, acc))| ModelMetric {
+            canonical_id: leak(canonical),
             name: leak(acc.display.clone()),
             provider: acc.provider,
             provider_label: acc.provider_label,
@@ -2100,6 +2139,71 @@ fn build_model_catalog(
             }
         })
         .collect()
+}
+
+fn build_model_detail(calls: &[&ParsedCall], currency: &CurrencyFormatter) -> ModelPageDetail {
+    let input: u64 = calls.iter().map(|c| c.input_tokens).sum();
+    let output: u64 = calls.iter().map(|c| c.output_tokens).sum();
+    let cache_read: u64 = calls.iter().map(|c| c.cache_read_input_tokens).sum();
+    let cache_write: u64 = calls.iter().map(|c| c.cache_creation_input_tokens).sum();
+    let total_cost: f64 = calls.iter().map(|c| c.cost_usd).sum();
+
+    // Rates come from the raw (tool, model) pairs — never the canonical id —
+    // so tool-scoped aliases and overrides apply and synthetic canonical ids
+    // don't falsely hit the fallback row. The latest timestamp per pair picks
+    // the effective book row.
+    let mut pairs: HashMap<(&'static str, &str), Option<DateTime<Utc>>> = HashMap::new();
+    for c in calls {
+        let entry = pairs.entry((c.tool, c.model.as_str())).or_default();
+        *entry = (*entry).max(c.timestamp);
+    }
+    let per_mtok = |rate: f64| -> String {
+        if rate <= 0.0 {
+            "-".into()
+        } else {
+            currency.format_money(rate * 1_000_000.0)
+        }
+    };
+    let mut input_rates = HashSet::new();
+    let mut output_rates = HashSet::new();
+    let mut cache_read_prices = HashSet::new();
+    let mut cache_write_prices = HashSet::new();
+    let mut cache_read_rates = HashSet::new();
+    let mut cache_write_rates = HashSet::new();
+    let mut fallback = false;
+    for ((tool, model), timestamp) in &pairs {
+        let price = pricing::price_for(tool, model, *timestamp);
+        input_rates.insert(per_mtok(price.input));
+        output_rates.insert(per_mtok(price.output));
+        cache_read_prices.insert(per_mtok(price.cache_read));
+        cache_write_prices.insert(per_mtok(price.cache_write));
+        cache_read_rates.insert(pricing::cache_read_rate_label_for(tool, model, *timestamp));
+        cache_write_rates.insert(pricing::cache_write_rate_label_for(tool, model, *timestamp));
+        fallback |= pricing::uses_fallback(tool, model, *timestamp);
+    }
+
+    ModelPageDetail {
+        composition: TokenComposition {
+            input,
+            output,
+            cache_read,
+            cache_write,
+            input_label: leak(format_compact(input)),
+            output_label: leak(format_compact(output)),
+            cache_read_label: leak(format_compact(cache_read)),
+            cache_write_label: leak(format_compact(cache_write)),
+        },
+        pricing: ModelPricingInfo {
+            input_per_mtok: leak(uniform_rate_label(input_rates)),
+            output_per_mtok: leak(uniform_rate_label(output_rates)),
+            cache_read_per_mtok: leak(uniform_rate_label(cache_read_prices)),
+            cache_write_per_mtok: leak(uniform_rate_label(cache_write_prices)),
+            cache_read_rate: leak(uniform_rate_label(cache_read_rates)),
+            cache_write_rate: leak(uniform_rate_label(cache_write_rates)),
+            avg_cost_per_call: leak(currency.format_money(total_cost / calls.len() as f64)),
+            fallback,
+        },
+    }
 }
 
 fn build_analytics(
@@ -2440,6 +2544,110 @@ mod tests {
             model: "claude-opus-4-7".into(),
             ..ParsedCall::default()
         }
+    }
+
+    #[test]
+    fn model_filter_scopes_dashboard_and_folds_dated_ids() {
+        let now = chrono::Utc::now().to_rfc3339();
+        let mut opus_dated = mk_call("claude-code", &now, 2.0);
+        opus_dated.model = "claude-opus-4-7-20250115".into();
+        opus_dated.session_id = "s-opus".into();
+        let opus = mk_call("claude-code", &now, 1.0);
+        let mut gpt = mk_call("codex", &now, 4.0);
+        gpt.model = "gpt-5".into();
+        gpt.session_id = "s-gpt".into();
+
+        let ingested = Ingested {
+            calls: vec![opus_dated, opus, gpt],
+            limits: Vec::new(),
+        };
+        let canonical = crate::models::resolve("claude-code", "claude-opus-4-7").canonical_id;
+        let filter = ModelFilter::Selected {
+            canonical_id: canonical,
+            label: "Opus".into(),
+        };
+        let usd = CurrencyFormatter::usd();
+        let scoped = ingested.dashboard(
+            Period::AllTime,
+            Tool::All,
+            &ProjectFilter::All,
+            &filter,
+            SortMode::Spend,
+            &usd,
+        );
+
+        // Both raw opus ids fold into the canonical row; the gpt call is out.
+        assert_eq!(scoped.summary.cost, "$3.00");
+        assert_eq!(scoped.summary.calls, "2");
+        assert_eq!(scoped.models.len(), 1);
+
+        let sessions = ingested.session_options(
+            Period::AllTime,
+            Tool::All,
+            &ProjectFilter::All,
+            &filter,
+            SortMode::Spend,
+            &usd,
+        );
+        assert_eq!(sessions.len(), 2);
+        assert!(sessions
+            .iter()
+            .all(|option| option.key.contains("s-opus") || option.key.contains("s1")));
+    }
+
+    #[test]
+    fn model_detail_sums_token_buckets_and_flags_fallback() {
+        let now = chrono::Utc::now().to_rfc3339();
+        let mut first = mk_call("claude-code", &now, 2.0);
+        first.input_tokens = 100;
+        first.output_tokens = 50;
+        first.cache_read_input_tokens = 500;
+        first.cache_creation_input_tokens = 40;
+        let mut second = mk_call("claude-code", &now, 1.0);
+        second.input_tokens = 30;
+        second.output_tokens = 20;
+        second.cache_read_input_tokens = 100;
+        second.cache_creation_input_tokens = 10;
+        let mut other = mk_call("codex", &now, 4.0);
+        other.model = "gpt-5".into();
+        other.input_tokens = 9_999;
+
+        let ingested = Ingested {
+            calls: vec![first, second, other],
+            limits: Vec::new(),
+        };
+        let canonical = crate::models::resolve("claude-code", "claude-opus-4-7").canonical_id;
+        let usd = CurrencyFormatter::usd();
+        let detail = ingested
+            .model_detail(Period::AllTime, &canonical, &usd)
+            .expect("model has calls in period");
+
+        assert_eq!(detail.composition.input, 130);
+        assert_eq!(detail.composition.output, 70);
+        assert_eq!(detail.composition.cache_read, 600);
+        assert_eq!(detail.composition.cache_write, 50);
+        assert_eq!(detail.pricing.avg_cost_per_call, "$1.50");
+        assert!(!detail.pricing.fallback);
+        assert_ne!(detail.pricing.input_per_mtok, "-");
+
+        // A proxy-renamed model no book knows falls back — the panel says so.
+        let mut proxy = mk_call("claude-code", &now, 1.0);
+        proxy.model = "my-proxy-model-9000".into();
+        let proxy_canonical =
+            crate::models::resolve("claude-code", "my-proxy-model-9000").canonical_id;
+        let proxied = Ingested {
+            calls: vec![proxy],
+            limits: Vec::new(),
+        };
+        let proxy_detail = proxied
+            .model_detail(Period::AllTime, &proxy_canonical, &usd)
+            .expect("proxy model has calls");
+        assert!(proxy_detail.pricing.fallback);
+
+        // No calls for the model in the period: no detail payload.
+        assert!(ingested
+            .model_detail(Period::AllTime, "never-used-model", &usd)
+            .is_none());
     }
 
     #[test]
@@ -3215,6 +3423,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
@@ -3222,6 +3431,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Date,
             &CurrencyFormatter::usd(),
         );
@@ -3229,6 +3439,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Tokens,
             &CurrencyFormatter::usd(),
         );
@@ -3273,6 +3484,7 @@ mod tests {
             Period::Today,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
@@ -3280,6 +3492,7 @@ mod tests {
             Period::Week,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
@@ -3435,6 +3648,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
@@ -3442,6 +3656,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Tokens,
             &CurrencyFormatter::usd(),
         );
@@ -3542,6 +3757,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
@@ -3570,6 +3786,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
@@ -3675,6 +3892,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
@@ -3713,6 +3931,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
@@ -3742,6 +3961,7 @@ mod tests {
             Period::AllTime,
             Tool::Codex,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
@@ -3756,6 +3976,7 @@ mod tests {
             Period::AllTime,
             Tool::Gemini,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
@@ -3791,6 +4012,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &filter,
+            &ModelFilter::All,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
@@ -3827,6 +4049,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
@@ -3920,6 +4143,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
         );
@@ -3948,6 +4172,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Spend,
             &CurrencyFormatter::usd(),
         );

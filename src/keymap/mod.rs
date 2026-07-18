@@ -15,6 +15,7 @@ pub const CONTEXT_SCROLLBACK_INPUT: &str = "scrollback_input";
 pub const CONTEXT_HELP: &str = "help";
 pub const CONTEXT_CALL_DETAIL: &str = "call_detail";
 pub const CONTEXT_PROJECT_PICKER: &str = "project_picker";
+pub const CONTEXT_MODEL_PICKER: &str = "model_picker";
 pub const CONTEXT_SESSION_PICKER: &str = "session_picker";
 pub const CONTEXT_CURRENCY_PICKER: &str = "currency_picker";
 pub const CONTEXT_DOWNLOAD_CONFIRM: &str = "download_confirm";
@@ -41,6 +42,7 @@ pub const ACTION_CYCLE_TOOL: &str = "cycle_tool";
 pub const ACTION_CYCLE_SORT: &str = "cycle_sort";
 pub const ACTION_TOGGLE_DATA_SOURCE: &str = "toggle_data_source";
 pub const ACTION_OPEN_PROJECT_PICKER: &str = "open_project_picker";
+pub const ACTION_OPEN_MODEL_PICKER: &str = "open_model_picker";
 pub const ACTION_OPEN_SESSION_PICKER: &str = "open_session_picker";
 pub const ACTION_OPEN_EXPORT_PICKER: &str = "open_export_picker";
 pub const ACTION_OPEN_EXPORT_FOLDER_PICKER: &str = "open_export_folder_picker";
@@ -86,6 +88,7 @@ const SUPPORTED_ACTIONS: &[&str] = &[
     ACTION_CYCLE_SORT,
     ACTION_TOGGLE_DATA_SOURCE,
     ACTION_OPEN_PROJECT_PICKER,
+    ACTION_OPEN_MODEL_PICKER,
     ACTION_OPEN_SESSION_PICKER,
     ACTION_OPEN_EXPORT_PICKER,
     ACTION_OPEN_EXPORT_FOLDER_PICKER,

@@ -19,6 +19,7 @@
   export let navigate: (route: Route) => void;
   export let openSession: (key: string) => void;
   export let openProject: (name: string) => void;
+  export let openModel: (id: string, name: string) => void;
 
   function routeIdFor(label: string): RouteToolId | null {
     const match = snapshot.tools.find((option) => option.value !== 'all' && option.label === label);
@@ -216,7 +217,7 @@
         <ProjectTable rows={toolPage.dashboard.projects} copy={snapshot.copy} {openProject} />
       </Panel>
       <Panel title={snapshot.copy.desktop.top_models} tone="magenta" scrollable>
-        <ModelTable rows={toolPage.dashboard.models} copy={snapshot.copy} />
+        <ModelTable rows={toolPage.dashboard.models} copy={snapshot.copy} {openModel} />
       </Panel>
     </section>
 

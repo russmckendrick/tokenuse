@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 use color_eyre::Result;
 use serde_json::{json, Map, Value};
 
-use crate::app::{Period, ProjectFilter, SortMode, Tool};
+use crate::app::{ModelFilter, Period, ProjectFilter, SortMode, Tool};
 use crate::archive;
 use crate::config::{ConfigPaths, UserConfig};
 use crate::copy::{copy, template};
@@ -444,6 +444,7 @@ fn overview_payload(ingested: &Ingested, formatter: &CurrencyFormatter) -> Value
         period,
         Tool::All,
         &ProjectFilter::All,
+        &ModelFilter::All,
         SortMode::Spend,
         formatter,
     );
@@ -496,6 +497,7 @@ fn projects_payload(
         Period::Month,
         Tool::All,
         &ProjectFilter::All,
+        &ModelFilter::All,
         SortMode::Spend,
         formatter,
     );
@@ -531,6 +533,7 @@ fn month_label_by_identity(
         Period::Month,
         Tool::All,
         &ProjectFilter::All,
+        &ModelFilter::All,
         SortMode::Spend,
         formatter,
     );

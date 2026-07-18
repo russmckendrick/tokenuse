@@ -187,6 +187,7 @@ fn slugify(s: &str) -> String {
 mod tests {
     use super::super::labels;
     use super::*;
+    use crate::app::ModelFilter;
     use crate::config::ConfigPaths;
     use crate::currency::CurrencyFormatter;
     use crate::data::{
@@ -218,6 +219,7 @@ mod tests {
             Period::AllTime,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             crate::app::SortMode::Spend,
             &CurrencyFormatter::usd(),
         );

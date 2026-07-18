@@ -12,7 +12,8 @@ use ratatui::{
 };
 
 use super::sections::{
-    render_currency_modal, render_footer, render_project_modal, render_title_bar,
+    render_currency_modal, render_footer, render_model_modal, render_project_modal,
+    render_title_bar,
 };
 use crate::app::{App, DataSource};
 use crate::copy::{copy, template};
@@ -35,6 +36,7 @@ pub(super) fn render_scrollback(frame: &mut Frame<'_>, area: Rect, root: Rect, a
     render_results(frame, sections[2], app);
     render_footer(frame, sections[3], app);
     render_project_modal(frame, root, app);
+    render_model_modal(frame, root, app);
     render_currency_modal(frame, root, app);
 }
 

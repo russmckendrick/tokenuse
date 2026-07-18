@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ArrowLeft } from 'lucide-svelte';
   import { api } from '../api';
   import Donut from '../charts/Donut.svelte';
   import ActivityPulse from '../components/ActivityPulse.svelte';
@@ -20,6 +21,9 @@
   export let snapshot: DesktopSnapshot;
   export let project: { identity: string; label: string };
   export let openSession: (key: string) => void;
+  export let openModel: (id: string, name: string) => void;
+  export let backLabel: string;
+  export let goBack: () => void;
 
   const SESSION_PAGE_SIZE = 60;
 
@@ -129,6 +133,10 @@
 
 {#if data}
   <section class="page-flow" use:staggeredReveal={{ selector: ':scope > *', y: 5, stagger: 0.03 }}>
+    <div class="drill-back">
+      <button type="button" onclick={goBack}><ArrowLeft size={15} /> {backLabel}</button>
+    </div>
+
     <section class="kpis hero-kpis project-kpis">
       <div>
         <span>{snapshot.copy.metrics.cost}</span>
@@ -254,7 +262,7 @@
         {/if}
       </Panel>
       <Panel title={snapshot.copy.desktop.top_models} tone="magenta" scrollable>
-        <ModelTable rows={data.dashboard.models} copy={snapshot.copy} />
+        <ModelTable rows={data.dashboard.models} copy={snapshot.copy} {openModel} />
       </Panel>
     </section>
 
@@ -306,6 +314,10 @@
 {/if}
 
 <style>
+  .drill-back {
+    display: flex;
+  }
+
   .project-kpis {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }

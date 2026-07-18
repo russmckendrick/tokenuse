@@ -6,7 +6,7 @@
 use color_eyre::Result;
 use serde::Serialize;
 
-use crate::app::{Period, ProjectFilter, SortMode, Tool};
+use crate::app::{ModelFilter, Period, ProjectFilter, SortMode, Tool};
 use crate::archive;
 use crate::config::{ConfigPaths, UserConfig};
 use crate::copy::{copy, template};
@@ -134,6 +134,7 @@ pub fn run_overview(json: bool) -> Result<()> {
         period,
         Tool::All,
         &ProjectFilter::All,
+        &ModelFilter::All,
         SortMode::Spend,
         &data.formatter,
     );

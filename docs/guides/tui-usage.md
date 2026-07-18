@@ -39,6 +39,8 @@ Project names are normalized across tools. Absolute paths are folded to the near
 
 Press `g` to cycle the dashboard sort mode between spend, latest date, and token use. The active sort applies to dashboard tables, pickers, the Usage page ordering, and session call rows.
 
+Press `m` to open a typeable model picker, mirroring the `p` project picker: selecting a model scopes Overview and Deep Dive (and the `s` session picker) to that one canonical model, and the title bar shows the active model next to the project filter. Pick **All** to clear it. The tool, project, and model filters compose — each narrows the same underlying call set independently.
+
 ## Pages
 
 - **Overview**: the everyday command center with KPIs, an activity pulse graph, project/tool spend, model spend, shell commands, and MCP servers.
@@ -74,6 +76,7 @@ The keyboard reference, footer hints, and TUI shortcut behavior come from the em
 | `g` | Cycle sort mode: spend, latest date, token use |
 | `Shift-D` | Toggle between live and sample data |
 | `p` | Open project picker |
+| `m` | Open model picker |
 | `Tab` / `Shift-Tab` | Cycle Overview, Deep Dive, Usage, Coach, and Scrollback |
 | `o` | Open Overview |
 | `d` | Open Deep Dive |
@@ -91,7 +94,7 @@ In the session page, use `Up` / `Down`, `PgUp` / `PgDn`, `Home` / `End` to move 
 
 ## Usage Page
 
-The Usage page is always a rolling 24-hour view. Opening it automatically selects the 24 Hours period. The page ignores project filters and renders all tool console sections so plan-limit gauges stay comparable across tools.
+The Usage page is always a rolling 24-hour view. Opening it automatically selects the 24 Hours period. The page ignores project and model filters and renders all tool console sections so plan-limit gauges stay comparable across tools.
 The active sort mode controls the order of tool sections and model rows; rate-limit rows keep their scope/window order.
 
 Each tool section includes:

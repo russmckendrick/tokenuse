@@ -8,6 +8,7 @@ import type {
   DesktopUpdateMetadata,
   DoctorReport,
   ModelCatalogEntry,
+  ModelPageData,
   PeriodId,
   ProjectIndexRow,
   ProjectOption,
@@ -39,6 +40,7 @@ export const api = {
   getToolPage: (tool: ToolId) => invoke<ToolPageData>('get_tool_page', { tool }),
   getProjectIndex: () => invoke<ProjectIndexRow[]>('get_project_index'),
   getProjectPage: (identity: string) => invoke<ProjectPageData>('get_project_page', { identity }),
+  getModelPage: (canonicalId: string) => invoke<ModelPageData>('get_model_page', { canonicalId }),
   getAnalytics: (period: PeriodId) => invoke<AnalyticsData>('get_analytics', { period }),
   getCoach: (period: PeriodId) => invoke<CoachData>('get_coach', { period }),
   getCoachTimeline: (day: string) =>
