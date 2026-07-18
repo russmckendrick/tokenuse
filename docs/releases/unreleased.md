@@ -4,11 +4,11 @@ Changes that should be included in the next release go here. Keep this file curr
 
 ## Added
 
-- Desktop 3D Graph explorer with project and AI-stack lenses, call/spend/token weighting, optional Core tool and MCP server layers, orbit/zoom/drag interaction, search, relationship inspection, and direct project/model/tool navigation.
+No additions recorded yet.
 
 ## Changed
 
-- README caught up with the shipped surface: the full TUI shortcut set (model picker, Coach, Scrollback, sort cycle, five-tab cycle, live/sample toggle), the `status` / `overview` / `doctor` / `report` / `mcp` CLI subcommands, the desktop Coach and Scrollback screens, the By Activity panel, and the current config-directory file list.
+No changes recorded yet.
 
 ## Removed
 
