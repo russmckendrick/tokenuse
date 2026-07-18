@@ -229,6 +229,20 @@
   min-width: 0;
 }
 
+/* Graph is the page's primary workspace, so its route consumes the remaining
+   shell height while shorter windows keep scrolling inside the page. */
+.page-scroll.graph-route {
+  display: flex;
+  flex-direction: column;
+}
+
+.page-scroll.graph-route > .route-view {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .tool-hero {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);

@@ -526,7 +526,7 @@ impl Ingested {
     }
 }
 
-fn matches_tool(call: &ParsedCall, tool: Tool) -> bool {
+pub(crate) fn matches_tool(call: &ParsedCall, tool: Tool) -> bool {
     match tool {
         Tool::All => true,
         Tool::ClaudeCode => call.tool == "claude-code",
@@ -537,7 +537,7 @@ fn matches_tool(call: &ParsedCall, tool: Tool) -> bool {
     }
 }
 
-fn matches_project(call: &ParsedCall, project_filter: &ProjectFilter) -> bool {
+pub(crate) fn matches_project(call: &ParsedCall, project_filter: &ProjectFilter) -> bool {
     match project_filter {
         ProjectFilter::All => true,
         ProjectFilter::Selected { identity, .. } => project_identity(&call.project) == *identity,
@@ -553,7 +553,7 @@ fn matches_model(call: &ParsedCall, model_filter: &ModelFilter) -> bool {
     }
 }
 
-fn in_period(call: &ParsedCall, period: Period, now: DateTime<Local>) -> bool {
+pub(crate) fn in_period(call: &ParsedCall, period: Period, now: DateTime<Local>) -> bool {
     let Some(ts) = call.timestamp else {
         return matches!(period, Period::AllTime);
     };

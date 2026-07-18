@@ -7,6 +7,7 @@
     LayoutDashboard,
     PanelLeftClose,
     PanelLeftOpen,
+    Share2,
     Settings,
     TextSearch,
     Wrench
@@ -81,6 +82,18 @@
     >
       <ChartLine size={16} />
       {#if !collapsed}<span>{copy.nav.analytics}</span>{/if}
+    </button>
+
+    <button
+      type="button"
+      class="sidebar-item"
+      class:active={isActive('graph')}
+      aria-current={isActive('graph') ? 'page' : undefined}
+      title={copy.nav.graph}
+      onclick={() => navigate({ page: 'graph' })}
+    >
+      <Share2 size={16} />
+      {#if !collapsed}<span>{copy.nav.graph}</span>{/if}
     </button>
 
     <button

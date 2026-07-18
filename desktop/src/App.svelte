@@ -21,6 +21,7 @@
   import ProjectsPage from './routes/ProjectsPage.svelte';
   import ToolsPage from './routes/ToolsPage.svelte';
   import AnalyticsPage from './routes/AnalyticsPage.svelte';
+  import GraphPage from './routes/GraphPage.svelte';
   import ConfigView from './views/ConfigView.svelte';
   import ProjectPage from './routes/ProjectPage.svelte';
   import ModelPage from './routes/ModelPage.svelte';
@@ -178,6 +179,8 @@
         return nav.overview;
       case 'analytics':
         return nav.analytics;
+      case 'graph':
+        return nav.graph;
       case 'coach':
         return nav.coach;
       case 'tools': {
@@ -547,7 +550,7 @@
     if (!action) return;
     const page = router.route.page;
     const periodLocked = page === 'tools' && router.route.tool === undefined;
-    const dataFiltersActive = page === 'overview' || page === 'analytics';
+    const dataFiltersActive = page === 'overview' || page === 'analytics' || page === 'graph';
 
     switch (action.kind) {
       case 'period':
@@ -1042,9 +1045,9 @@
         title={currentPageTitle}
         {snapshot}
         showPeriod={router.route.page !== 'config' && router.route.page !== 'session' && router.route.page !== 'scrollback' && (router.route.page !== 'tools' || router.route.tool !== undefined)}
-        showTool={router.route.page === 'overview' || router.route.page === 'analytics' || router.route.page === 'coach'}
-        showSort={router.route.page !== 'config' && router.route.page !== 'session' && (router.route.page !== 'models' || router.route.model !== undefined) && router.route.page !== 'coach' && router.route.page !== 'scrollback'}
-        showProject={router.route.page === 'overview' || router.route.page === 'analytics' || router.route.page === 'coach' || (router.route.page === 'projects' && !router.route.project)}
+        showTool={router.route.page === 'overview' || router.route.page === 'analytics' || router.route.page === 'graph' || router.route.page === 'coach'}
+        showSort={router.route.page !== 'config' && router.route.page !== 'session' && router.route.page !== 'graph' && (router.route.page !== 'models' || router.route.model !== undefined) && router.route.page !== 'coach' && router.route.page !== 'scrollback'}
+        showProject={router.route.page === 'overview' || router.route.page === 'analytics' || router.route.page === 'graph' || router.route.page === 'coach' || (router.route.page === 'projects' && !router.route.project)}
         {setPeriod}
         setTool={setToolFromEvent}
         setSort={setSortFromEvent}
@@ -1053,13 +1056,24 @@
         openReport={() => openModal('report')}
       />
 
-      <main class="page-scroll" bind:this={pageScrollEl}>
+      <main
+        class="page-scroll"
+        class:graph-route={router.route.page === 'graph'}
+        bind:this={pageScrollEl}
+      >
         {#key `${router.route.page}:${router.route.tool ?? ''}:${router.route.project?.identity ?? ''}:${router.route.model?.id ?? ''}`}
           <div class="route-view" use:pageTransition>
             {#if router.route.page === 'overview'}
               <OverviewPage {snapshot} {openProject} openModel={openModelPage} />
             {:else if router.route.page === 'analytics'}
               <AnalyticsPage {snapshot} openSessionPicker={() => openModal('session')} {openSession} {openProject} openModel={openModelPage} />
+            {:else if router.route.page === 'graph'}
+              <GraphPage
+                {snapshot}
+                {openProjectPage}
+                {openModelPage}
+                openToolPage={(tool) => navigate({ page: 'tools', tool })}
+              />
             {:else if router.route.page === 'coach'}
               <CoachPage {snapshot} />
             {:else if router.route.page === 'scrollback'}

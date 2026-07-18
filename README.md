@@ -32,7 +32,7 @@ Linux, Windows, and manual desktop downloads are published on GitHub Releases. S
 
 ## Desktop App
 
-The TUI remains the default app, and a Tauri v2 desktop shell lives under `desktop/` for macOS, Windows, and Linux local builds. It shares the same archive, config, currency, pricing, model registry, and report logic as the TUI. The desktop diverges visually into a sidebar application with Overview, Analytics, Tools, Models, Projects, and Config screens plus direct per-tool pages.
+The TUI remains the default app, and a Tauri v2 desktop shell lives under `desktop/` for macOS, Windows, and Linux local builds. It shares the same archive, config, currency, pricing, model registry, and report logic as the TUI. The desktop diverges visually into a sidebar application with Overview, Analytics, Graph, Coach, Scrollback, Models, Projects, Tools, and Config screens plus direct per-tool pages.
 
 ```bash
 cd desktop
@@ -64,7 +64,10 @@ The dashboard shows:
 - spend by project and by project/tool pair
 - top sessions
 - spend by model
+- spend by task category (By Activity)
 - core tool calls, shell command heads, and MCP server usage
+
+Beyond Overview and Deep Dive, dedicated pages cover rolling 24-hour usage and rate limits (`u`), a Coach practice report card (`k`), and Scrollback full-text search across archived session transcripts (`/`).
 
 Project names are normalized across tools. Absolute paths are folded to the nearest existing Git root when possible, then displayed with the shortest unique suffix.
 
@@ -74,41 +77,52 @@ The TUI and desktop app share the same checked-in shortcut definitions from `src
 
 - `q`: quit · `Esc`: close modal / back from sub-page
 - `1`–`5`: period (24 hours, 7 days, 30 days, this month, all time)
-- `t`: cycle tool filter
-- `p`: open project picker (type to search; Backspace to clear last char; Ctrl-U to clear)
-- `Tab` / `Shift-Tab`: cycle main tabs (Overview ↔ Deep Dive ↔ Usage)
-- `o`: Overview · `d`: Deep Dive · `u`: Usage / rate limits
+- `t`: cycle tool filter · `g`: cycle sort mode (spend, latest date, token use)
+- `p`: open project picker · `m`: open model picker (type to search; Backspace to clear last char; Ctrl-U to clear)
+- `Tab` / `Shift-Tab`: cycle main tabs (Overview → Deep Dive → Usage → Coach → Scrollback)
+- `o`: Overview · `d`: Deep Dive · `u`: Usage / rate limits · `k`: Coach practice report
+- `/`: Scrollback transcript search (type a phrase, `Enter` to search, `Enter` again to open the matching session)
 - `c`: open configuration · `s`: open session picker (drill into a single session's calls)
 - `e`: generate a report (HTML, PDF, SVG, PNG, JSON, Excel, or CSV folder) to Downloads; press `f`/`b` in the report modal to choose another folder for this session
 - `r`: reload (sync archive in place; keeps prior data on failure)
+- `Shift-D`: toggle between live and sample data
 - `h` or `?`: open the keybinding reference (full list of shortcuts)
-- In the session page: `Up`/`Down`, `PgUp`/`PgDn`, `Home`/`End`, `Esc`/`d` back to Deep Dive
+- In the session page: `Up`/`Down`, `PgUp`/`PgDn`, `Home`/`End`, `Esc`/`d` back to the page that opened the session
 - In pickers and configuration: `Up`/`Down`, `Home`/`End`, `Enter`, `Esc`
 
 ## Configuration
 
 The dashboard stores user settings and downloaded data in the platform config directory under `tokenuse`. The files are:
 
-- `config.json`: user overrides, currently the display currency
+- `config.json`: user overrides — display currency, plan prices, background alert thresholds, desktop preferences, and MCP server settings
 - `archive.db`: durable local usage archive
 - `exchange-rates.json`: latest downloaded published currency snapshot
 - `rates.json`: legacy local currency snapshot, still read when `exchange-rates.json` is absent
 - `pricing-upstream.json` and `pricing-overrides.json`: latest downloaded pricing books
 - `pricing-snapshot.json`: legacy local pricing snapshot
+- `mcp-salt` and `mcp-token`: MCP project-pseudonymisation salt and the bearer token for the opt-in HTTP endpoint
 - `limits/claude-code.json`: optional Claude Code status-line limit sidecar
 - `limits/copilot.json`: optional Copilot quota sidecar written by confirmed sync
+- `limits/claude_subscription.json` and `limits/codex_subscription.json`: optional Claude.ai / ChatGPT (Codex) quota sidecars written by opt-in sync
 
 USD remains the default. Costs are calculated and stored internally as import-time USD, then converted for display using the configured currency. Open the TUI configuration page with `c` to pick a currency, download the latest local data, sync Claude/Copilot limit sidecars, or clear and rebuild the local archive. Downloading `exchange-rates.json` asks for confirmation and updates display rates immediately; downloading pricing books asks for confirmation and applies to newly imported calls. Copilot quota sync asks for confirmation, reads existing local Copilot credentials, writes `limits/copilot.json`, and refreshes archive limits. Clear data also asks for confirmation, deletes `archive.db`, and immediately reimports from local tool history.
 
 Default TUI and desktop builds include the confirmed download and quota sync actions. Build with `--no-default-features` when you need a no-download binary; those builds keep ingestion local-only and report Config-page downloads and Copilot quota sync as unavailable.
 
-## CLI Helper
+## CLI Helpers
 
-Sync the archive and list normalized project/tool rows without opening the TUI:
+Sync the archive and answer questions without opening the TUI:
 
 ```bash
-tokenuse --list-projects
+tokenuse status            # one line with 24-hour and month totals (--json)
+tokenuse overview          # copy-pasteable summary of this month (--json)
+tokenuse doctor            # diagnose per-tool data discovery and parsing (--json)
+tokenuse report            # guided report generator, same formats as `e` in the TUI
+tokenuse mcp               # read-only MCP stdio server for LLM clients
+tokenuse --list-projects   # print the ingested project inventory
 ```
+
+`tokenuse mcp` exposes `status`, `overview`, `projects`, and `scrollback` (transcript search) tools. Project names are pseudonymised unless you pass `--real-names`, and `--http [--port N]` swaps stdio for a loopback-only, bearer-token-gated HTTP endpoint. See [the MCP server doc](docs/development/mcp-server.md) for registration examples.
 
 Maintainer snapshot refresh commands are documented in [local development](docs/development/local-development.md). Do not hand-edit generated cost books such as `costs/exchange-rates.json`, `costs/pricing-upstream.json`, or `src/pricing/snapshot.json`; use the refresh commands so generated data stays consistent.
 
@@ -119,7 +133,8 @@ Maintainer snapshot refresh commands are documented in [local development](docs/
 - [Model normalisation](docs/development/models.md)
 - [Architecture and data flow](docs/development/architecture.md)
 - [Desktop app usage](docs/guides/desktop-usage.md)
-- [Usage page (rolling 24h utilisation)](docs/guides/tui-usage.md#usage-page)
+- [TUI usage guide (pages, keyboard, Scrollback, Usage)](docs/guides/tui-usage.md)
+- [MCP server](docs/development/mcp-server.md)
 - [Release notes](docs/releases/)
 
 ## Development

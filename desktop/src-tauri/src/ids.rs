@@ -1,5 +1,6 @@
 use tokenuse::{
     app::{Period, SortMode, StatusTone, Tool},
+    graph::GraphMetric,
     reports::ReportFormat,
 };
 
@@ -73,6 +74,15 @@ pub(crate) fn sort_id(sort: SortMode) -> &'static str {
         SortMode::Spend => "spend",
         SortMode::Date => "date",
         SortMode::Tokens => "tokens",
+    }
+}
+
+pub(crate) fn parse_graph_metric(value: &str) -> CommandResult<GraphMetric> {
+    match value {
+        "calls" => Ok(GraphMetric::Calls),
+        "spend" => Ok(GraphMetric::Spend),
+        "tokens" => Ok(GraphMetric::Tokens),
+        _ => Err(unknown("graph metric", value)),
     }
 }
 

@@ -8,6 +8,7 @@ pub mod currency;
 pub mod data;
 pub mod doctor;
 pub mod export;
+pub mod graph;
 pub mod ingest;
 pub mod ingest_cache;
 pub mod keymap;

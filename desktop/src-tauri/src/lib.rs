@@ -583,6 +583,7 @@ pub fn run() {
             commands::get_project_page,
             commands::get_model_page,
             commands::get_analytics,
+            commands::get_graph,
             commands::get_coach,
             commands::get_coach_timeline,
             commands::get_session_detail,

@@ -10,7 +10,7 @@ use tokenuse::{
 
 use crate::{
     apply_dock_or_taskbar_icon, hide_tray_popover_window,
-    ids::{parse_period, parse_report_format, parse_sort, parse_tool},
+    ids::{parse_graph_metric, parse_period, parse_report_format, parse_sort, parse_tool},
     restore_main_window,
     snapshot::{
         model_page, project_page, snapshot, tray_snapshot, DesktopSnapshot, ModelPageData,
@@ -183,6 +183,14 @@ pub(crate) async fn get_analytics(
         Ok(app.analytics_for(period, app.tool, &app.project_filter.clone()))
     })
     .await
+}
+
+#[tauri::command]
+pub(crate) async fn get_graph(
+    metric: String,
+    state: State<'_, SharedState>,
+) -> CommandResult<tokenuse::graph::GraphData> {
+    with_app(state, move |app| Ok(app.graph_for(parse_graph_metric(&metric)?))).await
 }
 
 #[tauri::command]

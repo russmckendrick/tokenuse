@@ -7,6 +7,8 @@ import type {
   DesktopUpdateDownloadEvent,
   DesktopUpdateMetadata,
   DoctorReport,
+  GraphData,
+  GraphMetricId,
   ModelCatalogEntry,
   ModelPageData,
   PeriodId,
@@ -42,6 +44,7 @@ export const api = {
   getProjectPage: (identity: string) => invoke<ProjectPageData>('get_project_page', { identity }),
   getModelPage: (canonicalId: string) => invoke<ModelPageData>('get_model_page', { canonicalId }),
   getAnalytics: (period: PeriodId) => invoke<AnalyticsData>('get_analytics', { period }),
+  getGraph: (metric: GraphMetricId) => invoke<GraphData>('get_graph', { metric }),
   getCoach: (period: PeriodId) => invoke<CoachData>('get_coach', { period }),
   getCoachTimeline: (day: string) =>
     invoke<CoachTimelineDay | null>('get_coach_timeline', { day }),

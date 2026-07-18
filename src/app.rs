@@ -1237,6 +1237,16 @@ struct QueryCache {
     analytics: HashMap<(Period, Tool, Option<String>, String), AnalyticsData>,
     coach: HashMap<(Period, Tool, Option<String>), crate::data::CoachData>,
     coach_timeline: HashMap<(String, Tool, Option<String>, String), Option<CoachTimelineDay>>,
+    graph: HashMap<
+        (
+            Period,
+            Tool,
+            Option<String>,
+            crate::graph::GraphMetric,
+            String,
+        ),
+        crate::graph::GraphData,
+    >,
 }
 
 impl QueryCache {
@@ -1249,6 +1259,7 @@ impl QueryCache {
             self.analytics.clear();
             self.coach.clear();
             self.coach_timeline.clear();
+            self.graph.clear();
             self.generation = generation;
         }
     }
@@ -1576,6 +1587,47 @@ impl App {
         self.query_cache
             .borrow_mut()
             .analytics
+            .insert(key, data.clone());
+        data
+    }
+
+    pub fn graph_for(&self, metric: crate::graph::GraphMetric) -> crate::graph::GraphData {
+        let key = (
+            self.period,
+            self.tool,
+            self.project_filter.identity_key(),
+            metric,
+            self.settings.currency.clone(),
+        );
+        {
+            let mut cache = self.query_cache.borrow_mut();
+            cache.sync_generation(self.data_generation);
+            if let Some(data) = cache.graph.get(&key) {
+                return data.clone();
+            }
+        }
+
+        let currency = self.currency();
+        let data = match &self.source {
+            DataSource::Live(ingested) => crate::graph::graph_data(
+                &ingested.calls,
+                self.period,
+                self.tool,
+                &self.project_filter,
+                metric,
+                &currency,
+            ),
+            DataSource::Sample => crate::graph::sample_graph_data(
+                self.period,
+                self.tool,
+                &self.project_filter,
+                metric,
+                &currency,
+            ),
+        };
+        self.query_cache
+            .borrow_mut()
+            .graph
             .insert(key, data.clone());
         data
     }

@@ -1,6 +1,7 @@
 export type PeriodId = 'today' | 'week' | 'thirty-days' | 'month' | 'all-time';
 export type ToolId = 'all' | 'claude-code' | 'cursor' | 'codex' | 'copilot' | 'gemini';
 export type SortId = 'spend' | 'date' | 'tokens';
+export type GraphMetricId = 'calls' | 'spend' | 'tokens';
 export type ReportFormatId = 'json' | 'csv' | 'svg' | 'png' | 'html' | 'pdf' | 'xlsx';
 
 export type OptionItem<T extends string = string> = {
@@ -108,6 +109,55 @@ export type AnalyticsData = {
   hour_day: number[][];
   provider_share: ShareMetric[];
   tool_share: ShareMetric[];
+};
+
+export type GraphNodeKind = 'project' | 'tool' | 'model' | 'core_tool' | 'mcp_server';
+
+export type GraphRelation =
+  | 'project_tool'
+  | 'project_model'
+  | 'tool_model'
+  | 'project_core_tool'
+  | 'tool_core_tool'
+  | 'project_mcp_server'
+  | 'tool_mcp_server';
+
+export type GraphStats = {
+  calls: number;
+  sessions: number;
+  tokens: number;
+  cost: string;
+  /** USD magnitude used only for relative scaling; display uses `cost`. */
+  cost_value: number;
+  last_activity: string;
+};
+
+export type GraphNode = {
+  id: string;
+  kind: GraphNodeKind;
+  label: string;
+  entity_id: string;
+  provider: string;
+  stats: GraphStats;
+};
+
+export type GraphEdge = {
+  id: string;
+  source: string;
+  target: string;
+  relation: GraphRelation;
+  stats: GraphStats;
+};
+
+export type GraphData = {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  meta: {
+    total_nodes: number;
+    shown_nodes: number;
+    total_edges: number;
+    shown_edges: number;
+  };
 };
 
 export type CoachData = {
@@ -613,6 +663,54 @@ export type CoachCopy = {
 export type CopyDeck = {
   brand: Record<string, string>;
   nav: Record<string, string>;
+  graph: {
+    lens_aria: string;
+    lens_projects: string;
+    lens_stack: string;
+    metric_aria: string;
+    weight_calls: string;
+    weight_spend: string;
+    weight_tokens: string;
+    core_tools: string;
+    mcp_servers: string;
+    search_label: string;
+    search_placeholder: string;
+    search_no_results: string;
+    fit_view: string;
+    reset_layout: string;
+    canvas_aria: string;
+    mode_3d: string;
+    interaction_hint: string;
+    keyboard_hint: string;
+    legend_aria: string;
+    kind_project: string;
+    kind_tool: string;
+    kind_model: string;
+    kind_core_tool: string;
+    kind_mcp_server: string;
+    showing: string;
+    truncated_hint: string;
+    empty: string;
+    loading: string;
+    load_error: string;
+    selection_empty_title: string;
+    selection_empty_detail: string;
+    selection_empty_hint: string;
+    visible_entities: string;
+    visible_links: string;
+    weighted_by: string;
+    relationships: string;
+    last_active: string;
+    open_details: string;
+    relation_project_tool: string;
+    relation_project_model: string;
+    relation_tool_model: string;
+    relation_project_core_tool: string;
+    relation_tool_core_tool: string;
+    relation_project_mcp_server: string;
+    relation_tool_mcp_server: string;
+    node_aria: string;
+  };
   coach: CoachCopy;
   periods: Record<string, string>;
   sorts: Record<string, string>;

@@ -19,6 +19,7 @@ The desktop app uses a persistent left sidebar rather than the TUI tab strip. Ev
 
 - Overview
 - Analytics
+- Graph
 - Coach
 - Scrollback
 - Models
@@ -31,7 +32,7 @@ Use **Collapse** at the bottom of the sidebar to reduce it to an icon rail. The 
 
 Tools sits directly above the five direct tool rows as the group's summary entry. The tool rows dynamically order themselves from highest to lowest rolling 24-hour call activity, so the tools currently driving usage stay closest to their summary. Primary screen and Config positions never move.
 
-The header holds the controls that apply to the current screen in one toolbar: title, period, contextual tool/project/sort filters, refresh, then report. At compact window widths the filter labels collapse to icons while their current values remain visible. Overview and Analytics expose period, tool, sort, and project filters. Dedicated tool pages expose period and sort. The Models catalog uses the active period for ranking while keeping all five ranges visible in its table; a model's dedicated page adds the sort control. Projects exposes period, sort, and project. The parent Tools screen is a fixed rolling 24-hour capacity view, so its period control is intentionally hidden. Scrollback hides the period and sort controls too — its search box and tool/project selects live in the page's own toolbar.
+The header holds the controls that apply to the current screen in one toolbar: title, period, contextual tool/project/sort filters, refresh, then report. At compact window widths the filter labels collapse to icons while their current values remain visible. Overview and Analytics expose period, tool, sort, and project filters. Graph exposes period, tool, and project; relationship weighting lives inside its explorer. Dedicated tool pages expose period and sort. The Models catalog uses the active period for ranking while keeping all five ranges visible in its table; a model's dedicated page adds the sort control. Projects exposes period, sort, and project. The parent Tools screen is a fixed rolling 24-hour capacity view, so its period control is intentionally hidden. Scrollback hides the period and sort controls too — its search box and tool/project selects live in the page's own toolbar.
 
 The footer shows live or sample source, currency, and context-sensitive shortcut hints. Refresh, report, configuration, and sync results appear as temporary bottom-right toasts instead of permanently consuming header space.
 
@@ -59,6 +60,14 @@ Analytics is the time and distribution workspace. It includes:
 Top Sessions rows are links: select one (click, `Enter`, or `Space`) to open that session in the full session view, alongside the existing session picker. Closing the session view returns to the page it was opened from, at the scroll position you left. Project rows link too: selecting one on Overview, Analytics, or a tool page opens that project's dedicated page. Model rows behave the same, opening that model's page.
 
 Charts use the same token-driven colors and relative ranking language as the TUI. Hovered chart values are exact for that bucket; bars, heat intensity, and row rank fills are relative to the visible dataset. Ranked tables carry that relative magnitude as a muted wash across each row's background (hover a row for the exact percentage) rather than a meter column, so the full project and model names keep the space.
+
+### Graph
+
+Graph turns the same local usage calls into an explorable 3D relationship space. **Projects** connects each project to the AI tools and canonical models it uses; **AI stack** connects tools to their models and the projects driving them. The period, tool, and project filters in the page header scope every node, edge, total, and last-active date.
+
+Calls is the default relationship weight, while Spend and Tokens change node size, edge strength, and which entities survive the display cap. Core tools and MCP servers are optional layers so the initial map stays legible. The explorer shows the strongest 30 projects, 24 models, 12 Core tools, and 12 MCP servers, reports when more detail exists, and recommends narrowing the shared filters rather than presenting a hairball.
+
+Drag the background to orbit, scroll to zoom, and drag a node to pin it temporarily in the force layout. Select a node to hold its immediate neighbourhood in focus and inspect complete totals plus its strongest visible relationships. Search jumps directly to a visible project, tool, model, Core tool, or MCP server; the arrow keys provide an equivalent keyboard path through the canvas. Project and model details use the same origin-aware drill-in as ranked tables; returning restores the lens, metric, layers, selection, and 3D camera. Tool nodes open the matching direct tool page. The graph remains entirely local and never includes prompt text, sessions, file paths, shell commands, or network-derived data.
 
 ### Coach
 
@@ -143,7 +152,7 @@ Desktop navigation is resolved in the Svelte shell; data actions call typed Rust
 
 | Key | Action |
 | --- | --- |
-| `Tab` / `Shift-Tab` | Cycle Overview, Analytics, Coach, Scrollback, Models, Projects, Tools, and Config. |
+| `Tab` / `Shift-Tab` | Cycle Overview, Analytics, Graph, Coach, Scrollback, Models, Projects, Tools, and Config. |
 | `o` | Open Overview. |
 | `d` | Open Analytics. |
 | `h` | Open Coach. |
@@ -151,9 +160,9 @@ Desktop navigation is resolved in the Svelte shell; data actions call typed Rust
 | `u` | Open Tools. |
 | `c` | Open Config. |
 | `1`–`5` | Select 24 Hours, 7 Days, 30 Days, This Month, or All Time where the period is available. |
-| `t` | Cycle tool on Overview or Analytics. |
+| `t` | Cycle tool on Overview, Analytics, or Graph. |
 | `g` | Cycle spend, latest-date, and token-use sorting where sorting is available. |
-| `p` | Open the project picker on Overview, Analytics, or Projects. |
+| `p` | Open the project picker on Overview, Analytics, Graph, or Projects. |
 | `s` | Open the session picker. |
 | `e` | Open report generation. |
 | `r` | Refresh the archive. |
