@@ -67,6 +67,12 @@
           { "match": "Claude Fable 5", "model": "claude-fable-5" },
           { "match": "Claude Mythos 5", "model": "claude-mythos-5" },
           {
+            "match": "Claude Opus 5",
+            "model": "claude-opus-5",
+            "set": { "fast_multiplier": 2 },
+            "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 5 fast mode at $10 input and $50 output per MTok (2x base)."
+          },
+          {
             "match": "Claude Opus 4.8",
             "model": "claude-opus-4-8",
             "set": { "fast_multiplier": 2 },
@@ -82,7 +88,7 @@
             "match": "Claude Opus 4.7",
             "model": "claude-opus-4-7",
             "set": { "fast_multiplier": 6 },
-            "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.7 fast mode at $30 input and $150 output per MTok; deprecated upstream with removal scheduled for 2026-07-24."
+            "note": "Fast multiplier is configured from Claude Code fast mode, which listed Opus 4.7 fast mode at $30 input and $150 output per MTok; deprecated 2026-06-25 and removed 2026-07-24. Kept so archived fast-mode calls from before removal still price correctly."
           },
           {
             "match": "Claude Opus 4.6",
@@ -143,25 +149,27 @@
       "url": "https://cursor.com/docs/models-and-pricing.md",
       "kind": "markdown-table",
       "output": "overrides",
-      "table_heading": "Auto pricing",
+      "table_heading": "Model pricing",
       "extract": {
-        "mode": "label-rows",
+        "mode": "model-rows",
         "scope": "global",
-        "model": "cursor-auto",
         "columns": {
-          "label": "Token type",
-          "price": "Price per 1M tokens"
-        },
-        "labels": {
-          "input": "Input + Cache Write",
-          "cache_write": "Input + Cache Write",
-          "output": "Output",
-          "cache_read": "Cache Read"
+          "model": "Model",
+          "input": "Input",
+          "cache_write": "Cache write",
+          "cache_read": "Cache read",
+          "output": "Output"
         },
         "defaults": {
           "web_search": 0.01
         },
-        "note": "Cursor Auto lists input plus cache write at $1.25/MTok, output at $6/MTok, and cache read at $0.25/MTok."
+        "rows": [
+          {
+            "match": "Auto Cost",
+            "model": "cursor-auto",
+            "note": "Cursor folded its standalone \"Auto pricing\" table into the combined \"Model pricing\" table; Auto is now the \"Auto Cost\" row at $1.25/MTok input and cache write, $0.25/MTok cache read, and $6/MTok output."
+          }
+        ]
       }
     },
     {
@@ -260,6 +268,7 @@
             "model": "claude-opus-4-8-fast",
             "note": "Copilot lists fast mode as its own billable model row."
           },
+          { "match": "Claude Opus 5", "model": "claude-opus-5" },
           { "match": "Claude Sonnet 5", "model": "claude-sonnet-5" },
           { "match": "Claude Fable 5", "model": "claude-fable-5" },
           { "match": "Gemini 2.5 Pro", "model": "gemini-2.5-pro" },

@@ -765,6 +765,17 @@ mod tests {
         let opus_48 = table.lookup("claude-opus-4-8-20260601");
         assert_eq!(opus_48.fast_multiplier, Some(2.0));
 
+        // Opus 5 bills at the same $5/$25 as Opus 4.8, with fast mode at 2x.
+        // Before it was priced it fell through to the Sonnet 4.6 fallback,
+        // which silently under-costed every Opus 5 call.
+        let opus_5 = table.lookup("claude-opus-5-20260715");
+        assert!((opus_5.input * 1e6 - 5.0).abs() < 0.001);
+        assert!((opus_5.output * 1e6 - 25.0).abs() < 0.001);
+        assert!((opus_5.cache_write * 1e6 - 6.25).abs() < 0.001);
+        assert!((opus_5.cache_read * 1e6 - 0.5).abs() < 0.001);
+        assert_eq!(opus_5.fast_multiplier, Some(2.0));
+        assert!(!uses_fallback("claude-code", "claude-opus-5", None));
+
         let intro = table.lookup_for(
             "claude-code",
             "claude-sonnet-5",

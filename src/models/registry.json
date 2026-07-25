@@ -18,6 +18,7 @@
     { "match": "exact", "keys": ["auto"], "display": "Auto", "provider": "other", "family": "Auto" },
 
     { "match": "prefix", "keys": ["claude-fable-5"], "display": "Fable 5", "provider": "anthropic", "family": "Fable" },
+    { "match": "prefix", "keys": ["claude-opus-5"], "display": "Opus 5", "provider": "anthropic", "family": "Opus" },
     { "match": "prefix", "keys": ["claude-opus-4-8"], "display": "Opus 4.8", "provider": "anthropic", "family": "Opus" },
     { "match": "prefix", "keys": ["claude-opus-4-7"], "display": "Opus 4.7", "provider": "anthropic", "family": "Opus" },
     { "match": "prefix", "keys": ["claude-opus-4-6"], "display": "Opus 4.6", "provider": "anthropic", "family": "Opus" },

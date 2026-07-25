@@ -28,7 +28,7 @@ Generated books carry top-level `checked_at` metadata, and every override row ca
 
 Copilot moved every plan to usage-based billing ("AI Credits", 1 credit = $0.01) on June 1, 2026, and bills token consumption at the listed per-model API rates. Copilot rows therefore live under the `copilot` tool scope with `effective_from: "2026-06-01"`.
 
-That scope matters: `GPT-5.6 Terra`, `Claude Opus 4.8`, `Gemini 3.5 Flash`, and similar display names are mapped for Copilot only. They do not override Codex, Claude Code, Gemini, or Cursor calls with similar model names.
+That scope matters: `GPT-5.6 Terra`, `Claude Opus 5`, `Gemini 3.5 Flash`, and similar display names are mapped for Copilot only. They do not override Codex, Claude Code, Gemini, or Cursor calls with similar model names.
 
 The upstream page now uses per-provider tables: the Anthropic table carries a `Cache write` column, and the OpenAI/Google tables add `Tier`/`Threshold` columns with separate Default and Long-context rows per model. Row matching is first-match, which selects the Default tier — long-context surcharges are not modelled. Rows retired since the June switch (`GPT-4.1`, `GPT-5.2`, `GPT-5.2-Codex`, `Grok Code Fast 1`, `Goldeneye`) keep their last-known override rows via the drift handling below.
 
@@ -41,11 +41,11 @@ The UI's `Cache` column remains observed cache-hit behavior from local usage dat
 Current important rows:
 
 - Claude prompt-cache reads are 10% of input; 5-minute cache writes are 125% of input. 1-hour cache writes are 200% of input — the books carry the 5-minute rate and the pricing formula applies a fixed 1.6x premium to the 1h share reported under `usage.cache_creation` (see [Architecture — Pricing](architecture.md#pricing)).
-- Cursor Auto reads are 20% of input, and cache writes use the same rate as input.
+- Cursor Auto reads are 20% of input, and cache writes use the same rate as input. Cursor folded its standalone "Auto pricing" table into the combined "Model pricing" table, so `cursor-auto` is now read from that table's `Auto Cost` row rather than from a per-token-type table.
 - Current OpenAI GPT-5.4/GPT-5.5/GPT-5.6 and Codex rows use 10% cached-input pricing; `codex-mini-latest` remains 25%.
 - Gemini rows are explicit overrides with source provenance because Gemini publishes prompt-length tiers that the parser cannot yet choose per call.
 - Claude Sonnet 5 carries introductory pricing in the upstream book; a dated override switches it to standard pricing from September 1, 2026 (`effective_from: "2026-09-01"`).
-- Claude Code fast mode is modelled as `fast_multiplier` on the base row: 2x for Opus 4.8, 6x for Opus 4.7 (deprecated upstream, removal scheduled July 24, 2026) and the historical Opus 4.6 rows.
+- Claude Code fast mode is modelled as `fast_multiplier` on the base row: 2x for Opus 5 and Opus 4.8, 6x for Opus 4.7 and the historical Opus 4.6 rows. Opus 4.7 fast mode was deprecated on June 25, 2026 and removed on July 24, 2026; its row keeps the 6x multiplier so archived fast-mode calls from before removal still price correctly.
 
 ## Fallback Visibility
 

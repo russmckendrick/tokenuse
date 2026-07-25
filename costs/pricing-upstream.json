@@ -1,6 +1,6 @@
 {
   "_metadata": {
-    "checked_at": "2026-07-20",
+    "checked_at": "2026-07-25",
     "fields": {
       "cache_read": "USD per cache read token",
       "cache_write": "USD per cache write token",
@@ -141,6 +141,13 @@
       "output": 0.000025,
       "web_search": 0.01
     },
+    "anthropic.claude-opus-5": {
+      "cache_read": 5e-7,
+      "cache_write": 6.25e-6,
+      "input": 5e-6,
+      "output": 0.000025,
+      "web_search": 0.01
+    },
     "anthropic.claude-sonnet-4-20250514-v1:0": {
       "cache_read": 3e-7,
       "cache_write": 3.75e-6,
@@ -233,6 +240,13 @@
       "web_search": 0.01
     },
     "au.anthropic.claude-opus-4-8": {
+      "cache_read": 5.5e-7,
+      "cache_write": 6.875e-6,
+      "input": 5.5e-6,
+      "output": 0.0000275,
+      "web_search": 0.01
+    },
+    "au.anthropic.claude-opus-5": {
       "cache_read": 5.5e-7,
       "cache_write": 6.875e-6,
       "input": 5.5e-6,
@@ -471,6 +485,13 @@
       "web_search": 0.01
     },
     "claude-opus-41": {
+      "web_search": 0.01
+    },
+    "claude-opus-5": {
+      "cache_read": 5e-7,
+      "cache_write": 6.25e-6,
+      "input": 5e-6,
+      "output": 0.000025,
       "web_search": 0.01
     },
     "claude-sonnet-4": {
@@ -717,6 +738,13 @@
       "output": 0.0000275,
       "web_search": 0.01
     },
+    "eu.anthropic.claude-opus-5": {
+      "cache_read": 5.5e-7,
+      "cache_write": 6.875e-6,
+      "input": 5.5e-6,
+      "output": 0.0000275,
+      "web_search": 0.01
+    },
     "eu.anthropic.claude-sonnet-4-20250514-v1:0": {
       "cache_read": 3e-7,
       "cache_write": 3.75e-6,
@@ -940,6 +968,18 @@
       "output": 9e-6,
       "web_search": 0.01
     },
+    "gemini-3.5-flash-lite": {
+      "cache_read": 3e-8,
+      "input": 3e-7,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "gemini-3.6-flash": {
+      "cache_read": 1.5e-7,
+      "input": 1.5e-6,
+      "output": 7.5e-6,
+      "web_search": 0.01
+    },
     "gemini-embedding-001": {
       "input": 1.5e-7,
       "output": 0.0,
@@ -1051,6 +1091,13 @@
       "web_search": 0.01
     },
     "global.anthropic.claude-opus-4-8": {
+      "cache_read": 5e-7,
+      "cache_write": 6.25e-6,
+      "input": 5e-6,
+      "output": 0.000025,
+      "web_search": 0.01
+    },
+    "global.anthropic.claude-opus-5": {
       "cache_read": 5e-7,
       "cache_write": 6.25e-6,
       "input": 5e-6,
@@ -1838,6 +1885,13 @@
       "output": 0.0000275,
       "web_search": 0.01
     },
+    "jp.anthropic.claude-opus-5": {
+      "cache_read": 5.5e-7,
+      "cache_write": 6.875e-6,
+      "input": 5.5e-6,
+      "output": 0.0000275,
+      "web_search": 0.01
+    },
     "jp.anthropic.claude-sonnet-4-5-20250929-v1:0": {
       "cache_read": 3.3e-7,
       "cache_write": 4.125e-6,
@@ -2179,6 +2233,13 @@
       "web_search": 0.01
     },
     "us.anthropic.claude-opus-4-8": {
+      "cache_read": 5.5e-7,
+      "cache_write": 6.875e-6,
+      "input": 5.5e-6,
+      "output": 0.0000275,
+      "web_search": 0.01
+    },
+    "us.anthropic.claude-opus-5": {
       "cache_read": 5.5e-7,
       "cache_write": 6.875e-6,
       "input": 5.5e-6,

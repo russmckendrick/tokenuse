@@ -19,7 +19,37 @@ use crate::tools::{
 
 pub const SYNC_INTERVAL: Duration = crate::ingest_cache::TTL;
 
-const ARCHIVE_SCHEMA_VERSION: u32 = 7;
+const ARCHIVE_SCHEMA_VERSION: u32 = 8;
+
+/// Rates the v8 repair reasons about, frozen as literals rather than read
+/// from the books: the repair has to reproduce what was actually charged at
+/// import time, and the books move underneath us.
+///
+/// Until Opus 5 was priced, `claude-opus-5` matched no row and fell through
+/// to the books' Sonnet 4.6 fallback, so every Opus 5 call was billed at
+/// $3/$15 per MTok instead of $5/$25.
+mod opus_5_repair {
+    /// Sonnet 4.6 per-token rates, i.e. what these calls were charged at.
+    pub const FALLBACK_INPUT: f64 = 3e-6;
+    pub const FALLBACK_OUTPUT: f64 = 15e-6;
+    pub const FALLBACK_CACHE_WRITE: f64 = 3.75e-6;
+    pub const FALLBACK_CACHE_READ: f64 = 3e-7;
+
+    /// Opus 5's input, output, cache-write, and cache-read rates are each
+    /// exactly 5/3 of the Sonnet 4.6 rate above, so a single factor restores
+    /// the true cost. Rescaling also preserves the 1-hour cache-write
+    /// premium, which scales with the cache-write rate but is not persisted
+    /// on the row and so could not survive a recompute.
+    pub const FACTOR: f64 = 5.0 / 3.0;
+
+    /// Web search bills at $0.01 per request under both rows, so that part of
+    /// the stored cost is held out of the rescale.
+    pub const WEB_SEARCH: f64 = 0.01;
+
+    /// Fast mode is 2x on Opus 5. The Sonnet 4.6 fallback carries no fast
+    /// multiplier, so fast-speed rows were charged at 1x and need it applied.
+    pub const FAST_MULTIPLIER: f64 = 2.0;
+}
 
 pub struct Archive {
     conn: Connection,
@@ -506,6 +536,15 @@ impl Archive {
                 ",
             )?;
         }
+        if version < 8 {
+            // v8 repairs Opus 5 calls archived before the model was priced.
+            // Costs are otherwise frozen at import time on purpose, so this
+            // is a deliberate one-shot correction rather than a reprice pass.
+            let tx = self.conn.unchecked_transaction()?;
+            reprice_fallback_priced_opus_5_calls(&tx)?;
+            tx.execute_batch("PRAGMA user_version = 8;")?;
+            tx.commit()?;
+        }
         Ok(())
     }
 
@@ -906,6 +945,87 @@ fn remove_transcript_if_superseding_carries_text(
         params![call.tool, superseded_key],
     )?;
     Ok(())
+}
+
+/// Restore the true cost of Opus 5 calls that were archived while the model
+/// was still unpriced. Returns how many rows were corrected.
+///
+/// Every row is checked against the fallback rates before being touched: a
+/// row that already carries Opus 5 pricing is left alone, so a user who
+/// downloaded corrected pricing books before upgrading the binary cannot be
+/// double-charged. The check separates the two cleanly. A fallback-priced row
+/// costs at most `fallback_tokens + 0.6 * cache_write_rate * cache_creation`,
+/// and that premium is always smaller than the `2/3 * fallback_tokens` of
+/// headroom below the corrected floor, because `fallback_tokens` already
+/// contains a full `cache_write_rate * cache_creation` term.
+fn reprice_fallback_priced_opus_5_calls(tx: &Transaction<'_>) -> Result<usize> {
+    use opus_5_repair as rates;
+
+    let mut candidates = Vec::new();
+    {
+        let mut stmt = tx.prepare(
+            "
+            SELECT id, model, speed, cost_usd, input_tokens, output_tokens,
+                   cache_creation_input_tokens, cache_read_input_tokens,
+                   web_search_requests
+            FROM calls
+            WHERE model LIKE '%claude-opus-5%'
+            ",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, f64>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, i64>(6)?,
+                row.get::<_, i64>(7)?,
+                row.get::<_, i64>(8)?,
+            ))
+        })?;
+        for row in rows {
+            candidates.push(row?);
+        }
+    }
+
+    let mut repriced = 0usize;
+    for (id, model, speed, cost_usd, input, output, cache_write, cache_read, web) in candidates {
+        // The SQL prefilter is deliberately loose; the shared canonicalization
+        // decides, so dated and vendor-prefixed ids fold in but neighbours
+        // such as a Cursor `claude-opus-5-fast` row do not.
+        if crate::models::canonical_key(&model) != "claude-opus-5" {
+            continue;
+        }
+
+        let speed_multiplier = if speed == "fast" {
+            rates::FAST_MULTIPLIER
+        } else {
+            1.0
+        };
+        let web_cost = web as f64 * rates::WEB_SEARCH;
+        let fallback_tokens = input as f64 * rates::FALLBACK_INPUT
+            + output as f64 * rates::FALLBACK_OUTPUT
+            + cache_write as f64 * rates::FALLBACK_CACHE_WRITE
+            + cache_read as f64 * rates::FALLBACK_CACHE_READ;
+
+        let corrected_floor = speed_multiplier * (fallback_tokens * rates::FACTOR + web_cost);
+        if cost_usd >= corrected_floor {
+            continue;
+        }
+
+        // The stored cost was charged at 1x: the fallback row has no fast
+        // multiplier, so the speed multiplier is applied here, not unwound.
+        let corrected = speed_multiplier * ((cost_usd - web_cost) * rates::FACTOR + web_cost);
+        tx.execute(
+            "UPDATE calls SET cost_usd = ?1 WHERE id = ?2",
+            params![corrected, id],
+        )?;
+        repriced += 1;
+    }
+
+    Ok(repriced)
 }
 
 /// Codex v6 re-keyed calls onto lineage-addressed dedup keys. Each reparsed
@@ -1789,7 +1909,7 @@ mod tests {
             .conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(version, ARCHIVE_SCHEMA_VERSION);
         let advice_tables: u32 = archive
             .conn
             .query_row(
@@ -1814,7 +1934,7 @@ mod tests {
             .conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(version, ARCHIVE_SCHEMA_VERSION);
 
         let loaded = archive.load().unwrap();
         assert_eq!(loaded.calls.len(), 1, "calls survive the v4 migration");
@@ -2612,7 +2732,7 @@ mod tests {
             .conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(version, ARCHIVE_SCHEMA_VERSION);
 
         let seeded = transcript_row(&archive, "legacy-call").unwrap();
         assert_eq!(seeded.0, "legacy row", "truncated prompt seeds user_text");
@@ -2629,6 +2749,214 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM source_state", [], |row| row.get(0))
             .unwrap();
         assert_eq!(sources, 0, "v7 clears source_state to force re-parse");
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    /// Insert one pre-v8 row with an explicit cost, then migrate.
+    fn legacy_opus_5_row(
+        label: &str,
+        model: &str,
+        speed: &str,
+        cost: f64,
+        call: &ParsedCall,
+    ) -> String {
+        format!(
+            "INSERT INTO calls (tool, dedup_key, model, input_tokens, output_tokens,
+                 cache_creation_input_tokens, cache_read_input_tokens, cached_input_tokens,
+                 reasoning_tokens, web_search_requests, cost_usd, tools_json,
+                 bash_commands_json, timestamp, speed, user_message, session_id,
+                 project, imported_at)
+             VALUES ('claude-code', '{label}', '{model}', {}, {}, {}, {}, 0, 0, {},
+                 {cost}, '[]', '[]', '2026-07-20T12:00:00Z', '{speed}', '', 's', 'p',
+                 '2026-07-20T12:00:00Z');",
+            call.input_tokens,
+            call.output_tokens,
+            call.cache_creation_input_tokens,
+            call.cache_read_input_tokens,
+            call.web_search_requests,
+        )
+    }
+
+    fn cost_of(archive: &Archive, key: &str) -> f64 {
+        archive
+            .conn
+            .query_row(
+                "SELECT cost_usd FROM calls WHERE dedup_key = ?1",
+                params![key],
+                |row| row.get(0),
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn migrate_v8_reprices_opus_5_rows_to_match_the_real_pricing_formula() {
+        // A call with a 1-hour cache-write share, which is the term that
+        // cannot be recomputed from the archive because it is never persisted.
+        let mut call = bare_call("opus5");
+        call.tool = "claude-code";
+        call.model = "claude-opus-5".into();
+        call.input_tokens = 12_000;
+        call.output_tokens = 3_400;
+        call.cache_creation_input_tokens = 50_000;
+        call.cache_creation_1h_input_tokens = 30_000;
+        call.cache_read_input_tokens = 900_000;
+        call.web_search_requests = 0;
+        call.timestamp = Some(Utc.with_ymd_and_hms(2026, 7, 20, 12, 0, 0).unwrap());
+
+        // What the call was actually billed while Opus 5 was unpriced, and
+        // what it should have cost.
+        let charged = crate::pricing::cost("claude-sonnet-4-6", &call, Speed::Standard);
+        let truth = crate::pricing::cost("claude-opus-5", &call, Speed::Standard);
+        assert!(charged < truth, "the gap this migration exists to close");
+
+        let paths = temp_paths("migrate-v8-opus5");
+        create_legacy_db(
+            &paths,
+            &format!(
+                "{}
+                PRAGMA user_version = 7;
+                ",
+                legacy_opus_5_row("opus5", "claude-opus-5", "standard", charged, &call)
+            ),
+        );
+
+        let archive = Archive::open(&paths).unwrap();
+        let repaired = cost_of(&archive, "opus5");
+        assert!(
+            (repaired - truth).abs() < 1e-9,
+            "rescale must reproduce the pricing formula exactly, including the \
+             1h cache-write premium: got {repaired}, want {truth}"
+        );
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn migrate_v8_skips_rows_that_are_already_correctly_priced() {
+        let mut call = bare_call("correct");
+        call.tool = "claude-code";
+        call.input_tokens = 12_000;
+        call.output_tokens = 3_400;
+        call.cache_creation_input_tokens = 50_000;
+        call.cache_creation_1h_input_tokens = 30_000;
+        call.cache_read_input_tokens = 900_000;
+        call.timestamp = Some(Utc.with_ymd_and_hms(2026, 7, 20, 12, 0, 0).unwrap());
+
+        // Someone who downloaded corrected books before upgrading the binary
+        // already has true Opus 5 costs; rescaling those would over-count.
+        let already_correct = crate::pricing::cost("claude-opus-5", &call, Speed::Standard);
+        // A different model must not be touched at all.
+        let sonnet = crate::pricing::cost("claude-sonnet-4-6", &call, Speed::Standard);
+
+        let paths = temp_paths("migrate-v8-guard");
+        create_legacy_db(
+            &paths,
+            &format!(
+                "{}
+                {}
+                PRAGMA user_version = 7;
+                ",
+                legacy_opus_5_row(
+                    "correct",
+                    "claude-opus-5",
+                    "standard",
+                    already_correct,
+                    &call
+                ),
+                legacy_opus_5_row("other", "claude-sonnet-4-6", "standard", sonnet, &call),
+            ),
+        );
+
+        let archive = Archive::open(&paths).unwrap();
+        assert!(
+            (cost_of(&archive, "correct") - already_correct).abs() < 1e-12,
+            "an already-correct Opus 5 row must be left alone"
+        );
+        assert!(
+            (cost_of(&archive, "other") - sonnet).abs() < 1e-12,
+            "non-Opus-5 rows must be untouched"
+        );
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn migrate_v8_applies_the_fast_multiplier_the_fallback_row_never_had() {
+        let mut call = bare_call("fast");
+        call.tool = "claude-code";
+        call.input_tokens = 8_000;
+        call.output_tokens = 2_000;
+        call.cache_creation_input_tokens = 1_000;
+        call.cache_read_input_tokens = 40_000;
+        call.timestamp = Some(Utc.with_ymd_and_hms(2026, 7, 20, 12, 0, 0).unwrap());
+
+        // Sonnet 4.6 carries no fast multiplier, so fast rows were billed at 1x.
+        let charged = crate::pricing::cost("claude-sonnet-4-6", &call, Speed::Fast);
+        let truth = crate::pricing::cost("claude-opus-5", &call, Speed::Fast);
+
+        let paths = temp_paths("migrate-v8-fast");
+        create_legacy_db(
+            &paths,
+            &format!(
+                "{}
+                PRAGMA user_version = 7;
+                ",
+                legacy_opus_5_row("fast", "claude-opus-5", "fast", charged, &call)
+            ),
+        );
+
+        let archive = Archive::open(&paths).unwrap();
+        let repaired = cost_of(&archive, "fast");
+        assert!(
+            (repaired - truth).abs() < 1e-9,
+            "fast rows need the 2x Opus 5 multiplier applied: got {repaired}, want {truth}"
+        );
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn migrate_v8_folds_dated_ids_but_not_neighbouring_models() {
+        let mut call = bare_call("dated");
+        call.tool = "claude-code";
+        call.input_tokens = 5_000;
+        call.output_tokens = 1_000;
+        call.timestamp = Some(Utc.with_ymd_and_hms(2026, 7, 20, 12, 0, 0).unwrap());
+
+        let charged = crate::pricing::cost("claude-sonnet-4-6", &call, Speed::Standard);
+
+        let paths = temp_paths("migrate-v8-canonical");
+        create_legacy_db(
+            &paths,
+            &format!(
+                "{}
+                {}
+                PRAGMA user_version = 7;
+                ",
+                legacy_opus_5_row(
+                    "dated",
+                    "anthropic/claude-opus-5-20260715",
+                    "standard",
+                    charged,
+                    &call
+                ),
+                legacy_opus_5_row(
+                    "neighbour",
+                    "claude-opus-5-fast",
+                    "standard",
+                    charged,
+                    &call
+                ),
+            ),
+        );
+
+        let archive = Archive::open(&paths).unwrap();
+        let truth = crate::pricing::cost("claude-opus-5", &call, Speed::Standard);
+        assert!(
+            (cost_of(&archive, "dated") - truth).abs() < 1e-9,
+            "dated and vendor-prefixed Opus 5 ids canonicalize into the repair"
+        );
+        assert!(
+            (cost_of(&archive, "neighbour") - charged).abs() < 1e-12,
+            "a distinct model id that merely starts with claude-opus-5 is not repriced"
+        );
         let _ = fs::remove_dir_all(paths.dir);
     }
 

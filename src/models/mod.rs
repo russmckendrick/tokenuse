@@ -390,6 +390,14 @@ mod tests {
         assert_eq!(display("claude-code", "claude-opus-4-8"), "Opus 4.8");
         assert_eq!(display("copilot", "claude-opus-4-8"), "Opus 4.8");
 
+        // Opus 5 drops the point release, so it must not be shadowed by the
+        // `claude-opus-4*` prefix rules that sit next to it in the registry.
+        let opus_5 = resolve("claude-code", "claude-opus-5");
+        assert_eq!(opus_5.display, "Opus 5");
+        assert_eq!(opus_5.canonical_id, "claude-opus-5");
+        assert_eq!(opus_5.family, "Opus");
+        assert_eq!(display("copilot", "claude-opus-5"), "Opus 5");
+
         // Unknown Claude ids self-name in the short-name style.
         let unknown = resolve("claude-code", "claude-nova-2");
         assert_eq!(unknown.display, "Nova 2");
