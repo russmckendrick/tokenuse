@@ -142,6 +142,10 @@ struct ExtractRow {
     set: FixedFields,
     #[serde(default)]
     note: Option<String>,
+    /// `pinned` rows only: the model is already gone from the source page, so
+    /// skip the liveness check that would otherwise warn on every refresh.
+    #[serde(default)]
+    retired: bool,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -244,7 +248,7 @@ fn sources_config() -> Result<PricingSourcesConfig> {
             && source
                 .extract
                 .as_ref()
-                .is_none_or(|extract| extract.mode != "model-rows")
+                .is_none_or(|extract| !matches!(extract.mode.as_str(), "model-rows" | "pinned"))
         {
             return Err(eyre!(
                 "markdown-table source {} is missing table_heading",
@@ -325,11 +329,93 @@ fn merge_override_source(source: &SourceConfig, overrides: &mut Value) -> Result
     match extract.mode.as_str() {
         "label-rows" => merge_label_rows_source(source, extract, &raw, overrides),
         "model-rows" => merge_model_rows_source(source, extract, &raw, overrides),
+        "pinned" => merge_pinned_rows_source(source, extract, &raw, overrides),
         other => Err(eyre!(
             "source {} uses unsupported override extract mode {other}",
             source.id
         )),
     }
+}
+
+/// Emit maintainer-pinned prices for models the source still documents but no
+/// longer publishes in any machine-readable table (Cursor renders its
+/// first-party rates from a client-side bundle, so the Markdown export carries
+/// the prose but none of the numbers).
+///
+/// Nothing is parsed from the page: every row supplies its own `set` values. The
+/// fetched body is still used as a liveness check so a renamed or retired model
+/// surfaces as a warning instead of staying pinned and unexamined forever. A
+/// pin whose price changes upstream cannot be detected this way — that is the
+/// cost of the source dropping its table, and the reason each row carries a
+/// `note` recording what was verified.
+fn merge_pinned_rows_source(
+    source: &SourceConfig,
+    extract: &ExtractConfig,
+    raw: &str,
+    overrides: &mut Value,
+) -> Result<()> {
+    if extract.rows.is_empty() {
+        return Err(eyre!("pinned source {} has no configured rows", source.id));
+    }
+    let haystack = comparable(raw);
+    let mut checked = 0usize;
+    let mut present = 0usize;
+    for row_rule in &extract.rows {
+        if !row_rule.retired {
+            let marker = row_rule
+                .match_text
+                .as_deref()
+                .unwrap_or(row_rule.model.as_str());
+            checked += 1;
+            if haystack.contains(&comparable(marker)) {
+                present += 1;
+            } else {
+                eprintln!(
+                    "warning: source {} no longer mentions {marker}; keeping the pinned price for {} (model retired or renamed upstream?)",
+                    source.id, row_rule.model
+                );
+            }
+        }
+
+        let mut price = Map::new();
+        apply_defaults_and_fixed(&mut price, &extract.defaults, &extract.set);
+        apply_fixed(&mut price, &row_rule.set);
+        // Guard on token rates specifically: `defaults` alone (web_search) would
+        // otherwise leave a row that looks populated but prices nothing.
+        if !["input", "output", "cache_read", "cache_write"]
+            .iter()
+            .any(|field| price.contains_key(*field))
+        {
+            return Err(eyre!(
+                "pinned source {} row {} has no prices to set",
+                source.id,
+                row_rule.model
+            ));
+        }
+        let note = row_rule.note.as_deref().or(extract.note.as_deref());
+        add_provenance(source, note, &mut price);
+        if let Some(effective_from) = row_rule
+            .effective_from
+            .as_deref()
+            .or(source.effective_from.as_deref())
+        {
+            price.insert(
+                "effective_from".into(),
+                Value::String(effective_from.into()),
+            );
+        }
+        insert_override_price(source, extract, &row_rule.model, price, overrides)?;
+    }
+
+    // Mirrors the model-rows guard: one missing model is drift, every model
+    // vanishing at once means the page changed shape and the pins need a human.
+    if checked > 0 && present == 0 {
+        return Err(eyre!(
+            "source {} no longer mentions any of its {checked} pinned models; the upstream page may have changed",
+            source.id
+        ));
+    }
+    Ok(())
 }
 
 fn merge_label_rows_source(
@@ -1350,6 +1436,158 @@ after
         )
         .unwrap_err();
         assert!(err.to_string().contains("matched none"));
+    }
+
+    fn pinned_cursor_source() -> SourceConfig {
+        serde_json::from_str(
+            r#"{
+              "id": "cursor-model-pricing",
+              "name": "Cursor models and pricing",
+              "url": "https://example.invalid/cursor.md",
+              "kind": "markdown-table",
+              "output": "overrides",
+              "extract": {
+                "mode": "pinned",
+                "scope": "tool",
+                "tool": "cursor",
+                "defaults": { "web_search": 0.01 },
+                "rows": [
+                  {
+                    "model": "composer-1",
+                    "retired": true,
+                    "set": { "input": 0.00000125, "output": 0.00001 }
+                  },
+                  {
+                    "match": "Composer 2.5",
+                    "model": "composer-2.5",
+                    "set": { "input": 0.0000005, "output": 0.0000025 }
+                  }
+                ]
+              }
+            }"#,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn pinned_rows_emit_configured_prices_without_a_table() {
+        let source = pinned_cursor_source();
+        // Cursor renders its first-party rates client-side: the page names the
+        // models in prose but publishes no table for them.
+        let raw = "## Composer pricing\n\nComposer 2.5 is Cursor's own model.\n";
+        let mut overrides = json!({ "fallback": "composer-2.5", "tool_models": {} });
+
+        merge_pinned_rows_source(
+            &source,
+            source.extract.as_ref().unwrap(),
+            raw,
+            &mut overrides,
+        )
+        .unwrap();
+
+        let row = overrides
+            .pointer("/tool_models/cursor/composer-2.5")
+            .unwrap();
+        assert_eq!(row["input"], json!(0.0000005));
+        assert_eq!(row["output"], json!(0.0000025));
+        assert_eq!(row["web_search"], json!(0.01));
+        assert_eq!(row["provenance"]["source_name"], json!(source.name));
+
+        // A row flagged retired is still pinned even though the page never
+        // mentions it, so archived calls for it keep pricing.
+        assert_eq!(
+            overrides.pointer("/tool_models/cursor/composer-1/input"),
+            Some(&json!(0.00000125))
+        );
+    }
+
+    #[test]
+    fn pinned_rows_error_when_no_checked_model_is_mentioned() {
+        let source = pinned_cursor_source();
+        // The page no longer names any live pinned model: that is a reshuffle
+        // the pins cannot survive unexamined, so fail rather than go quiet.
+        let raw = "## Pricing\n\nSee the dashboard for current rates.\n";
+        let mut overrides = json!({ "fallback": "composer-2.5", "tool_models": {} });
+
+        let err = merge_pinned_rows_source(
+            &source,
+            source.extract.as_ref().unwrap(),
+            raw,
+            &mut overrides,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("no longer mentions any"));
+    }
+
+    #[test]
+    fn pinned_rows_of_only_retired_models_skip_the_liveness_check() {
+        let source: SourceConfig = serde_json::from_str(
+            r#"{
+              "id": "cursor-model-pricing",
+              "name": "Cursor models and pricing",
+              "url": "https://example.invalid/cursor.md",
+              "kind": "markdown-table",
+              "output": "overrides",
+              "extract": {
+                "mode": "pinned",
+                "scope": "tool",
+                "tool": "cursor",
+                "rows": [
+                  {
+                    "model": "composer-1",
+                    "retired": true,
+                    "set": { "input": 0.00000125, "output": 0.00001 }
+                  }
+                ]
+              }
+            }"#,
+        )
+        .unwrap();
+        let mut overrides = json!({ "fallback": "composer-1", "tool_models": {} });
+
+        merge_pinned_rows_source(
+            &source,
+            source.extract.as_ref().unwrap(),
+            "nothing relevant here",
+            &mut overrides,
+        )
+        .unwrap();
+
+        assert!(overrides
+            .pointer("/tool_models/cursor/composer-1")
+            .is_some());
+    }
+
+    #[test]
+    fn pinned_rows_reject_a_row_with_no_prices() {
+        let source: SourceConfig = serde_json::from_str(
+            r#"{
+              "id": "cursor-pricing",
+              "name": "Cursor pricing",
+              "url": "https://example.invalid/cursor.md",
+              "kind": "markdown-table",
+              "output": "overrides",
+              "extract": {
+                "mode": "pinned",
+                "scope": "global",
+                "defaults": { "web_search": 0.01 },
+                "rows": [{ "match": "Auto Cost", "model": "cursor-auto" }]
+              }
+            }"#,
+        )
+        .unwrap();
+        // `defaults` populates web_search, so the row is not literally empty --
+        // it is still unpriced and must be rejected.
+        let mut overrides = json!({ "fallback": "cursor-auto", "models": {} });
+
+        let err = merge_pinned_rows_source(
+            &source,
+            source.extract.as_ref().unwrap(),
+            "### Auto Cost",
+            &mut overrides,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("no prices to set"));
     }
 
     #[test]

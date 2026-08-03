@@ -1,6 +1,6 @@
 {
   "_metadata": {
-    "checked_at": "2026-07-27",
+    "checked_at": "2026-08-03",
     "fields": {
       "cache_read": "USD per cache read token",
       "cache_write": "USD per cache write token",
@@ -1586,10 +1586,10 @@
       "web_search": 0.01
     },
     "gpt-5.6-luna": {
-      "cache_read": 1e-7,
-      "cache_write": 1.25e-6,
-      "input": 1e-6,
-      "output": 6e-6,
+      "cache_read": 2e-8,
+      "cache_write": 2.5e-7,
+      "input": 2e-7,
+      "output": 1.2e-6,
       "web_search": 0.01
     },
     "gpt-5.6-sol": {
@@ -1600,10 +1600,10 @@
       "web_search": 0.01
     },
     "gpt-5.6-terra": {
-      "cache_read": 2.5e-7,
-      "cache_write": 3.125e-6,
-      "input": 2.5e-6,
-      "output": 0.000015,
+      "cache_read": 2e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.000012,
       "web_search": 0.01
     },
     "grok-2": {
@@ -2107,10 +2107,10 @@
       "web_search": 0.01
     },
     "openai.gpt-5.6-luna": {
-      "cache_read": 1.1e-7,
-      "cache_write": 1.375e-6,
-      "input": 1.1e-6,
-      "output": 6.6e-6,
+      "cache_read": 2.2e-8,
+      "cache_write": 2.75e-7,
+      "input": 2.2e-7,
+      "output": 1.32e-6,
       "web_search": 0.01
     },
     "openai.gpt-5.6-sol": {
@@ -2121,10 +2121,10 @@
       "web_search": 0.01
     },
     "openai.gpt-5.6-terra": {
-      "cache_read": 2.75e-7,
-      "cache_write": 3.4375e-6,
-      "input": 2.75e-6,
-      "output": 0.0000165,
+      "cache_read": 2.2e-7,
+      "cache_write": 2.75e-6,
+      "input": 2.2e-6,
+      "output": 0.0000132,
       "web_search": 0.01
     },
     "us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0": {

@@ -7,7 +7,7 @@ Last checked: July 11, 2026.
 - `costs/pricing-upstream.json`: broad model coverage generated from LiteLLM and other machine-readable feeds.
 - `costs/pricing-overrides.json`: official-source corrections, aliases, fallback rows, tool-scoped rows, provenance, and effective dates.
 
-`costs/pricing-sources.json` owns the live source configuration: URLs, source kind, table headings, columns, row matches, scope, defaults, and published local-download URLs. Rust implements generic JSON-map, Markdown-table, and HTML-table/text extraction; provider-specific selectors stay in JSON.
+`costs/pricing-sources.json` owns the live source configuration: URLs, source kind, table headings, columns, row matches, scope, defaults, and published local-download URLs. Rust implements generic JSON-map, Markdown-table, and HTML-table/text extraction, plus maintainer-pinned rows for sources that stopped publishing machine-readable rates; provider-specific selectors stay in JSON.
 
 ## Source Policy
 
@@ -19,7 +19,7 @@ LiteLLM is broad coverage, not final authority. Official provider/tool docs over
 | Claude Code fast mode | [Claude fast mode markdown](https://code.claude.com/docs/en/fast-mode.md) |
 | OpenAI/Codex API pricing | [OpenAI API pricing](https://openai.com/api/pricing/) |
 | Gemini API pricing | [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing) |
-| Cursor Auto pricing | [Cursor models and pricing markdown](https://cursor.com/docs/models-and-pricing.md) |
+| Cursor Auto and first-party model pricing | [Cursor models and pricing markdown](https://cursor.com/docs/models-and-pricing.md) (pinned — see [Pinned rows](#pinned-rows)) |
 | GitHub Copilot pricing | [GitHub Copilot models and pricing markdown](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md) |
 
 Generated books carry top-level `checked_at` metadata, and every override row carries `source_name`, `source_url`, `checked_at`, and optional `note`. Rows can also carry `effective_from`; future-effective rows are ignored until the call timestamp reaches that date. Calls without a timestamp use import time.
@@ -76,6 +76,19 @@ GitHub Actions also runs `.github/workflows/refresh-pricing.yml` weekly and on m
 - **Retired rows.** When a configured model disappears from a source entirely (e.g. a Copilot model that was pulled), the refresh prints a `warning: ... skipping` line and keeps the model's last-known override row instead of erroring.
 
 As a safety net, a source that matches **none** of its configured rows still fails loudly — that pattern signals a table heading/column change rather than a single model being retired.
+
+### Pinned rows
+
+Some sources document a model but stop publishing its rates in any machine-readable form. Cursor is the current example: it renders its first-party rates (Auto Cost, Composer, Grok) from a client-side pricing widget, so `models-and-pricing.md` carries the prose and none of the numbers.
+
+Those rows use `"mode": "pinned"`. Nothing is parsed from the page — every row supplies its rates through `set`, and the note records what was verified and when. The page is still fetched, and each row's `match` string is used as a liveness check:
+
+- **Model still named on the page.** Normal case; the pinned rates are written.
+- **Model no longer named.** The refresh prints a `warning: ... keeping the pinned price` line and keeps the row, so archived calls still price.
+- **No live model named at all.** The source fails loudly, mirroring the `model-rows` zero-match guard — the page has been reshuffled and the pins need re-checking by hand.
+- **`"retired": true`.** The model is already gone from the source (e.g. Composer 1); the liveness check is skipped so the refresh does not warn on every run.
+
+A pinned row cannot detect an upstream *price* change — only a rename or retirement. Re-check pinned rates by hand when Cursor announces pricing changes.
 
 ## Local Downloads
 
