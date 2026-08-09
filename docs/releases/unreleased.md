@@ -4,7 +4,7 @@ Changes that should be included in the next release go here. Keep this file curr
 
 ## Added
 
-No additions recorded yet.
+- The Windows desktop app is now published to WinGet as `RussMckendrick.TokenUse` (`winget install --id RussMckendrick.TokenUse -e`). Each release automatically opens a manifest pull request against `microsoft/winget-pkgs` pointing at the MSI installer.
 
 ## Changed
 

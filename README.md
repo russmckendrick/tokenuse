@@ -28,6 +28,12 @@ brew install --cask russmckendrick/tap/tokenuse-desktop
 open -a "Token Use"
 ```
 
+Install the Windows desktop app with WinGet:
+
+```powershell
+winget install --id RussMckendrick.TokenUse -e
+```
+
 Linux, Windows, and manual desktop downloads are published on GitHub Releases. See [installation](docs/guides/installation.md) for platform-specific commands.
 
 ## Desktop App

@@ -77,7 +77,15 @@ Compare the hash output with the first value in `tokenuse-windows-amd64.exe.sha2
 
 ## Windows Desktop
 
-Windows desktop releases are published as unsigned AMD64 NSIS and MSI installers. Verify the checksum before installing:
+Install the desktop app with WinGet:
+
+```powershell
+winget install --id RussMckendrick.TokenUse -e
+```
+
+WinGet pins the SHA256 of each release in its manifest, so no manual checksum step is needed.
+
+Alternatively, Windows desktop releases are published as unsigned AMD64 NSIS and MSI installers on GitHub Releases. Verify the checksum before installing:
 
 ```powershell
 Invoke-WebRequest -Uri "https://github.com/russmckendrick/tokenuse/releases/latest/download/tokenuse-desktop-windows-amd64-setup.exe" -OutFile "tokenuse-desktop-windows-amd64-setup.exe"

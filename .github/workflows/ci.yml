@@ -678,3 +678,12 @@ jobs:
     with:
       release_tag: ${{ github.ref_name }}
     secrets: inherit
+
+  update-winget:
+    name: "🪟 Update WinGet"
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/update-winget.yml
+    with:
+      release_tag: ${{ github.ref_name }}
+    secrets: inherit
