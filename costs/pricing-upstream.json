@@ -1,6 +1,6 @@
 {
   "_metadata": {
-    "checked_at": "2026-08-10",
+    "checked_at": "2026-08-17",
     "fields": {
       "cache_read": "USD per cache read token",
       "cache_write": "USD per cache write token",
@@ -374,6 +374,20 @@
       "cache_write": 1.25e-6,
       "input": 1e-6,
       "output": 5e-6,
+      "web_search": 0.01
+    },
+    "claude-mythos-5": {
+      "cache_read": 1e-6,
+      "cache_write": 0.0000125,
+      "input": 0.00001,
+      "output": 0.00005,
+      "web_search": 0.01
+    },
+    "claude-mythos-preview": {
+      "cache_read": 1e-6,
+      "cache_write": 0.0000125,
+      "input": 0.00001,
+      "output": 0.00005,
       "web_search": 0.01
     },
     "claude-opus-4": {
@@ -950,6 +964,11 @@
       "output": 4.5e-6,
       "web_search": 0.01
     },
+    "gemini-3.1-flash-tts-preview": {
+      "input": 1e-6,
+      "output": 0.00002,
+      "web_search": 0.01
+    },
     "gemini-3.1-pro-preview": {
       "cache_read": 2e-7,
       "input": 2e-6,
@@ -978,6 +997,12 @@
       "cache_read": 1.5e-7,
       "input": 1.5e-6,
       "output": 7.5e-6,
+      "web_search": 0.01
+    },
+    "gemini-3.7-flash": {
+      "cache_read": 7.5e-8,
+      "input": 7.5e-7,
+      "output": 3.75e-6,
       "web_search": 0.01
     },
     "gemini-embedding-001": {
@@ -1062,6 +1087,11 @@
     },
     "gemini-robotics-er-2-preview": {
       "cache_read": 2e-7,
+      "input": 2e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
+    "gemini-robotics-er-2-streaming-preview": {
       "input": 2e-6,
       "output": 0.00001,
       "web_search": 0.01
@@ -1787,28 +1817,40 @@
       "output": 5e-7,
       "web_search": 0.01
     },
+    "grok-4.20-0309-non-reasoning": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
     "grok-4.20-0309-reasoning": {
       "cache_read": 2e-7,
-      "input": 2e-6,
-      "output": 6e-6,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
       "web_search": 0.01
     },
     "grok-4.20-beta-0309-non-reasoning": {
       "cache_read": 2e-7,
-      "input": 2e-6,
-      "output": 6e-6,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
       "web_search": 0.01
     },
     "grok-4.20-beta-0309-reasoning": {
       "cache_read": 2e-7,
-      "input": 2e-6,
-      "output": 6e-6,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "grok-4.20-multi-agent-0309": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
       "web_search": 0.01
     },
     "grok-4.20-multi-agent-beta-0309": {
       "cache_read": 2e-7,
-      "input": 2e-6,
-      "output": 6e-6,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
       "web_search": 0.01
     },
     "grok-4.20-non-reasoning": {
@@ -1836,12 +1878,18 @@
       "web_search": 0.01
     },
     "grok-4.5": {
-      "cache_read": 5e-7,
+      "cache_read": 3e-7,
       "input": 2e-6,
       "output": 6e-6,
       "web_search": 0.01
     },
     "grok-4.5-latest": {
+      "cache_read": 3e-7,
+      "input": 2e-6,
+      "output": 6e-6,
+      "web_search": 0.01
+    },
+    "grok-4.6": {
       "cache_read": 5e-7,
       "input": 2e-6,
       "output": 6e-6,
@@ -1852,22 +1900,28 @@
       "output": 0.000015,
       "web_search": 0.01
     },
+    "grok-build-0.1": {
+      "cache_read": 2e-7,
+      "input": 1e-6,
+      "output": 2e-6,
+      "web_search": 0.01
+    },
     "grok-code-fast": {
-      "cache_read": 2e-8,
-      "input": 2e-7,
-      "output": 1.5e-6,
+      "cache_read": 2e-7,
+      "input": 1e-6,
+      "output": 2e-6,
       "web_search": 0.01
     },
     "grok-code-fast-1": {
-      "cache_read": 2e-8,
-      "input": 2e-7,
-      "output": 1.5e-6,
+      "cache_read": 2e-7,
+      "input": 1e-6,
+      "output": 2e-6,
       "web_search": 0.01
     },
     "grok-code-fast-1-0825": {
-      "cache_read": 2e-8,
-      "input": 2e-7,
-      "output": 1.5e-6,
+      "cache_read": 2e-7,
+      "input": 1e-6,
+      "output": 2e-6,
       "web_search": 0.01
     },
     "grok-vision-beta": {
