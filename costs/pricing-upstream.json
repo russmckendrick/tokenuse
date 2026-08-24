@@ -1,6 +1,6 @@
 {
   "_metadata": {
-    "checked_at": "2026-08-17",
+    "checked_at": "2026-08-24",
     "fields": {
       "cache_read": "USD per cache read token",
       "cache_write": "USD per cache write token",
@@ -602,6 +602,11 @@
       "output": 0.00002500001,
       "web_search": 0.01
     },
+    "databricks-claude-opus-4-6": {
+      "input": 5.00003e-6,
+      "output": 0.00002500001,
+      "web_search": 0.01
+    },
     "databricks-claude-sonnet-4": {
       "input": 2.99999e-6,
       "output": 0.000015000020000000002,
@@ -617,6 +622,11 @@
       "output": 0.000015000020000000002,
       "web_search": 0.01
     },
+    "databricks-claude-sonnet-4-6": {
+      "input": 2.99999e-6,
+      "output": 0.000015000020000000002,
+      "web_search": 0.01
+    },
     "databricks-gemini-2-5-flash": {
       "input": 3.0002e-7,
       "output": 2.49998e-6,
@@ -627,6 +637,26 @@
       "output": 9.999990000000002e-6,
       "web_search": 0.01
     },
+    "databricks-gemini-3-1-flash-lite": {
+      "input": 3.1248e-7,
+      "output": 1.87502e-6,
+      "web_search": 0.01
+    },
+    "databricks-gemini-3-1-pro": {
+      "input": 2.49998e-6,
+      "output": 0.000015000020000000002,
+      "web_search": 0.01
+    },
+    "databricks-gemini-3-flash": {
+      "input": 6.2503e-7,
+      "output": 3.74997e-6,
+      "web_search": 0.01
+    },
+    "databricks-gemini-3-pro": {
+      "input": 2.49998e-6,
+      "output": 0.000015000020000000002,
+      "web_search": 0.01
+    },
     "databricks-gpt-5": {
       "input": 1.24999e-6,
       "output": 9.999990000000002e-6,
@@ -635,6 +665,46 @@
     "databricks-gpt-5-1": {
       "input": 1.24999e-6,
       "output": 9.999990000000002e-6,
+      "web_search": 0.01
+    },
+    "databricks-gpt-5-1-codex-max": {
+      "input": 1.24999e-6,
+      "output": 9.999990000000002e-6,
+      "web_search": 0.01
+    },
+    "databricks-gpt-5-1-codex-mini": {
+      "input": 2.4997e-7,
+      "output": 1.99997e-6,
+      "web_search": 0.01
+    },
+    "databricks-gpt-5-2": {
+      "input": 1.75e-6,
+      "output": 0.000014,
+      "web_search": 0.01
+    },
+    "databricks-gpt-5-2-codex": {
+      "input": 1.75e-6,
+      "output": 0.000014,
+      "web_search": 0.01
+    },
+    "databricks-gpt-5-3-codex": {
+      "input": 1.75e-6,
+      "output": 0.000014,
+      "web_search": 0.01
+    },
+    "databricks-gpt-5-4": {
+      "input": 2.49998e-6,
+      "output": 0.000015000020000000002,
+      "web_search": 0.01
+    },
+    "databricks-gpt-5-4-mini": {
+      "input": 7.4998e-7,
+      "output": 4.50002e-6,
+      "web_search": 0.01
+    },
+    "databricks-gpt-5-4-nano": {
+      "input": 1.9999e-7,
+      "output": 1.24999e-6,
       "web_search": 0.01
     },
     "databricks-gpt-5-mini": {
@@ -953,6 +1023,12 @@
       "output": 1.5e-6,
       "web_search": 0.01
     },
+    "gemini-3.1-flash-lite-image": {
+      "cache_read": 2.5e-8,
+      "input": 2.5e-7,
+      "output": 1.5e-6,
+      "web_search": 0.01
+    },
     "gemini-3.1-flash-lite-preview": {
       "cache_read": 2.5e-8,
       "input": 2.5e-7,
@@ -993,10 +1069,15 @@
       "output": 2.5e-6,
       "web_search": 0.01
     },
+    "gemini-3.5-live-translate-preview": {
+      "input": 3.5e-6,
+      "output": 0.000021,
+      "web_search": 0.01
+    },
     "gemini-3.6-flash": {
-      "cache_read": 1.5e-7,
-      "input": 1.5e-6,
-      "output": 7.5e-6,
+      "cache_read": 7.5e-8,
+      "input": 7.5e-7,
+      "output": 3.75e-6,
       "web_search": 0.01
     },
     "gemini-3.7-flash": {
@@ -1171,6 +1252,33 @@
       "cache_write": 2.5e-6,
       "input": 2e-6,
       "output": 0.00001,
+      "web_search": 0.01
+    },
+    "global.openai.gpt-5.6-luna": {
+      "cache_read": 2e-8,
+      "cache_write": 2.5e-7,
+      "input": 2e-7,
+      "output": 1.2e-6,
+      "web_search": 0.01
+    },
+    "global.openai.gpt-5.6-sol": {
+      "cache_read": 5e-7,
+      "cache_write": 6.25e-6,
+      "input": 5e-6,
+      "output": 0.00003,
+      "web_search": 0.01
+    },
+    "global.openai.gpt-5.6-terra": {
+      "cache_read": 2e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.000012,
+      "web_search": 0.01
+    },
+    "global.xai.grok-4.6": {
+      "cache_read": 5e-7,
+      "input": 2e-6,
+      "output": 6e-6,
       "web_search": 0.01
     },
     "google.gemini-2.5-flash": {
@@ -1620,10 +1728,17 @@
       "web_search": 0.01
     },
     "gpt-5.6": {
-      "cache_read": 5e-7,
-      "cache_write": 6.25e-6,
-      "input": 5e-6,
-      "output": 0.00003,
+      "cache_read": 4e-7,
+      "cache_write": 5e-6,
+      "input": 4e-6,
+      "output": 0.00002,
+      "web_search": 0.01
+    },
+    "gpt-5.6-cyber": {
+      "cache_read": 1.25e-6,
+      "cache_write": 0.000015625,
+      "input": 0.0000125,
+      "output": 0.000075,
       "web_search": 0.01
     },
     "gpt-5.6-luna": {
@@ -1634,10 +1749,10 @@
       "web_search": 0.01
     },
     "gpt-5.6-sol": {
-      "cache_read": 5e-7,
-      "cache_write": 6.25e-6,
-      "input": 5e-6,
-      "output": 0.00003,
+      "cache_read": 4e-7,
+      "cache_write": 5e-6,
+      "input": 4e-6,
+      "output": 0.00002,
       "web_search": 0.01
     },
     "gpt-5.6-terra": {
@@ -2339,6 +2454,33 @@
       "output": 0.000011,
       "web_search": 0.01
     },
+    "us.openai.gpt-5.6-luna": {
+      "cache_read": 2.2e-8,
+      "cache_write": 2.75e-7,
+      "input": 2.2e-7,
+      "output": 1.32e-6,
+      "web_search": 0.01
+    },
+    "us.openai.gpt-5.6-sol": {
+      "cache_read": 5.5e-7,
+      "cache_write": 6.875e-6,
+      "input": 5.5e-6,
+      "output": 0.000033,
+      "web_search": 0.01
+    },
+    "us.openai.gpt-5.6-terra": {
+      "cache_read": 2.2e-7,
+      "cache_write": 2.75e-6,
+      "input": 2.2e-6,
+      "output": 0.0000132,
+      "web_search": 0.01
+    },
+    "us.xai.grok-4.6": {
+      "cache_read": 5.5e-7,
+      "input": 2.2e-6,
+      "output": 6.6e-6,
+      "web_search": 0.01
+    },
     "xai.grok-3": {
       "input": 3e-6,
       "output": 0.000015,
@@ -2388,6 +2530,12 @@
       "cache_read": 2e-7,
       "input": 1.25e-6,
       "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "xai.grok-4.6": {
+      "cache_read": 5.5e-7,
+      "input": 2.2e-6,
+      "output": 6.6e-6,
       "web_search": 0.01
     },
     "xai.grok-code-fast-1": {
