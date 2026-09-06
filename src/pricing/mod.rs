@@ -62,6 +62,9 @@ pub fn configured_book_status(paths: &crate::config::ConfigPaths) -> PricingBook
             paths.pricing_upstream_file.as_path(),
             paths.pricing_overrides_file.as_path(),
         ]);
+        if pricing_book_date_is_older_than_embedded(date.as_deref()) {
+            return embedded_book_status();
+        }
         return PricingBookStatus {
             source: PricingBookSource::LocalBooks,
             date,
@@ -76,11 +79,23 @@ pub fn configured_book_status(paths: &crate::config::ConfigPaths) -> PricingBook
         };
     }
 
+    embedded_book_status()
+}
+
+fn embedded_book_status() -> PricingBookStatus {
     PricingBookStatus {
         source: PricingBookSource::EmbeddedBooks,
         date: pricing_book_date_from_raw(&[EMBEDDED_UPSTREAM, EMBEDDED_OVERRIDES])
             .or_else(|| pricing_book_date_from_raw(&[LEGACY_EMBEDDED_SNAPSHOT])),
     }
+}
+
+fn pricing_book_date_is_older_than_embedded(local_date: Option<&str>) -> bool {
+    let embedded_date = pricing_book_date_from_raw(&[EMBEDDED_UPSTREAM, EMBEDDED_OVERRIDES]);
+    matches!(
+        (local_date, embedded_date.as_deref()),
+        (Some(local), Some(embedded)) if local < embedded
+    )
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Default, PartialEq)]
@@ -99,6 +114,11 @@ pub struct ModelPrice {
     pub fast_multiplier: Option<f64>,
     #[serde(default)]
     pub effective_from: Option<NaiveDate>,
+    /// Exclusive end date for a price row. This is used for pricing that a
+    /// provider explicitly retires on a known date, such as Cursor's legacy
+    /// Enterprise Auto rate.
+    #[serde(default)]
+    pub effective_to: Option<NaiveDate>,
     #[serde(default)]
     pub provenance: Option<PriceProvenance>,
 }
@@ -179,17 +199,13 @@ impl PriceTable {
         let date = effective_date(timestamp);
         let tool_key = tool.trim().to_ascii_lowercase();
         let canonical = canonicalize(model);
-        let tool_target = self
-            .tool_aliases
-            .get(&tool_key)
-            .and_then(|aliases| aliases.get(&canonical))
-            .map(String::as_str)
-            .unwrap_or(canonical.as_str());
+        let structured = normalize_tool_pricing_key(&tool_key, &canonical);
+        let tool_target = resolve_alias(self.tool_aliases.get(&tool_key), &structured);
 
-        if let Some(price) = self.lookup_tool(&tool_key, tool_target, date) {
+        if let Some(price) = self.lookup_tool(&tool_key, &tool_target, date) {
             return price;
         }
-        if let Some(price) = self.lookup_global(tool_target, date) {
+        if let Some(price) = self.lookup_global(&tool_target, date) {
             return price;
         }
         self.lookup_global(&self.fallback_key, date)
@@ -234,14 +250,10 @@ impl PriceTable {
         let date = effective_date(timestamp);
         let tool_key = tool.trim().to_ascii_lowercase();
         let canonical = canonicalize(model);
-        let tool_target = self
-            .tool_aliases
-            .get(&tool_key)
-            .and_then(|aliases| aliases.get(&canonical))
-            .map(String::as_str)
-            .unwrap_or(canonical.as_str());
-        self.lookup_tool(&tool_key, tool_target, date).is_none()
-            && self.lookup_global(tool_target, date).is_none()
+        let structured = normalize_tool_pricing_key(&tool_key, &canonical);
+        let tool_target = resolve_alias(self.tool_aliases.get(&tool_key), &structured);
+        self.lookup_tool(&tool_key, &tool_target, date).is_none()
+            && self.lookup_global(&tool_target, date).is_none()
     }
 
     pub fn local_from_paths(paths: &crate::config::ConfigPaths) -> Result<Self, String> {
@@ -259,7 +271,12 @@ impl PriceTable {
                 .map_err(|e| format!("read {}: {e}", paths.pricing_upstream_file.display()))?;
             let overrides = fs::read_to_string(&paths.pricing_overrides_file)
                 .map_err(|e| format!("read {}: {e}", paths.pricing_overrides_file.display()))?;
-            return Self::from_books(&upstream, &overrides);
+            let table = Self::from_books(&upstream, &overrides)?;
+            let local_date = pricing_book_date_from_raw(&[&upstream, &overrides]);
+            if pricing_book_date_is_older_than_embedded(local_date.as_deref()) {
+                return Ok(Self::from_embedded());
+            }
+            return Ok(table);
         }
 
         let raw = fs::read_to_string(&paths.pricing_snapshot_file)
@@ -365,16 +382,61 @@ impl PriceTable {
     }
 
     fn validate_fallback(&self) -> Result<(), String> {
-        let earliest = NaiveDate::from_ymd_opt(1970, 1, 1).expect("valid fallback date");
-        self.lookup_global(&self.fallback_key, earliest)
-            .map(|_| ())
-            .ok_or_else(|| {
-                format!(
-                    "fallback model {} not present in price books",
-                    self.fallback_key
-                )
+        let target = self
+            .aliases
+            .get(&self.fallback_key)
+            .map(String::as_str)
+            .unwrap_or(&self.fallback_key);
+        let mut windows: Vec<_> = self
+            .models
+            .iter()
+            .filter(|(key, _)| target.starts_with(key.as_str()))
+            .flat_map(|(_, entries)| {
+                entries
+                    .iter()
+                    .map(|entry| (entry.effective_from, entry.effective_to))
             })
+            .collect();
+        if windows.is_empty() {
+            return Err(format!(
+                "fallback model {} not present in price books",
+                self.fallback_key
+            ));
+        }
+        if !price_windows_cover_all_dates(&mut windows) {
+            return Err(format!(
+                "fallback model {} is not priced for every effective date",
+                self.fallback_key
+            ));
+        }
+        Ok(())
     }
+}
+
+/// Price windows are half-open date ranges: `[effective_from, effective_to)`.
+/// A fallback must cover the entire date line because it is the terminal path
+/// for every lookup that misses a model-specific row.
+fn price_windows_cover_all_dates(windows: &mut [(Option<NaiveDate>, Option<NaiveDate>)]) -> bool {
+    windows.sort_by_key(|(from, _)| *from);
+    let Some((None, first_to)) = windows.first().copied() else {
+        return false;
+    };
+
+    let mut covered_until = first_to;
+    for &(from, to) in &windows[1..] {
+        let Some(end) = covered_until else {
+            return true;
+        };
+        if from.is_some_and(|start| start > end) {
+            return false;
+        }
+        match to {
+            None => return true,
+            Some(next_end) if next_end > end => covered_until = Some(next_end),
+            Some(_) => {}
+        }
+    }
+    covered_until.is_none()
 }
 
 fn configured_table() -> &'static RwLock<PriceTable> {
@@ -427,6 +489,13 @@ fn validate_price(key: &str, price: &ModelPrice) -> Result<(), String> {
             return Err(format!("invalid fast_multiplier for {key}: {multiplier}"));
         }
     }
+    if let (Some(from), Some(to)) = (price.effective_from, price.effective_to) {
+        if to <= from {
+            return Err(format!(
+                "invalid effective window for {key}: effective_to {to} must be after effective_from {from}"
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -454,6 +523,7 @@ fn effective_entry(entries: &[ModelPrice], date: NaiveDate) -> Option<&ModelPric
     entries
         .iter()
         .filter(|entry| entry.effective_from.map(|d| d <= date).unwrap_or(true))
+        .filter(|entry| entry.effective_to.map(|d| date < d).unwrap_or(true))
         .max_by_key(|entry| entry.effective_from)
 }
 
@@ -471,6 +541,100 @@ fn normalize_tool_aliases(
         .into_iter()
         .map(|(tool, entries)| (tool.to_ascii_lowercase(), normalize_aliases(entries)))
         .collect()
+}
+
+fn normalize_tool_pricing_key(tool: &str, model: &str) -> String {
+    if tool != crate::tools::cursor::config::TOOL_ID {
+        return model.to_string();
+    }
+
+    if let Some((base, parameters)) = model.split_once('[') {
+        let Some(parameters) = parameters.strip_suffix(']') else {
+            return model.to_string();
+        };
+        let parameter = |wanted: &str| {
+            parameters.split(',').find_map(|parameter| {
+                let (key, value) = parameter.split_once('=')?;
+                (key.trim() == wanted).then(|| value.trim())
+            })
+        };
+        let fast = match parameter("fast") {
+            Some("true") => true,
+            Some("false") | None => false,
+            Some(_) => return model.to_string(),
+        };
+        let long = cursor_has_long_context_tier(base)
+            && parameter("context")
+                .and_then(parse_context_tokens)
+                .is_some_and(|tokens| tokens > 272_000);
+        return match (fast, long) {
+            (false, false) => base.to_string(),
+            (true, false) => format!("{base}-fast"),
+            (false, true) => format!("{base}-long"),
+            (true, true) => format!("{base}-fast-long"),
+        };
+    }
+
+    let Some(without_fast) = model.strip_suffix("-fast") else {
+        return model.to_string();
+    };
+    for effort in [
+        "extra-high",
+        "minimal",
+        "medium",
+        "xhigh",
+        "high",
+        "none",
+        "low",
+        "max",
+    ] {
+        if let Some(base) = without_fast.strip_suffix(&format!("-{effort}")) {
+            return format!("{base}-fast-{effort}");
+        }
+    }
+    model.to_string()
+}
+
+fn cursor_has_long_context_tier(model: &str) -> bool {
+    matches!(
+        model,
+        "gpt-5.4" | "gpt-5.6-luna" | "gpt-5.6-sol" | "gpt-5.6-terra"
+    )
+}
+
+fn parse_context_tokens(value: &str) -> Option<u64> {
+    let (digits, multiplier) = match value.as_bytes().last().copied() {
+        Some(b'k') => (&value[..value.len() - 1], 1_000),
+        Some(b'm') => (&value[..value.len() - 1], 1_000_000),
+        Some(last) if last.is_ascii_digit() => (value, 1),
+        _ => return None,
+    };
+    digits.parse::<u64>().ok()?.checked_mul(multiplier)
+}
+
+fn resolve_alias(aliases: Option<&HashMap<String, String>>, model: &str) -> String {
+    let Some(aliases) = aliases else {
+        return model.to_string();
+    };
+    if let Some(target) = aliases.get(model) {
+        return target.clone();
+    }
+
+    // Cursor appends effort/speed suffixes to several model ids. Preserve the
+    // suffix after translating a configured punctuation alias, choosing the
+    // most specific alias when model families overlap.
+    aliases
+        .iter()
+        .filter_map(|(alias, target)| {
+            model.strip_prefix(alias).and_then(|suffix| {
+                suffix
+                    .starts_with('-')
+                    .then_some((alias.len(), target, suffix))
+            })
+        })
+        .max_by_key(|(len, _, _)| *len)
+        .map(|(_, target, suffix)| format!("{target}{suffix}"))
+        .unwrap_or_else(|| model.to_string())
 }
 
 pub fn cache_read_rate_label(model: &str) -> String {
@@ -583,9 +747,7 @@ fn parse_pricing_book_date(value: &str) -> Option<NaiveDate> {
 }
 
 fn canonicalize(model: &str) -> String {
-    // Pricing and the model registry must agree on what "the same model"
-    // means, so both share one normalization.
-    crate::models::canonical_key(model)
+    crate::models::pricing_key(model)
 }
 
 fn effective_date(timestamp: Option<DateTime<Utc>>) -> NaiveDate {
@@ -653,9 +815,11 @@ pub fn cost(model: &str, call: &ParsedCall, speed: Speed) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
+    use chrono::{Days, TimeZone};
 
     use super::*;
+
+    const LOCAL_TEST_INPUT: f64 = 123e-6;
 
     fn call_at(tool: &'static str, model: &str, date: (i32, u32, u32)) -> ParsedCall {
         ParsedCall {
@@ -670,6 +834,40 @@ mod tests {
             ),
             ..ParsedCall::default()
         }
+    }
+
+    fn local_pricing_paths(name: &str) -> crate::config::ConfigPaths {
+        let unique = format!(
+            "tokenuse-pricing-{name}-{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        );
+        let paths = crate::config::ConfigPaths::new(std::env::temp_dir().join(unique));
+        std::fs::create_dir_all(&paths.dir).unwrap();
+        paths
+    }
+
+    fn embedded_test_book_date() -> NaiveDate {
+        pricing_book_date_from_raw(&[EMBEDDED_UPSTREAM, EMBEDDED_OVERRIDES])
+            .unwrap()
+            .parse()
+            .unwrap()
+    }
+
+    fn write_local_test_books(paths: &crate::config::ConfigPaths, date: NaiveDate) {
+        let upstream = format!(
+            r#"{{
+              "_metadata":{{"generated_at":"{date}"}},
+              "models":{{"local-fallback":{{"input":{LOCAL_TEST_INPUT}}}}}
+            }}"#
+        );
+        let overrides = format!(
+            r#"{{
+              "_metadata":{{"generated_at":"{date}"}},
+              "fallback":"local-fallback"
+            }}"#
+        );
+        std::fs::write(&paths.pricing_upstream_file, upstream).unwrap();
+        std::fs::write(&paths.pricing_overrides_file, overrides).unwrap();
     }
 
     #[test]
@@ -755,12 +953,36 @@ mod tests {
     }
 
     #[test]
-    fn claude_5_family_resolves_with_dated_pricing() {
+    fn claude_5_family_resolves_current_pricing() {
         let table = PriceTable::embedded();
 
         let fable = table.lookup("claude-fable-5");
         assert!((fable.input * 1e6 - 10.0).abs() < 0.001);
         assert!(fable.fast_multiplier.is_none());
+
+        let fable_51 = table.lookup("claude-fable-5-1");
+        assert!((fable_51.input * 1e6 - 10.0).abs() < 0.001);
+        assert!((fable_51.cache_write * 1e6 - 12.5).abs() < 0.001);
+        assert!((fable_51.cache_read * 1e6 - 0.25).abs() < 0.001);
+        assert!((fable_51.output * 1e6 - 50.0).abs() < 0.001);
+        assert!(!table.uses_fallback("claude-code", "claude-fable-5-1", None));
+        assert!((table.lookup("claude-fable-5.1").cache_read * 1e6 - 0.25).abs() < 0.001);
+
+        let mythos_51 = table.lookup("claude-mythos-5-1");
+        assert!((mythos_51.cache_read * 1e6 - 0.25).abs() < 0.001);
+
+        let haiku_35 = table.lookup("claude-3-5-haiku-20241022");
+        assert!((haiku_35.input * 1e6 - 0.8).abs() < 0.001);
+        assert!((haiku_35.cache_write * 1e6 - 1.0).abs() < 0.001);
+        assert!((haiku_35.cache_read * 1e6 - 0.08).abs() < 0.001);
+        assert!((haiku_35.output * 1e6 - 4.0).abs() < 0.001);
+
+        let copilot_fable_dot = table.lookup_for(
+            "copilot",
+            "claude-fable-5.1",
+            Some(Utc.with_ymd_and_hms(2026, 9, 2, 12, 0, 0).unwrap()),
+        );
+        assert!((copilot_fable_dot.cache_read * 1e6 - 0.25).abs() < 0.001);
 
         let opus_48 = table.lookup("claude-opus-4-8-20260601");
         assert_eq!(opus_48.fast_multiplier, Some(2.0));
@@ -781,20 +1003,35 @@ mod tests {
             "claude-sonnet-5",
             Some(Utc.with_ymd_and_hms(2026, 8, 15, 12, 0, 0).unwrap()),
         );
-        let standard = table.lookup_for(
+        let permanent = table.lookup_for(
             "claude-code",
             "claude-sonnet-5",
             Some(Utc.with_ymd_and_hms(2026, 9, 2, 12, 0, 0).unwrap()),
         );
         assert!((intro.input * 1e6 - 2.0).abs() < 0.001);
-        assert!((standard.input * 1e6 - 3.0).abs() < 0.001);
+        assert!((permanent.input * 1e6 - 2.0).abs() < 0.001);
+        assert!((permanent.output * 1e6 - 10.0).abs() < 0.001);
     }
 
     #[test]
     fn cursor_auto_alias_resolves() {
-        let p = PriceTable::embedded().lookup("cursor-auto");
+        let p = PriceTable::embedded().lookup_for(
+            "cursor",
+            "cursor-auto",
+            Some(Utc.with_ymd_and_hms(2026, 9, 6, 12, 0, 0).unwrap()),
+        );
         assert!(p.input > 0.0);
         assert!(p.fast_multiplier.is_none());
+    }
+
+    #[test]
+    fn cursor_legacy_auto_expires_when_routed_model_billing_begins() {
+        let table = PriceTable::embedded();
+        let before = Some(Utc.with_ymd_and_hms(2026, 9, 6, 12, 0, 0).unwrap());
+        let after = Some(Utc.with_ymd_and_hms(2026, 9, 7, 12, 0, 0).unwrap());
+
+        assert!(!table.uses_fallback("cursor", "default", before));
+        assert!(table.uses_fallback("cursor", "default", after));
     }
 
     #[test]
@@ -803,6 +1040,12 @@ mod tests {
 
         assert_eq!(table.cache_read_rate_label("claude-sonnet-4-6"), "10%");
         assert_eq!(table.cache_write_rate_label("claude-sonnet-4-6"), "125%");
+        assert_eq!(
+            table.cache_write_rate_label("claude-3-7-sonnet-latest"),
+            "125%"
+        );
+        assert_eq!(table.cache_read_rate_label("claude-fable-5-1"), "2.5%");
+        assert_eq!(table.cache_read_rate_label("claude-mythos-5-1"), "2.5%");
     }
 
     #[test]
@@ -810,7 +1053,61 @@ mod tests {
         let table = PriceTable::embedded();
 
         assert_eq!(table.cache_read_rate_label("gpt-5.3-codex"), "10%");
+        let spark = table.lookup("gpt-5.3-codex-spark");
+        assert!(
+            spark.input > 0.0,
+            "an upstream placeholder must not shadow the priced Codex family"
+        );
+        assert!(
+            spark.output > 0.0,
+            "Spark token usage must never resolve to a zero-rate placeholder"
+        );
+        let gpt_54 = table.lookup("gpt-5.4");
+        assert!((gpt_54.input * 1e6 - 2.5).abs() < 0.001);
+        assert!((gpt_54.cache_read * 1e6 - 0.25).abs() < 0.001);
+        assert!((gpt_54.output * 1e6 - 15.0).abs() < 0.001);
         assert_eq!(table.cache_read_rate_label("gpt-5.4"), "10%");
+        let gpt_54_snapshot = table.lookup("gpt-5.4-2026-03-05");
+        assert!((gpt_54_snapshot.input * 1e6 - 2.5).abs() < 0.001);
+        assert!((gpt_54_snapshot.cache_read * 1e6 - 0.25).abs() < 0.001);
+        assert!((gpt_54_snapshot.output * 1e6 - 15.0).abs() < 0.001);
+
+        let astra = table.lookup_for(
+            "codex",
+            "gpt-6-astra",
+            Some(Utc.with_ymd_and_hms(2026, 9, 5, 12, 0, 0).unwrap()),
+        );
+        assert!((astra.input * 1e6 - 10.0).abs() < 0.001);
+        assert!((astra.cache_read * 1e6 - 1.0).abs() < 0.001);
+        assert!((astra.cache_write * 1e6 - 12.5).abs() < 0.001);
+        assert!((astra.output * 1e6 - 50.0).abs() < 0.001);
+        assert!(!table.uses_fallback(
+            "codex",
+            "gpt-6-astra",
+            Some(Utc.with_ymd_and_hms(2026, 9, 5, 12, 0, 0).unwrap())
+        ));
+        assert!(
+            table.uses_fallback("codex", "codex-auto-review", None),
+            "the unpublished Auto Review route must stay visible as an estimate"
+        );
+
+        let sol = table.lookup_for(
+            "codex",
+            "gpt-5.6",
+            Some(Utc.with_ymd_and_hms(2026, 8, 22, 12, 0, 0).unwrap()),
+        );
+        assert!((sol.input * 1e6 - 4.0).abs() < 0.001);
+        assert!((sol.cache_read * 1e6 - 0.4).abs() < 0.001);
+        assert!((sol.cache_write * 1e6 - 5.0).abs() < 0.001);
+        assert!((sol.output * 1e6 - 20.0).abs() < 0.001);
+
+        let sol_before_promotion = table.lookup_for(
+            "copilot",
+            "gpt-5.6-sol",
+            Some(Utc.with_ymd_and_hms(2026, 8, 20, 12, 0, 0).unwrap()),
+        );
+        assert!((sol_before_promotion.input * 1e6 - 5.0).abs() < 0.001);
+        assert!((sol_before_promotion.output * 1e6 - 30.0).abs() < 0.001);
     }
 
     #[test]
@@ -823,9 +1120,16 @@ mod tests {
     #[test]
     fn cursor_auto_cache_read_is_twenty_percent() {
         let table = PriceTable::embedded();
+        let timestamp = Some(Utc.with_ymd_and_hms(2026, 9, 6, 12, 0, 0).unwrap());
 
-        assert_eq!(table.cache_read_rate_label("cursor-auto"), "20%");
-        assert_eq!(table.cache_write_rate_label("cursor-auto"), "100%");
+        assert_eq!(
+            table.cache_read_rate_label_for("cursor", "cursor-auto", timestamp),
+            "20%"
+        );
+        assert_eq!(
+            table.cache_write_rate_label_for("cursor", "cursor-auto", timestamp),
+            "100%"
+        );
     }
 
     #[test]
@@ -840,10 +1144,261 @@ mod tests {
         assert!((composer_fast.input * 1e6 - 3.0).abs() < 0.001);
         assert!((composer_fast.output * 1e6 - 15.0).abs() < 0.001);
 
+        let composer_fast_effort = table.lookup_for("cursor", "composer-2-5-fast-high", None);
+        assert!((composer_fast_effort.input * 1e6 - 3.0).abs() < 0.001);
+        assert!((composer_fast_effort.output * 1e6 - 15.0).abs() < 0.001);
+
         let grok_fast = table.lookup_for("cursor", "grok-4.5-fast", None);
         assert!((grok_fast.input * 1e6 - 4.0).abs() < 0.001);
         assert!((grok_fast.cache_read * 1e6 - 1.0).abs() < 0.001);
         assert!((grok_fast.output * 1e6 - 18.0).abs() < 0.001);
+
+        let grok_46_fast = table.lookup_for("cursor", "grok-4-6-fast", None);
+        assert!((grok_46_fast.input * 1e6 - 4.0).abs() < 0.001);
+        assert!((grok_46_fast.cache_read * 1e6 - 1.0).abs() < 0.001);
+        assert!((grok_46_fast.output * 1e6 - 12.0).abs() < 0.001);
+
+        let grok_46_fast_effort = table.lookup_for("cursor", "grok-4-6-fast-high", None);
+        assert!((grok_46_fast_effort.input * 1e6 - 4.0).abs() < 0.001);
+        assert!((grok_46_fast_effort.cache_read * 1e6 - 1.0).abs() < 0.001);
+        assert!((grok_46_fast_effort.output * 1e6 - 12.0).abs() < 0.001);
+
+        let gemini = table.lookup_for("cursor", "gemini-3.8-flash", None);
+        assert!((gemini.output * 1e6 - 3.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn cursor_third_party_and_fast_variants_use_cursor_scoped_rates() {
+        let table = PriceTable::embedded();
+
+        let glm = table.lookup_for("cursor", "glm-5.2-max", None);
+        assert!((glm.input * 1e6 - 1.4).abs() < 0.001);
+        assert!((glm.cache_read * 1e6 - 0.26).abs() < 0.001);
+        assert!((glm.output * 1e6 - 4.4).abs() < 0.001);
+
+        let kimi = table.lookup_for("cursor", "kimi-k2.7-code", None);
+        assert!((kimi.input * 1e6 - 0.95).abs() < 0.001);
+        assert!((kimi.cache_read * 1e6 - 0.19).abs() < 0.001);
+        assert!((kimi.output * 1e6 - 4.0).abs() < 0.001);
+
+        for (model, input, cache_write, cache_read, output) in [
+            ("gpt-5-high-fast", 2.5, 0.0, 0.25, 20.0),
+            ("gpt-5.4-medium-fast", 5.0, 0.0, 0.5, 30.0),
+            (
+                "gpt-5.4[context=272k,reasoning=medium,fast=true]",
+                5.0,
+                0.0,
+                0.5,
+                30.0,
+            ),
+            ("gpt-5.5-extra-high-fast", 12.5, 0.0, 1.25, 75.0),
+            ("gpt-5.6-luna-low-fast", 0.4, 0.5, 0.04, 2.4),
+            ("gpt-5.6-sol-high-fast", 8.0, 10.0, 0.8, 40.0),
+            ("gpt-5.6-terra-max-fast", 4.0, 5.0, 0.4, 24.0),
+        ] {
+            let price = table.lookup_for("cursor", model, None);
+            assert!((price.input * 1e6 - input).abs() < 0.001, "{model}");
+            assert!(
+                (price.cache_write * 1e6 - cache_write).abs() < 0.001,
+                "{model}"
+            );
+            assert!(
+                (price.cache_read * 1e6 - cache_read).abs() < 0.001,
+                "{model}"
+            );
+            assert!((price.output * 1e6 - output).abs() < 0.001, "{model}");
+            assert_eq!(price.fast_multiplier, None, "{model}");
+        }
+
+        let structured_standard = table.lookup_for(
+            "cursor",
+            "gpt-5.4[context=272k,reasoning=medium,fast=false]",
+            None,
+        );
+        assert!((structured_standard.input * 1e6 - 2.5).abs() < 0.001);
+        assert!((structured_standard.cache_read * 1e6 - 0.25).abs() < 0.001);
+        assert!((structured_standard.output * 1e6 - 15.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn cursor_effort_before_fast_pricing_keys_are_normalized_structurally() {
+        for effort in [
+            "none",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "extra-high",
+        ] {
+            let raw = format!("gpt-5.6-terra-{effort}-fast");
+            assert_eq!(
+                normalize_tool_pricing_key("cursor", &raw),
+                format!("gpt-5.6-terra-fast-{effort}")
+            );
+        }
+        assert_eq!(
+            normalize_tool_pricing_key("cursor", "gpt-5.4-xhigh-fast"),
+            "gpt-5.4-fast-xhigh"
+        );
+        assert_eq!(
+            normalize_tool_pricing_key("cursor", "gpt-5.5-extra-high-fast"),
+            "gpt-5.5-fast-extra-high"
+        );
+        assert_eq!(
+            normalize_tool_pricing_key("codex", "gpt-5.4-xhigh-fast"),
+            "gpt-5.4-xhigh-fast"
+        );
+    }
+
+    #[test]
+    fn cursor_gpt_5_6_sol_fast_respects_the_promotion_boundary() {
+        let table = PriceTable::embedded();
+        let before = Some(Utc.with_ymd_and_hms(2026, 8, 20, 12, 0, 0).unwrap());
+        let after = Some(Utc.with_ymd_and_hms(2026, 8, 22, 12, 0, 0).unwrap());
+
+        let historical_standard = table.lookup_for("cursor", "gpt-5.6-sol-max", before);
+        assert!((historical_standard.input * 1e6 - 5.0).abs() < 0.001);
+        assert!((historical_standard.output * 1e6 - 30.0).abs() < 0.001);
+
+        let historical_fast = table.lookup_for("cursor", "gpt-5.6-sol-max-fast", before);
+        assert!((historical_fast.input * 1e6 - 10.0).abs() < 0.001);
+        assert!((historical_fast.cache_write * 1e6 - 12.5).abs() < 0.001);
+        assert!((historical_fast.cache_read * 1e6 - 1.0).abs() < 0.001);
+        assert!((historical_fast.output * 1e6 - 60.0).abs() < 0.001);
+
+        let historical_fast_long = table.lookup_for(
+            "cursor",
+            "gpt-5.6-sol[context=300k,effort=max,fast=true]",
+            before,
+        );
+        assert!((historical_fast_long.input * 1e6 - 20.0).abs() < 0.001);
+        assert!((historical_fast_long.cache_write * 1e6 - 25.0).abs() < 0.001);
+        assert!((historical_fast_long.cache_read * 1e6 - 2.0).abs() < 0.001);
+        assert!((historical_fast_long.output * 1e6 - 90.0).abs() < 0.001);
+
+        let promotional_fast = table.lookup_for("cursor", "gpt-5.6-sol-max-fast", after);
+        assert!((promotional_fast.input * 1e6 - 8.0).abs() < 0.001);
+        assert!((promotional_fast.cache_write * 1e6 - 10.0).abs() < 0.001);
+        assert!((promotional_fast.cache_read * 1e6 - 0.8).abs() < 0.001);
+        assert!((promotional_fast.output * 1e6 - 40.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn cursor_bracket_context_selects_explicit_long_context_rows() {
+        let table = PriceTable::embedded();
+        let current = Some(Utc.with_ymd_and_hms(2026, 9, 6, 12, 0, 0).unwrap());
+
+        let at_boundary = table.lookup_for(
+            "cursor",
+            "gpt-5.4[context=272k,effort=high,fast=false]",
+            current,
+        );
+        assert!((at_boundary.input * 1e6 - 2.5).abs() < 0.001);
+        assert!((at_boundary.cache_read * 1e6 - 0.25).abs() < 0.001);
+        assert!((at_boundary.output * 1e6 - 15.0).abs() < 0.001);
+
+        for (model, input, cache_write, cache_read, output) in [
+            (
+                "gpt-5.4[context=273000,effort=xhigh,fast=false]",
+                5.0,
+                0.0,
+                0.5,
+                22.5,
+            ),
+            (
+                "gpt-5.4[fast=true,context=300k,effort=medium]",
+                10.0,
+                0.0,
+                1.0,
+                45.0,
+            ),
+            (
+                "gpt-5.6-luna[context=1m,effort=low,fast=false]",
+                0.4,
+                0.5,
+                0.04,
+                1.8,
+            ),
+            (
+                "gpt-5.6-luna[context=300k,effort=low,fast=true]",
+                0.8,
+                1.0,
+                0.08,
+                3.6,
+            ),
+            (
+                "gpt-5.6-sol[context=300k,effort=high,fast=false]",
+                8.0,
+                10.0,
+                0.8,
+                30.0,
+            ),
+            (
+                "gpt-5.6-sol[context=300k,effort=high,fast=true]",
+                16.0,
+                20.0,
+                1.6,
+                60.0,
+            ),
+            (
+                "gpt-5.6-terra[context=300k,effort=max,fast=false]",
+                4.0,
+                5.0,
+                0.4,
+                18.0,
+            ),
+            (
+                "gpt-5.6-terra[context=300k,effort=max,fast=true]",
+                8.0,
+                10.0,
+                0.8,
+                36.0,
+            ),
+        ] {
+            let price = table.lookup_for("cursor", model, current);
+            assert!((price.input * 1e6 - input).abs() < 0.001, "{model}");
+            assert!(
+                (price.cache_write * 1e6 - cache_write).abs() < 0.001,
+                "{model}"
+            );
+            assert!(
+                (price.cache_read * 1e6 - cache_read).abs() < 0.001,
+                "{model}"
+            );
+            assert!((price.output * 1e6 - output).abs() < 0.001, "{model}");
+            assert_eq!(price.web_search, 0.01, "{model}");
+        }
+    }
+
+    #[test]
+    fn global_aliases_do_not_rewrite_explicit_model_families() {
+        let table = PriceTable::embedded();
+
+        for (model, input, output) in [
+            ("gpt-5.6-luna", 0.2, 1.2),
+            ("gpt-5.6-terra", 2.0, 12.0),
+            ("claude-opus-4-8", 5.0, 25.0),
+            ("claude-sonnet-4-5", 3.0, 15.0),
+            ("claude-3-5-haiku", 0.8, 4.0),
+        ] {
+            let price = table.lookup_for("", model, None);
+            assert!((price.input * 1e6 - input).abs() < 0.001, "{model}");
+            assert!((price.output * 1e6 - output).abs() < 0.001, "{model}");
+        }
+    }
+
+    #[test]
+    fn cursor_explicit_fast_price_does_not_multiply_web_searches() {
+        let mut call = call_at("cursor", "gpt-5.4-medium-fast", (2026, 9, 6));
+        call.output_tokens = 0;
+        call.cache_read_input_tokens = 0;
+        call.web_search_requests = 1;
+
+        let charged = cost(&call.model, &call, Speed::Fast);
+
+        assert!((charged - 5.01).abs() < 1e-9);
     }
 
     #[test]
@@ -851,6 +1406,20 @@ mod tests {
         let table = PriceTable::embedded();
 
         assert_eq!(table.cache_read_rate_label("gemini-2.5-pro"), "10%");
+
+        let flash_15 = table.lookup_for(
+            "cursor",
+            "gemini-1.5-flash",
+            Some(Utc.with_ymd_and_hms(2025, 1, 1, 12, 0, 0).unwrap()),
+        );
+        assert!((flash_15.input * 1e6 - 0.075).abs() < 0.0001);
+        assert!((flash_15.cache_read * 1e6 - 0.01875).abs() < 0.0001);
+        assert!((flash_15.output * 1e6 - 0.30).abs() < 0.0001);
+        assert!(!table.uses_fallback(
+            "cursor",
+            "gemini-1.5-flash",
+            Some(Utc.with_ymd_and_hms(2025, 1, 1, 12, 0, 0).unwrap())
+        ));
     }
 
     #[test]
@@ -876,6 +1445,87 @@ mod tests {
 
         assert_eq!(status.source, PricingBookSource::EmbeddedBooks);
         assert!(status.date.is_some());
+    }
+
+    #[test]
+    fn stale_local_books_use_embedded_runtime_and_status() {
+        let paths = local_pricing_paths("stale-books");
+        let stale_date = embedded_test_book_date()
+            .checked_sub_days(Days::new(1))
+            .unwrap();
+        write_local_test_books(&paths, stale_date);
+
+        let table = PriceTable::local_from_paths(&paths).unwrap();
+        let embedded_input = PriceTable::embedded().lookup("unknown-model").input;
+        assert!((table.lookup("unknown-model").input - embedded_input).abs() < f64::EPSILON);
+        assert_eq!(configured_book_status(&paths), embedded_book_status());
+
+        let _ = std::fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn same_date_local_books_remain_selected() {
+        let paths = local_pricing_paths("same-date-books");
+        let date = embedded_test_book_date();
+        write_local_test_books(&paths, date);
+
+        let table = PriceTable::local_from_paths(&paths).unwrap();
+        assert!((table.lookup("unknown-model").input - LOCAL_TEST_INPUT).abs() < f64::EPSILON);
+        assert_eq!(
+            configured_book_status(&paths),
+            PricingBookStatus {
+                source: PricingBookSource::LocalBooks,
+                date: Some(date.to_string()),
+            }
+        );
+
+        let _ = std::fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn newer_local_books_remain_selected() {
+        let paths = local_pricing_paths("newer-books");
+        let date = embedded_test_book_date()
+            .checked_add_days(Days::new(1))
+            .unwrap();
+        write_local_test_books(&paths, date);
+
+        let table = PriceTable::local_from_paths(&paths).unwrap();
+        assert!((table.lookup("unknown-model").input - LOCAL_TEST_INPUT).abs() < f64::EPSILON);
+        assert_eq!(
+            configured_book_status(&paths).source,
+            PricingBookSource::LocalBooks
+        );
+
+        let _ = std::fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn incomplete_local_book_pair_still_returns_an_error() {
+        let paths = local_pricing_paths("incomplete-books");
+        std::fs::write(&paths.pricing_upstream_file, r#"{"models":{}}"#).unwrap();
+
+        let error = PriceTable::local_from_paths(&paths).unwrap_err();
+        assert!(error.contains("missing"));
+        assert!(error.contains("pricing-overrides.json"));
+
+        let _ = std::fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn malformed_local_books_still_return_their_parse_error() {
+        let paths = local_pricing_paths("malformed-books");
+        std::fs::write(&paths.pricing_upstream_file, "not json").unwrap();
+        std::fs::write(
+            &paths.pricing_overrides_file,
+            r#"{"fallback":"local-fallback"}"#,
+        )
+        .unwrap();
+
+        let error = PriceTable::local_from_paths(&paths).unwrap_err();
+        assert!(error.contains("parse upstream book"));
+
+        let _ = std::fs::remove_dir_all(paths.dir);
     }
 
     #[test]
@@ -949,6 +1599,74 @@ mod tests {
             ),
             "25%"
         );
+
+        let cursor_gemini = PriceTable::embedded().lookup_for(
+            "cursor",
+            "gemini-3.8-flash",
+            Some(Utc.with_ymd_and_hms(2026, 9, 5, 12, 0, 0).unwrap()),
+        );
+        let copilot_gemini = PriceTable::embedded().lookup_for(
+            "copilot",
+            "Gemini 3.8 Flash",
+            Some(Utc.with_ymd_and_hms(2026, 9, 5, 12, 0, 0).unwrap()),
+        );
+        assert!((cursor_gemini.output * 1e6 - 3.5).abs() < 0.001);
+        assert!((copilot_gemini.output * 1e6 - 3.75).abs() < 0.001);
+    }
+
+    #[test]
+    fn effective_to_is_an_exclusive_price_boundary() {
+        let upstream = r#"{"models":{"fallback":{"input":0.000003}}}"#;
+        let overrides = r#"{
+          "fallback":"fallback",
+          "models":{
+            "limited":{"input":0.00000125,"effective_to":"2026-09-07"}
+          }
+        }"#;
+        let table = PriceTable::from_books(upstream, overrides).unwrap();
+        let before = Some(Utc.with_ymd_and_hms(2026, 9, 6, 23, 59, 59).unwrap());
+        let boundary = Some(Utc.with_ymd_and_hms(2026, 9, 7, 0, 0, 0).unwrap());
+
+        assert!(!table.uses_fallback("", "limited", before));
+        assert!(table.uses_fallback("", "limited", boundary));
+        assert!((table.lookup_for("", "limited", before).input * 1e6 - 1.25).abs() < 0.001);
+        assert!((table.lookup_for("", "limited", boundary).input * 1e6 - 3.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn dated_model_snapshots_keep_their_exact_prices() {
+        let upstream = r#"{
+          "models":{
+            "fallback":{"input":0.000003,"output":0.000015},
+            "gpt-4o":{"input":0.0000025,"output":0.00001},
+            "gpt-4o-2024-05-13":{"input":0.000005,"output":0.000015},
+            "gpt-4o-2024-08-06":{"input":0.0000025,"output":0.00001}
+          }
+        }"#;
+        let overrides = r#"{"fallback":"fallback"}"#;
+        let table = PriceTable::from_books(upstream, overrides).unwrap();
+
+        assert!((table.lookup("gpt-4o").input * 1e6 - 2.5).abs() < 0.001);
+        assert!((table.lookup("openai/gpt-4o-2024-05-13@prod").input * 1e6 - 5.0).abs() < 0.001);
+        assert!((table.lookup("gpt-4o-2024-08-06").input * 1e6 - 2.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn rejects_a_gap_in_fallback_price_windows() {
+        let upstream = r#"{
+          "models":{
+            "fallback":{"input":0.000003,"effective_to":"2026-09-07"}
+          }
+        }"#;
+        let overrides = r#"{
+          "fallback":"fallback",
+          "models":{
+            "fallback":{"input":0.000004,"effective_from":"2026-09-08"}
+          }
+        }"#;
+
+        let err = PriceTable::from_books(upstream, overrides).unwrap_err();
+        assert!(err.contains("not priced for every effective date"));
     }
 
     #[test]
@@ -963,5 +1681,22 @@ mod tests {
         let overrides = r#"{"fallback":"bad"}"#;
         let err = PriceTable::from_books(upstream, overrides).unwrap_err();
         assert!(err.contains("invalid input price"));
+    }
+
+    #[test]
+    fn rejects_inverted_effective_windows() {
+        let upstream = r#"{"models":{"fallback":{"input":0.000003}}}"#;
+        let overrides = r#"{
+          "fallback":"fallback",
+          "models":{
+            "bad":{
+              "input":0.000001,
+              "effective_from":"2026-09-07",
+              "effective_to":"2026-09-07"
+            }
+          }
+        }"#;
+        let err = PriceTable::from_books(upstream, overrides).unwrap_err();
+        assert!(err.contains("invalid effective window"));
     }
 }

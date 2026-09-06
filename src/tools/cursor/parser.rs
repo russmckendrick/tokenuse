@@ -1842,11 +1842,38 @@ fn normalize_tool_name(raw: &str) -> String {
 }
 
 fn speed_from_model(model: &str) -> Speed {
-    if model.to_ascii_lowercase().contains("fast") {
+    if let Some(fast) = bracket_fast_parameter(model) {
+        return if fast { Speed::Fast } else { Speed::Standard };
+    }
+
+    let model_id = model.split_once('[').map_or(model, |(id, _)| id);
+    if model_id
+        .split('-')
+        .any(|segment| segment.eq_ignore_ascii_case("fast"))
+    {
         Speed::Fast
     } else {
         Speed::Standard
     }
+}
+
+fn bracket_fast_parameter(model: &str) -> Option<bool> {
+    let (_, parameters) = model.split_once('[')?;
+    let parameters = parameters
+        .split_once(']')
+        .map_or(parameters, |(inside, _)| inside);
+
+    parameters.split(',').find_map(|parameter| {
+        let (name, value) = parameter.split_once('=')?;
+        if !name.trim().eq_ignore_ascii_case("fast") {
+            return None;
+        }
+        match value.trim() {
+            value if value.eq_ignore_ascii_case("true") => Some(true),
+            value if value.eq_ignore_ascii_case("false") => Some(false),
+            _ => None,
+        }
+    })
 }
 
 fn extract_user_query(text: &str) -> String {
@@ -2319,12 +2346,44 @@ mod tests {
     }
 
     #[test]
-    fn reversed_claude_style_keeps_fast_speed_separate() {
+    fn speed_from_model_marks_explicit_fast_segments() {
+        for model in [
+            "composer-2.5-fast",
+            "gpt-5-high-fast",
+            "gpt-5.4-fast-high",
+            "gpt-5.4-high-fast",
+        ] {
+            assert_eq!(speed_from_model(model), Speed::Fast, "{model}");
+        }
+    }
+
+    #[test]
+    fn speed_from_model_keeps_non_fast_models_standard() {
+        for model in [
+            "claude-4.5-sonnet-thinking",
+            "gpt-5.6-luna",
+            "breakfast-model",
+        ] {
+            assert_eq!(speed_from_model(model), Speed::Standard, "{model}");
+        }
+    }
+
+    #[test]
+    fn speed_from_model_honors_bracket_fast_true() {
         assert_eq!(
-            speed_from_model("claude-4.5-sonnet-thinking"),
-            Speed::Standard
+            speed_from_model("gpt-5.4[context=272k,reasoning=medium,fast=true]"),
+            Speed::Fast
         );
-        assert_eq!(speed_from_model("composer-2.5-fast"), Speed::Fast);
+    }
+
+    #[test]
+    fn speed_from_model_honors_bracket_fast_false() {
+        for model in [
+            "gpt-5.4[context=272k,reasoning=medium,fast=false]",
+            "gpt-5.4-fast[context=272k,fast=false]",
+        ] {
+            assert_eq!(speed_from_model(model), Speed::Standard, "{model}");
+        }
     }
 
     #[test]

@@ -100,7 +100,7 @@ Each `*.jsonl` is one JSON object per line. Two entry types matter:
 | `model` | `message.model` (preserved verbatim; pricing canonicalizes) |
 | `cost_usd` | `pricing::cost(model, &call, speed)` |
 
-Anthropic-specific quirk: cache reads are billed at 10% of the input rate in current bundled rows, cache writes use the 5-minute 125% rate, and `cache_read_input_tokens` is **not** included in `input_tokens`. The pricing formula handles this directly — do **not** sum the buckets together before pricing. See [Pricing and cache rates](../pricing.md) for source evidence.
+Anthropic-specific quirk: cache reads are billed at 10% of the input rate in most current bundled rows, but Fable 5.1 and Mythos 5.1 use a special 2.5% rate. Cache writes use the 5-minute 125% rate, and `cache_read_input_tokens` is **not** included in `input_tokens`. The pricing formula handles this directly — do **not** sum the buckets together before pricing. Archive schema v9 repairs only provably stale 5.1/Sonnet 5 costs already frozen before these corrections. See [Pricing and cache rates](../pricing.md) for source evidence.
 
 **1-hour cache writes.** Newer transcripts split cache writes by TTL under `usage.cache_creation` (`ephemeral_5m_input_tokens` / `ephemeral_1h_input_tokens`). Anthropic bills 1h writes at 2x the base input rate versus 1.25x for 5m, so the pricing formula charges the 1h share a 1.6x premium over the books' cache-write rate. Sessions pinned to 1h caching (long-TTL prompt caching) were underpriced before this split was read.
 

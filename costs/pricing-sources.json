@@ -7,6 +7,18 @@
     "upstream_url": "https://raw.githubusercontent.com/russmckendrick/tokenuse/refs/heads/main/costs/pricing-upstream.json",
     "overrides_url": "https://raw.githubusercontent.com/russmckendrick/tokenuse/refs/heads/main/costs/pricing-overrides.json"
   },
+  "aliases": {
+    "gpt-5.6": "gpt-5.6-sol-history",
+    "gpt-5.6-sol": "gpt-5.6-sol-history"
+  },
+  "tool_aliases": {
+    "cursor": {
+      "gpt-5.6-sol": "gpt-5.6-sol-history",
+      "gpt-5.6-sol-fast": "gpt-5.6-sol-fast-history",
+      "gpt-5.6-sol-fast-long": "gpt-5.6-sol-fast-long-history",
+      "gpt-5.6-sol-long": "gpt-5.6-sol-long-history"
+    }
+  },
   "sources": [
     {
       "id": "litellm",
@@ -15,6 +27,10 @@
       "kind": "json-map",
       "output": "upstream",
       "include": {
+        "accepted_modes": [
+          "chat",
+          "responses"
+        ],
         "key_contains": [
           "claude-opus-",
           "claude-sonnet-",
@@ -23,6 +39,7 @@
           "claude-mythos-",
           "claude-3-",
           "gpt-5",
+          "gpt-6",
           "gpt-4o",
           "o1",
           "o3",
@@ -57,13 +74,24 @@
           "model": "Model",
           "input": "Base Input Tokens",
           "cache_write": "5m Cache Writes",
-          "cache_read": "Cache Hits & Refreshes",
+          "cache_read": "Cache hits and refreshes",
           "output": "Output Tokens"
         },
+        "required_fields": ["input", "cache_write", "cache_read", "output"],
         "defaults": {
           "web_search": 0.01
         },
         "rows": [
+          {
+            "match": "Claude Fable 5.1",
+            "model": "claude-fable-5-1",
+            "note": "Fable 5.1 keeps Fable 5 input, cache-write, and output rates but reduces prompt-cache reads to $0.25/MTok."
+          },
+          {
+            "match": "Claude Mythos 5.1",
+            "model": "claude-mythos-5-1",
+            "note": "Mythos 5.1 keeps Mythos 5 input, cache-write, and output rates but reduces prompt-cache reads to $0.25/MTok."
+          },
           { "match": "Claude Fable 5", "model": "claude-fable-5" },
           { "match": "Claude Mythos 5", "model": "claude-mythos-5" },
           {
@@ -94,30 +122,35 @@
             "match": "Claude Opus 4.6",
             "model": "claude-opus-4-6",
             "set": { "fast_multiplier": 6 },
-            "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.6 fast mode at $30 input and $150 output per MTok."
+            "note": "The 6x multiplier is retained for historical Claude Code fast-speed calls; current fast mode supports only Opus 5 and Opus 4.8."
           },
           {
             "match": "Claude Opus 4.6",
             "model": "claude-opus-4-6-20260205",
             "set": { "fast_multiplier": 6 },
-            "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.6 fast mode at $30 input and $150 output per MTok."
+            "note": "The 6x multiplier is retained for historical Claude Code fast-speed calls; current fast mode supports only Opus 5 and Opus 4.8."
           },
           {
             "match": "Claude Opus 4.6",
             "model": "claude-opus-4.6",
             "set": { "fast_multiplier": 6 },
-            "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.6 fast mode at $30 input and $150 output per MTok."
+            "note": "The 6x multiplier is retained for historical Claude Code fast-speed calls; current fast mode supports only Opus 5 and Opus 4.8."
           },
           {
-            "match": "Claude Sonnet 5 starting September 1, 2026",
+            "match": "Claude Sonnet 5",
             "model": "claude-sonnet-5",
-            "effective_from": "2026-09-01",
-            "note": "Standard Sonnet 5 pricing takes effect 2026-09-01; introductory pricing through 2026-08-31 is carried by the upstream book."
+            "note": "Anthropic made Sonnet 5 launch pricing permanent: $2 input, $2.50 5-minute cache writes, $0.20 cache reads, and $10 output per MTok."
           },
           { "match": "Claude Sonnet 4.6", "model": "claude-sonnet-4-6" },
           { "match": "Claude Sonnet 4.5", "model": "claude-sonnet-4-5" },
           { "match": "Claude Sonnet 4", "model": "claude-sonnet-4" },
-          { "match": "Claude Haiku 4.5", "model": "claude-haiku-4-5" }
+          { "match": "Claude Haiku 4.5", "model": "claude-haiku-4-5" },
+          {
+            "match": "Claude Haiku 3.5",
+            "model": "claude-haiku-3-5",
+            "effective_from": "2024-12-03",
+            "note": "Anthropic's historical Haiku 3.5 row corrects incomplete and higher LiteLLM rates for archived Claude Code usage."
+          }
         ]
       }
     },
@@ -130,11 +163,135 @@
       "table_heading": "Understand the cost tradeoff"
     },
     {
-      "id": "openai-pricing",
-      "name": "OpenAI API pricing",
-      "url": "https://openai.com/api/pricing/",
-      "kind": "html-table",
-      "output": "reference"
+      "id": "openai-gpt-5-4-pricing",
+      "name": "OpenAI GPT-5.4 model pricing",
+      "url": "https://developers.openai.com/api/docs/models/gpt-5.4.md",
+      "kind": "markdown-table",
+      "output": "overrides",
+      "table_heading": "Text tokens",
+      "extract": {
+        "mode": "label-rows",
+        "scope": "global",
+        "model": "gpt-5.4",
+        "columns": { "label": "Metric", "price": "Price" },
+        "labels": {
+          "input": "Input",
+          "cache_read": "Cached input",
+          "output": "Output"
+        },
+        "defaults": { "web_search": 0.01 },
+        "note": "Default-tier GPT-5.4 rates. Requests above 272K input tokens use OpenAI's long-context rates, which tokenuse does not yet select per call."
+      }
+    },
+    {
+      "id": "openai-gpt-6-astra-pricing",
+      "name": "OpenAI GPT-6 Astra model pricing",
+      "url": "https://developers.openai.com/api/docs/models/gpt-6-astra.md",
+      "kind": "markdown-table",
+      "output": "overrides",
+      "effective_from": "2026-09-03",
+      "table_heading": "Text tokens",
+      "extract": {
+        "mode": "label-rows",
+        "scope": "global",
+        "model": "gpt-6-astra",
+        "columns": { "label": "Metric", "price": "Price" },
+        "labels": {
+          "input": "Input",
+          "cache_write": "Cache writes",
+          "cache_read": "Cached input",
+          "output": "Output"
+        },
+        "defaults": { "web_search": 0.01 },
+        "note": "Default-tier GPT-6 Astra rates. Requests above 272K input tokens use OpenAI's long-context rates, which tokenuse does not yet select per call."
+      }
+    },
+    {
+      "id": "openai-gpt-5-6-sol-pricing",
+      "name": "OpenAI GPT-5.6 Sol model pricing",
+      "url": "https://developers.openai.com/api/docs/models/gpt-5.6-sol.md",
+      "kind": "markdown-table",
+      "output": "overrides",
+      "effective_from": "2026-08-21",
+      "table_heading": "Text tokens",
+      "extract": {
+        "mode": "label-rows",
+        "scope": "global",
+        "model": "gpt-5.6-sol",
+        "columns": { "label": "Metric", "price": "Price" },
+        "labels": {
+          "input": "Input",
+          "cache_read": "Cached input",
+          "output": "Output"
+        },
+        "set": { "cache_write": 0.000005 },
+        "defaults": { "web_search": 0.01 },
+        "note": "Promotional Sol rates available at least through November 21, 2026; cache writes are 1.25x input. Long-context rates are not yet selected per call."
+      }
+    },
+    {
+      "id": "openai-gpt-5-6-sol-historical-pricing",
+      "name": "OpenAI GPT-5.6 Sol model pricing",
+      "url": "https://developers.openai.com/api/docs/models/gpt-5.6-sol.md",
+      "kind": "text",
+      "output": "overrides",
+      "extract": {
+        "mode": "pinned",
+        "scope": "global",
+        "rows": [
+          {
+            "match": "GPT-5.6 Sol",
+            "model": "gpt-5.6-sol-history",
+            "effective_to": "2026-08-21",
+            "set": { "input": 0.000005, "cache_write": 0.00000625, "cache_read": 0.0000005, "output": 0.00003 },
+            "note": "Pre-promotion GPT-5.6 Sol rates retained for calls before August 21, 2026. The synthetic -history lookup target lets the current live row remain the family-prefix fallback after this window expires."
+          }
+        ]
+      }
+    },
+    {
+      "id": "openai-gpt-5-6-terra-pricing",
+      "name": "OpenAI GPT-5.6 Terra model pricing",
+      "url": "https://developers.openai.com/api/docs/models/gpt-5.6-terra.md",
+      "kind": "markdown-table",
+      "output": "overrides",
+      "table_heading": "Text tokens",
+      "extract": {
+        "mode": "label-rows",
+        "scope": "global",
+        "model": "gpt-5.6-terra",
+        "columns": { "label": "Metric", "price": "Price" },
+        "labels": {
+          "input": "Input",
+          "cache_read": "Cached input",
+          "output": "Output"
+        },
+        "set": { "cache_write": 0.0000025 },
+        "defaults": { "web_search": 0.01 },
+        "note": "Default-tier Terra rates; cache writes are 1.25x input. Long-context rates are not yet selected per call."
+      }
+    },
+    {
+      "id": "openai-gpt-5-6-luna-pricing",
+      "name": "OpenAI GPT-5.6 Luna model pricing",
+      "url": "https://developers.openai.com/api/docs/models/gpt-5.6-luna.md",
+      "kind": "markdown-table",
+      "output": "overrides",
+      "table_heading": "Text tokens",
+      "extract": {
+        "mode": "label-rows",
+        "scope": "global",
+        "model": "gpt-5.6-luna",
+        "columns": { "label": "Metric", "price": "Price" },
+        "labels": {
+          "input": "Input",
+          "cache_read": "Cached input",
+          "output": "Output"
+        },
+        "set": { "cache_write": 0.00000025 },
+        "defaults": { "web_search": 0.01 },
+        "note": "Default-tier Luna rates; cache writes are 1.25x input. Long-context rates are not yet selected per call."
+      }
     },
     {
       "id": "gemini-pricing",
@@ -142,6 +299,27 @@
       "url": "https://ai.google.dev/gemini-api/docs/pricing",
       "kind": "html-table",
       "output": "reference"
+    },
+    {
+      "id": "gemini-1-5-flash-historical-pricing",
+      "name": "Google Gemini 1.5 Flash price update",
+      "url": "https://developers.googleblog.com/en/gemini-15-flash-updates-google-ai-studio-gemini-api/",
+      "kind": "text",
+      "output": "overrides",
+      "extract": {
+        "mode": "pinned",
+        "scope": "global",
+        "defaults": { "web_search": 0.01 },
+        "rows": [
+          {
+            "match": "Gemini 1.5 Flash",
+            "model": "gemini-1.5-flash",
+            "effective_from": "2024-08-12",
+            "set": { "input": 0.000000075, "cache_read": 0.00000001875, "output": 0.0000003 },
+            "note": "Historical short-context rates after Google's August 12, 2024 reduction. Requests above 128K input tokens cost 2x; Gemini 1.5 Flash was retired September 29, 2025."
+          }
+        ]
+      }
     },
     {
       "id": "cursor-pricing",
@@ -157,10 +335,11 @@
         },
         "rows": [
           {
-            "match": "Auto Cost",
+            "match": "Legacy Enterprise Auto",
             "model": "cursor-auto",
+            "effective_to": "2026-09-07",
             "set": { "input": 0.00000125, "cache_write": 0.00000125, "cache_read": 0.00000025, "output": 0.000006 },
-            "note": "Cursor moved its first-party rates out of the \"Model pricing\" table into client-side pricing widgets, so the Markdown export carries the prose but none of the numbers. Auto Cost is $1.25/MTok input and cache write, $0.25/MTok cache read, and $6/MTok output; verified 2026-08-03."
+            "note": "Legacy Enterprise Auto was $1.25/MTok input and cache write, $0.25/MTok cache read, and $6/MTok output. Cursor says this flat rate ends September 7, 2026; newer Auto requests bill the routed model's list price."
           }
         ]
       }
@@ -171,6 +350,60 @@
       "url": "https://cursor.com/docs/models-and-pricing.md",
       "kind": "markdown-table",
       "output": "overrides",
+      "table_heading": "Cursor Models",
+      "extract": {
+        "mode": "model-rows",
+        "scope": "tool",
+        "tool": "cursor",
+        "columns": {
+          "model": "Model",
+          "input": "Input",
+          "cache_write": "Cache write",
+          "cache_read": "Cache read",
+          "output": "Output"
+        },
+        "required_fields": ["input", "cache_read", "output"],
+        "defaults": {
+          "web_search": 0.01
+        },
+        "note": "Live Cursor Models table rates.",
+        "rows": [
+          {
+            "match": "Composer 2.5",
+            "model": "composer-2.5"
+          },
+          {
+            "match": "Composer 2.5 (Fast)",
+            "model": "composer-2.5-fast",
+            "note": "Cursor publishes Fast as a distinct first-party rate row."
+          },
+          {
+            "match": "Grok 4.6",
+            "model": "grok-4.6"
+          },
+          {
+            "match": "Grok 4.6 (Fast)",
+            "model": "grok-4.6-fast",
+            "note": "Cursor publishes Fast as a distinct first-party rate row."
+          },
+          {
+            "match": "Grok 4.5",
+            "model": "grok-4.5"
+          },
+          {
+            "match": "Grok 4.5 (Fast)",
+            "model": "grok-4.5-fast",
+            "note": "Cursor publishes Fast as a distinct first-party rate row."
+          }
+        ]
+      }
+    },
+    {
+      "id": "cursor-retired-model-pricing",
+      "name": "Cursor retired model pricing",
+      "url": "https://cursor.com/docs/models-and-pricing.md",
+      "kind": "markdown-table",
+      "output": "overrides",
       "extract": {
         "mode": "pinned",
         "scope": "tool",
@@ -178,47 +411,244 @@
         "defaults": {
           "web_search": 0.01
         },
-        "note": "Cursor moved its first-party rates out of the \"Model pricing\" table into client-side pricing widgets, so the Markdown export carries the prose but none of the numbers. These rates are pinned here and were verified 2026-08-03.",
         "rows": [
           {
             "model": "composer-1",
             "retired": true,
             "set": { "input": 0.00000125, "cache_read": 0.000000125, "output": 0.00001 },
-            "note": "Composer 1 is retired from Cursor's docs; its published rates ($1.25/$10 per 1M, cache read $0.125) are pinned here so archived Composer 1 calls still price."
+            "note": "Retired Composer 1 rates are preserved for archived calls."
           },
           {
             "model": "composer-1.5",
             "retired": true,
             "set": { "input": 0.0000035, "cache_read": 0.00000035, "output": 0.0000175 },
-            "note": "Composer 1.5 is retired from Cursor's docs; its published rates ($3.50/$17.50 per 1M, cache read $0.35) are pinned here."
+            "note": "Retired Composer 1.5 rates are preserved for archived calls."
           },
           {
             "model": "composer-2",
             "retired": true,
             "set": { "input": 0.0000005, "cache_read": 0.0000002, "output": 0.0000025 },
-            "note": "Composer 2 is retired from Cursor's docs; its published rates matched Composer 2.5 ($0.50/$2.50 per 1M, cache read $0.20) and are pinned here."
+            "note": "Retired Composer 2 rates are preserved for archived calls."
+          }
+        ]
+      }
+    },
+    {
+      "id": "cursor-third-party-pricing",
+      "name": "Cursor third-party model pricing",
+      "url": "https://cursor.com/docs/models-and-pricing.md",
+      "kind": "markdown-table",
+      "output": "overrides",
+      "table_heading": "Model pricing",
+      "extract": {
+        "mode": "model-rows",
+        "scope": "tool",
+        "tool": "cursor",
+        "columns": {
+          "model": "Model",
+          "input": "Input",
+          "cache_write": "Cache write",
+          "cache_read": "Cache read",
+          "output": "Output"
+        },
+        "required_fields": ["input", "cache_read", "output"],
+        "defaults": {
+          "web_search": 0.01
+        },
+        "note": "Cursor's listed third-party rate. Plan-specific Cursor Token Rate, regional, and legacy Max uplifts are not applied because local artifacts do not identify the plan.",
+        "rows": [
+          { "match": "Claude Fable 5.1", "model": "claude-fable-5-1" },
+          { "match": "Gemini 3.8 Flash", "model": "gemini-3.8-flash" },
+          { "match": "GLM 5.2", "model": "glm-5.2" },
+          { "match": "GPT-5 Fast", "model": "gpt-5-fast", "note": "Cursor publishes GPT-5 Fast as a distinct 2x rate row." },
+          { "match": "GPT-5.4", "model": "gpt-5.4" },
+          { "match": "GPT-5.5", "model": "gpt-5.5" },
+          { "match": "GPT-5.6 Luna", "model": "gpt-5.6-luna" },
+          { "match": "GPT-5.6 Sol", "model": "gpt-5.6-sol", "effective_from": "2026-08-21" },
+          { "match": "GPT-5.6 Terra", "model": "gpt-5.6-terra" },
+          { "match": "Claude Sonnet 5", "model": "claude-sonnet-5" },
+          { "match": "Claude Opus 5", "model": "claude-opus-5" },
+          { "match": "Claude Opus 4.8", "model": "claude-opus-4-8" },
+          { "match": "Gemini 3.6 Flash", "model": "gemini-3.6-flash" },
+          { "match": "Gemini 3.7 Flash", "model": "gemini-3.7-flash" },
+          { "match": "Kimi K2.7 Code", "model": "kimi-k2.7-code" },
+          { "match": "Kimi K3", "model": "kimi-k3" }
+        ]
+      }
+    },
+    {
+      "id": "cursor-gpt-5-4-fast-pricing",
+      "name": "Cursor GPT-5.4 model pricing",
+      "url": "https://cursor.com/docs/models/gpt-5-4",
+      "kind": "html-table",
+      "output": "overrides",
+      "extract": {
+        "mode": "model-rows",
+        "scope": "tool",
+        "tool": "cursor",
+        "columns": { "model": "Name", "input": "Input", "cache_read": "Cache Read", "output": "Output" },
+        "required_fields": ["input", "cache_read", "output"],
+        "defaults": { "web_search": 0.01 },
+        "rows": [
+          {
+            "match": "GPT-5.4",
+            "model": "gpt-5.4-fast",
+            "token_multipliers": { "input": 2, "cache_read": 2, "output": 2 },
+            "note": "Cursor's GPT-5.4 model page publishes gpt-5.4-fast at 2x the standard token rates. The fixed web-search charge is not multiplied."
           },
           {
-            "match": "Composer 2.5",
-            "model": "composer-2.5",
-            "set": { "input": 0.0000005, "cache_read": 0.0000002, "output": 0.0000025 }
+            "match": "GPT-5.4",
+            "model": "gpt-5.4-long",
+            "token_multipliers": { "input": 2, "cache_read": 2, "output": 1.5 },
+            "note": "Cursor's GPT-5.4 model page publishes 2x input/cache-read and 1.5x output rates above 272K input tokens."
           },
           {
-            "match": "Composer 2.5",
-            "model": "composer-2.5-fast",
-            "set": { "input": 0.000003, "cache_write": 0.000003, "cache_read": 0.0000005, "output": 0.000015 },
-            "note": "Composer 2.5 Fast ($3/MTok input, $0.50/MTok cache read, $15/MTok output) is kept as a distinct tool-scoped row; verified 2026-08-03."
+            "match": "GPT-5.4",
+            "model": "gpt-5.4-fast-long",
+            "token_multipliers": { "input": 4, "cache_read": 4, "output": 3 },
+            "note": "Cursor's GPT-5.4 Fast long-context row combines the published 2x Fast tier with 2x input/cache-read and 1.5x output above 272K. The fixed web-search charge is not multiplied."
+          }
+        ]
+      }
+    },
+    {
+      "id": "cursor-gpt-5-5-fast-pricing",
+      "name": "Cursor GPT-5.5 model pricing",
+      "url": "https://cursor.com/docs/models/gpt-5-5",
+      "kind": "html-table",
+      "output": "overrides",
+      "extract": {
+        "mode": "model-rows",
+        "scope": "tool",
+        "tool": "cursor",
+        "columns": { "model": "Name", "input": "Input", "cache_read": "Cache Read", "output": "Output" },
+        "required_fields": ["input", "cache_read", "output"],
+        "defaults": { "web_search": 0.01 },
+        "rows": [
+          {
+            "match": "GPT-5.5 (Fast Mode)",
+            "model": "gpt-5.5-fast",
+            "note": "Cursor's GPT-5.5 model page publishes gpt-5.5-fast at $12.50 input, $1.25 cache read, and $75 output per MTok. The fixed web-search charge is not multiplied."
+          }
+        ]
+      }
+    },
+    {
+      "id": "cursor-gpt-5-6-luna-fast-pricing",
+      "name": "Cursor GPT-5.6 Luna model pricing",
+      "url": "https://cursor.com/docs/models/gpt-5-6-luna",
+      "kind": "html-table",
+      "output": "overrides",
+      "extract": {
+        "mode": "model-rows",
+        "scope": "tool",
+        "tool": "cursor",
+        "columns": { "model": "Name", "input": "Input", "cache_write": "Cache Write", "cache_read": "Cache Read", "output": "Output" },
+        "required_fields": ["input", "cache_write", "cache_read", "output"],
+        "defaults": { "web_search": 0.01 },
+        "rows": [
+          {
+            "match": "GPT-5.6 Luna (Fast Mode)",
+            "model": "gpt-5.6-luna-fast",
+            "note": "Cursor's GPT-5.6 Luna model page publishes gpt-5.6-luna-fast at 2x the standard token rates. The fixed web-search charge is not multiplied."
           },
           {
-            "match": "Grok 4.5",
-            "model": "grok-4.5",
-            "set": { "input": 0.000002, "cache_read": 0.0000005, "output": 0.000006 }
+            "match": "GPT-5.6 Luna (Long Context (>272k))",
+            "model": "gpt-5.6-luna-long",
+            "note": "Cursor's explicit GPT-5.6 Luna long-context row applies above 272K input tokens."
           },
           {
-            "match": "Grok 4.5",
-            "model": "grok-4.5-fast",
-            "set": { "input": 0.000004, "cache_write": 0.000004, "cache_read": 0.000001, "output": 0.000018 },
-            "note": "Grok 4.5 Fast ($4/MTok input, $1/MTok cache read, $18/MTok output) is kept as a distinct tool-scoped row; verified 2026-08-03."
+            "match": "GPT-5.6 Luna (Fast Mode, Long Context (>272k))",
+            "model": "gpt-5.6-luna-fast-long",
+            "note": "Cursor's explicit GPT-5.6 Luna Fast long-context row applies above 272K input tokens. The fixed web-search charge is not multiplied."
+          }
+        ]
+      }
+    },
+    {
+      "id": "cursor-gpt-5-6-sol-fast-pricing",
+      "name": "Cursor GPT-5.6 Sol model pricing",
+      "url": "https://cursor.com/docs/models/gpt-5-6-sol",
+      "kind": "html-table",
+      "output": "overrides",
+      "extract": {
+        "mode": "model-rows",
+        "scope": "tool",
+        "tool": "cursor",
+        "columns": { "model": "Name", "input": "Input", "cache_write": "Cache Write", "cache_read": "Cache Read", "output": "Output" },
+        "required_fields": ["input", "cache_write", "cache_read", "output"],
+        "defaults": { "web_search": 0.01 },
+        "rows": [
+          {
+            "match": "GPT-5.6 Sol (Long Context (>272k))",
+            "model": "gpt-5.6-sol-long-history",
+            "effective_to": "2026-08-21",
+            "set": { "input": 0.00001, "cache_write": 0.0000125, "cache_read": 0.000001, "output": 0.000045 },
+            "note": "Pre-promotion GPT-5.6 Sol long-context rates retain the documented 2x input/cache and 1.5x output relationship to the historical standard schedule."
+          },
+          {
+            "match": "GPT-5.6 Sol (Long Context (>272k))",
+            "model": "gpt-5.6-sol-long",
+            "effective_from": "2026-08-21",
+            "note": "Cursor's explicit GPT-5.6 Sol long-context row applies above 272K input tokens."
+          },
+          {
+            "match": "GPT-5.6 Sol (Fast Mode)",
+            "model": "gpt-5.6-sol-fast-history",
+            "effective_to": "2026-08-21",
+            "set": { "input": 0.00001, "cache_write": 0.0000125, "cache_read": 0.000001, "output": 0.00006 },
+            "note": "Pre-promotion GPT-5.6 Sol Fast rates retain the documented 2x relationship to the historical $5/$6.25/$0.50/$30 standard schedule. The synthetic -history target keeps current Fast variants on the live row after this window."
+          },
+          {
+            "match": "GPT-5.6 Sol (Fast Mode)",
+            "model": "gpt-5.6-sol-fast",
+            "effective_from": "2026-08-21",
+            "note": "Cursor's GPT-5.6 Sol model page publishes gpt-5.6-sol-fast at 2x the current standard token rates. The fixed web-search charge is not multiplied."
+          },
+          {
+            "match": "GPT-5.6 Sol (Fast Mode, Long Context (>272k))",
+            "model": "gpt-5.6-sol-fast-long-history",
+            "effective_to": "2026-08-21",
+            "set": { "input": 0.00002, "cache_write": 0.000025, "cache_read": 0.000002, "output": 0.00009 },
+            "note": "Pre-promotion GPT-5.6 Sol Fast long-context rates combine the documented 2x Fast and long-context relationships with the historical standard schedule."
+          },
+          {
+            "match": "GPT-5.6 Sol (Fast Mode, Long Context (>272k))",
+            "model": "gpt-5.6-sol-fast-long",
+            "effective_from": "2026-08-21",
+            "note": "Cursor's explicit GPT-5.6 Sol Fast long-context row applies above 272K input tokens. The fixed web-search charge is not multiplied."
+          }
+        ]
+      }
+    },
+    {
+      "id": "cursor-gpt-5-6-terra-fast-pricing",
+      "name": "Cursor GPT-5.6 Terra model pricing",
+      "url": "https://cursor.com/docs/models/gpt-5-6-terra",
+      "kind": "html-table",
+      "output": "overrides",
+      "extract": {
+        "mode": "model-rows",
+        "scope": "tool",
+        "tool": "cursor",
+        "columns": { "model": "Name", "input": "Input", "cache_write": "Cache Write", "cache_read": "Cache Read", "output": "Output" },
+        "required_fields": ["input", "cache_write", "cache_read", "output"],
+        "defaults": { "web_search": 0.01 },
+        "rows": [
+          {
+            "match": "GPT-5.6 Terra (Fast Mode)",
+            "model": "gpt-5.6-terra-fast",
+            "note": "Cursor's GPT-5.6 Terra model page publishes gpt-5.6-terra-fast at 2x the standard token rates. The fixed web-search charge is not multiplied."
+          },
+          {
+            "match": "GPT-5.6 Terra (Long Context (>272k))",
+            "model": "gpt-5.6-terra-long",
+            "note": "Cursor's explicit GPT-5.6 Terra long-context row applies above 272K input tokens."
+          },
+          {
+            "match": "GPT-5.6 Terra (Fast Mode, Long Context (>272k))",
+            "model": "gpt-5.6-terra-fast-long",
+            "note": "Cursor's explicit GPT-5.6 Terra Fast long-context row applies above 272K input tokens. The fixed web-search charge is not multiplied."
           }
         ]
       }
@@ -241,6 +671,7 @@
           "cache_write": "Cache write",
           "output": "Output"
         },
+        "required_fields": ["input", "cache_read", "output"],
         "rows": [
           { "match": "GPT-4.1", "model": "gpt-4.1" },
           { "match": "GPT-5 mini", "model": "gpt-5-mini" },
@@ -252,8 +683,9 @@
           { "match": "GPT-5.4 nano", "model": "gpt-5.4-nano" },
           { "match": "GPT-5.5", "model": "gpt-5.5" },
           { "match": "GPT-5.6 Luna", "model": "gpt-5.6-luna" },
-          { "match": "GPT-5.6 Sol", "model": "gpt-5.6-sol" },
+          { "match": "GPT-5.6 Sol", "model": "gpt-5.6-sol", "effective_from": "2026-08-21" },
           { "match": "GPT-5.6 Terra", "model": "gpt-5.6-terra" },
+          { "match": "GPT-6 Astra", "model": "gpt-6-astra", "effective_from": "2026-09-04" },
           { "match": "Claude Haiku 4.5", "model": "claude-haiku-4-5" },
           { "match": "Claude Sonnet 4", "model": "claude-sonnet-4" },
           { "match": "Claude Sonnet 4.5", "model": "claude-sonnet-4-5" },
@@ -269,14 +701,22 @@
           },
           { "match": "Claude Opus 5", "model": "claude-opus-5" },
           { "match": "Claude Sonnet 5", "model": "claude-sonnet-5" },
+          { "match": "Claude Fable 5.1", "model": "claude-fable-5-1", "effective_from": "2026-09-01" },
           { "match": "Claude Fable 5", "model": "claude-fable-5" },
           { "match": "Gemini 2.5 Pro", "model": "gemini-2.5-pro" },
           { "match": "Gemini 3 Flash", "model": "gemini-3-flash" },
           { "match": "Gemini 3.1 Pro", "model": "gemini-3.1-pro" },
           { "match": "Gemini 3.5 Flash", "model": "gemini-3.5-flash" },
+          { "match": "Gemini 3.6 Flash", "model": "gemini-3.6-flash" },
+          { "match": "Gemini 3.7 Flash", "model": "gemini-3.7-flash" },
+          { "match": "Gemini 3.8 Flash", "model": "gemini-3.8-flash", "effective_from": "2026-09-03" },
+          { "match": "Grok 4.5", "model": "grok-4.5" },
+          { "match": "Grok 4.6", "model": "grok-4.6" },
           { "match": "Grok Code Fast 1", "model": "grok-code-fast-1" },
           { "match": "MAI-Code-1-Flash", "model": "mai-code-1-flash" },
+          { "match": "MAI-Code-1.1-Flash", "model": "mai-code-1.1-flash" },
           { "match": "Kimi K2.7 Code", "model": "kimi-k2.7-code" },
+          { "match": "Kimi K3", "model": "kimi-k3" },
           { "match": "Raptor mini", "model": "raptor-mini" },
           { "match": "Goldeneye", "model": "goldeneye" }
         ]

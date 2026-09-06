@@ -77,9 +77,9 @@ The cancellation-through-file fields are the archive v4 Coach enrichment; archiv
 
 ## Model Identity
 
-Adapters retain the raw or inferred `ParsedCall.model`. Aggregation resolves `(tool, model)` through `src/models/registry.json`, producing a canonical id, display name, provider, and family before rows are grouped. The registry is ordered and first-match wins; tool-scoped automatic-router rules precede general rules. `models::canonical_key` lowercases identifiers and removes vendor paths, `@` pins, and trailing `-YYYYMMDD` dates, so equivalent ids fold into one row.
+Adapters retain the raw or inferred `ParsedCall.model`. Aggregation resolves `(tool, model)` through `src/models/registry.json`, producing a canonical id, display name, provider, and family before rows are grouped. The registry is ordered and first-match wins; tool-scoped automatic-router rules precede general rules. `models::canonical_key` lowercases identifiers and removes vendor paths, `@` pins, and trailing `-YYYYMMDD` or `-YYYY-MM-DD` dates, so equivalent ids fold into one row.
 
-Unknown ids use provider-aware readable fallbacks rather than appearing raw. The same canonical-key function is shared with pricing, but registry identity and pricing rows remain separate concerns. See [Model normalisation](models.md) for the schema and update workflow.
+Unknown ids use provider-aware readable fallbacks rather than appearing raw. Pricing uses a companion normalization that preserves dated snapshots, because two pins grouped under the same display identity may still have different token rates. See [Model normalisation](models.md) for the schema and update workflow.
 
 ## Aggregation
 
@@ -229,7 +229,7 @@ Raw project strings come from each tool's local data. Before display, `tokenuse`
 
 ## Archive And Sync
 
-`src/archive.rs` owns the SQLite archive. Schema v8 stores full `ParsedCall` rows, append-only limit snapshots, per-source fingerprints in `source_state`, and the transcript store behind Scrollback search. The v4 migration added Coach enrichment (`is_canceled`, prompt/response chars, elapsed time, code blocks, and file lists); v5 adds `interaction_mode`, `token_quality`, and `timestamp_quality`. Existing timestamped rows migrate as exact, and source fingerprints are cleared once so surviving sources can reparse with stronger metadata. Re-inserted duplicate rows backfill previously empty enrichment/provenance without clobbering stronger archived data. Calls remain unique on `(tool, dedup_key)`.
+`src/archive.rs` owns the SQLite archive. Schema v9 stores full `ParsedCall` rows, append-only limit snapshots, per-source fingerprints in `source_state`, and the transcript store behind Scrollback search. The v4 migration added Coach enrichment (`is_canceled`, prompt/response chars, elapsed time, code blocks, and file lists); v5 adds `interaction_mode`, `token_quality`, and `timestamp_quality`. Existing timestamped rows migrate as exact, and source fingerprints are cleared once so surviving sources can reparse with stronger metadata. Re-inserted duplicate rows backfill previously empty enrichment/provenance without clobbering stronger archived data. Calls remain unique on `(tool, dedup_key)`.
 
 v6 adds `source_state.cursor_json`: an adapter-owned incremental-parse cursor persisted beside the fingerprint (purely additive — no forced re-parse). The `ToolAdapter::parse_with_cursor` hook receives the stored cursor and returns the next one; the default ignores cursors and parses fully. Claude Code is the only adapter that implements it: its session JSONL files are append-only, so grown files resume from a stored per-file byte offset instead of re-reading every session in the project directory (see the Claude Code tool doc for the mechanism and boundary caveats). The sync status line on both front-ends appends `· N tail-resumed` when any file resumed this way.
 
@@ -248,6 +248,8 @@ v7 adds the Scrollback transcript store, entirely inside `archive.db`: a `transc
 The v7 migration seeds fallback rows from already-archived truncated prompts with `origin = 'prompt'`, so sessions whose source files were deleted before the upgrade stay prompt-searchable, then clears `source_state` to force one full re-parse that re-reads surviving sources with transcript capture and upgrades their rows to `origin = 'full'` (each adapter's fingerprint version, and Claude Code's incremental-cursor `PARSE_VERSION`, was bumped for the same reason). Transcript upserts are grow-only per column — a fresh parse of an append-only source is a superset of what was archived, so longer text wins and a weaker parse never clobbers captured text — with one exception: Claude tail-resumed continuations append their assistant blocks to the stored row, cooperating with the v6 cursor-based tail parsing. Superseded Cursor and Codex rows delete their transcript rows in the same transaction as their call rows.
 
 v8 is a one-shot cost repair with no schema change. Calls archived before Claude Opus 5 was priced matched no pricing row and fell through to the books' Sonnet 4.6 fallback, so they were billed at $3/$15 per MTok instead of $5/$25. The migration rescales those rows rather than recomputing them: Opus 5's input, output, cache-write, and cache-read rates are each exactly 5/3 of the Sonnet 4.6 rates they were charged at, so one factor restores the true cost — and unlike a recompute it preserves the 1-hour cache-write premium, which scales with the cache-write rate but is never persisted on the row. Web-search requests bill at $0.01 under both rows and are held out of the rescale; `speed = 'fast'` rows additionally take Opus 5's 2x multiplier, which the fallback row never carried. Rates are frozen literals rather than book lookups, because the repair must reproduce what was actually charged and the books move. Every row is checked against the fallback rates first and skipped if it already carries Opus 5 pricing, so anyone who downloaded corrected books before upgrading the binary cannot be double-charged; model ids are matched through the shared canonicalization, so dated and vendor-prefixed ids fold in while neighbours such as `claude-opus-5-fast` do not. This is a deliberate, versioned correction — archived costs are otherwise frozen at import time on purpose (see `remove_superseded_codex_rows`, which inherits import-time cost so history is never silently repriced).
+
+v9 adds another guarded cost repair with no column change. It corrects September 2026 Fable/Mythos 5.1 cache-read overcharges, the canceled Sonnet 5 price increase, GPT-5.3-Codex Spark rows charged only for web searches while an exact zero-token-rate placeholder shadowed their priced family, and GPT-6 Astra rows whose total exactly matches the former Sonnet fallback formula. A full-history pass runs once during migration; afterward, the same idempotent checks are restricted to the primary-key range inserted by each new source batch plus exact older Cursor rows whose authoritative token reconstruction updated their cost. This prevents stale local pricing books from reintroducing the known errors without rescanning the archive. Already-correct, ambiguous, unrelated, and pre-transition rows remain frozen.
 
 `src/search.rs` is the query side. `search_transcripts(paths, query, filters)` opens its own read-only SQLite connection per query, so callers on any thread — the TUI key handler, the desktop `search_transcripts` Tauri command, the MCP `scrollback` tool — never contend with the sync writer's connection and can never mutate the archive. Raw input is sanitised into a safe MATCH expression: each whitespace-separated token becomes a quoted phrase (neutralising FTS5 operators such as `-`, `OR`, and `NEAR(`), the final token matches by prefix, and terms are ANDed. Ranking uses bm25 with user text weighted 2:1 over assistant text (prose outranks code-heavy assistant output); results are grouped per session — 20 by default, capped at 50 — each with up to three snippets carrying highlight spans, a `prompt_only` flag for sessions whose only matches are migration-seeded prompt fallbacks, and the session's summed call cost. The project filter accepts a project identity and is expanded to every raw archived project string it groups. The unicode61 tokenizer means word/prefix matching only: no infix substring matches and weak CJK segmentation.
 
@@ -278,7 +280,7 @@ Session counts are tool-qualified, so `claude-code:s1` and `codex:s1` remain sep
 
 ## Pricing
 
-Pricing is embedded as two compile-time books under `costs/`. At runtime, `PriceTable::configured()` first looks for local `pricing-upstream.json` and `pricing-overrides.json` in the tokenuse config directory, then falls back to the embedded books. A legacy local `pricing-snapshot.json` is still accepted for older installs.
+Pricing is embedded as two compile-time books under `costs/`. At runtime, `PriceTable::configured()` uses a complete local `pricing-upstream.json`/`pricing-overrides.json` pair only when its latest checked/generated date is at least as new as the embedded pair; otherwise the embedded books win. A legacy local `pricing-snapshot.json` is still accepted for older installs.
 
 ```mermaid
 flowchart LR
@@ -286,7 +288,7 @@ flowchart LR
     B --> C{tool alias?}
     C -->|yes| D[tool target]
     C -->|no| E[model target]
-    D --> F{tool-scoped effective row?}
+    D --> F{tool-scoped active date-window row?}
     E --> F
     F -->|yes| G[price row]
     F -->|no| H{global alias or row?}
@@ -298,7 +300,7 @@ flowchart LR
     J --> K
 ```
 
-Canonicalization lowercases model names, drops a vendor prefix such as `anthropic/`, strips an `@pin` suffix, and removes trailing `-YYYYMMDD` date stamps. Aliases such as `anthropic-auto` and `openai-auto` resolve through the overrides book; `cursor-auto` is a direct Cursor Auto pricing row. Tool aliases are scoped, so Copilot display names do not affect Codex/OpenAI/Claude/Gemini calls.
+Pricing canonicalization lowercases model names, drops a vendor prefix such as `anthropic/`, and strips an `@pin` suffix, but deliberately preserves trailing model-snapshot dates so an older exact variant can retain its historical rate. Aliases such as `anthropic-auto`, `openai-auto`, and `gpt-5.6` resolve through the overrides book. Tool aliases are scoped, so Copilot display names and Cursor Fast-id rewrites do not affect other tools. Price rows may define an inclusive `effective_from` and exclusive `effective_to`; Cursor's legacy flat Auto rate uses the latter so unresolved calls stop receiving that obsolete estimate when routed-model billing begins.
 
 The pricing formula is:
 
@@ -319,7 +321,7 @@ Claude Opus fast mode uses the model row's `fast_multiplier` when present. The `
 cargo run -- --refresh-prices
 ```
 
-The TUI and desktop configuration pages can also download the published pricing books into the local config directory after confirmation and reload pricing in-process. Because the archive stores `cost_usd` at import time, refreshed pricing applies to newly imported calls; existing historical rows keep their original USD cost. Builds made with `--no-default-features` compile without these download actions.
+The TUI and desktop configuration pages can also download the published pricing books into the local config directory after confirmation and reload pricing in-process. Because the archive stores `cost_usd` at import time, refreshed pricing normally applies to newly imported calls; existing historical rows keep their original USD cost. The guarded v8 and v9 repairs described under [Archive And Sync](#archive-and-sync) are narrow, versioned exceptions. Builds made with `--no-default-features` compile without these download actions.
 
 See [Pricing and cache rates](pricing.md) for provider source quotes, current cache-read multipliers, and parser caveats.
 

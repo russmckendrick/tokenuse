@@ -123,7 +123,7 @@ Model breakdown labels preserve the complete GPT identifier. For example, `gpt-5
 
 **Critical quirk:** OpenAI reports cached tokens **inside** `input_tokens`. The parser subtracts `cached_input_tokens` before pricing or the cache read would be double-billed.
 
-Current bundled OpenAI/Codex cache-read rates are not uniformly 50%: GPT-5.x and GPT-5.x-Codex rows use 10%, while `codex-mini-latest` uses 25% and older rows such as `gpt-4o` can still use 50%. See [Pricing and cache rates](../pricing.md).
+Current bundled OpenAI/Codex cache-read rates are not uniformly 50%: the newly reviewed GPT-5.6 and GPT-6 Astra rows, plus current rows such as `gpt-5.3-codex` and `gpt-5.4`, use 10%, while exact older variants can differ, `codex-mini-latest` uses 25%, and rows such as `gpt-4o` can still use 50%. GPT-5.6 and GPT-6 also carry the documented 1.25x cache-write rate. GPT-6 Astra's bundled row is the default tier; requests above 272K input tokens use higher long-context rates that `tokenuse` cannot yet select per call. Archive schema v9 repairs existing Astra rows only when the stored cost exactly proves the old fallback formula was used. The internal `codex-auto-review` id remains visibly fallback-priced because OpenAI does not publish the reviewer's routed model or token rate; it is not guessed as Astra or Sol. See [Pricing and cache rates](../pricing.md).
 
 **Reasoning tokens** are folded into `output_tokens` and priced at the output rate, matching the bundled snapshot schema (which has no separate reasoning rate). They are also preserved in `reasoning_tokens` for future per-rate breakouts.
 

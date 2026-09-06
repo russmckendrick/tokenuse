@@ -74,9 +74,22 @@ pub struct ModelIdentity {
 
 /// Normalize a raw model id into the key the registry matches against:
 /// trimmed, lowercased, vendor path prefix and `@suffix` removed, and a
-/// trailing `-YYYYMMDD` date stripped. Pricing lookups share this exact
-/// normalization via `pricing`.
+/// trailing `-YYYYMMDD` or `-YYYY-MM-DD` date stripped.
 pub fn canonical_key(model: &str) -> String {
+    normalized_key(model, true)
+}
+
+/// Normalize a model id for pricing without discarding a dated snapshot.
+///
+/// Model identity intentionally folds provider snapshot dates so usage groups
+/// under one friendly model name. Pricing cannot do that: dated variants can
+/// carry different rates, so the price table must try the exact snapshot first
+/// and only then fall back to the undated family prefix.
+pub(crate) fn pricing_key(model: &str) -> String {
+    normalized_key(model, false)
+}
+
+fn normalized_key(model: &str, strip_date: bool) -> String {
     let mut s = model.trim().to_lowercase();
     if let Some(idx) = s.find('@') {
         s.truncate(idx);
@@ -84,8 +97,10 @@ pub fn canonical_key(model: &str) -> String {
     if let Some(idx) = s.rfind('/') {
         s = s[idx + 1..].to_string();
     }
-    if let Some(stripped) = strip_date_suffix(&s) {
-        s = stripped;
+    if strip_date {
+        if let Some(stripped) = strip_date_suffix(&s) {
+            s = stripped;
+        }
     }
     s = normalize_reversed_claude_id(&s);
     s
@@ -98,7 +113,7 @@ fn normalize_reversed_claude_id(model: &str) -> String {
     let parts = rest.split('-').collect::<Vec<_>>();
     let Some(family_idx) = parts
         .iter()
-        .position(|part| matches!(*part, "opus" | "sonnet" | "haiku"))
+        .position(|part| matches!(*part, "opus" | "sonnet" | "haiku" | "fable" | "mythos"))
     else {
         return model.to_string();
     };
@@ -117,6 +132,18 @@ fn normalize_reversed_claude_id(model: &str) -> String {
 
 fn strip_date_suffix(model: &str) -> Option<String> {
     let bytes = model.as_bytes();
+    if bytes.len() >= 11 {
+        let tail = &bytes[bytes.len() - 11..];
+        if tail[0] == b'-'
+            && tail[5] == b'-'
+            && tail[8] == b'-'
+            && tail[1..5].iter().all(|b| b.is_ascii_digit())
+            && tail[6..8].iter().all(|b| b.is_ascii_digit())
+            && tail[9..11].iter().all(|b| b.is_ascii_digit())
+        {
+            return Some(model[..model.len() - 11].to_string());
+        }
+    }
     if bytes.len() < 9 {
         return None;
     }
@@ -128,7 +155,10 @@ fn strip_date_suffix(model: &str) -> Option<String> {
 }
 
 pub fn resolve(tool_id: &str, raw: &str) -> ModelIdentity {
-    let key = canonical_key(raw);
+    let mut key = canonical_key(raw);
+    if tool_id == "cursor" {
+        key = cursor_identity_key(key);
+    }
     for rule in rules() {
         if let Some(tool) = &rule.tool {
             if tool != tool_id {
@@ -150,6 +180,41 @@ pub fn resolve(tool_id: &str, raw: &str) -> ModelIdentity {
         }
     }
     fallback_identity(&key)
+}
+
+fn cursor_identity_key(mut key: String) -> String {
+    let Some(parameters_start) = key.find('[') else {
+        return key;
+    };
+    let fast = cursor_bracket_fast_parameter(&key[parameters_start + 1..]);
+    key.truncate(parameters_start);
+
+    match fast {
+        Some(true) if !key.split('-').any(|segment| segment == "fast") => {
+            key.push_str("-fast");
+            key
+        }
+        Some(false) => key
+            .split('-')
+            .filter(|segment| *segment != "fast")
+            .collect::<Vec<_>>()
+            .join("-"),
+        _ => key,
+    }
+}
+
+fn cursor_bracket_fast_parameter(parameters: &str) -> Option<bool> {
+    let parameters = parameters
+        .split_once(']')
+        .map_or(parameters, |(inside, _)| inside);
+    parameters.split(',').find_map(|parameter| {
+        let (name, value) = parameter.split_once('=')?;
+        match (name.trim(), value.trim()) {
+            ("fast", "true") => Some(true),
+            ("fast", "false") => Some(false),
+            _ => None,
+        }
+    })
 }
 
 /// Provider-inferred naming for ids the registry does not know yet, so a
@@ -350,6 +415,7 @@ mod tests {
         assert_eq!(display("codex", "gpt-5.6-sol"), "GPT-5.6 Sol");
         assert_eq!(display("codex", "gpt-5.6-terra"), "GPT-5.6 Terra");
         assert_eq!(display("codex", "gpt-5.6-luna"), "GPT-5.6 Luna");
+        assert_eq!(display("codex", "gpt-6-astra"), "GPT-6 Astra");
         assert_eq!(display("codex", "gpt-5.6"), "GPT-5.6");
         assert_eq!(display("codex", "gpt-5.3-codex"), "GPT-5.3 Codex");
         assert_eq!(
@@ -374,6 +440,77 @@ mod tests {
     }
 
     #[test]
+    fn current_grok_models_keep_their_versions() {
+        let grok = resolve("copilot", "grok-4.6");
+        assert_eq!(grok.display, "Grok 4.6");
+        assert_eq!(grok.canonical_id, "grok-4.6");
+        assert_eq!(grok.provider, Provider::XAI);
+    }
+
+    #[test]
+    fn copilot_current_display_labels_fold_into_api_model_identities() {
+        for (raw, canonical, display, provider, family) in [
+            (
+                "Claude Fable 5.1",
+                "claude-fable-5-1",
+                "Fable 5.1",
+                Provider::Anthropic,
+                "Fable",
+            ),
+            (
+                "GPT-6 Astra",
+                "gpt-6-astra",
+                "GPT-6 Astra",
+                Provider::OpenAI,
+                "GPT-6",
+            ),
+            (
+                "Gemini 3.6 Flash",
+                "gemini-3.6-flash",
+                "Gemini 3.6 Flash",
+                Provider::Google,
+                "Gemini",
+            ),
+            (
+                "Gemini 3.7 Flash",
+                "gemini-3.7-flash",
+                "Gemini 3.7 Flash",
+                Provider::Google,
+                "Gemini",
+            ),
+            (
+                "Gemini 3.8 Flash",
+                "gemini-3.8-flash",
+                "Gemini 3.8 Flash",
+                Provider::Google,
+                "Gemini",
+            ),
+            (
+                "MAI-Code-1.1-Flash",
+                "mai-code-1.1-flash",
+                "MAI-Code-1.1-Flash",
+                Provider::Other,
+                "MAI-Code",
+            ),
+            ("Grok 4.5", "grok-4.5", "Grok 4.5", Provider::XAI, "Grok"),
+            ("Grok 4.6", "grok-4.6", "Grok 4.6", Provider::XAI, "Grok"),
+            ("Kimi K3", "kimi-k3", "Kimi K3", Provider::Other, "Kimi"),
+        ] {
+            let identity = resolve("copilot", raw);
+            assert_eq!(identity.canonical_id, canonical, "{raw} canonical id");
+            assert_eq!(identity.display, display, "{raw} display");
+            assert_eq!(identity.provider, provider, "{raw} provider");
+            assert_eq!(identity.family, family, "{raw} family");
+
+            let api_identity = resolve("copilot", canonical);
+            assert_eq!(
+                api_identity.canonical_id, canonical,
+                "{raw} must fold with the API-style id"
+            );
+        }
+    }
+
+    #[test]
     fn claude_models_fold_dated_ids_and_name_unknowns() {
         let dated = resolve("claude-code", "claude-opus-4-5-20250929");
         assert_eq!(dated.display, "Opus 4.5");
@@ -384,6 +521,25 @@ mod tests {
         let fable = resolve("claude-code", "claude-fable-5");
         assert_eq!(fable.display, "Fable 5");
         assert_eq!(fable.family, "Fable");
+
+        let fable_51 = resolve("claude-code", "claude-fable-5-1");
+        assert_eq!(fable_51.display, "Fable 5.1");
+        assert_eq!(fable_51.canonical_id, "claude-fable-5-1");
+        assert_eq!(fable_51.provider, Provider::Anthropic);
+
+        let mythos_51 = resolve("claude-code", "claude-mythos-5.1");
+        assert_eq!(mythos_51.display, "Mythos 5.1");
+        assert_eq!(mythos_51.canonical_id, "claude-mythos-5-1");
+
+        let cursor_fable = resolve("cursor", "claude-5.1-fable-thinking");
+        assert_eq!(cursor_fable.display, "Fable 5.1");
+        assert_eq!(cursor_fable.canonical_id, "claude-fable-5-1");
+        assert_eq!(cursor_fable.provider, Provider::Anthropic);
+
+        let cursor_mythos = resolve("cursor", "claude-5.1-mythos-high");
+        assert_eq!(cursor_mythos.display, "Mythos 5.1");
+        assert_eq!(cursor_mythos.canonical_id, "claude-mythos-5-1");
+        assert_eq!(cursor_mythos.provider, Provider::Anthropic);
 
         // Claude Code's old table stopped at Opus 4.7; the shared registry
         // knows newer models regardless of which tool saw them.
@@ -459,10 +615,31 @@ mod tests {
             "gemini-2.5-pro"
         );
         assert_eq!(canonical_key("Claude-Opus-4-5-20250929"), "claude-opus-4-5");
+        assert_eq!(canonical_key("gpt-5.4-2026-03-05"), "gpt-5.4");
         assert_eq!(canonical_key(" gpt-5 "), "gpt-5");
         assert_eq!(
             canonical_key("claude-4.5-sonnet-thinking-high"),
             "claude-sonnet-4-5-thinking-high"
+        );
+        assert_eq!(
+            canonical_key("claude-5.1-fable-thinking"),
+            "claude-fable-5-1-thinking"
+        );
+        assert_eq!(
+            canonical_key("claude-5.1-mythos-high"),
+            "claude-mythos-5-1-high"
+        );
+    }
+
+    #[test]
+    fn pricing_key_preserves_snapshot_dates() {
+        assert_eq!(
+            pricing_key("openai/gpt-4o-2024-05-13@production"),
+            "gpt-4o-2024-05-13"
+        );
+        assert_eq!(
+            pricing_key("anthropic/claude-opus-4-7-20250514@v1"),
+            "claude-opus-4-7-20250514"
         );
     }
 
@@ -477,9 +654,164 @@ mod tests {
         assert_eq!(grok.display, "Grok 4.5 Fast");
         assert_eq!(grok.canonical_id, "cursor-grok-4.5");
 
+        let grok_46 = resolve("cursor", "grok-4-6-fast-high");
+        assert_eq!(grok_46.display, "Grok 4.6 Fast");
+        assert_eq!(grok_46.canonical_id, "cursor-grok-4.6");
+        assert_eq!(grok_46.provider, Provider::Cursor);
+
         let vega = resolve("cursor", "vega-fast-xhigh");
         assert_eq!(vega.display, "Vega (Preview)");
         assert_eq!(vega.canonical_id, "cursor-vega");
+    }
+
+    #[test]
+    fn cursor_gpt_standard_effort_models_fold_into_base_identities() {
+        for (raw, canonical, display) in [
+            ("gpt-5", "gpt-5", "GPT-5"),
+            ("gpt-5-high", "gpt-5", "GPT-5"),
+            ("gpt-5-low", "gpt-5", "GPT-5"),
+            ("gpt-5.4-high", "gpt-5.4", "GPT-5.4"),
+            ("gpt-5.5-extra-high", "gpt-5.5", "GPT-5.5"),
+            ("gpt-5.6-luna-medium", "gpt-5.6-luna", "GPT-5.6 Luna"),
+            ("gpt-5.6-sol-xhigh", "gpt-5.6-sol", "GPT-5.6 Sol"),
+            ("gpt-5.6-terra-high", "gpt-5.6-terra", "GPT-5.6 Terra"),
+        ] {
+            let identity = resolve("cursor", raw);
+            assert_eq!(identity.canonical_id, canonical, "{raw} canonical id");
+            assert_eq!(identity.display, display, "{raw} display");
+            assert_eq!(identity.provider, Provider::OpenAI, "{raw} provider");
+            assert_eq!(identity.family, "GPT-5", "{raw} family");
+        }
+    }
+
+    #[test]
+    fn cursor_gpt_fast_effort_models_keep_fast_display_and_base_identity() {
+        for (raw, canonical, display) in [
+            ("gpt-5-fast", "gpt-5", "GPT-5 Fast"),
+            ("gpt-5-fast-high", "gpt-5", "GPT-5 Fast"),
+            ("gpt-5-high-fast", "gpt-5", "GPT-5 Fast"),
+            ("gpt-5-low-fast", "gpt-5", "GPT-5 Fast"),
+            ("gpt-5.4-fast", "gpt-5.4", "GPT-5.4 Fast"),
+            ("gpt-5.4-fast-high", "gpt-5.4", "GPT-5.4 Fast"),
+            ("gpt-5.4-high-fast", "gpt-5.4", "GPT-5.4 Fast"),
+            ("gpt-5.5-fast", "gpt-5.5", "GPT-5.5 Fast"),
+            ("gpt-5.5-extra-high-fast", "gpt-5.5", "GPT-5.5 Fast"),
+            (
+                "gpt-5.6-luna-fast-high",
+                "gpt-5.6-luna",
+                "GPT-5.6 Luna Fast",
+            ),
+            ("gpt-5.6-luna-low-fast", "gpt-5.6-luna", "GPT-5.6 Luna Fast"),
+            ("gpt-5.6-sol-fast-xhigh", "gpt-5.6-sol", "GPT-5.6 Sol Fast"),
+            ("gpt-5.6-sol-low-fast", "gpt-5.6-sol", "GPT-5.6 Sol Fast"),
+            ("gpt-5.6-sol-medium-fast", "gpt-5.6-sol", "GPT-5.6 Sol Fast"),
+            ("gpt-5.6-sol-xhigh-fast", "gpt-5.6-sol", "GPT-5.6 Sol Fast"),
+            ("gpt-5.6-sol-max-fast", "gpt-5.6-sol", "GPT-5.6 Sol Fast"),
+            (
+                "gpt-5.6-terra-fast-high",
+                "gpt-5.6-terra",
+                "GPT-5.6 Terra Fast",
+            ),
+            (
+                "gpt-5.6-terra-max-fast",
+                "gpt-5.6-terra",
+                "GPT-5.6 Terra Fast",
+            ),
+        ] {
+            let identity = resolve("cursor", raw);
+            assert_eq!(identity.canonical_id, canonical, "{raw} canonical id");
+            assert_eq!(identity.display, display, "{raw} display");
+            assert_eq!(identity.provider, Provider::OpenAI, "{raw} provider");
+            assert_eq!(identity.family, "GPT-5", "{raw} family");
+        }
+    }
+
+    #[test]
+    fn cursor_gpt_5_6_luna_and_terra_all_efforts_keep_fast_identity() {
+        for (base, canonical, display) in [
+            ("gpt-5.6-luna", "gpt-5.6-luna", "GPT-5.6 Luna Fast"),
+            ("gpt-5.6-terra", "gpt-5.6-terra", "GPT-5.6 Terra Fast"),
+        ] {
+            for effort in [
+                None,
+                Some("low"),
+                Some("medium"),
+                Some("high"),
+                Some("xhigh"),
+                Some("max"),
+            ] {
+                let raw = effort.map_or_else(
+                    || format!("{base}-fast"),
+                    |effort| format!("{base}-{effort}-fast"),
+                );
+                let identity = resolve("cursor", &raw);
+                assert_eq!(identity.canonical_id, canonical, "{raw} canonical id");
+                assert_eq!(identity.display, display, "{raw} display");
+                assert_eq!(identity.provider, Provider::OpenAI, "{raw} provider");
+            }
+        }
+    }
+
+    #[test]
+    fn cursor_bracket_fast_flags_select_the_matching_identity_display() {
+        for (raw, canonical, display) in [
+            (
+                "gpt-5.4[context=272k,reasoning=medium,fast=true]",
+                "gpt-5.4",
+                "GPT-5.4 Fast",
+            ),
+            (
+                "gpt-5.4-fast[context=272k,fast=false]",
+                "gpt-5.4",
+                "GPT-5.4",
+            ),
+            (
+                "gpt-5.5[reasoning=extra-high,fast=true]",
+                "gpt-5.5",
+                "GPT-5.5 Fast",
+            ),
+            (
+                "gpt-5.6-luna[reasoning=low,fast=true]",
+                "gpt-5.6-luna",
+                "GPT-5.6 Luna Fast",
+            ),
+            (
+                "gpt-5.6-sol[reasoning=medium,fast=false]",
+                "gpt-5.6-sol",
+                "GPT-5.6 Sol",
+            ),
+            (
+                "gpt-5.6-terra[reasoning=max,fast=true]",
+                "gpt-5.6-terra",
+                "GPT-5.6 Terra Fast",
+            ),
+        ] {
+            let identity = resolve("cursor", raw);
+            assert_eq!(identity.canonical_id, canonical, "{raw} canonical id");
+            assert_eq!(identity.display, display, "{raw} display");
+            assert_eq!(identity.provider, Provider::OpenAI, "{raw} provider");
+        }
+    }
+
+    #[test]
+    fn cursor_third_party_models_fold_base_and_effort_ids() {
+        for (raw, canonical, display, family) in [
+            ("glm-5.2", "glm-5.2", "GLM 5.2", "GLM"),
+            ("glm-5.2-max", "glm-5.2", "GLM 5.2", "GLM"),
+            ("kimi-k2.7-code", "kimi-k2.7-code", "Kimi K2.7 Code", "Kimi"),
+            (
+                "kimi-k2.7-code-high",
+                "kimi-k2.7-code",
+                "Kimi K2.7 Code",
+                "Kimi",
+            ),
+        ] {
+            let identity = resolve("cursor", raw);
+            assert_eq!(identity.canonical_id, canonical, "{raw} canonical id");
+            assert_eq!(identity.display, display, "{raw} display");
+            assert_eq!(identity.provider, Provider::Other, "{raw} provider");
+            assert_eq!(identity.family, family, "{raw} family");
+        }
     }
 
     #[test]

@@ -3,7 +3,7 @@ use std::fs;
 use std::path::Path;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use color_eyre::{
     eyre::{eyre, Context},
     Result,
@@ -19,7 +19,7 @@ use crate::tools::{
 
 pub const SYNC_INTERVAL: Duration = crate::ingest_cache::TTL;
 
-const ARCHIVE_SCHEMA_VERSION: u32 = 8;
+const ARCHIVE_SCHEMA_VERSION: u32 = 9;
 
 /// Rates the v8 repair reasons about, frozen as literals rather than read
 /// from the books: the repair has to reproduce what was actually charged at
@@ -49,6 +49,76 @@ mod opus_5_repair {
     /// Fast mode is 2x on Opus 5. The Sonnet 4.6 fallback carries no fast
     /// multiplier, so fast-speed rows were charged at 1x and need it applied.
     pub const FAST_MULTIPLIER: f64 = 2.0;
+}
+
+/// Frozen rates used by the v9 historical repair. These deliberately do not
+/// read the mutable pricing books: the migration has to identify which rate
+/// schedule produced an archived cost before it can safely change that cost.
+#[derive(Clone, Copy)]
+struct ClaudeRepairRates {
+    input: f64,
+    output: f64,
+    cache_write_5m: f64,
+    cache_read: f64,
+}
+
+mod claude_2026_09_repair {
+    use super::ClaudeRepairRates;
+
+    pub const WEB_SEARCH: f64 = 0.01;
+
+    /// Fable/Mythos 5 pricing, which a 5.1 id inherited through longest-prefix
+    /// matching before exact 5.1 rows existed in the books.
+    pub const FABLE_5: ClaudeRepairRates = ClaudeRepairRates {
+        input: 10e-6,
+        output: 50e-6,
+        cache_write_5m: 12.5e-6,
+        cache_read: 1e-6,
+    };
+
+    /// Fable/Mythos 5.1 changed only cache reads, from $1 to $0.25 per MTok.
+    pub const FABLE_5_1: ClaudeRepairRates = ClaudeRepairRates {
+        cache_read: 0.25e-6,
+        ..FABLE_5
+    };
+
+    /// The September 1 Sonnet 5 increase that was present in the books but
+    /// canceled before it took effect.
+    pub const SONNET_5_STALE: ClaudeRepairRates = ClaudeRepairRates {
+        input: 3e-6,
+        output: 15e-6,
+        cache_write_5m: 3.75e-6,
+        cache_read: 0.3e-6,
+    };
+
+    /// Sonnet 5's introductory $2/$10 pricing was made permanent; all token
+    /// buckets are exactly two-thirds of the stale schedule above.
+    pub const SONNET_5: ClaudeRepairRates = ClaudeRepairRates {
+        input: 2e-6,
+        output: 10e-6,
+        cache_write_5m: 2.5e-6,
+        cache_read: 0.2e-6,
+    };
+}
+
+mod codex_spark_repair {
+    pub const INPUT: f64 = 1.75e-6;
+    pub const OUTPUT: f64 = 14e-6;
+    pub const CACHE_READ: f64 = 0.175e-6;
+    pub const WEB_SEARCH: f64 = 0.01;
+}
+
+mod gpt_6_astra_repair {
+    pub const FALLBACK_INPUT: f64 = 3e-6;
+    pub const FALLBACK_OUTPUT: f64 = 15e-6;
+    pub const FALLBACK_CACHE_WRITE: f64 = 3.75e-6;
+    pub const FALLBACK_CACHE_READ: f64 = 0.3e-6;
+
+    pub const INPUT: f64 = 10e-6;
+    pub const OUTPUT: f64 = 50e-6;
+    pub const CACHE_WRITE: f64 = 12.5e-6;
+    pub const CACHE_READ: f64 = 1e-6;
+    pub const WEB_SEARCH: f64 = 0.01;
 }
 
 pub struct Archive {
@@ -246,11 +316,23 @@ impl Archive {
                         continue;
                     }
                 }
+                let mut first_inserted_call_id = None;
+                let mut updated_cursor_call_ids = HashSet::new();
                 for call in &parsed.calls {
-                    if insert_call(&tx, call)? {
+                    let outcome = insert_call(&tx, call)?;
+                    if let Some(call_id) = outcome.inserted_id {
                         stats.calls_inserted += 1;
+                        first_inserted_call_id.get_or_insert(call_id);
+                    }
+                    if let Some(call_id) = outcome.updated_cursor_id {
+                        updated_cursor_call_ids.insert(call_id);
                     }
                 }
+                repair_v9_after_insert_batch(
+                    &tx,
+                    first_inserted_call_id,
+                    &updated_cursor_call_ids,
+                )?;
                 for limit in &limits {
                     if insert_limit(&tx, limit)? {
                         stats.limits_inserted += 1;
@@ -302,11 +384,19 @@ impl Archive {
     pub fn insert_ingested(&mut self, ingested: &Ingested) -> Result<usize> {
         let tx = self.conn.transaction()?;
         let mut inserted = 0;
+        let mut first_inserted_call_id = None;
+        let mut updated_cursor_call_ids = HashSet::new();
         for call in &ingested.calls {
-            if insert_call(&tx, call)? {
+            let outcome = insert_call(&tx, call)?;
+            if let Some(call_id) = outcome.inserted_id {
                 inserted += 1;
+                first_inserted_call_id.get_or_insert(call_id);
+            }
+            if let Some(call_id) = outcome.updated_cursor_id {
+                updated_cursor_call_ids.insert(call_id);
             }
         }
+        repair_v9_after_insert_batch(&tx, first_inserted_call_id, &updated_cursor_call_ids)?;
         for limit in &ingested.limits {
             if insert_limit(&tx, limit)? {
                 inserted += 1;
@@ -545,6 +635,18 @@ impl Archive {
             tx.execute_batch("PRAGMA user_version = 8;")?;
             tx.commit()?;
         }
+        if version < 9 {
+            // v9 repairs narrowly identifiable pricing errors: inherited
+            // Fable/Mythos 5 cache-read rates on 5.1 calls, the canceled
+            // September Sonnet 5 increase, an exact zero-token-rate Codex
+            // Spark placeholder, and GPT-6 Astra calls proven to have used
+            // fallback pricing. The same guarded repair also runs after new
+            // archive batches so stale local books cannot reintroduce them.
+            let tx = self.conn.unchecked_transaction()?;
+            repair_v9_mispriced_calls(&tx, None, None)?;
+            tx.execute_batch("PRAGMA user_version = 9;")?;
+            tx.commit()?;
+        }
         Ok(())
     }
 
@@ -683,7 +785,13 @@ impl Archive {
     }
 }
 
-fn insert_call(tx: &Transaction<'_>, call: &ParsedCall) -> Result<bool> {
+#[derive(Debug, Default)]
+struct InsertCallOutcome {
+    inserted_id: Option<i64>,
+    updated_cursor_id: Option<i64>,
+}
+
+fn insert_call(tx: &Transaction<'_>, call: &ParsedCall) -> Result<InsertCallOutcome> {
     let tools_json = serde_json::to_string(&call.tools)?;
     let bash_json = serde_json::to_string(&call.bash_commands)?;
     let code_blocks_json = serde_json::to_string(&call.code_blocks)?;
@@ -742,9 +850,11 @@ fn insert_call(tx: &Transaction<'_>, call: &ParsedCall) -> Result<bool> {
             effective_timestamp_quality(call).as_str(),
         ],
     )?;
+    let inserted_id = (inserted > 0).then(|| tx.last_insert_rowid());
+    let mut updated_cursor_id = None;
     if inserted == 0 {
         update_existing_cursor_project(tx, call)?;
-        update_existing_cursor_tokens(tx, call)?;
+        updated_cursor_id = update_existing_cursor_tokens(tx, call)?;
         update_existing_copilot_cli_totals(tx, call)?;
         update_existing_codex_tool_activity(tx, call, &tools_json, &bash_json)?;
         update_existing_call_enrichment(
@@ -774,7 +884,10 @@ fn insert_call(tx: &Transaction<'_>, call: &ParsedCall) -> Result<bool> {
     remove_superseded_cursor_rows(tx, call)?;
     remove_superseded_codex_rows(tx, call, inserted > 0)?;
     zero_superseded_copilot_turn_estimates(tx, call)?;
-    Ok(inserted > 0)
+    Ok(InsertCallOutcome {
+        inserted_id,
+        updated_cursor_id,
+    })
 }
 
 /// Strip the private-use sentinel characters the search snippets use as
@@ -1021,6 +1134,480 @@ fn reprice_fallback_priced_opus_5_calls(tx: &Transaction<'_>) -> Result<usize> {
         tx.execute(
             "UPDATE calls SET cost_usd = ?1 WHERE id = ?2",
             params![corrected, id],
+        )?;
+        repriced += 1;
+    }
+
+    Ok(repriced)
+}
+
+#[derive(Debug)]
+struct ClaudeRepairCandidate {
+    id: i64,
+    tool: String,
+    model: String,
+    speed: String,
+    timestamp: Option<String>,
+    imported_at: String,
+    cost_usd: f64,
+    input_tokens: i64,
+    output_tokens: i64,
+    cache_write_tokens: i64,
+    cache_read_tokens: i64,
+    web_search_requests: i64,
+}
+
+impl ClaudeRepairCandidate {
+    /// The normal pricing path uses the call timestamp, or the import-time
+    /// current date when the source has no timestamp. `imported_at` is written
+    /// immediately after pricing, so it is the faithful fallback here.
+    fn pricing_date(&self) -> Option<NaiveDate> {
+        let raw = self.timestamp.as_deref().unwrap_or(&self.imported_at);
+        DateTime::parse_from_rfc3339(raw)
+            .ok()
+            .map(|dt| dt.with_timezone(&Utc).date_naive())
+    }
+}
+
+/// Return the cost for a historical rate hypothesis and a proposed count of
+/// 1-hour cache-write tokens. The archive stores only total cache writes, so
+/// this hidden integer is what lets the migration distinguish old pricing
+/// from already-correct pricing without discarding the 1-hour premium.
+fn claude_cost_hypothesis(
+    call: &ClaudeRepairCandidate,
+    rates: ClaudeRepairRates,
+    cache_write_1h_tokens: f64,
+) -> f64 {
+    let cache_write_1h_premium = rates.cache_write_5m * (1.6 - 1.0);
+    call.input_tokens as f64 * rates.input
+        + call.output_tokens as f64 * rates.output
+        + call.cache_write_tokens as f64 * rates.cache_write_5m
+        + cache_write_1h_tokens * cache_write_1h_premium
+        + call.cache_read_tokens as f64 * rates.cache_read
+        + call.web_search_requests as f64 * claude_2026_09_repair::WEB_SEARCH
+}
+
+fn approximately_same_cost(left: f64, right: f64) -> bool {
+    let tolerance = 1e-9_f64.max(left.abs().max(right.abs()) * 1e-12);
+    (left - right).abs() <= tolerance
+}
+
+fn is_model_or_variant(model: &str, base: &str) -> bool {
+    model == base
+        || model
+            .strip_prefix(base)
+            .is_some_and(|suffix| suffix.starts_with('-'))
+}
+
+fn is_any_model_or_variant(model: &str, bases: &[&str]) -> bool {
+    bases.iter().any(|base| is_model_or_variant(model, base))
+}
+
+/// Whether an archived row could have been produced by `rates` for one exact
+/// integer split of its total cache writes. Rows for which both the stale and
+/// corrected schedules match are intentionally ambiguous and must be skipped.
+fn matches_claude_cost_hypothesis(call: &ClaudeRepairCandidate, rates: ClaudeRepairRates) -> bool {
+    const MAX_EXACT_F64_INTEGER: i64 = 1_i64 << 53;
+
+    if !call.cost_usd.is_finite()
+        || call.cost_usd < 0.0
+        || [
+            call.input_tokens,
+            call.output_tokens,
+            call.cache_write_tokens,
+            call.cache_read_tokens,
+            call.web_search_requests,
+        ]
+        .into_iter()
+        .any(|tokens| !(0..=MAX_EXACT_F64_INTEGER).contains(&tokens))
+    {
+        return false;
+    }
+
+    let five_minute_floor = claude_cost_hypothesis(call, rates, 0.0);
+    let one_hour_premium = rates.cache_write_5m * (1.6 - 1.0);
+    let inferred_one_hour = ((call.cost_usd - five_minute_floor) / one_hour_premium).round();
+    if inferred_one_hour < 0.0 || inferred_one_hour > call.cache_write_tokens as f64 {
+        return false;
+    }
+
+    approximately_same_cost(
+        call.cost_usd,
+        claude_cost_hypothesis(call, rates, inferred_one_hour),
+    )
+}
+
+/// Correct the September 2026 Claude pricing mistakes that can be proven from
+/// archived token buckets. Returns the number of changed rows.
+///
+/// The provenance check tests both the stale and corrected schedules. A row
+/// is changed only when the stale schedule matches and the corrected one does
+/// not. This protects users who downloaded fixed pricing books before their
+/// binary gained this migration. Because the 1-hour cache-write split was not
+/// persisted, some write-heavy rows can satisfy both schedules; leaving those
+/// ambiguous rows untouched is the only non-destructive choice.
+fn reprice_mispriced_september_2026_claude_calls(
+    tx: &Transaction<'_>,
+    min_call_id: Option<i64>,
+    max_call_id: Option<i64>,
+) -> Result<usize> {
+    use claude_2026_09_repair as rates;
+
+    let claude_code = crate::tools::claude_code::config::TOOL_ID;
+    let cursor = crate::tools::cursor::config::TOOL_ID;
+    let mut candidates = Vec::new();
+    {
+        let mut stmt = tx.prepare(
+            "
+            SELECT id, tool, model, speed, timestamp, imported_at, cost_usd,
+                   input_tokens, output_tokens, cache_creation_input_tokens,
+                   cache_read_input_tokens, web_search_requests
+            FROM calls
+            WHERE tool IN (?1, ?2)
+              AND id >= COALESCE(?3, 0)
+              AND id <= COALESCE(?4, 9223372036854775807)
+              AND (
+                    lower(model) LIKE '%fable%'
+                 OR lower(model) LIKE '%mythos%'
+                 OR lower(model) LIKE '%sonnet%'
+              )
+            ",
+        )?;
+        let rows = stmt.query_map(
+            params![claude_code, cursor, min_call_id, max_call_id],
+            |row| {
+                Ok(ClaudeRepairCandidate {
+                    id: row.get(0)?,
+                    tool: row.get(1)?,
+                    model: row.get(2)?,
+                    speed: row.get(3)?,
+                    timestamp: row.get(4)?,
+                    imported_at: row.get(5)?,
+                    cost_usd: row.get(6)?,
+                    input_tokens: row.get(7)?,
+                    output_tokens: row.get(8)?,
+                    cache_write_tokens: row.get(9)?,
+                    cache_read_tokens: row.get(10)?,
+                    web_search_requests: row.get(11)?,
+                })
+            },
+        )?;
+        for row in rows {
+            candidates.push(row?);
+        }
+    }
+
+    let cutoff = NaiveDate::from_ymd_opt(2026, 9, 1).expect("valid Sonnet 5 cutoff date");
+    let mut repriced = 0usize;
+    for call in candidates {
+        if call.speed != "standard" || call.pricing_date().is_none_or(|date| date < cutoff) {
+            continue;
+        }
+
+        let model = crate::models::canonical_key(&call.model);
+        let corrected = match model.as_str() {
+            model
+                if is_any_model_or_variant(model, &["claude-fable-5-1", "claude-fable-5.1"])
+                    && (call.tool == claude_code || call.tool == cursor)
+                    && call.cache_read_tokens > 0 =>
+            {
+                if !matches_claude_cost_hypothesis(&call, rates::FABLE_5)
+                    || matches_claude_cost_hypothesis(&call, rates::FABLE_5_1)
+                {
+                    continue;
+                }
+                call.cost_usd - call.cache_read_tokens as f64 * 0.75e-6
+            }
+            model
+                if is_any_model_or_variant(model, &["claude-mythos-5-1", "claude-mythos-5.1"])
+                    && call.tool == claude_code
+                    && call.cache_read_tokens > 0 =>
+            {
+                if !matches_claude_cost_hypothesis(&call, rates::FABLE_5)
+                    || matches_claude_cost_hypothesis(&call, rates::FABLE_5_1)
+                {
+                    continue;
+                }
+                call.cost_usd - call.cache_read_tokens as f64 * 0.75e-6
+            }
+            model if is_model_or_variant(model, "claude-sonnet-5") => {
+                if !matches_claude_cost_hypothesis(&call, rates::SONNET_5_STALE)
+                    || matches_claude_cost_hypothesis(&call, rates::SONNET_5)
+                {
+                    continue;
+                }
+                let web_cost = call.web_search_requests as f64 * claude_2026_09_repair::WEB_SEARCH;
+                web_cost + (call.cost_usd - web_cost) * (2.0 / 3.0)
+            }
+            _ => continue,
+        };
+
+        if !corrected.is_finite() || corrected < 0.0 {
+            continue;
+        }
+        tx.execute(
+            "UPDATE calls SET cost_usd = ?1 WHERE id = ?2",
+            params![corrected, call.id],
+        )?;
+        repriced += 1;
+    }
+
+    Ok(repriced)
+}
+
+fn repair_v9_mispriced_calls(
+    tx: &Transaction<'_>,
+    min_call_id: Option<i64>,
+    max_call_id: Option<i64>,
+) -> Result<usize> {
+    Ok(
+        reprice_mispriced_september_2026_claude_calls(tx, min_call_id, max_call_id)?
+            + reprice_zero_priced_codex_spark_calls(tx, min_call_id, max_call_id)?
+            + reprice_fallback_priced_gpt_6_astra_calls(tx, min_call_id, max_call_id)?,
+    )
+}
+
+/// Repair newly inserted calls as one primary-key range, then repair any
+/// older Cursor rows whose authoritative token refresh rewrote their cost.
+/// Updated rows at or above the first inserted id were created earlier in the
+/// same batch and are already covered by the range pass.
+fn repair_v9_after_insert_batch(
+    tx: &Transaction<'_>,
+    first_inserted_call_id: Option<i64>,
+    updated_cursor_call_ids: &HashSet<i64>,
+) -> Result<()> {
+    if let Some(first_id) = first_inserted_call_id {
+        repair_v9_mispriced_calls(tx, Some(first_id), None)?;
+    }
+    for &call_id in updated_cursor_call_ids {
+        if first_inserted_call_id.is_none_or(|first_id| call_id < first_id) {
+            repair_v9_mispriced_calls(tx, Some(call_id), Some(call_id))?;
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug)]
+struct CodexSparkRepairCandidate {
+    id: i64,
+    model: String,
+    cost_usd: f64,
+    input_tokens: i64,
+    output_tokens: i64,
+    cache_read_tokens: i64,
+    web_search_requests: i64,
+}
+
+/// Repair Spark calls archived while an exact LiteLLM placeholder shadowed
+/// the priced `gpt-5.3-codex` family. The placeholder charged only web
+/// searches, so that exact stored cost proves the bad row was used whenever
+/// the corrected token component is non-zero.
+fn reprice_zero_priced_codex_spark_calls(
+    tx: &Transaction<'_>,
+    min_call_id: Option<i64>,
+    max_call_id: Option<i64>,
+) -> Result<usize> {
+    let mut candidates = Vec::new();
+    {
+        let mut stmt = tx.prepare(
+            "
+            SELECT id, model, cost_usd, input_tokens, output_tokens,
+                   cache_read_input_tokens, web_search_requests
+            FROM calls
+            WHERE tool = ?1
+              AND id >= COALESCE(?2, 0)
+              AND id <= COALESCE(?3, 9223372036854775807)
+              AND lower(model) LIKE '%gpt-5.3-codex-spark%'
+            ",
+        )?;
+        let rows = stmt.query_map(
+            params![
+                crate::tools::codex::config::TOOL_ID,
+                min_call_id,
+                max_call_id
+            ],
+            |row| {
+                Ok(CodexSparkRepairCandidate {
+                    id: row.get(0)?,
+                    model: row.get(1)?,
+                    cost_usd: row.get(2)?,
+                    input_tokens: row.get(3)?,
+                    output_tokens: row.get(4)?,
+                    cache_read_tokens: row.get(5)?,
+                    web_search_requests: row.get(6)?,
+                })
+            },
+        )?;
+        for row in rows {
+            candidates.push(row?);
+        }
+    }
+
+    const MAX_EXACT_F64_INTEGER: i64 = 1_i64 << 53;
+    let mut repriced = 0usize;
+    for call in candidates {
+        if !is_model_or_variant(
+            &crate::models::canonical_key(&call.model),
+            "gpt-5.3-codex-spark",
+        ) || !call.cost_usd.is_finite()
+            || call.cost_usd < 0.0
+            || [
+                call.input_tokens,
+                call.output_tokens,
+                call.cache_read_tokens,
+                call.web_search_requests,
+            ]
+            .into_iter()
+            .any(|tokens| !(0..=MAX_EXACT_F64_INTEGER).contains(&tokens))
+        {
+            continue;
+        }
+
+        let old_cost = call.web_search_requests as f64 * codex_spark_repair::WEB_SEARCH;
+        if !approximately_same_cost(call.cost_usd, old_cost) {
+            continue;
+        }
+        let corrected = old_cost
+            + call.input_tokens as f64 * codex_spark_repair::INPUT
+            + call.output_tokens as f64 * codex_spark_repair::OUTPUT
+            + call.cache_read_tokens as f64 * codex_spark_repair::CACHE_READ;
+        if approximately_same_cost(call.cost_usd, corrected) {
+            continue;
+        }
+
+        tx.execute(
+            "UPDATE calls SET cost_usd = ?1 WHERE id = ?2",
+            params![corrected, call.id],
+        )?;
+        repriced += 1;
+    }
+
+    Ok(repriced)
+}
+
+#[derive(Debug)]
+struct AstraRepairCandidate {
+    id: i64,
+    model: String,
+    timestamp: Option<String>,
+    imported_at: String,
+    cost_usd: f64,
+    input_tokens: i64,
+    output_tokens: i64,
+    cache_write_tokens: i64,
+    cache_read_tokens: i64,
+    web_search_requests: i64,
+}
+
+impl AstraRepairCandidate {
+    fn pricing_date(&self) -> Option<NaiveDate> {
+        let raw = self.timestamp.as_deref().unwrap_or(&self.imported_at);
+        DateTime::parse_from_rfc3339(raw)
+            .ok()
+            .map(|dt| dt.with_timezone(&Utc).date_naive())
+    }
+
+    fn cost_at(&self, input: f64, output: f64, cache_write: f64, cache_read: f64) -> f64 {
+        self.input_tokens as f64 * input
+            + self.output_tokens as f64 * output
+            + self.cache_write_tokens as f64 * cache_write
+            + self.cache_read_tokens as f64 * cache_read
+            + self.web_search_requests as f64 * gpt_6_astra_repair::WEB_SEARCH
+    }
+}
+
+/// Repair GPT-6 Astra calls archived while stale local books had no Astra row
+/// and therefore charged the Claude Sonnet fallback. The old fallback and the
+/// official Astra formula are both frozen here. A row changes only when its
+/// exact stored cost proves the fallback formula was used after launch.
+fn reprice_fallback_priced_gpt_6_astra_calls(
+    tx: &Transaction<'_>,
+    min_call_id: Option<i64>,
+    max_call_id: Option<i64>,
+) -> Result<usize> {
+    let mut candidates = Vec::new();
+    {
+        let mut stmt = tx.prepare(
+            "
+            SELECT id, model, timestamp, imported_at, cost_usd, input_tokens,
+                   output_tokens, cache_creation_input_tokens,
+                   cache_read_input_tokens, web_search_requests
+            FROM calls
+            WHERE tool = ?1
+              AND id >= COALESCE(?2, 0)
+              AND id <= COALESCE(?3, 9223372036854775807)
+              AND lower(model) LIKE '%gpt-6-astra%'
+            ",
+        )?;
+        let rows = stmt.query_map(
+            params![
+                crate::tools::codex::config::TOOL_ID,
+                min_call_id,
+                max_call_id
+            ],
+            |row| {
+                Ok(AstraRepairCandidate {
+                    id: row.get(0)?,
+                    model: row.get(1)?,
+                    timestamp: row.get(2)?,
+                    imported_at: row.get(3)?,
+                    cost_usd: row.get(4)?,
+                    input_tokens: row.get(5)?,
+                    output_tokens: row.get(6)?,
+                    cache_write_tokens: row.get(7)?,
+                    cache_read_tokens: row.get(8)?,
+                    web_search_requests: row.get(9)?,
+                })
+            },
+        )?;
+        for row in rows {
+            candidates.push(row?);
+        }
+    }
+
+    const MAX_EXACT_F64_INTEGER: i64 = 1_i64 << 53;
+    let launch = NaiveDate::from_ymd_opt(2026, 9, 3).expect("valid GPT-6 Astra launch date");
+    let mut repriced = 0usize;
+    for call in candidates {
+        if crate::models::canonical_key(&call.model) != "gpt-6-astra"
+            || call.pricing_date().is_none_or(|date| date < launch)
+            || !call.cost_usd.is_finite()
+            || call.cost_usd < 0.0
+            || [
+                call.input_tokens,
+                call.output_tokens,
+                call.cache_write_tokens,
+                call.cache_read_tokens,
+                call.web_search_requests,
+            ]
+            .into_iter()
+            .any(|tokens| !(0..=MAX_EXACT_F64_INTEGER).contains(&tokens))
+        {
+            continue;
+        }
+
+        let fallback_cost = call.cost_at(
+            gpt_6_astra_repair::FALLBACK_INPUT,
+            gpt_6_astra_repair::FALLBACK_OUTPUT,
+            gpt_6_astra_repair::FALLBACK_CACHE_WRITE,
+            gpt_6_astra_repair::FALLBACK_CACHE_READ,
+        );
+        if !approximately_same_cost(call.cost_usd, fallback_cost) {
+            continue;
+        }
+        let corrected = call.cost_at(
+            gpt_6_astra_repair::INPUT,
+            gpt_6_astra_repair::OUTPUT,
+            gpt_6_astra_repair::CACHE_WRITE,
+            gpt_6_astra_repair::CACHE_READ,
+        );
+        if approximately_same_cost(call.cost_usd, corrected) {
+            continue;
+        }
+
+        tx.execute(
+            "UPDATE calls SET cost_usd = ?1 WHERE id = ?2",
+            params![corrected, call.id],
         )?;
         repriced += 1;
     }
@@ -1435,12 +2022,12 @@ fn update_existing_copilot_cli_totals(tx: &Transaction<'_>, call: &ParsedCall) -
 /// Refresh the token columns when they changed; cost and quality follow the
 /// tokens they were computed from. Rows whose source no longer reparses are
 /// untouched.
-fn update_existing_cursor_tokens(tx: &Transaction<'_>, call: &ParsedCall) -> Result<()> {
+fn update_existing_cursor_tokens(tx: &Transaction<'_>, call: &ParsedCall) -> Result<Option<i64>> {
     if call.tool != crate::tools::cursor::config::TOOL_ID {
-        return Ok(());
+        return Ok(None);
     }
 
-    tx.execute(
+    let updated = tx.execute(
         "
         UPDATE calls
         SET input_tokens = ?1, output_tokens = ?2, cost_usd = ?3,
@@ -1458,7 +2045,17 @@ fn update_existing_cursor_tokens(tx: &Transaction<'_>, call: &ParsedCall) -> Res
             call.dedup_key,
         ],
     )?;
-    Ok(())
+    if updated == 0 {
+        return Ok(None);
+    }
+
+    tx.query_row(
+        "SELECT id FROM calls WHERE tool = ?1 AND dedup_key = ?2",
+        params![call.tool, call.dedup_key],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(Into::into)
 }
 
 fn update_existing_cursor_project(tx: &Transaction<'_>, call: &ParsedCall) -> Result<()> {
@@ -2492,8 +3089,8 @@ mod tests {
 
         {
             let tx = archive.conn.transaction().unwrap();
-            assert!(insert_call(&tx, &full).unwrap());
-            assert!(!insert_call(&tx, &tail).unwrap());
+            assert!(insert_call(&tx, &full).unwrap().inserted_id.is_some());
+            assert!(insert_call(&tx, &tail).unwrap().inserted_id.is_none());
             tx.commit().unwrap();
         }
 
@@ -2777,6 +3374,76 @@ mod tests {
         )
     }
 
+    fn historical_claude_cost(call: &ParsedCall, rates: ClaudeRepairRates) -> f64 {
+        call.input_tokens as f64 * rates.input
+            + call.output_tokens as f64 * rates.output
+            + call.cache_creation_input_tokens as f64 * rates.cache_write_5m
+            + call.cache_creation_1h_input_tokens as f64 * rates.cache_write_5m * (1.6 - 1.0)
+            + call.cache_read_input_tokens as f64 * rates.cache_read
+            + call.web_search_requests as f64 * claude_2026_09_repair::WEB_SEARCH
+    }
+
+    fn corrected_codex_spark_cost(call: &ParsedCall) -> f64 {
+        call.input_tokens as f64 * codex_spark_repair::INPUT
+            + call.output_tokens as f64 * codex_spark_repair::OUTPUT
+            + call.cache_read_input_tokens as f64 * codex_spark_repair::CACHE_READ
+            + call.web_search_requests as f64 * codex_spark_repair::WEB_SEARCH
+    }
+
+    fn gpt_6_astra_cost(call: &ParsedCall, fallback: bool) -> f64 {
+        let (input, output, cache_write, cache_read) = if fallback {
+            (
+                gpt_6_astra_repair::FALLBACK_INPUT,
+                gpt_6_astra_repair::FALLBACK_OUTPUT,
+                gpt_6_astra_repair::FALLBACK_CACHE_WRITE,
+                gpt_6_astra_repair::FALLBACK_CACHE_READ,
+            )
+        } else {
+            (
+                gpt_6_astra_repair::INPUT,
+                gpt_6_astra_repair::OUTPUT,
+                gpt_6_astra_repair::CACHE_WRITE,
+                gpt_6_astra_repair::CACHE_READ,
+            )
+        };
+        call.input_tokens as f64 * input
+            + call.output_tokens as f64 * output
+            + call.cache_creation_input_tokens as f64 * cache_write
+            + call.cache_read_input_tokens as f64 * cache_read
+            + call.web_search_requests as f64 * gpt_6_astra_repair::WEB_SEARCH
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn legacy_september_claude_row(
+        label: &str,
+        tool: &str,
+        model: &str,
+        speed: &str,
+        timestamp: Option<&str>,
+        imported_at: &str,
+        cost: f64,
+        call: &ParsedCall,
+    ) -> String {
+        let timestamp = timestamp
+            .map(|value| format!("'{value}'"))
+            .unwrap_or_else(|| "NULL".into());
+        format!(
+            "INSERT INTO calls (tool, dedup_key, model, input_tokens, output_tokens,
+                 cache_creation_input_tokens, cache_read_input_tokens, cached_input_tokens,
+                 reasoning_tokens, web_search_requests, cost_usd, tools_json,
+                 bash_commands_json, timestamp, speed, user_message, session_id,
+                 project, imported_at)
+             VALUES ('{tool}', '{label}', '{model}', {}, {}, {}, {}, 0, 0, {},
+                 {cost}, '[]', '[]', {timestamp}, '{speed}', '', 's', 'p',
+                 '{imported_at}');",
+            call.input_tokens,
+            call.output_tokens,
+            call.cache_creation_input_tokens,
+            call.cache_read_input_tokens,
+            call.web_search_requests,
+        )
+    }
+
     fn cost_of(archive: &Archive, key: &str) -> f64 {
         archive
             .conn
@@ -2957,6 +3624,656 @@ mod tests {
             (cost_of(&archive, "neighbour") - charged).abs() < 1e-12,
             "a distinct model id that merely starts with claude-opus-5 is not repriced"
         );
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn migrate_v9_repairs_fable_and_mythos_5_1_cache_read_overcharge() {
+        let mut call = bare_call("fable-5-1");
+        call.tool = crate::tools::claude_code::config::TOOL_ID;
+        call.input_tokens = 12_000;
+        call.output_tokens = 3_400;
+        call.cache_creation_input_tokens = 50_000;
+        call.cache_creation_1h_input_tokens = 30_000;
+        call.cache_read_input_tokens = 900_000;
+        call.web_search_requests = 2;
+
+        let charged = historical_claude_cost(&call, claude_2026_09_repair::FABLE_5);
+        let truth = historical_claude_cost(&call, claude_2026_09_repair::FABLE_5_1);
+        assert!(charged > truth);
+
+        let paths = temp_paths("migrate-v9-fable-mythos");
+        create_legacy_db(
+            &paths,
+            &format!(
+                "{}
+                {}
+                {}
+                {}
+                {}
+                PRAGMA user_version = 8;
+                ",
+                legacy_september_claude_row(
+                    "fable",
+                    "claude-code",
+                    "anthropic/claude-fable-5-1-20260901",
+                    "standard",
+                    Some("2026-09-02T12:00:00Z"),
+                    "2026-09-02T12:01:00Z",
+                    charged,
+                    &call,
+                ),
+                legacy_september_claude_row(
+                    "fable-dotted",
+                    "claude-code",
+                    "claude-fable-5.1",
+                    "standard",
+                    Some("2026-09-03T12:00:00Z"),
+                    "2026-09-03T12:01:00Z",
+                    charged,
+                    &call,
+                ),
+                legacy_september_claude_row(
+                    "mythos",
+                    "claude-code",
+                    "claude-mythos-5.1",
+                    "standard",
+                    Some("2026-09-03T12:00:00Z"),
+                    "2026-09-03T12:01:00Z",
+                    charged,
+                    &call,
+                ),
+                legacy_september_claude_row(
+                    "fable-cursor",
+                    "cursor",
+                    "claude-fable-5-1",
+                    "standard",
+                    Some("2026-09-04T12:00:00Z"),
+                    "2026-09-04T12:01:00Z",
+                    charged,
+                    &call,
+                ),
+                legacy_september_claude_row(
+                    "fable-cursor-thinking",
+                    "cursor",
+                    "claude-5.1-fable-thinking",
+                    "standard",
+                    Some("2026-09-04T12:00:00Z"),
+                    "2026-09-04T12:01:00Z",
+                    charged,
+                    &call,
+                ),
+            ),
+        );
+
+        let archive = Archive::open(&paths).unwrap();
+        for key in [
+            "fable",
+            "fable-dotted",
+            "mythos",
+            "fable-cursor",
+            "fable-cursor-thinking",
+        ] {
+            let repaired = cost_of(&archive, key);
+            assert!(
+                (repaired - truth).abs() < 1e-9,
+                "{key} must retain its hidden 1h premium while reducing only cache reads: \
+                 got {repaired}, want {truth}"
+            );
+        }
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn insert_ingested_repairs_stale_v9_rows_after_archive_open() {
+        let mut first = bare_call("post-open-fable");
+        first.tool = crate::tools::claude_code::config::TOOL_ID;
+        first.model = "claude-fable-5.1".into();
+        first.input_tokens = 12_000;
+        first.output_tokens = 3_400;
+        first.cache_creation_input_tokens = 50_000;
+        first.cache_creation_1h_input_tokens = 30_000;
+        first.cache_read_input_tokens = 900_000;
+        first.web_search_requests = 2;
+        first.timestamp = Some(Utc.with_ymd_and_hms(2026, 9, 4, 12, 0, 0).unwrap());
+        first.speed = Speed::Standard;
+        first.cost_usd = historical_claude_cost(&first, claude_2026_09_repair::FABLE_5);
+        let truth = historical_claude_cost(&first, claude_2026_09_repair::FABLE_5_1);
+
+        let mut second = first.clone();
+        second.dedup_key = "post-open-mythos".into();
+        second.model = "claude-mythos-5.1".into();
+
+        let paths = temp_paths("insert-after-v9-migration");
+        let mut archive = Archive::open(&paths).unwrap();
+        assert_eq!(
+            archive
+                .conn
+                .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+                .unwrap(),
+            9
+        );
+
+        assert_eq!(
+            archive
+                .insert_ingested(&Ingested {
+                    calls: vec![first],
+                    limits: Vec::new(),
+                })
+                .unwrap(),
+            1
+        );
+        assert!((cost_of(&archive, "post-open-fable") - truth).abs() < 1e-9);
+
+        assert_eq!(
+            archive
+                .insert_ingested(&Ingested {
+                    calls: vec![second],
+                    limits: Vec::new(),
+                })
+                .unwrap(),
+            1
+        );
+        assert!((cost_of(&archive, "post-open-fable") - truth).abs() < 1e-9);
+        assert!((cost_of(&archive, "post-open-mythos") - truth).abs() < 1e-9);
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn duplicate_cursor_token_refresh_repairs_the_updated_existing_row() {
+        let mut original = bare_call("cursor-fable-existing");
+        original.tool = crate::tools::cursor::config::TOOL_ID;
+        original.model = "claude-5.1-fable-thinking".into();
+        original.input_tokens = 12_000;
+        original.output_tokens = 3_400;
+        original.cache_creation_input_tokens = 50_000;
+        original.cache_creation_1h_input_tokens = 30_000;
+        original.cache_read_input_tokens = 900_000;
+        original.web_search_requests = 2;
+        original.timestamp = Some(Utc.with_ymd_and_hms(2026, 9, 4, 12, 0, 0).unwrap());
+        original.speed = Speed::Standard;
+        original.cost_usd = historical_claude_cost(&original, claude_2026_09_repair::FABLE_5_1);
+
+        let paths = temp_paths("duplicate-cursor-v9-repair");
+        let mut archive = Archive::open(&paths).unwrap();
+        assert_eq!(
+            archive
+                .insert_ingested(&Ingested {
+                    calls: vec![original.clone()],
+                    limits: Vec::new(),
+                })
+                .unwrap(),
+            1
+        );
+
+        // A later Cursor reconstruction changes the authoritative token
+        // counts, but stale local pricing books recompute the cost with the
+        // old Fable 5 cache-read rate. Include a new row after the duplicate:
+        // its higher id exercises the range repair without covering the
+        // existing row that was just updated.
+        let mut reparsed = original.clone();
+        reparsed.input_tokens += 1_000;
+        reparsed.output_tokens += 100;
+        reparsed.cost_usd = historical_claude_cost(&reparsed, claude_2026_09_repair::FABLE_5);
+        let corrected = historical_claude_cost(&reparsed, claude_2026_09_repair::FABLE_5_1);
+
+        assert_eq!(
+            archive
+                .insert_ingested(&Ingested {
+                    calls: vec![reparsed.clone(), bare_call("newer-unrelated-row")],
+                    limits: Vec::new(),
+                })
+                .unwrap(),
+            1
+        );
+        let loaded = archive.load().unwrap();
+        let repaired = loaded
+            .calls
+            .iter()
+            .find(|call| call.dedup_key == original.dedup_key)
+            .unwrap();
+        assert_eq!(repaired.input_tokens, reparsed.input_tokens);
+        assert_eq!(repaired.output_tokens, reparsed.output_tokens);
+        assert!(
+            (repaired.cost_usd - corrected).abs() < 1e-9,
+            "the exact id of a mutated Cursor row must be v9-repaired: got {}, want {corrected}",
+            repaired.cost_usd
+        );
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn migrate_v9_skips_correct_ambiguous_and_unsupported_fable_rows() {
+        let mut ordinary = bare_call("ordinary");
+        ordinary.tool = crate::tools::claude_code::config::TOOL_ID;
+        ordinary.input_tokens = 12_000;
+        ordinary.output_tokens = 3_400;
+        ordinary.cache_creation_input_tokens = 50_000;
+        ordinary.cache_creation_1h_input_tokens = 30_000;
+        ordinary.cache_read_input_tokens = 900_000;
+        let already_correct = historical_claude_cost(&ordinary, claude_2026_09_repair::FABLE_5_1);
+        let stale = historical_claude_cost(&ordinary, claude_2026_09_repair::FABLE_5);
+
+        // Under the stale schedule this has 100 one-hour tokens. The same
+        // stored cost under corrected pricing has 110, so provenance cannot
+        // be proven after the archive discarded that split.
+        let mut ambiguous = bare_call("ambiguous");
+        ambiguous.tool = crate::tools::claude_code::config::TOOL_ID;
+        ambiguous.input_tokens = 0;
+        ambiguous.output_tokens = 0;
+        ambiguous.cache_creation_input_tokens = 600;
+        ambiguous.cache_creation_1h_input_tokens = 100;
+        ambiguous.cache_read_input_tokens = 100;
+        ambiguous.web_search_requests = 0;
+        let ambiguous_cost = historical_claude_cost(&ambiguous, claude_2026_09_repair::FABLE_5);
+
+        let paths = temp_paths("migrate-v9-fable-guards");
+        create_legacy_db(
+            &paths,
+            &format!(
+                "{}
+                {}
+                {}
+                PRAGMA user_version = 8;
+                ",
+                legacy_september_claude_row(
+                    "correct",
+                    "claude-code",
+                    "claude-fable-5-1",
+                    "standard",
+                    Some("2026-09-02T12:00:00Z"),
+                    "2026-09-02T12:01:00Z",
+                    already_correct,
+                    &ordinary,
+                ),
+                legacy_september_claude_row(
+                    "ambiguous",
+                    "claude-code",
+                    "claude-fable-5-1",
+                    "standard",
+                    Some("2026-09-02T12:00:00Z"),
+                    "2026-09-02T12:01:00Z",
+                    ambiguous_cost,
+                    &ambiguous,
+                ),
+                legacy_september_claude_row(
+                    "neighbour",
+                    "claude-code",
+                    "claude-fable-5-1x-custom",
+                    "standard",
+                    Some("2026-09-02T12:00:00Z"),
+                    "2026-09-02T12:01:00Z",
+                    stale,
+                    &ordinary,
+                ),
+            ),
+        );
+
+        let archive = Archive::open(&paths).unwrap();
+        assert!((cost_of(&archive, "correct") - already_correct).abs() < 1e-12);
+        assert!((cost_of(&archive, "ambiguous") - ambiguous_cost).abs() < 1e-12);
+        assert!((cost_of(&archive, "neighbour") - stale).abs() < 1e-12);
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn migrate_v9_repairs_zero_priced_codex_spark_and_skips_unproven_rows() {
+        let mut spark = bare_call("spark-zero-rate");
+        spark.tool = crate::tools::codex::config::TOOL_ID;
+        spark.model = "gpt-5.3-codex-spark".into();
+        spark.input_tokens = 18_000;
+        spark.output_tokens = 750;
+        spark.cache_creation_input_tokens = 0;
+        spark.cache_read_input_tokens = 11_000;
+        spark.web_search_requests = 2;
+        let placeholder_cost = spark.web_search_requests as f64 * codex_spark_repair::WEB_SEARCH;
+        let corrected = corrected_codex_spark_cost(&spark);
+        assert!(corrected > placeholder_cost);
+
+        let mut ambiguous = spark.clone();
+        ambiguous.input_tokens = 0;
+        ambiguous.output_tokens = 0;
+        ambiguous.cache_read_input_tokens = 0;
+        let ambiguous_cost = corrected_codex_spark_cost(&ambiguous);
+        assert!(approximately_same_cost(ambiguous_cost, placeholder_cost));
+
+        let nonmatching_cost = corrected + 0.25;
+        let paths = temp_paths("migrate-v9-codex-spark");
+        create_legacy_db(
+            &paths,
+            &format!(
+                "{}
+                {}
+                {}
+                {}
+                PRAGMA user_version = 8;
+                ",
+                legacy_september_claude_row(
+                    "spark-zero-rate",
+                    "codex",
+                    "openai/gpt-5.3-codex-spark-20260901",
+                    "standard",
+                    Some("2026-09-02T12:00:00Z"),
+                    "2026-09-02T12:01:00Z",
+                    placeholder_cost,
+                    &spark,
+                ),
+                legacy_september_claude_row(
+                    "spark-ambiguous",
+                    "codex",
+                    "gpt-5.3-codex-spark",
+                    "standard",
+                    Some("2026-09-02T12:00:00Z"),
+                    "2026-09-02T12:01:00Z",
+                    ambiguous_cost,
+                    &ambiguous,
+                ),
+                legacy_september_claude_row(
+                    "spark-nonmatching",
+                    "codex",
+                    "gpt-5.3-codex-spark",
+                    "standard",
+                    Some("2026-09-02T12:00:00Z"),
+                    "2026-09-02T12:01:00Z",
+                    nonmatching_cost,
+                    &spark,
+                ),
+                legacy_september_claude_row(
+                    "spark-preview",
+                    "codex",
+                    "gpt-5.3-codex-spark-preview",
+                    "standard",
+                    Some("2026-09-02T12:00:00Z"),
+                    "2026-09-02T12:01:00Z",
+                    placeholder_cost,
+                    &spark,
+                ),
+            ),
+        );
+
+        let archive = Archive::open(&paths).unwrap();
+        assert!((cost_of(&archive, "spark-zero-rate") - corrected).abs() < 1e-9);
+        assert!((cost_of(&archive, "spark-ambiguous") - ambiguous_cost).abs() < 1e-12);
+        assert!((cost_of(&archive, "spark-nonmatching") - nonmatching_cost).abs() < 1e-12);
+        assert!((cost_of(&archive, "spark-preview") - corrected).abs() < 1e-9);
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn migrate_v9_repairs_fallback_priced_gpt_6_astra_and_skips_unproven_rows() {
+        let mut astra = bare_call("astra-fallback");
+        astra.tool = crate::tools::codex::config::TOOL_ID;
+        astra.model = "gpt-6-astra".into();
+        astra.input_tokens = 2_600_000;
+        astra.output_tokens = 480_700;
+        astra.cache_creation_input_tokens = 0;
+        astra.cache_read_input_tokens = 104_500_000;
+        astra.web_search_requests = 0;
+        let fallback = gpt_6_astra_cost(&astra, true);
+        let corrected = gpt_6_astra_cost(&astra, false);
+        assert!((fallback - 46.3605).abs() < 1e-9);
+        assert!((corrected - 154.535).abs() < 1e-9);
+
+        let nonmatching = fallback + 0.25;
+        let mut empty = astra.clone();
+        empty.input_tokens = 0;
+        empty.output_tokens = 0;
+        empty.cache_read_input_tokens = 0;
+        empty.web_search_requests = 1;
+        let unchanged_empty = gpt_6_astra_cost(&empty, true);
+        assert!(approximately_same_cost(
+            unchanged_empty,
+            gpt_6_astra_cost(&empty, false)
+        ));
+
+        let paths = temp_paths("migrate-v9-gpt-6-astra");
+        create_legacy_db(
+            &paths,
+            &format!(
+                "{}
+                {}
+                {}
+                {}
+                {}
+                {}
+                PRAGMA user_version = 8;
+                ",
+                legacy_september_claude_row(
+                    "astra-fallback",
+                    "codex",
+                    "openai/gpt-6-astra-2026-09-03",
+                    "standard",
+                    Some("2026-09-05T12:00:00Z"),
+                    "2026-09-05T12:01:00Z",
+                    fallback,
+                    &astra,
+                ),
+                legacy_september_claude_row(
+                    "astra-correct",
+                    "codex",
+                    "gpt-6-astra",
+                    "standard",
+                    Some("2026-09-05T12:00:00Z"),
+                    "2026-09-05T12:01:00Z",
+                    corrected,
+                    &astra,
+                ),
+                legacy_september_claude_row(
+                    "astra-nonmatching",
+                    "codex",
+                    "gpt-6-astra",
+                    "standard",
+                    Some("2026-09-05T12:00:00Z"),
+                    "2026-09-05T12:01:00Z",
+                    nonmatching,
+                    &astra,
+                ),
+                legacy_september_claude_row(
+                    "astra-before-launch",
+                    "codex",
+                    "gpt-6-astra",
+                    "standard",
+                    Some("2026-09-02T12:00:00Z"),
+                    "2026-09-02T12:01:00Z",
+                    fallback,
+                    &astra,
+                ),
+                legacy_september_claude_row(
+                    "astra-neighbour",
+                    "codex",
+                    "gpt-6-astra-preview",
+                    "standard",
+                    Some("2026-09-05T12:00:00Z"),
+                    "2026-09-05T12:01:00Z",
+                    fallback,
+                    &astra,
+                ),
+                legacy_september_claude_row(
+                    "astra-empty",
+                    "codex",
+                    "gpt-6-astra",
+                    "standard",
+                    Some("2026-09-05T12:00:00Z"),
+                    "2026-09-05T12:01:00Z",
+                    unchanged_empty,
+                    &empty,
+                ),
+            ),
+        );
+
+        let archive = Archive::open(&paths).unwrap();
+        assert!((cost_of(&archive, "astra-fallback") - corrected).abs() < 1e-9);
+        assert!((cost_of(&archive, "astra-correct") - corrected).abs() < 1e-12);
+        assert!((cost_of(&archive, "astra-nonmatching") - nonmatching).abs() < 1e-12);
+        assert!((cost_of(&archive, "astra-before-launch") - fallback).abs() < 1e-12);
+        assert!((cost_of(&archive, "astra-neighbour") - fallback).abs() < 1e-12);
+        assert!((cost_of(&archive, "astra-empty") - unchanged_empty).abs() < 1e-12);
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn migrate_v9_repairs_post_cutoff_sonnet_5_for_global_pricing_tools() {
+        let mut claude = bare_call("sonnet-claude");
+        claude.tool = crate::tools::claude_code::config::TOOL_ID;
+        claude.input_tokens = 12_000;
+        claude.output_tokens = 3_400;
+        claude.cache_creation_input_tokens = 50_000;
+        claude.cache_creation_1h_input_tokens = 30_000;
+        claude.cache_read_input_tokens = 900_000;
+        claude.web_search_requests = 3;
+        let charged = historical_claude_cost(&claude, claude_2026_09_repair::SONNET_5_STALE);
+        let truth = historical_claude_cost(&claude, claude_2026_09_repair::SONNET_5);
+
+        let mut cursor = bare_call("sonnet-cursor");
+        cursor.tool = crate::tools::cursor::config::TOOL_ID;
+        cursor.input_tokens = 70_000;
+        cursor.output_tokens = 2_000;
+        cursor.cache_creation_input_tokens = 0;
+        cursor.cache_creation_1h_input_tokens = 0;
+        cursor.cache_read_input_tokens = 0;
+        cursor.web_search_requests = 0;
+        let cursor_charged = historical_claude_cost(&cursor, claude_2026_09_repair::SONNET_5_STALE);
+        let cursor_truth = historical_claude_cost(&cursor, claude_2026_09_repair::SONNET_5);
+
+        let paths = temp_paths("migrate-v9-sonnet");
+        create_legacy_db(
+            &paths,
+            &format!(
+                "{}
+                {}
+                {}
+                {}
+                PRAGMA user_version = 8;
+                ",
+                legacy_september_claude_row(
+                    "sonnet-claude",
+                    "claude-code",
+                    "anthropic/claude-5-sonnet-20260901",
+                    "standard",
+                    Some("2026-09-02T12:00:00Z"),
+                    "2026-09-02T12:01:00Z",
+                    charged,
+                    &claude,
+                ),
+                legacy_september_claude_row(
+                    "sonnet-cursor",
+                    "cursor",
+                    "claude-sonnet-5",
+                    "standard",
+                    None,
+                    "2026-09-03T12:01:00Z",
+                    cursor_charged,
+                    &cursor,
+                ),
+                legacy_september_claude_row(
+                    "sonnet-august",
+                    "claude-code",
+                    "claude-sonnet-5",
+                    "standard",
+                    Some("2026-08-31T23:59:59Z"),
+                    "2026-09-03T12:01:00Z",
+                    truth,
+                    &claude,
+                ),
+                legacy_september_claude_row(
+                    "sonnet-copilot",
+                    "copilot",
+                    "claude-sonnet-5",
+                    "standard",
+                    Some("2026-09-02T12:00:00Z"),
+                    "2026-09-02T12:01:00Z",
+                    charged,
+                    &claude,
+                ),
+            ),
+        );
+
+        let archive = Archive::open(&paths).unwrap();
+        assert!((cost_of(&archive, "sonnet-claude") - truth).abs() < 1e-9);
+        assert!((cost_of(&archive, "sonnet-cursor") - cursor_truth).abs() < 1e-9);
+        assert!((cost_of(&archive, "sonnet-august") - truth).abs() < 1e-12);
+        assert!((cost_of(&archive, "sonnet-copilot") - charged).abs() < 1e-12);
+
+        drop(archive);
+        let reopened = Archive::open(&paths).unwrap();
+        assert!(
+            (cost_of(&reopened, "sonnet-claude") - truth).abs() < 1e-9,
+            "the schema-version guard makes the repair one-shot"
+        );
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn migrate_v9_skips_correct_ambiguous_and_fast_sonnet_rows() {
+        let mut ordinary = bare_call("sonnet-correct");
+        ordinary.tool = crate::tools::claude_code::config::TOOL_ID;
+        ordinary.input_tokens = 12_000;
+        ordinary.output_tokens = 3_400;
+        ordinary.cache_creation_input_tokens = 50_000;
+        ordinary.cache_creation_1h_input_tokens = 30_000;
+        ordinary.cache_read_input_tokens = 900_000;
+        let already_correct = historical_claude_cost(&ordinary, claude_2026_09_repair::SONNET_5);
+        let stale = historical_claude_cost(&ordinary, claude_2026_09_repair::SONNET_5_STALE);
+
+        // Stale pricing with zero one-hour writes equals corrected pricing
+        // with 500 one-hour writes, so this row must remain unchanged.
+        let mut ambiguous = bare_call("sonnet-ambiguous");
+        ambiguous.tool = crate::tools::claude_code::config::TOOL_ID;
+        ambiguous.input_tokens = 0;
+        ambiguous.output_tokens = 0;
+        ambiguous.cache_creation_input_tokens = 600;
+        ambiguous.cache_creation_1h_input_tokens = 0;
+        ambiguous.cache_read_input_tokens = 0;
+        ambiguous.web_search_requests = 0;
+        let ambiguous_cost =
+            historical_claude_cost(&ambiguous, claude_2026_09_repair::SONNET_5_STALE);
+
+        let paths = temp_paths("migrate-v9-sonnet-guards");
+        create_legacy_db(
+            &paths,
+            &format!(
+                "{}
+                {}
+                {}
+                PRAGMA user_version = 8;
+                ",
+                legacy_september_claude_row(
+                    "correct",
+                    "claude-code",
+                    "claude-sonnet-5",
+                    "standard",
+                    Some("2026-09-02T12:00:00Z"),
+                    "2026-09-02T12:01:00Z",
+                    already_correct,
+                    &ordinary,
+                ),
+                legacy_september_claude_row(
+                    "ambiguous",
+                    "claude-code",
+                    "claude-sonnet-5",
+                    "standard",
+                    Some("2026-09-02T12:00:00Z"),
+                    "2026-09-02T12:01:00Z",
+                    ambiguous_cost,
+                    &ambiguous,
+                ),
+                legacy_september_claude_row(
+                    "fast",
+                    "claude-code",
+                    "claude-sonnet-5",
+                    "fast",
+                    Some("2026-09-02T12:00:00Z"),
+                    "2026-09-02T12:01:00Z",
+                    stale,
+                    &ordinary,
+                ),
+            ),
+        );
+
+        let archive = Archive::open(&paths).unwrap();
+        assert!((cost_of(&archive, "correct") - already_correct).abs() < 1e-12);
+        assert!((cost_of(&archive, "ambiguous") - ambiguous_cost).abs() < 1e-12);
+        assert!((cost_of(&archive, "fast") - stale).abs() < 1e-12);
         let _ = fs::remove_dir_all(paths.dir);
     }
 

@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -12,6 +13,7 @@ use serde_json::{json, Map, Value};
 const EMBEDDED_OVERRIDES: &str = include_str!("../../costs/pricing-overrides.json");
 const UPSTREAM_FILE_NAME: &str = "pricing-upstream.json";
 const OVERRIDES_FILE_NAME: &str = "pricing-overrides.json";
+const TOKEN_RATE_FIELDS: [&str; 4] = ["input", "output", "cache_write", "cache_read"];
 
 #[derive(Debug, Clone)]
 pub struct RefreshOutput {
@@ -22,6 +24,10 @@ pub struct RefreshOutput {
 #[derive(Debug, Deserialize)]
 struct PricingSourcesConfig {
     published_books: PublishedBooks,
+    #[serde(default)]
+    aliases: BTreeMap<String, String>,
+    #[serde(default)]
+    tool_aliases: BTreeMap<String, BTreeMap<String, String>>,
     sources: Vec<SourceConfig>,
 }
 
@@ -41,6 +47,8 @@ struct SourceConfig {
     #[serde(default)]
     effective_from: Option<String>,
     #[serde(default)]
+    effective_to: Option<String>,
+    #[serde(default)]
     include: IncludeRules,
     #[serde(default)]
     fields: FieldMap,
@@ -58,6 +66,8 @@ struct IncludeRules {
     key_contains: Vec<String>,
     #[serde(default)]
     canonical_exact: Vec<String>,
+    #[serde(default)]
+    accepted_modes: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -93,6 +103,11 @@ struct ExtractConfig {
     labels: FieldLabels,
     #[serde(default)]
     rows: Vec<ExtractRow>,
+    /// Token-rate fields that every matched row from this source must expose.
+    /// This turns a renamed or removed table column into a refresh failure
+    /// instead of silently replacing an override with a zero rate.
+    #[serde(default)]
+    required_fields: Vec<String>,
     #[serde(default)]
     defaults: PriceDefaults,
     #[serde(default)]
@@ -139,7 +154,11 @@ struct ExtractRow {
     #[serde(default)]
     effective_from: Option<String>,
     #[serde(default)]
+    effective_to: Option<String>,
+    #[serde(default)]
     set: FixedFields,
+    #[serde(default)]
+    token_multipliers: TokenMultipliers,
     #[serde(default)]
     note: Option<String>,
     /// `pinned` rows only: the model is already gone from the source page, so
@@ -162,6 +181,18 @@ struct FixedFields {
     web_search: Option<f64>,
     #[serde(default)]
     fast_multiplier: Option<f64>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct TokenMultipliers {
+    #[serde(default)]
+    input: Option<f64>,
+    #[serde(default)]
+    output: Option<f64>,
+    #[serde(default)]
+    cache_write: Option<f64>,
+    #[serde(default)]
+    cache_read: Option<f64>,
 }
 
 pub fn run(output_dir: &Path) -> Result<RefreshOutput> {
@@ -196,6 +227,8 @@ pub fn run(output_dir: &Path) -> Result<RefreshOutput> {
     let overrides_path = output_dir.join(OVERRIDES_FILE_NAME);
     let mut overrides = override_book_base(&overrides_path)?;
     set_book_checked_at(&mut overrides, &checked_at);
+    merge_configured_aliases(&config.aliases, &mut overrides)?;
+    merge_configured_tool_aliases(&config.tool_aliases, &mut overrides)?;
     for source in config
         .sources
         .iter()
@@ -286,36 +319,131 @@ fn merge_json_map_source(
         .as_object()
         .ok_or_else(|| eyre!("{} root was not an object", source.id))?;
 
-    for (key, val) in map {
-        let canonical = canonicalize(key);
-        if !source.include.matches(key, &canonical) {
-            continue;
+    // Process vendor-routed aliases first, then direct model ids. When several
+    // raw keys canonicalize together this lets the provider's base rate win
+    // over regional Azure/Bedrock uplifts while still filling absent cache
+    // fields from a more complete alias.
+    for direct_model_id in [false, true] {
+        for (key, val) in map {
+            if is_direct_model_id(key) != direct_model_id {
+                continue;
+            }
+            let canonical = canonicalize(key);
+            if !source.include.matches_key(key, &canonical) {
+                continue;
+            }
+            let entry = val
+                .as_object()
+                .ok_or_else(|| eyre!("model entry {key} from {} was not an object", source.id))?;
+            if !source.include.accepts_mode(entry) {
+                continue;
+            }
+            let mut out = Map::new();
+            copy_f64(entry, source.fields.input.as_deref(), &mut out, "input");
+            copy_f64(entry, source.fields.output.as_deref(), &mut out, "output");
+            copy_f64(
+                entry,
+                source.fields.cache_write.as_deref(),
+                &mut out,
+                "cache_write",
+            );
+            copy_f64(
+                entry,
+                source.fields.cache_read.as_deref(),
+                &mut out,
+                "cache_read",
+            );
+            if let Some(web_search) = source.defaults.web_search {
+                insert_f64(&mut out, "web_search", web_search);
+            }
+            // LiteLLM occasionally publishes placeholder records for upcoming
+            // or non-token models. Keeping one would shadow a priced family
+            // prefix (for example `gpt-5.3-codex-spark`) and make real usage
+            // look free. Text-generation rows must price both input and output;
+            // generic sources retain the looser any-positive-rate rule.
+            if !has_positive_token_rate(&out)
+                || (!source.include.accepted_modes.is_empty()
+                    && !has_positive_input_and_output(&out))
+            {
+                continue;
+            }
+            merge_upstream_price(models, canonical, out, direct_model_id);
         }
-        let entry = val
-            .as_object()
-            .ok_or_else(|| eyre!("model entry {key} from {} was not an object", source.id))?;
-        let mut out = Map::new();
-        copy_f64(entry, source.fields.input.as_deref(), &mut out, "input");
-        copy_f64(entry, source.fields.output.as_deref(), &mut out, "output");
-        copy_f64(
-            entry,
-            source.fields.cache_write.as_deref(),
-            &mut out,
-            "cache_write",
-        );
-        copy_f64(
-            entry,
-            source.fields.cache_read.as_deref(),
-            &mut out,
-            "cache_read",
-        );
-        if let Some(web_search) = source.defaults.web_search {
-            insert_f64(&mut out, "web_search", web_search);
-        }
-        models.insert(canonical, Value::Object(out));
     }
 
     Ok(())
+}
+
+fn is_direct_model_id(raw_key: &str) -> bool {
+    !raw_key.contains('/')
+}
+
+fn has_positive_token_rate(price: &Map<String, Value>) -> bool {
+    TOKEN_RATE_FIELDS.iter().any(|field| {
+        price
+            .get(*field)
+            .and_then(Value::as_f64)
+            .is_some_and(|v| v > 0.0)
+    })
+}
+
+fn has_positive_input_and_output(price: &Map<String, Value>) -> bool {
+    ["input", "output"].iter().all(|field| {
+        price
+            .get(*field)
+            .and_then(Value::as_f64)
+            .is_some_and(|value| value > 0.0)
+    })
+}
+
+fn merge_upstream_price(
+    models: &mut Map<String, Value>,
+    canonical: String,
+    mut incoming: Map<String, Value>,
+    prefer_incoming: bool,
+) {
+    let Some(Value::Object(existing)) = models.get_mut(&canonical) else {
+        models.insert(canonical, Value::Object(incoming));
+        return;
+    };
+
+    if prefer_incoming || positive_token_rate_count(&incoming) > positive_token_rate_count(existing)
+    {
+        std::mem::swap(existing, &mut incoming);
+    }
+
+    for field in TOKEN_RATE_FIELDS {
+        let existing_is_positive = existing
+            .get(field)
+            .and_then(Value::as_f64)
+            .is_some_and(|value| value > 0.0);
+        if existing_is_positive {
+            continue;
+        }
+        if incoming
+            .get(field)
+            .and_then(Value::as_f64)
+            .is_some_and(|value| value > 0.0)
+        {
+            existing.insert(field.into(), incoming[field].clone());
+        }
+    }
+
+    for (field, value) in incoming {
+        existing.entry(field).or_insert(value);
+    }
+}
+
+fn positive_token_rate_count(price: &Map<String, Value>) -> usize {
+    TOKEN_RATE_FIELDS
+        .iter()
+        .filter(|field| {
+            price
+                .get(**field)
+                .and_then(Value::as_f64)
+                .is_some_and(|value| value > 0.0)
+        })
+        .count()
 }
 
 fn merge_override_source(source: &SourceConfig, overrides: &mut Value) -> Result<()> {
@@ -337,10 +465,44 @@ fn merge_override_source(source: &SourceConfig, overrides: &mut Value) -> Result
     }
 }
 
-/// Emit maintainer-pinned prices for models the source still documents but no
-/// longer publishes in any machine-readable table (Cursor renders its
-/// first-party rates from a client-side bundle, so the Markdown export carries
-/// the prose but none of the numbers).
+fn merge_configured_aliases(
+    configured: &BTreeMap<String, String>,
+    overrides: &mut Value,
+) -> Result<()> {
+    let aliases = object_member(overrides, "aliases")?;
+    for (alias, target) in configured {
+        aliases.insert(canonicalize(alias), Value::String(canonicalize(target)));
+    }
+    Ok(())
+}
+
+fn merge_configured_tool_aliases(
+    configured: &BTreeMap<String, BTreeMap<String, String>>,
+    overrides: &mut Value,
+) -> Result<()> {
+    let tool_aliases = object_member(overrides, "tool_aliases")?;
+    for (tool, configured_aliases) in configured {
+        let tool = tool.trim().to_ascii_lowercase();
+        if tool.is_empty() {
+            return Err(eyre!("configured tool alias scope cannot be empty"));
+        }
+        let aliases = tool_aliases
+            .entry(tool.clone())
+            .or_insert_with(|| Value::Object(Map::new()));
+        let Value::Object(aliases) = aliases else {
+            return Err(eyre!(
+                "pricing override book tool_aliases.{tool} must be an object"
+            ));
+        };
+        for (alias, target) in configured_aliases {
+            aliases.insert(canonicalize(alias), Value::String(canonicalize(target)));
+        }
+    }
+    Ok(())
+}
+
+/// Emit maintainer-pinned prices for historical models whose source no longer
+/// publishes a machine-readable rate row.
 ///
 /// Nothing is parsed from the page: every row supplies its own `set` values. The
 /// fetched body is still used as a liveness check so a renamed or retired model
@@ -403,6 +565,13 @@ fn merge_pinned_rows_source(
                 "effective_from".into(),
                 Value::String(effective_from.into()),
             );
+        }
+        if let Some(effective_to) = row_rule
+            .effective_to
+            .as_deref()
+            .or(source.effective_to.as_deref())
+        {
+            price.insert("effective_to".into(), Value::String(effective_to.into()));
         }
         insert_override_price(source, extract, &row_rule.model, price, overrides)?;
     }
@@ -479,6 +648,15 @@ fn merge_label_rows_source(
 
     apply_defaults_and_fixed(&mut price, &extract.defaults, &extract.set);
     add_provenance(source, extract.note.as_deref(), &mut price);
+    if let Some(effective_from) = source.effective_from.as_deref() {
+        price.insert(
+            "effective_from".into(),
+            Value::String(effective_from.into()),
+        );
+    }
+    if let Some(effective_to) = source.effective_to.as_deref() {
+        price.insert("effective_to".into(), Value::String(effective_to.into()));
+    }
     insert_override_price(source, extract, model, price, overrides)
 }
 
@@ -514,8 +692,10 @@ fn merge_model_rows_source(
             continue;
         };
         matched += 1;
+        apply_token_multipliers(source, row_rule, &mut price)?;
         apply_defaults_and_fixed(&mut price, &extract.defaults, &extract.set);
         apply_fixed(&mut price, &row_rule.set);
+        validate_required_fields(source, extract, &row_rule.model, &price)?;
         let note = row_rule.note.as_deref().or(extract.note.as_deref());
         add_provenance(source, note, &mut price);
         if let Some(effective_from) = row_rule
@@ -528,6 +708,13 @@ fn merge_model_rows_source(
                 Value::String(effective_from.into()),
             );
         }
+        if let Some(effective_to) = row_rule
+            .effective_to
+            .as_deref()
+            .or(source.effective_to.as_deref())
+        {
+            price.insert("effective_to".into(), Value::String(effective_to.into()));
+        }
         insert_override_price(source, extract, &row_rule.model, price, overrides)?;
     }
     if !extract.rows.is_empty() && matched == 0 {
@@ -536,6 +723,59 @@ fn merge_model_rows_source(
             source.id,
             extract.rows.len()
         ));
+    }
+    Ok(())
+}
+
+fn apply_token_multipliers(
+    source: &SourceConfig,
+    row: &ExtractRow,
+    price: &mut Map<String, Value>,
+) -> Result<()> {
+    for (field, multiplier) in [
+        ("input", row.token_multipliers.input),
+        ("output", row.token_multipliers.output),
+        ("cache_write", row.token_multipliers.cache_write),
+        ("cache_read", row.token_multipliers.cache_read),
+    ] {
+        let Some(multiplier) = multiplier else {
+            continue;
+        };
+        if multiplier <= 0.0 || !multiplier.is_finite() {
+            return Err(eyre!(
+                "source {} row {} has invalid {field} token multiplier {multiplier}",
+                source.id,
+                row.model
+            ));
+        }
+        if let Some(value) = price.get(field).and_then(Value::as_f64) {
+            insert_f64(price, field, value * multiplier);
+        }
+    }
+    Ok(())
+}
+
+fn validate_required_fields(
+    source: &SourceConfig,
+    extract: &ExtractConfig,
+    model: &str,
+    price: &Map<String, Value>,
+) -> Result<()> {
+    const PRICE_FIELDS: [&str; 5] = ["input", "output", "cache_write", "cache_read", "web_search"];
+
+    for field in &extract.required_fields {
+        if !PRICE_FIELDS.contains(&field.as_str()) {
+            return Err(eyre!(
+                "source {} row {model} configures unknown required price field {field}",
+                source.id
+            ));
+        }
+        if !price.contains_key(field) {
+            return Err(eyre!(
+                "source {} row {model} is missing required price field {field}",
+                source.id
+            ));
+        }
     }
     Ok(())
 }
@@ -725,7 +965,7 @@ fn object_member<'a>(value: &'a mut Value, key: &str) -> Result<&'a mut Map<Stri
 }
 
 impl IncludeRules {
-    fn matches(&self, raw_key: &str, canonical: &str) -> bool {
+    fn matches_key(&self, raw_key: &str, canonical: &str) -> bool {
         self.key_contains
             .iter()
             .any(|needle| raw_key.contains(needle))
@@ -733,6 +973,18 @@ impl IncludeRules {
                 .canonical_exact
                 .iter()
                 .any(|model| canonical == model.as_str())
+    }
+
+    fn accepts_mode(&self, entry: &Map<String, Value>) -> bool {
+        self.accepted_modes.is_empty()
+            || entry
+                .get("mode")
+                .and_then(Value::as_str)
+                .is_some_and(|mode| {
+                    self.accepted_modes
+                        .iter()
+                        .any(|accepted| mode.eq_ignore_ascii_case(accepted))
+                })
     }
 }
 
@@ -818,14 +1070,7 @@ fn write_json_value(output: &Path, value: &Value) -> Result<()> {
 }
 
 fn canonicalize(model: &str) -> String {
-    let mut s = model.trim().to_lowercase();
-    if let Some(idx) = s.rfind('/') {
-        s = s[idx + 1..].to_string();
-    }
-    if let Some(idx) = s.find('@') {
-        s.truncate(idx);
-    }
-    s
+    crate::models::pricing_key(model)
 }
 
 fn markdown_tables(raw: &str, heading: Option<&str>) -> Vec<Vec<Vec<String>>> {
@@ -1013,7 +1258,20 @@ fn dollar_values(cell: &str) -> Vec<f64> {
 fn html_to_text(raw: &str) -> String {
     let mut out = String::new();
     let mut in_tag = false;
-    for ch in raw.chars() {
+    let mut rest = raw;
+    while !rest.is_empty() {
+        if let Some(after_open) = rest.strip_prefix("<!--") {
+            rest = after_open
+                .split_once("-->")
+                .map(|(_, after_close)| after_close)
+                .unwrap_or("");
+            continue;
+        }
+        let ch = rest
+            .chars()
+            .next()
+            .expect("non-empty HTML fragment has a character");
+        rest = &rest[ch.len_utf8()..];
         match ch {
             '<' => {
                 in_tag = true;
@@ -1029,6 +1287,8 @@ fn html_to_text(raw: &str) -> String {
     }
     out.replace("&nbsp;", " ")
         .replace("&amp;", "&")
+        .replace("&gt;", ">")
+        .replace("&lt;", "<")
         .replace("&#39;", "'")
         .replace("&quot;", "\"")
 }
@@ -1145,6 +1405,41 @@ mod tests {
                 && source.kind == "markdown-table"
                 && source.output == "overrides"
         }));
+        assert_eq!(
+            config
+                .tool_aliases
+                .get("cursor")
+                .and_then(|aliases| aliases.get("gpt-5.6-sol-fast"))
+                .map(String::as_str),
+            Some("gpt-5.6-sol-fast-history")
+        );
+    }
+
+    #[test]
+    fn configured_tool_aliases_are_canonicalized_and_merged() {
+        let configured = BTreeMap::from([(
+            " Cursor ".to_string(),
+            BTreeMap::from([(
+                "GPT-5.6-Sol-Fast".to_string(),
+                "GPT-5.6-Sol-Fast-History".to_string(),
+            )]),
+        )]);
+        let mut overrides = json!({
+            "tool_aliases": {
+                "cursor": { "existing": "existing-target" }
+            }
+        });
+
+        merge_configured_tool_aliases(&configured, &mut overrides).unwrap();
+
+        assert_eq!(
+            overrides.pointer("/tool_aliases/cursor/gpt-5.6-sol-fast"),
+            Some(&json!("gpt-5.6-sol-fast-history"))
+        );
+        assert_eq!(
+            overrides.pointer("/tool_aliases/cursor/existing"),
+            Some(&json!("existing-target"))
+        );
     }
 
     #[test]
@@ -1170,6 +1465,7 @@ mod tests {
         let body: Value = serde_json::from_str(
             r#"{
               "openai/gpt-fixture@v1": { "in": 0.1, "out": 0.2, "cw": 0.3, "cr": 0.4 },
+              "openai/gpt-placeholder": { "in": 0.0, "out": 0.0 },
               "codex-mini-latest": { "in": 1.0, "out": 2.0 },
               "ignored": { "in": 9.0, "out": 9.0 }
             }"#,
@@ -1181,7 +1477,199 @@ mod tests {
 
         assert!(models.contains_key("gpt-fixture"));
         assert!(models.contains_key("codex-mini-latest"));
+        assert!(!models.contains_key("gpt-placeholder"));
         assert!(!models.contains_key("ignored"));
+    }
+
+    #[test]
+    fn json_map_source_excludes_embedding_mode_when_only_text_modes_are_accepted() {
+        let source: SourceConfig = serde_json::from_str(
+            r#"{
+              "id": "fixture",
+              "name": "Fixture",
+              "url": "https://example.invalid/prices.json",
+              "kind": "json-map",
+              "output": "upstream",
+              "include": {
+                "accepted_modes": ["chat", "responses"],
+                "key_contains": ["gemini-"]
+              },
+              "fields": { "input": "in", "output": "out" }
+            }"#,
+        )
+        .unwrap();
+        let body: Value = serde_json::from_str(
+            r#"{
+              "gemini-chat": { "mode": "chat", "in": 0.1, "out": 0.2 },
+              "gemini-responses": { "mode": "responses", "in": 0.3, "out": 0.4 },
+              "gemini-incomplete": { "mode": "chat", "in": 0.5, "out": 0.0 },
+              "gemini-embedding-001": { "mode": "embedding", "in": 0.5, "out": 0.0 }
+            }"#,
+        )
+        .unwrap();
+        let mut models = Map::new();
+
+        merge_json_map_source(&source, &body, &mut models).unwrap();
+
+        assert_eq!(
+            models.keys().cloned().collect::<Vec<_>>(),
+            vec!["gemini-chat", "gemini-responses"]
+        );
+        assert!(!models.contains_key("gemini-incomplete"));
+    }
+
+    #[test]
+    fn json_map_source_combines_positive_rates_from_canonical_aliases() {
+        let source: SourceConfig = serde_json::from_str(
+            r#"{
+              "id": "fixture",
+              "name": "Fixture",
+              "url": "https://example.invalid/prices.json",
+              "kind": "json-map",
+              "output": "upstream",
+              "include": { "key_contains": ["claude-3-"] },
+              "fields": {
+                "input": "in",
+                "output": "out",
+                "cache_write": "cw",
+                "cache_read": "cr"
+              }
+            }"#,
+        )
+        .unwrap();
+        let body: Value = serde_json::from_str(
+            r#"{
+              "bedrock/claude-3-5-sonnet": {
+                "in": 0.1,
+                "out": 0.2,
+                "cw": 0.3,
+                "cr": 0.4
+              },
+              "claude-3-5-sonnet": { "in": 0.1, "out": 0.2 }
+            }"#,
+        )
+        .unwrap();
+        let mut models = Map::new();
+
+        merge_json_map_source(&source, &body, &mut models).unwrap();
+
+        assert_eq!(models.len(), 1);
+        assert_eq!(models["claude-sonnet-3-5"]["cache_write"], json!(0.3));
+        assert_eq!(models["claude-sonnet-3-5"]["cache_read"], json!(0.4));
+    }
+
+    #[test]
+    fn json_map_source_preserves_differently_priced_dated_snapshots() {
+        let source: SourceConfig = serde_json::from_str(
+            r#"{
+              "id": "fixture",
+              "name": "Fixture",
+              "url": "https://example.invalid/prices.json",
+              "kind": "json-map",
+              "output": "upstream",
+              "include": { "key_contains": ["gpt-4o"] },
+              "fields": { "input": "in", "output": "out" }
+            }"#,
+        )
+        .unwrap();
+        let body: Value = serde_json::from_str(
+            r#"{
+              "gpt-4o": { "in": 0.0000025, "out": 0.00001 },
+              "gpt-4o-2024-05-13": { "in": 0.000005, "out": 0.000015 }
+            }"#,
+        )
+        .unwrap();
+        let mut models = Map::new();
+
+        merge_json_map_source(&source, &body, &mut models).unwrap();
+
+        assert_eq!(models.len(), 2);
+        assert_eq!(models["gpt-4o"]["input"], json!(0.0000025));
+        assert_eq!(models["gpt-4o-2024-05-13"]["input"], json!(0.000005));
+    }
+
+    #[test]
+    fn json_map_source_prefers_direct_rates_over_regional_aliases() {
+        let source: SourceConfig = serde_json::from_str(
+            r#"{
+              "id": "fixture",
+              "name": "Fixture",
+              "url": "https://example.invalid/prices.json",
+              "kind": "json-map",
+              "output": "upstream",
+              "include": { "key_contains": ["gpt-fixture"] },
+              "fields": {
+                "input": "in",
+                "output": "out",
+                "cache_read": "cr"
+              }
+            }"#,
+        )
+        .unwrap();
+        let body: Value = serde_json::from_str(
+            r#"{
+              "azure/eu/gpt-fixture": { "in": 0.11, "out": 0.22, "cr": 0.011 },
+              "gpt-fixture": { "in": 0.1, "out": 0.2, "cr": 0.01 }
+            }"#,
+        )
+        .unwrap();
+        let mut models = Map::new();
+
+        merge_json_map_source(&source, &body, &mut models).unwrap();
+
+        assert_eq!(models["gpt-fixture"]["input"], json!(0.1));
+        assert_eq!(models["gpt-fixture"]["cache_read"], json!(0.01));
+        assert_eq!(models["gpt-fixture"]["output"], json!(0.2));
+    }
+
+    #[test]
+    fn json_map_source_does_not_replace_positive_rates_with_zero_alias_rates() {
+        let source: SourceConfig = serde_json::from_str(
+            r#"{
+              "id": "fixture",
+              "name": "Fixture",
+              "url": "https://example.invalid/prices.json",
+              "kind": "json-map",
+              "output": "upstream",
+              "include": { "key_contains": ["claude-3-"] },
+              "fields": {
+                "input": "in",
+                "output": "out",
+                "cache_write": "cw",
+                "cache_read": "cr"
+              }
+            }"#,
+        )
+        .unwrap();
+        let complete: Value = serde_json::from_str(
+            r#"{
+              "bedrock/claude-3-5-sonnet": {
+                "in": 0.1,
+                "out": 0.2,
+                "cw": 0.3,
+                "cr": 0.4
+              }
+            }"#,
+        )
+        .unwrap();
+        let incomplete: Value = serde_json::from_str(
+            r#"{
+              "claude-3-5-sonnet": {
+                "in": 0.1,
+                "out": 0.2,
+                "cw": 0.0,
+                "cr": 0.0
+              }
+            }"#,
+        )
+        .unwrap();
+        let mut models = Map::new();
+
+        merge_json_map_source(&source, &complete, &mut models).unwrap();
+        merge_json_map_source(&source, &incomplete, &mut models).unwrap();
+
+        assert_eq!(models["claude-sonnet-3-5"]["cache_write"], json!(0.3));
+        assert_eq!(models["claude-sonnet-3-5"]["cache_read"], json!(0.4));
     }
 
     #[test]
@@ -1219,6 +1707,8 @@ after
               "url": "https://example.invalid/cursor.md",
               "kind": "markdown-table",
               "output": "overrides",
+              "effective_from": "2026-08-01",
+              "effective_to": "2026-09-07",
               "table_heading": "Auto pricing",
               "extract": {
                 "mode": "label-rows",
@@ -1260,6 +1750,8 @@ after
         assert_eq!(row["cache_write"], json!(0.00000125));
         assert_eq!(row["cache_read"], json!(0.00000025));
         assert_eq!(row["output"], json!(0.000006));
+        assert_eq!(row["effective_from"], json!("2026-08-01"));
+        assert_eq!(row["effective_to"], json!("2026-09-07"));
     }
 
     #[test]
@@ -1282,7 +1774,11 @@ after
                   "cache_read": "Cached input",
                   "output": "Output"
                 },
-                "rows": [{ "match": "GPT-4.1", "model": "gpt-4.1" }]
+                "rows": [{
+                  "match": "GPT-4.1",
+                  "model": "gpt-4.1",
+                  "effective_to": "2026-09-07"
+                }]
               }
             }"#,
         )
@@ -1310,6 +1806,7 @@ after
         assert_eq!(row["cache_read"], json!(0.0000005));
         assert_eq!(row["output"], json!(0.000008));
         assert_eq!(row["effective_from"], json!("2026-06-01"));
+        assert_eq!(row["effective_to"], json!("2026-09-07"));
     }
 
     #[test]
@@ -1438,6 +1935,53 @@ after
         assert!(err.to_string().contains("matched none"));
     }
 
+    #[test]
+    fn model_rows_error_when_a_required_rate_disappears() {
+        let source: SourceConfig = serde_json::from_str(
+            r#"{
+              "id": "provider-pricing",
+              "name": "Provider pricing",
+              "url": "https://example.invalid/provider.md",
+              "kind": "markdown-table",
+              "output": "overrides",
+              "extract": {
+                "mode": "model-rows",
+                "scope": "global",
+                "columns": {
+                  "model": "Model",
+                  "input": "Input",
+                  "cache_read": "Cached input",
+                  "output": "Output"
+                },
+                "required_fields": ["input", "cache_read", "output"],
+                "rows": [{ "match": "New Model", "model": "new-model" }]
+              }
+            }"#,
+        )
+        .unwrap();
+        // A provider renamed or removed the cached-input column. The matched
+        // row must not silently replace a complete override with a zero rate.
+        let raw = r#"
+| Model | Input | Output |
+| --- | ---: | ---: |
+| New Model | $2.00 | $8.00 |
+"#;
+        let mut overrides = json!({ "fallback": "new-model", "models": {} });
+
+        let err = merge_model_rows_source(
+            &source,
+            source.extract.as_ref().unwrap(),
+            raw,
+            &mut overrides,
+        )
+        .unwrap_err();
+
+        assert!(err
+            .to_string()
+            .contains("missing required price field cache_read"));
+        assert!(overrides.pointer("/models/new-model").is_none());
+    }
+
     fn pinned_cursor_source() -> SourceConfig {
         serde_json::from_str(
             r#"{
@@ -1472,8 +2016,8 @@ after
     #[test]
     fn pinned_rows_emit_configured_prices_without_a_table() {
         let source = pinned_cursor_source();
-        // Cursor renders its first-party rates client-side: the page names the
-        // models in prose but publishes no table for them.
+        // Pinned mode reads no rates from this prose; it uses the configured
+        // values while checking that the live marker is still present.
         let raw = "## Composer pricing\n\nComposer 2.5 is Cursor's own model.\n";
         let mut overrides = json!({ "fallback": "composer-2.5", "tool_models": {} });
 
@@ -1635,6 +2179,61 @@ after
         assert!((row["input"].as_f64().unwrap() - 0.0000005).abs() < f64::EPSILON);
         assert!((row["cache_read"].as_f64().unwrap() - 0.00000005).abs() < f64::EPSILON);
         assert!((row["output"].as_f64().unwrap() - 0.000003).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn model_rows_can_emit_a_scaled_token_tier_without_scaling_web_search() {
+        let source: SourceConfig = serde_json::from_str(
+            r#"{
+              "id": "cursor-gpt-fast",
+              "name": "Cursor GPT pricing",
+              "url": "https://example.invalid/pricing",
+              "kind": "html-table",
+              "output": "overrides",
+              "extract": {
+                "mode": "model-rows",
+                "scope": "tool",
+                "tool": "cursor",
+                "columns": {
+                  "model": "Name",
+                  "input": "Input",
+                  "cache_read": "Cache Read",
+                  "output": "Output"
+                },
+                "required_fields": ["input", "cache_read", "output"],
+                "defaults": { "web_search": 0.01 },
+                "rows": [{
+                  "match": "GPT-5.4",
+                  "model": "gpt-5.4-fast",
+                  "token_multipliers": { "input": 2, "cache_read": 2, "output": 2 }
+                }]
+              }
+            }"#,
+        )
+        .unwrap();
+        let raw = r#"
+<table>
+  <tr><th>Name</th><th>Input</th><th>Cache Read</th><th>Output</th></tr>
+  <tr><td>GPT-5.4</td><td>$<!-- -->2.50</td><td>$<!-- -->0.25</td><td>$<!-- -->15.00</td></tr>
+</table>
+"#;
+        let mut overrides = json!({ "fallback": "gpt-5.4", "tool_models": {} });
+
+        merge_model_rows_source(
+            &source,
+            source.extract.as_ref().unwrap(),
+            raw,
+            &mut overrides,
+        )
+        .unwrap();
+
+        let row = overrides
+            .pointer("/tool_models/cursor/gpt-5.4-fast")
+            .unwrap();
+        assert!((row["input"].as_f64().unwrap() - 0.000005).abs() < f64::EPSILON);
+        assert!((row["cache_read"].as_f64().unwrap() - 0.0000005).abs() < f64::EPSILON);
+        assert!((row["output"].as_f64().unwrap() - 0.00003).abs() < f64::EPSILON);
+        assert_eq!(row["web_search"], json!(0.01));
     }
 
     #[test]

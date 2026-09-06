@@ -103,7 +103,7 @@ Archive v5 records provenance:
 | `token_quality` | `exact` when all populated sides are explicit; `estimated` when chars/4 supplies them; `mixed` when only one side is estimated; otherwise `unknown` |
 | `timestamp_quality` | `exact` for state message times; `session` for store/tracking session times; `file` for transcript mtime; otherwise `unknown` |
 
-Pricing is always tool-aware. Cursor Auto and official Cursor first-party model rows are looked up in the Cursor scope; unknown/observed-only models use the documented global fallback. See [Model normalisation](../models.md).
+Pricing is always tool-aware. Official Cursor first-party rows and selected third-party rates are looked up in the Cursor scope, including GLM 5.2, Kimi K2.7 Code, GPT-5 Fast, and explicit GPT-5.4/5.5/5.6 Fast tiers. Effort-before-speed and structured bracket ids are normalized onto the appropriate standard or Fast prefix; a numeric bracket `context` above 272K also selects the GPT-5.4 or GPT-5.6 Luna/Sol/Terra long-context tier. Exactly 272K remains on the default tier. Explicit rows keep the fixed web-search fee from being multiplied with token rates. The old flat Enterprise Auto row is valid only before September 7, 2026; current Auto bills the routed model, so a local `default` row with no resolved model is deliberately flagged as fallback-priced. See [Model normalisation](../models.md).
 
 ## Canonical dedup and archive backfill
 
@@ -135,3 +135,4 @@ Model-overreliance groups by the shared canonical model identity, so thinking/ef
 - Store protobuf branch/subagent fields other than the linear field-1 transcript are not yet interpreted.
 - Tracking timestamps are session/code-generation anchors, not exact request times.
 - Cache reads/writes are not locally attributable and remain zero.
+- Long-context pricing can be selected only when the stored model id carries a numeric `context`; other Cursor artifacts and non-Cursor adapters do not provide reliable threshold evidence.

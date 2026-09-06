@@ -74,7 +74,7 @@ cost = multiplier * (
 )
 ```
 
-Model lookup canonicalizes model names, resolves tool-scoped aliases first, applies effective dates, then falls back through global aliases and prefix matches to a default Sonnet row. `cursor-auto` is a direct Cursor Auto pricing row. Claude Opus fast mode applies the row's `fast_multiplier`.
+Model lookup canonicalizes model names, resolves tool-scoped aliases first, applies inclusive start and exclusive end dates, then falls back through global aliases and prefix matches to a default Sonnet row. Cursor's direct flat Auto row is historical and expires when routed-model billing begins on September 7, 2026; unresolved newer Auto calls therefore surface as fallback-priced. Claude Opus fast mode applies the row's `fast_multiplier`.
 
 Refresh the embedded maintainer books with:
 

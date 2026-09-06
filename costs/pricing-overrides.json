@@ -1,6 +1,6 @@
 {
   "_metadata": {
-    "checked_at": "2026-08-24",
+    "checked_at": "2026-09-06",
     "fields": {
       "cache_read": "USD per cache read token",
       "cache_write": "USD per cache write token",
@@ -14,10 +14,15 @@
   "aliases": {
     "anthropic-auto": "claude-sonnet-4-6",
     "auto": "cursor-auto",
+    "claude-3-7-sonnet-latest": "claude-3-7-sonnet",
+    "claude-fable-5.1": "claude-fable-5-1",
     "claude-haiku": "claude-haiku-4-5",
+    "claude-mythos-5.1": "claude-mythos-5-1",
     "claude-opus": "claude-opus-5",
     "claude-sonnet": "claude-sonnet-4-6",
     "default": "cursor-auto",
+    "gpt-5.6": "gpt-5.6-sol-history",
+    "gpt-5.6-sol": "gpt-5.6-sol-history",
     "openai-auto": "gpt-5-mini"
   },
   "fallback": "claude-sonnet-4-6",
@@ -28,7 +33,34 @@
       "input": 0.00001,
       "output": 0.00005,
       "provenance": {
-        "checked_at": "2026-08-24",
+        "checked_at": "2026-09-06",
+        "source_name": "Claude pricing markdown",
+        "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
+      },
+      "web_search": 0.01
+    },
+    "claude-fable-5-1": {
+      "cache_read": 2.5e-7,
+      "cache_write": 0.0000125,
+      "input": 0.00001,
+      "output": 0.00005,
+      "provenance": {
+        "checked_at": "2026-09-06",
+        "note": "Fable 5.1 keeps Fable 5 input, cache-write, and output rates but reduces prompt-cache reads to $0.25/MTok.",
+        "source_name": "Claude pricing markdown",
+        "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
+      },
+      "web_search": 0.01
+    },
+    "claude-haiku-3-5": {
+      "cache_read": 8e-8,
+      "cache_write": 1e-6,
+      "effective_from": "2024-12-03",
+      "input": 8.000000000000001e-7,
+      "output": 4e-6,
+      "provenance": {
+        "checked_at": "2026-09-06",
+        "note": "Anthropic's historical Haiku 3.5 row corrects incomplete and higher LiteLLM rates for archived Claude Code usage.",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
       },
@@ -40,7 +72,7 @@
       "input": 1e-6,
       "output": 5e-6,
       "provenance": {
-        "checked_at": "2026-08-24",
+        "checked_at": "2026-09-06",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
       },
@@ -52,7 +84,20 @@
       "input": 0.00001,
       "output": 0.00005,
       "provenance": {
-        "checked_at": "2026-08-24",
+        "checked_at": "2026-09-06",
+        "source_name": "Claude pricing markdown",
+        "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
+      },
+      "web_search": 0.01
+    },
+    "claude-mythos-5-1": {
+      "cache_read": 2.5e-7,
+      "cache_write": 0.0000125,
+      "input": 0.00001,
+      "output": 0.00005,
+      "provenance": {
+        "checked_at": "2026-09-06",
+        "note": "Mythos 5.1 keeps Mythos 5 input, cache-write, and output rates but reduces prompt-cache reads to $0.25/MTok.",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
       },
@@ -65,8 +110,8 @@
       "input": 5e-6,
       "output": 0.000025,
       "provenance": {
-        "checked_at": "2026-08-24",
-        "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.6 fast mode at $30 input and $150 output per MTok.",
+        "checked_at": "2026-09-06",
+        "note": "The 6x multiplier is retained for historical Claude Code fast-speed calls; current fast mode supports only Opus 5 and Opus 4.8.",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
       },
@@ -79,8 +124,8 @@
       "input": 5e-6,
       "output": 0.000025,
       "provenance": {
-        "checked_at": "2026-08-24",
-        "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.6 fast mode at $30 input and $150 output per MTok.",
+        "checked_at": "2026-09-06",
+        "note": "The 6x multiplier is retained for historical Claude Code fast-speed calls; current fast mode supports only Opus 5 and Opus 4.8.",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
       },
@@ -93,7 +138,7 @@
       "input": 5e-6,
       "output": 0.000025,
       "provenance": {
-        "checked_at": "2026-08-24",
+        "checked_at": "2026-09-06",
         "note": "Fast multiplier is configured from Claude Code fast mode, which listed Opus 4.7 fast mode at $30 input and $150 output per MTok; deprecated 2026-06-25 and removed 2026-07-24. Kept so archived fast-mode calls from before removal still price correctly.",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
@@ -107,7 +152,7 @@
       "input": 5e-6,
       "output": 0.000025,
       "provenance": {
-        "checked_at": "2026-08-24",
+        "checked_at": "2026-09-06",
         "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.8 fast mode at $10 input and $50 output per MTok (2x base).",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
@@ -121,8 +166,8 @@
       "input": 5e-6,
       "output": 0.000025,
       "provenance": {
-        "checked_at": "2026-08-24",
-        "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.6 fast mode at $30 input and $150 output per MTok.",
+        "checked_at": "2026-09-06",
+        "note": "The 6x multiplier is retained for historical Claude Code fast-speed calls; current fast mode supports only Opus 5 and Opus 4.8.",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
       },
@@ -135,7 +180,7 @@
       "input": 5e-6,
       "output": 0.000025,
       "provenance": {
-        "checked_at": "2026-08-24",
+        "checked_at": "2026-09-06",
         "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 4.8 fast mode at $10 input and $50 output per MTok (2x base).",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
@@ -149,7 +194,7 @@
       "input": 5e-6,
       "output": 0.000025,
       "provenance": {
-        "checked_at": "2026-08-24",
+        "checked_at": "2026-09-06",
         "note": "Fast multiplier is configured from Claude Code fast mode, which lists Opus 5 fast mode at $10 input and $50 output per MTok (2x base).",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
@@ -162,7 +207,7 @@
       "input": 3e-6,
       "output": 0.000015,
       "provenance": {
-        "checked_at": "2026-08-24",
+        "checked_at": "2026-09-06",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
       },
@@ -174,7 +219,7 @@
       "input": 3e-6,
       "output": 0.000015,
       "provenance": {
-        "checked_at": "2026-08-24",
+        "checked_at": "2026-09-06",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
       },
@@ -186,21 +231,20 @@
       "input": 3e-6,
       "output": 0.000015,
       "provenance": {
-        "checked_at": "2026-08-24",
+        "checked_at": "2026-09-06",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
       },
       "web_search": 0.01
     },
     "claude-sonnet-5": {
-      "cache_read": 3e-7,
-      "cache_write": 3.75e-6,
-      "effective_from": "2026-09-01",
-      "input": 3e-6,
-      "output": 0.000015,
+      "cache_read": 2.0000000000000002e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
       "provenance": {
-        "checked_at": "2026-08-10",
-        "note": "Standard Sonnet 5 pricing takes effect 2026-09-01; introductory pricing through 2026-08-31 is carried by the upstream book.",
+        "checked_at": "2026-09-06",
+        "note": "Anthropic made Sonnet 5 launch pricing permanent: $2 input, $2.50 5-minute cache writes, $0.20 cache reads, and $10 output per MTok.",
         "source_name": "Claude pricing markdown",
         "source_url": "https://platform.claude.com/docs/en/about-claude/pricing.md"
       },
@@ -209,13 +253,27 @@
     "cursor-auto": {
       "cache_read": 2.5e-7,
       "cache_write": 1.25e-6,
+      "effective_to": "2026-09-07",
       "input": 1.25e-6,
       "output": 6e-6,
       "provenance": {
-        "checked_at": "2026-08-24",
-        "note": "Cursor moved its first-party rates out of the \"Model pricing\" table into client-side pricing widgets, so the Markdown export carries the prose but none of the numbers. Auto Cost is $1.25/MTok input and cache write, $0.25/MTok cache read, and $6/MTok output; verified 2026-08-03.",
+        "checked_at": "2026-09-06",
+        "note": "Legacy Enterprise Auto was $1.25/MTok input and cache write, $0.25/MTok cache read, and $6/MTok output. Cursor says this flat rate ends September 7, 2026; newer Auto requests bill the routed model's list price.",
         "source_name": "Cursor pricing",
         "source_url": "https://cursor.com/docs/models-and-pricing.md"
+      },
+      "web_search": 0.01
+    },
+    "gemini-1.5-flash": {
+      "cache_read": 1.875e-8,
+      "effective_from": "2024-08-12",
+      "input": 7.5e-8,
+      "output": 3e-7,
+      "provenance": {
+        "checked_at": "2026-09-06",
+        "note": "Historical short-context rates after Google's August 12, 2024 reduction. Requests above 128K input tokens cost 2x; Gemini 1.5 Flash was retired September 29, 2025.",
+        "source_name": "Google Gemini 1.5 Flash price update",
+        "source_url": "https://developers.googleblog.com/en/gemini-15-flash-updates-google-ai-studio-gemini-api/"
       },
       "web_search": 0.01
     },
@@ -374,11 +432,91 @@
         "source_url": "https://openai.com/api/pricing/"
       },
       "web_search": 0.01
+    },
+    "gpt-5.4": {
+      "cache_read": 2.5e-7,
+      "input": 2.5e-6,
+      "output": 0.000015,
+      "provenance": {
+        "checked_at": "2026-09-06",
+        "note": "Default-tier GPT-5.4 rates. Requests above 272K input tokens use OpenAI's long-context rates, which tokenuse does not yet select per call.",
+        "source_name": "OpenAI GPT-5.4 model pricing",
+        "source_url": "https://developers.openai.com/api/docs/models/gpt-5.4.md"
+      },
+      "web_search": 0.01
+    },
+    "gpt-5.6-luna": {
+      "cache_read": 2e-8,
+      "cache_write": 2.5e-7,
+      "input": 2.0000000000000002e-7,
+      "output": 1.2e-6,
+      "provenance": {
+        "checked_at": "2026-09-06",
+        "note": "Default-tier Luna rates; cache writes are 1.25x input. Long-context rates are not yet selected per call.",
+        "source_name": "OpenAI GPT-5.6 Luna model pricing",
+        "source_url": "https://developers.openai.com/api/docs/models/gpt-5.6-luna.md"
+      },
+      "web_search": 0.01
+    },
+    "gpt-5.6-sol": {
+      "cache_read": 4.0000000000000003e-7,
+      "cache_write": 5e-6,
+      "effective_from": "2026-08-21",
+      "input": 4e-6,
+      "output": 0.00002,
+      "provenance": {
+        "checked_at": "2026-09-06",
+        "note": "Promotional Sol rates available at least through November 21, 2026; cache writes are 1.25x input. Long-context rates are not yet selected per call.",
+        "source_name": "OpenAI GPT-5.6 Sol model pricing",
+        "source_url": "https://developers.openai.com/api/docs/models/gpt-5.6-sol.md"
+      },
+      "web_search": 0.01
+    },
+    "gpt-5.6-sol-history": {
+      "cache_read": 5e-7,
+      "cache_write": 6.25e-6,
+      "effective_to": "2026-08-21",
+      "input": 5e-6,
+      "output": 0.00003,
+      "provenance": {
+        "checked_at": "2026-09-06",
+        "note": "Pre-promotion GPT-5.6 Sol rates retained for calls before August 21, 2026. The synthetic -history lookup target lets the current live row remain the family-prefix fallback after this window expires.",
+        "source_name": "OpenAI GPT-5.6 Sol model pricing",
+        "source_url": "https://developers.openai.com/api/docs/models/gpt-5.6-sol.md"
+      }
+    },
+    "gpt-5.6-terra": {
+      "cache_read": 2.0000000000000002e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.000012,
+      "provenance": {
+        "checked_at": "2026-09-06",
+        "note": "Default-tier Terra rates; cache writes are 1.25x input. Long-context rates are not yet selected per call.",
+        "source_name": "OpenAI GPT-5.6 Terra model pricing",
+        "source_url": "https://developers.openai.com/api/docs/models/gpt-5.6-terra.md"
+      },
+      "web_search": 0.01
+    },
+    "gpt-6-astra": {
+      "cache_read": 1e-6,
+      "cache_write": 0.0000125,
+      "effective_from": "2026-09-03",
+      "input": 0.00001,
+      "output": 0.00005,
+      "provenance": {
+        "checked_at": "2026-09-06",
+        "note": "Default-tier GPT-6 Astra rates. Requests above 272K input tokens use OpenAI's long-context rates, which tokenuse does not yet select per call.",
+        "source_name": "OpenAI GPT-6 Astra model pricing",
+        "source_url": "https://developers.openai.com/api/docs/models/gpt-6-astra.md"
+      },
+      "web_search": 0.01
     }
   },
   "tool_aliases": {
     "copilot": {
       "Claude Fable 5": "claude-fable-5",
+      "Claude Fable 5.1": "claude-fable-5-1",
       "Claude Haiku 4.5": "claude-haiku-4-5",
       "Claude Opus 4.5": "claude-opus-4-5",
       "Claude Opus 4.6": "claude-opus-4-6",
@@ -402,15 +540,36 @@
       "GPT-5.6 Luna": "gpt-5.6-luna",
       "GPT-5.6 Sol": "gpt-5.6-sol",
       "GPT-5.6 Terra": "gpt-5.6-terra",
+      "GPT-6 Astra": "gpt-6-astra",
       "Gemini 2.5 Pro": "gemini-2.5-pro",
       "Gemini 3 Flash": "gemini-3-flash",
       "Gemini 3.1 Pro": "gemini-3.1-pro",
       "Gemini 3.5 Flash": "gemini-3.5-flash",
+      "Gemini 3.6 Flash": "gemini-3.6-flash",
+      "Gemini 3.7 Flash": "gemini-3.7-flash",
+      "Gemini 3.8 Flash": "gemini-3.8-flash",
       "Goldeneye": "goldeneye",
+      "Grok 4.5": "grok-4.5",
+      "Grok 4.6": "grok-4.6",
       "Grok Code Fast 1": "grok-code-fast-1",
       "Kimi K2.7 Code": "kimi-k2.7-code",
+      "Kimi K3": "kimi-k3",
       "MAI-Code-1-Flash": "mai-code-1-flash",
-      "Raptor mini": "raptor-mini"
+      "MAI-Code-1.1-Flash": "mai-code-1.1-flash",
+      "Raptor mini": "raptor-mini",
+      "claude-fable-5.1": "claude-fable-5-1"
+    },
+    "cursor": {
+      "composer-2-5": "composer-2.5",
+      "composer-2-5-fast": "composer-2.5-fast",
+      "gpt-5.6-sol": "gpt-5.6-sol-history",
+      "gpt-5.6-sol-fast": "gpt-5.6-sol-fast-history",
+      "gpt-5.6-sol-fast-long": "gpt-5.6-sol-fast-long-history",
+      "gpt-5.6-sol-long": "gpt-5.6-sol-long-history",
+      "grok-4-5": "grok-4.5",
+      "grok-4-5-fast": "grok-4.5-fast",
+      "grok-4-6": "grok-4.6",
+      "grok-4-6-fast": "grok-4.6-fast"
     }
   },
   "tool_models": {
@@ -422,7 +581,19 @@
         "input": 0.00001,
         "output": 0.00005,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "claude-fable-5-1": {
+        "cache_read": 2.5e-7,
+        "cache_write": 0.0000125,
+        "effective_from": "2026-09-01",
+        "input": 0.00001,
+        "output": 0.00005,
+        "provenance": {
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -434,7 +605,7 @@
         "input": 1e-6,
         "output": 5e-6,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -446,7 +617,7 @@
         "input": 5e-6,
         "output": 0.000025,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-08-03",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -458,7 +629,7 @@
         "input": 5e-6,
         "output": 0.000025,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-08-03",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -470,7 +641,7 @@
         "input": 5e-6,
         "output": 0.000025,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -482,7 +653,7 @@
         "input": 5e-6,
         "output": 0.000025,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -494,7 +665,7 @@
         "input": 0.00001,
         "output": 0.00005,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
           "note": "Copilot lists fast mode as its own billable model row.",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
@@ -507,7 +678,7 @@
         "input": 5e-6,
         "output": 0.000025,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -519,7 +690,7 @@
         "input": 3e-6,
         "output": 0.000015,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -531,7 +702,7 @@
         "input": 3e-6,
         "output": 0.000015,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-08-03",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -543,7 +714,7 @@
         "input": 3e-6,
         "output": 0.000015,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -555,7 +726,7 @@
         "input": 2e-6,
         "output": 0.00001,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -588,7 +759,7 @@
         "input": 2e-6,
         "output": 0.000012,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-08-03",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -599,7 +770,40 @@
         "input": 1.5e-6,
         "output": 9e-6,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "gemini-3.6-flash": {
+        "cache_read": 7.5e-8,
+        "effective_from": "2026-06-01",
+        "input": 7.5e-7,
+        "output": 3.75e-6,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "gemini-3.7-flash": {
+        "cache_read": 7.5e-8,
+        "effective_from": "2026-06-01",
+        "input": 7.5e-7,
+        "output": 3.75e-6,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "gemini-3.8-flash": {
+        "cache_read": 7.5e-8,
+        "effective_from": "2026-09-03",
+        "input": 7.5e-7,
+        "output": 3.75e-6,
+        "provenance": {
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -632,7 +836,7 @@
         "input": 2.5e-7,
         "output": 2e-6,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -665,7 +869,7 @@
         "input": 1.75e-6,
         "output": 0.000014,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -676,7 +880,7 @@
         "input": 2.5e-6,
         "output": 0.000015,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -687,7 +891,7 @@
         "input": 7.5e-7,
         "output": 4.5e-6,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -698,7 +902,7 @@
         "input": 2.0000000000000002e-7,
         "output": 1.25e-6,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -709,7 +913,7 @@
         "input": 5e-6,
         "output": 0.00003,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -721,19 +925,19 @@
         "input": 2.0000000000000002e-7,
         "output": 1.2e-6,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
       },
       "gpt-5.6-sol": {
-        "cache_read": 2.0000000000000002e-7,
-        "cache_write": 2.5e-6,
-        "effective_from": "2026-06-01",
-        "input": 2e-6,
-        "output": 0.00001,
+        "cache_read": 4.0000000000000003e-7,
+        "cache_write": 5e-6,
+        "effective_from": "2026-08-21",
+        "input": 4e-6,
+        "output": 0.00002,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -745,7 +949,41 @@
         "input": 2e-6,
         "output": 0.000012,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "gpt-6-astra": {
+        "cache_read": 1e-6,
+        "cache_write": 0.0000125,
+        "effective_from": "2026-09-04",
+        "input": 0.00001,
+        "output": 0.00005,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "grok-4.5": {
+        "cache_read": 5e-7,
+        "effective_from": "2026-06-01",
+        "input": 2e-6,
+        "output": 6e-6,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "grok-4.6": {
+        "cache_read": 5e-7,
+        "effective_from": "2026-06-01",
+        "input": 2e-6,
+        "output": 6e-6,
+        "provenance": {
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -767,7 +1005,18 @@
         "input": 9.499999999999999e-7,
         "output": 4e-6,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "kimi-k3": {
+        "cache_read": 3e-7,
+        "effective_from": "2026-06-01",
+        "input": 3e-6,
+        "output": 0.000015,
+        "provenance": {
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
@@ -778,32 +1027,95 @@
         "input": 7.5e-7,
         "output": 4.5e-6,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-09-06",
+          "source_name": "GitHub Copilot models and pricing",
+          "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
+        }
+      },
+      "mai-code-1.1-flash": {
+        "cache_read": 2e-8,
+        "effective_from": "2026-06-01",
+        "input": 2.0000000000000002e-7,
+        "output": 1.2e-6,
+        "provenance": {
+          "checked_at": "2026-09-06",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
       },
       "raptor-mini": {
-        "cache_read": 2.5000000000000002e-8,
+        "cache_read": 2.5e-8,
         "effective_from": "2026-06-01",
         "input": 2.5e-7,
         "output": 2e-6,
         "provenance": {
-          "checked_at": "2026-08-24",
+          "checked_at": "2026-08-03",
           "source_name": "GitHub Copilot models and pricing",
           "source_url": "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing.md"
         }
       }
     },
     "cursor": {
+      "claude-fable-5-1": {
+        "cache_read": 2.5e-7,
+        "cache_write": 0.0000125,
+        "input": 0.00001,
+        "output": 0.00005,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's listed third-party rate. Plan-specific Cursor Token Rate, regional, and legacy Max uplifts are not applied because local artifacts do not identify the plan.",
+          "source_name": "Cursor third-party model pricing",
+          "source_url": "https://cursor.com/docs/models-and-pricing.md"
+        },
+        "web_search": 0.01
+      },
+      "claude-opus-4-8": {
+        "cache_read": 5e-7,
+        "cache_write": 6.25e-6,
+        "input": 5e-6,
+        "output": 0.000025,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's listed third-party rate. Plan-specific Cursor Token Rate, regional, and legacy Max uplifts are not applied because local artifacts do not identify the plan.",
+          "source_name": "Cursor third-party model pricing",
+          "source_url": "https://cursor.com/docs/models-and-pricing.md"
+        },
+        "web_search": 0.01
+      },
+      "claude-opus-5": {
+        "cache_read": 5e-7,
+        "cache_write": 6.25e-6,
+        "input": 5e-6,
+        "output": 0.000025,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's listed third-party rate. Plan-specific Cursor Token Rate, regional, and legacy Max uplifts are not applied because local artifacts do not identify the plan.",
+          "source_name": "Cursor third-party model pricing",
+          "source_url": "https://cursor.com/docs/models-and-pricing.md"
+        },
+        "web_search": 0.01
+      },
+      "claude-sonnet-5": {
+        "cache_read": 2.0000000000000002e-7,
+        "cache_write": 2.5e-6,
+        "input": 2e-6,
+        "output": 0.00001,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's listed third-party rate. Plan-specific Cursor Token Rate, regional, and legacy Max uplifts are not applied because local artifacts do not identify the plan.",
+          "source_name": "Cursor third-party model pricing",
+          "source_url": "https://cursor.com/docs/models-and-pricing.md"
+        },
+        "web_search": 0.01
+      },
       "composer-1": {
         "cache_read": 1.25e-7,
         "input": 1.25e-6,
         "output": 0.00001,
         "provenance": {
-          "checked_at": "2026-08-24",
-          "note": "Composer 1 is retired from Cursor's docs; its published rates ($1.25/$10 per 1M, cache read $0.125) are pinned here so archived Composer 1 calls still price.",
-          "source_name": "Cursor models and pricing",
+          "checked_at": "2026-09-06",
+          "note": "Retired Composer 1 rates are preserved for archived calls.",
+          "source_name": "Cursor retired model pricing",
           "source_url": "https://cursor.com/docs/models-and-pricing.md"
         },
         "web_search": 0.01
@@ -813,9 +1125,9 @@
         "input": 3.5e-6,
         "output": 0.0000175,
         "provenance": {
-          "checked_at": "2026-08-24",
-          "note": "Composer 1.5 is retired from Cursor's docs; its published rates ($3.50/$17.50 per 1M, cache read $0.35) are pinned here.",
-          "source_name": "Cursor models and pricing",
+          "checked_at": "2026-09-06",
+          "note": "Retired Composer 1.5 rates are preserved for archived calls.",
+          "source_name": "Cursor retired model pricing",
           "source_url": "https://cursor.com/docs/models-and-pricing.md"
         },
         "web_search": 0.01
@@ -825,20 +1137,20 @@
         "input": 5e-7,
         "output": 2.5e-6,
         "provenance": {
-          "checked_at": "2026-08-24",
-          "note": "Composer 2 is retired from Cursor's docs; its published rates matched Composer 2.5 ($0.50/$2.50 per 1M, cache read $0.20) and are pinned here.",
-          "source_name": "Cursor models and pricing",
+          "checked_at": "2026-09-06",
+          "note": "Retired Composer 2 rates are preserved for archived calls.",
+          "source_name": "Cursor retired model pricing",
           "source_url": "https://cursor.com/docs/models-and-pricing.md"
         },
         "web_search": 0.01
       },
       "composer-2.5": {
-        "cache_read": 2e-7,
+        "cache_read": 2.0000000000000002e-7,
         "input": 5e-7,
         "output": 2.5e-6,
         "provenance": {
-          "checked_at": "2026-08-24",
-          "note": "Cursor moved its first-party rates out of the \"Model pricing\" table into client-side pricing widgets, so the Markdown export carries the prose but none of the numbers. These rates are pinned here and were verified 2026-08-03.",
+          "checked_at": "2026-09-06",
+          "note": "Live Cursor Models table rates.",
           "source_name": "Cursor models and pricing",
           "source_url": "https://cursor.com/docs/models-and-pricing.md"
         },
@@ -846,14 +1158,347 @@
       },
       "composer-2.5-fast": {
         "cache_read": 5e-7,
-        "cache_write": 3e-6,
         "input": 3e-6,
         "output": 0.000015,
         "provenance": {
-          "checked_at": "2026-08-24",
-          "note": "Composer 2.5 Fast ($3/MTok input, $0.50/MTok cache read, $15/MTok output) is kept as a distinct tool-scoped row; verified 2026-08-03.",
+          "checked_at": "2026-09-06",
+          "note": "Cursor publishes Fast as a distinct first-party rate row.",
           "source_name": "Cursor models and pricing",
           "source_url": "https://cursor.com/docs/models-and-pricing.md"
+        },
+        "web_search": 0.01
+      },
+      "gemini-3.6-flash": {
+        "cache_read": 1.5e-7,
+        "input": 1.5e-6,
+        "output": 7.5e-6,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's listed third-party rate. Plan-specific Cursor Token Rate, regional, and legacy Max uplifts are not applied because local artifacts do not identify the plan.",
+          "source_name": "Cursor third-party model pricing",
+          "source_url": "https://cursor.com/docs/models-and-pricing.md"
+        },
+        "web_search": 0.01
+      },
+      "gemini-3.7-flash": {
+        "cache_read": 7.5e-8,
+        "input": 7.5e-7,
+        "output": 3.5e-6,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's listed third-party rate. Plan-specific Cursor Token Rate, regional, and legacy Max uplifts are not applied because local artifacts do not identify the plan.",
+          "source_name": "Cursor third-party model pricing",
+          "source_url": "https://cursor.com/docs/models-and-pricing.md"
+        },
+        "web_search": 0.01
+      },
+      "gemini-3.8-flash": {
+        "cache_read": 7.5e-8,
+        "input": 7.5e-7,
+        "output": 3.5e-6,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's listed third-party rate. Plan-specific Cursor Token Rate, regional, and legacy Max uplifts are not applied because local artifacts do not identify the plan.",
+          "source_name": "Cursor third-party model pricing",
+          "source_url": "https://cursor.com/docs/models-and-pricing.md"
+        },
+        "web_search": 0.01
+      },
+      "glm-5.2": {
+        "cache_read": 2.6e-7,
+        "input": 1.4e-6,
+        "output": 4.4e-6,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's listed third-party rate. Plan-specific Cursor Token Rate, regional, and legacy Max uplifts are not applied because local artifacts do not identify the plan.",
+          "source_name": "Cursor third-party model pricing",
+          "source_url": "https://cursor.com/docs/models-and-pricing.md"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5-fast": {
+        "cache_read": 2.5e-7,
+        "input": 2.5e-6,
+        "output": 0.00002,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor publishes GPT-5 Fast as a distinct 2x rate row.",
+          "source_name": "Cursor third-party model pricing",
+          "source_url": "https://cursor.com/docs/models-and-pricing.md"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.4": {
+        "cache_read": 2.5e-7,
+        "input": 2.5e-6,
+        "output": 0.000015,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's listed third-party rate. Plan-specific Cursor Token Rate, regional, and legacy Max uplifts are not applied because local artifacts do not identify the plan.",
+          "source_name": "Cursor third-party model pricing",
+          "source_url": "https://cursor.com/docs/models-and-pricing.md"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.4-fast": {
+        "cache_read": 5e-7,
+        "input": 5e-6,
+        "output": 0.00003,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's GPT-5.4 model page publishes gpt-5.4-fast at 2x the standard token rates. The fixed web-search charge is not multiplied.",
+          "source_name": "Cursor GPT-5.4 model pricing",
+          "source_url": "https://cursor.com/docs/models/gpt-5-4"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.4-fast-long": {
+        "cache_read": 1e-6,
+        "input": 0.00001,
+        "output": 0.000045,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's GPT-5.4 Fast long-context row combines the published 2x Fast tier with 2x input/cache-read and 1.5x output above 272K. The fixed web-search charge is not multiplied.",
+          "source_name": "Cursor GPT-5.4 model pricing",
+          "source_url": "https://cursor.com/docs/models/gpt-5-4"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.4-long": {
+        "cache_read": 5e-7,
+        "input": 5e-6,
+        "output": 0.0000225,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's GPT-5.4 model page publishes 2x input/cache-read and 1.5x output rates above 272K input tokens.",
+          "source_name": "Cursor GPT-5.4 model pricing",
+          "source_url": "https://cursor.com/docs/models/gpt-5-4"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.5": {
+        "cache_read": 5e-7,
+        "input": 5e-6,
+        "output": 0.00003,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's listed third-party rate. Plan-specific Cursor Token Rate, regional, and legacy Max uplifts are not applied because local artifacts do not identify the plan.",
+          "source_name": "Cursor third-party model pricing",
+          "source_url": "https://cursor.com/docs/models-and-pricing.md"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.5-fast": {
+        "cache_read": 1.25e-6,
+        "input": 0.0000125,
+        "output": 0.000075,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's GPT-5.5 model page publishes gpt-5.5-fast at $12.50 input, $1.25 cache read, and $75 output per MTok. The fixed web-search charge is not multiplied.",
+          "source_name": "Cursor GPT-5.5 model pricing",
+          "source_url": "https://cursor.com/docs/models/gpt-5-5"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.6-luna": {
+        "cache_read": 2e-8,
+        "cache_write": 2.5e-7,
+        "input": 2.0000000000000002e-7,
+        "output": 1.2e-6,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's listed third-party rate. Plan-specific Cursor Token Rate, regional, and legacy Max uplifts are not applied because local artifacts do not identify the plan.",
+          "source_name": "Cursor third-party model pricing",
+          "source_url": "https://cursor.com/docs/models-and-pricing.md"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.6-luna-fast": {
+        "cache_read": 4e-8,
+        "cache_write": 5e-7,
+        "input": 4.0000000000000003e-7,
+        "output": 2.4e-6,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's GPT-5.6 Luna model page publishes gpt-5.6-luna-fast at 2x the standard token rates. The fixed web-search charge is not multiplied.",
+          "source_name": "Cursor GPT-5.6 Luna model pricing",
+          "source_url": "https://cursor.com/docs/models/gpt-5-6-luna"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.6-luna-fast-long": {
+        "cache_read": 8e-8,
+        "cache_write": 1e-6,
+        "input": 8.000000000000001e-7,
+        "output": 3.6000000000000003e-6,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's explicit GPT-5.6 Luna Fast long-context row applies above 272K input tokens. The fixed web-search charge is not multiplied.",
+          "source_name": "Cursor GPT-5.6 Luna model pricing",
+          "source_url": "https://cursor.com/docs/models/gpt-5-6-luna"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.6-luna-long": {
+        "cache_read": 4e-8,
+        "cache_write": 5e-7,
+        "input": 4.0000000000000003e-7,
+        "output": 1.8000000000000001e-6,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's explicit GPT-5.6 Luna long-context row applies above 272K input tokens.",
+          "source_name": "Cursor GPT-5.6 Luna model pricing",
+          "source_url": "https://cursor.com/docs/models/gpt-5-6-luna"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.6-sol": {
+        "cache_read": 4.0000000000000003e-7,
+        "cache_write": 5e-6,
+        "effective_from": "2026-08-21",
+        "input": 4e-6,
+        "output": 0.00002,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's listed third-party rate. Plan-specific Cursor Token Rate, regional, and legacy Max uplifts are not applied because local artifacts do not identify the plan.",
+          "source_name": "Cursor third-party model pricing",
+          "source_url": "https://cursor.com/docs/models-and-pricing.md"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.6-sol-fast": {
+        "cache_read": 8.000000000000001e-7,
+        "cache_write": 0.00001,
+        "effective_from": "2026-08-21",
+        "input": 8e-6,
+        "output": 0.00004,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's GPT-5.6 Sol model page publishes gpt-5.6-sol-fast at 2x the current standard token rates. The fixed web-search charge is not multiplied.",
+          "source_name": "Cursor GPT-5.6 Sol model pricing",
+          "source_url": "https://cursor.com/docs/models/gpt-5-6-sol"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.6-sol-fast-history": {
+        "cache_read": 1e-6,
+        "cache_write": 0.0000125,
+        "effective_to": "2026-08-21",
+        "input": 0.00001,
+        "output": 0.00006,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Pre-promotion GPT-5.6 Sol Fast rates retain the documented 2x relationship to the historical $5/$6.25/$0.50/$30 standard schedule. The synthetic -history target keeps current Fast variants on the live row after this window.",
+          "source_name": "Cursor GPT-5.6 Sol model pricing",
+          "source_url": "https://cursor.com/docs/models/gpt-5-6-sol"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.6-sol-fast-long": {
+        "cache_read": 1.6000000000000001e-6,
+        "cache_write": 0.00002,
+        "effective_from": "2026-08-21",
+        "input": 0.000016,
+        "output": 0.00006,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's explicit GPT-5.6 Sol Fast long-context row applies above 272K input tokens. The fixed web-search charge is not multiplied.",
+          "source_name": "Cursor GPT-5.6 Sol model pricing",
+          "source_url": "https://cursor.com/docs/models/gpt-5-6-sol"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.6-sol-fast-long-history": {
+        "cache_read": 2e-6,
+        "cache_write": 0.000025,
+        "effective_to": "2026-08-21",
+        "input": 0.00002,
+        "output": 0.00009,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Pre-promotion GPT-5.6 Sol Fast long-context rates combine the documented 2x Fast and long-context relationships with the historical standard schedule.",
+          "source_name": "Cursor GPT-5.6 Sol model pricing",
+          "source_url": "https://cursor.com/docs/models/gpt-5-6-sol"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.6-sol-long": {
+        "cache_read": 8.000000000000001e-7,
+        "cache_write": 0.00001,
+        "effective_from": "2026-08-21",
+        "input": 8e-6,
+        "output": 0.00003,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's explicit GPT-5.6 Sol long-context row applies above 272K input tokens.",
+          "source_name": "Cursor GPT-5.6 Sol model pricing",
+          "source_url": "https://cursor.com/docs/models/gpt-5-6-sol"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.6-sol-long-history": {
+        "cache_read": 1e-6,
+        "cache_write": 0.0000125,
+        "effective_to": "2026-08-21",
+        "input": 0.00001,
+        "output": 0.000045,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Pre-promotion GPT-5.6 Sol long-context rates retain the documented 2x input/cache and 1.5x output relationship to the historical standard schedule.",
+          "source_name": "Cursor GPT-5.6 Sol model pricing",
+          "source_url": "https://cursor.com/docs/models/gpt-5-6-sol"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.6-terra": {
+        "cache_read": 2.0000000000000002e-7,
+        "cache_write": 2.5e-6,
+        "input": 2e-6,
+        "output": 0.000012,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's listed third-party rate. Plan-specific Cursor Token Rate, regional, and legacy Max uplifts are not applied because local artifacts do not identify the plan.",
+          "source_name": "Cursor third-party model pricing",
+          "source_url": "https://cursor.com/docs/models-and-pricing.md"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.6-terra-fast": {
+        "cache_read": 4.0000000000000003e-7,
+        "cache_write": 5e-6,
+        "input": 4e-6,
+        "output": 0.000024,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's GPT-5.6 Terra model page publishes gpt-5.6-terra-fast at 2x the standard token rates. The fixed web-search charge is not multiplied.",
+          "source_name": "Cursor GPT-5.6 Terra model pricing",
+          "source_url": "https://cursor.com/docs/models/gpt-5-6-terra"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.6-terra-fast-long": {
+        "cache_read": 8.000000000000001e-7,
+        "cache_write": 0.00001,
+        "input": 8e-6,
+        "output": 0.000036,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's explicit GPT-5.6 Terra Fast long-context row applies above 272K input tokens. The fixed web-search charge is not multiplied.",
+          "source_name": "Cursor GPT-5.6 Terra model pricing",
+          "source_url": "https://cursor.com/docs/models/gpt-5-6-terra"
+        },
+        "web_search": 0.01
+      },
+      "gpt-5.6-terra-long": {
+        "cache_read": 4.0000000000000003e-7,
+        "cache_write": 5e-6,
+        "input": 4e-6,
+        "output": 0.000018,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's explicit GPT-5.6 Terra long-context row applies above 272K input tokens.",
+          "source_name": "Cursor GPT-5.6 Terra model pricing",
+          "source_url": "https://cursor.com/docs/models/gpt-5-6-terra"
         },
         "web_search": 0.01
       },
@@ -862,8 +1507,8 @@
         "input": 2e-6,
         "output": 6e-6,
         "provenance": {
-          "checked_at": "2026-08-24",
-          "note": "Cursor moved its first-party rates out of the \"Model pricing\" table into client-side pricing widgets, so the Markdown export carries the prose but none of the numbers. These rates are pinned here and were verified 2026-08-03.",
+          "checked_at": "2026-09-06",
+          "note": "Live Cursor Models table rates.",
           "source_name": "Cursor models and pricing",
           "source_url": "https://cursor.com/docs/models-and-pricing.md"
         },
@@ -871,13 +1516,60 @@
       },
       "grok-4.5-fast": {
         "cache_read": 1e-6,
-        "cache_write": 4e-6,
         "input": 4e-6,
         "output": 0.000018,
         "provenance": {
-          "checked_at": "2026-08-24",
-          "note": "Grok 4.5 Fast ($4/MTok input, $1/MTok cache read, $18/MTok output) is kept as a distinct tool-scoped row; verified 2026-08-03.",
+          "checked_at": "2026-09-06",
+          "note": "Cursor publishes Fast as a distinct first-party rate row.",
           "source_name": "Cursor models and pricing",
+          "source_url": "https://cursor.com/docs/models-and-pricing.md"
+        },
+        "web_search": 0.01
+      },
+      "grok-4.6": {
+        "cache_read": 5e-7,
+        "input": 2e-6,
+        "output": 6e-6,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Live Cursor Models table rates.",
+          "source_name": "Cursor models and pricing",
+          "source_url": "https://cursor.com/docs/models-and-pricing.md"
+        },
+        "web_search": 0.01
+      },
+      "grok-4.6-fast": {
+        "cache_read": 1e-6,
+        "input": 4e-6,
+        "output": 0.000012,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor publishes Fast as a distinct first-party rate row.",
+          "source_name": "Cursor models and pricing",
+          "source_url": "https://cursor.com/docs/models-and-pricing.md"
+        },
+        "web_search": 0.01
+      },
+      "kimi-k2.7-code": {
+        "cache_read": 1.9e-7,
+        "input": 9.499999999999999e-7,
+        "output": 4e-6,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's listed third-party rate. Plan-specific Cursor Token Rate, regional, and legacy Max uplifts are not applied because local artifacts do not identify the plan.",
+          "source_name": "Cursor third-party model pricing",
+          "source_url": "https://cursor.com/docs/models-and-pricing.md"
+        },
+        "web_search": 0.01
+      },
+      "kimi-k3": {
+        "cache_read": 3e-7,
+        "input": 3e-6,
+        "output": 0.000015,
+        "provenance": {
+          "checked_at": "2026-09-06",
+          "note": "Cursor's listed third-party rate. Plan-specific Cursor Token Rate, regional, and legacy Max uplifts are not applied because local artifacts do not identify the plan.",
+          "source_name": "Cursor third-party model pricing",
           "source_url": "https://cursor.com/docs/models-and-pricing.md"
         },
         "web_search": 0.01
