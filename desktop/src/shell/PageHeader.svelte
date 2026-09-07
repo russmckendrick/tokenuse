@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowUpDown, Download, FolderGit2, RefreshCw, Wrench } from 'lucide-svelte';
+  import { ArrowUpDown, Download, FolderGit2, RefreshCw, Wrench } from '@lucide/svelte';
   import type { CopyDeck, DesktopSnapshot, PeriodId, SortId, ToolId } from '../types';
 
   export let copy: CopyDeck;

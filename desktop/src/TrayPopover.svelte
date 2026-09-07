@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { ExternalLink, RefreshCw, X } from 'lucide-svelte';
+  import { ExternalLink, RefreshCw, X } from '@lucide/svelte';
   import { api } from './api';
   import GaugeBar from './components/GaugeBar.svelte';
   import { reveal, staggeredReveal } from './motion';

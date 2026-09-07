@@ -279,17 +279,20 @@ fn cookie_header(token: &str) -> String {
 #[cfg(feature = "quota-sync")]
 fn fetch_access_token(session_token: &str) -> Result<String> {
     let raw = ureq::get(&config::auth_session_url())
-        .timeout(crate::quota_sync::HTTP_TIMEOUT)
-        .set("accept", "*/*")
-        .set("user-agent", config::USER_AGENT)
-        .set("referer", config::REFERER)
-        .set("sec-fetch-dest", "empty")
-        .set("sec-fetch-mode", "cors")
-        .set("sec-fetch-site", "same-origin")
-        .set("cookie", &cookie_header(session_token))
+        .config()
+        .timeout_global(Some(crate::quota_sync::HTTP_TIMEOUT))
+        .build()
+        .header("accept", "*/*")
+        .header("user-agent", config::USER_AGENT)
+        .header("referer", config::REFERER)
+        .header("sec-fetch-dest", "empty")
+        .header("sec-fetch-mode", "cors")
+        .header("sec-fetch-site", "same-origin")
+        .header("cookie", &cookie_header(session_token))
         .call()
         .map_err(map_ureq_error)?
-        .into_string()
+        .body_mut()
+        .read_to_string()
         .map_err(|e| eyre!("read Codex auth response: {e}"))?;
     let value: Value =
         serde_json::from_str(&raw).map_err(|e| eyre!("parse Codex auth response: {e}"))?;
@@ -362,17 +365,20 @@ fn value_kind(value: &Value) -> &'static str {
 #[cfg(feature = "quota-sync")]
 fn fetch_usage(access_token: &str) -> Result<Value> {
     let raw = ureq::get(&config::usage_url())
-        .timeout(crate::quota_sync::HTTP_TIMEOUT)
-        .set("accept", "*/*")
-        .set("authorization", &format!("Bearer {access_token}"))
-        .set("user-agent", config::USER_AGENT)
-        .set("referer", config::REFERER)
-        .set("sec-fetch-dest", "empty")
-        .set("sec-fetch-mode", "cors")
-        .set("sec-fetch-site", "same-origin")
+        .config()
+        .timeout_global(Some(crate::quota_sync::HTTP_TIMEOUT))
+        .build()
+        .header("accept", "*/*")
+        .header("authorization", &format!("Bearer {access_token}"))
+        .header("user-agent", config::USER_AGENT)
+        .header("referer", config::REFERER)
+        .header("sec-fetch-dest", "empty")
+        .header("sec-fetch-mode", "cors")
+        .header("sec-fetch-site", "same-origin")
         .call()
         .map_err(map_ureq_error)?
-        .into_string()
+        .body_mut()
+        .read_to_string()
         .map_err(|e| eyre!("read Codex usage response: {e}"))?;
     serde_json::from_str(&raw).map_err(|e| eyre!("parse Codex usage response: {e}"))
 }
@@ -380,15 +386,15 @@ fn fetch_usage(access_token: &str) -> Result<Value> {
 #[cfg(feature = "quota-sync")]
 fn map_ureq_error(err: ureq::Error) -> color_eyre::Report {
     match err {
-        ureq::Error::Status(401, _) => {
+        ureq::Error::StatusCode(401) => {
             eyre!("Codex session expired or unauthorized — reconfigure the session-token cookie")
         }
-        ureq::Error::Status(403, _) => {
+        ureq::Error::StatusCode(403) => {
             eyre!("Codex request blocked (HTTP 403 — likely Cloudflare challenge)")
         }
-        ureq::Error::Status(429, _) => eyre!("Codex rate limited (HTTP 429)"),
-        ureq::Error::Status(code, _) => eyre!("Codex HTTP error {code}"),
-        ureq::Error::Transport(t) => eyre!("Codex transport error: {t}"),
+        ureq::Error::StatusCode(429) => eyre!("Codex rate limited (HTTP 429)"),
+        ureq::Error::StatusCode(code) => eyre!("Codex HTTP error {code}"),
+        err => eyre!("Codex transport error: {err}"),
     }
 }
 

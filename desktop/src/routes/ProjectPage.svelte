@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowLeft } from 'lucide-svelte';
+  import { ArrowLeft } from '@lucide/svelte';
   import { api } from '../api';
   import Donut from '../charts/Donut.svelte';
   import ActivityPulse from '../components/ActivityPulse.svelte';

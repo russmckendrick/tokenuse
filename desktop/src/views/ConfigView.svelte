@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Copy, Database, Download, Eye, EyeOff, FolderOpen, RefreshCw, Stethoscope, Trash2 } from 'lucide-svelte';
+  import { Copy, Database, Download, Eye, EyeOff, FolderOpen, RefreshCw, Stethoscope, Trash2 } from '@lucide/svelte';
   import { api } from '../api';
   import Badge from '../components/Badge.svelte';
   import { reveal } from '../motion';

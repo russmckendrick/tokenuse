@@ -23,8 +23,57 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  CI: true
 
 jobs:
+  rust-audit:
+    name: "🔐 Rust Audit (${{ matrix.lockfile }})"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        lockfile: [Cargo.lock, desktop/src-tauri/Cargo.lock]
+
+    steps:
+      - name: "📥 Check out repository"
+        uses: actions/checkout@v6
+
+      - name: "🔧 Install cargo-audit"
+        uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2
+        with:
+          tool: cargo-audit@0.22.2
+          fallback: none
+
+      - name: "🔐 Audit locked Rust dependencies"
+        run: cargo audit --file "${{ matrix.lockfile }}"
+
+  frontend-audit:
+    name: "🔐 Frontend Audit"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: "📥 Check out repository"
+        uses: actions/checkout@v6
+
+      - name: "📦 Set up pnpm"
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: "🟢 Set up Node.js"
+        uses: actions/setup-node@v5
+        with:
+          node-version: lts/*
+
+      - name: "🔐 Audit locked frontend dependencies"
+        working-directory: desktop
+        run: pnpm audit --audit-level low
+
   check:
     name: "✅ Check (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
@@ -159,9 +208,11 @@ jobs:
             exit 1
           fi
 
+          test -s "docs/releases/${TAG_VERSION}.md"
+
   build:
     name: "📦 Build (${{ matrix.artifact }})"
-    needs: [check, desktop-check, release-version]
+    needs: [check, desktop-check, rust-audit, frontend-audit, release-version]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ${{ matrix.os }}
     strategy:
@@ -231,7 +282,7 @@ jobs:
 
   desktop-build:
     name: "🖥️ Build Desktop DMG"
-    needs: [check, desktop-check, release-version]
+    needs: [check, desktop-check, rust-audit, frontend-audit, release-version]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: macos-latest
 
@@ -393,7 +444,7 @@ jobs:
 
   desktop-build-windows:
     name: "🖥️ Build Desktop Windows"
-    needs: [check, desktop-check, release-version]
+    needs: [check, desktop-check, rust-audit, frontend-audit, release-version]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
 
@@ -491,7 +542,7 @@ jobs:
 
   desktop-build-linux:
     name: "🖥️ Build Desktop Linux (${{ matrix.arch }})"
-    needs: [check, desktop-check, release-version]
+    needs: [check, desktop-check, rust-audit, frontend-audit, release-version]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ${{ matrix.os }}
     strategy:
@@ -636,6 +687,14 @@ jobs:
             --tag "${GITHUB_REF_NAME}" \
             --out release/latest.json
 
+      - name: "📝 Read release notes"
+        id: release-notes
+        run: |
+          NOTES_PATH="docs/releases/${GITHUB_REF_NAME#v}.md"
+          test -s "${NOTES_PATH}"
+          echo "path=${NOTES_PATH}" >> "$GITHUB_OUTPUT"
+          echo "name=$(head -n 1 "${NOTES_PATH}" | sed 's/^# //')" >> "$GITHUB_OUTPUT"
+
       - name: "🚀 Create GitHub Release"
         uses: softprops/action-gh-release@v3
         with:
@@ -644,7 +703,8 @@ jobs:
           prerelease: false
           fail_on_unmatched_files: true
           overwrite_files: true
-          generate_release_notes: true
+          name: ${{ steps.release-notes.outputs.name }}
+          body_path: ${{ steps.release-notes.outputs.path }}
 
   trigger-site-rebuild:
     name: "🌐 Trigger Website Rebuild"

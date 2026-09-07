@@ -283,13 +283,16 @@ fn fetch_account_sidecar(account: &CopilotAccount, output: &Path, labeled: bool)
     let url = config::copilot_user_url(&account.host)
         .ok_or_else(|| eyre!("Copilot quota sync does not support host {}", account.host))?;
     let raw = ureq::get(&url)
-        .timeout(crate::quota_sync::HTTP_TIMEOUT)
-        .set("Accept", "application/json")
-        .set("User-Agent", "tokenuse")
-        .set("Authorization", &format!("Bearer {}", account.token))
+        .config()
+        .timeout_global(Some(crate::quota_sync::HTTP_TIMEOUT))
+        .build()
+        .header("Accept", "application/json")
+        .header("User-Agent", "tokenuse")
+        .header("Authorization", &format!("Bearer {}", account.token))
         .call()
         .map_err(|e| eyre!("fetch Copilot limits for {}: {e}", account.label()))?
-        .into_string()
+        .body_mut()
+        .read_to_string()
         .map_err(|e| eyre!("read Copilot limits for {}: {e}", account.label()))?;
     let payload: Value =
         serde_json::from_str(&raw).map_err(|e| eyre!("parse Copilot limits json: {e}"))?;

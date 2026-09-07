@@ -308,51 +308,57 @@ fn call_claude(url: &str, session_key: &str) -> Result<String> {
     apply_claude_headers(ureq::get(url), session_key)
         .call()
         .map_err(map_ureq_error)?
-        .into_string()
+        .body_mut()
+        .read_to_string()
         .map_err(|e| eyre!("read Claude response body: {e}"))
 }
 
 #[cfg(feature = "quota-sync")]
 fn call_claude_optional(url: &str, session_key: &str) -> Option<String> {
     match apply_claude_headers(ureq::get(url), session_key).call() {
-        Ok(response) => response.into_string().ok(),
-        Err(ureq::Error::Status(403 | 404, _)) => None,
+        Ok(mut response) => response.body_mut().read_to_string().ok(),
+        Err(ureq::Error::StatusCode(403 | 404)) => None,
         Err(_) => None,
     }
 }
 
 #[cfg(feature = "quota-sync")]
-fn apply_claude_headers(req: ureq::Request, session_key: &str) -> ureq::Request {
-    req.timeout(crate::quota_sync::HTTP_TIMEOUT)
-        .set("accept", "*/*")
-        .set("accept-language", "en-US,en;q=0.9")
-        .set("content-type", "application/json")
-        .set(
+fn apply_claude_headers(
+    req: ureq::RequestBuilder<ureq::typestate::WithoutBody>,
+    session_key: &str,
+) -> ureq::RequestBuilder<ureq::typestate::WithoutBody> {
+    req.config()
+        .timeout_global(Some(crate::quota_sync::HTTP_TIMEOUT))
+        .build()
+        .header("accept", "*/*")
+        .header("accept-language", "en-US,en;q=0.9")
+        .header("content-type", "application/json")
+        .header(
             "anthropic-client-platform",
             config::ANTHROPIC_CLIENT_PLATFORM,
         )
-        .set("anthropic-client-version", config::ANTHROPIC_CLIENT_VERSION)
-        .set("user-agent", config::USER_AGENT)
-        .set("origin", config::BASE_URL)
-        .set("referer", config::REFERER)
-        .set("sec-fetch-dest", "empty")
-        .set("sec-fetch-mode", "cors")
-        .set("sec-fetch-site", "same-origin")
-        .set("cookie", &format!("sessionKey={session_key}"))
+        .header("anthropic-client-version", config::ANTHROPIC_CLIENT_VERSION)
+        .header("user-agent", config::USER_AGENT)
+        .header("origin", config::BASE_URL)
+        .header("referer", config::REFERER)
+        .header("sec-fetch-dest", "empty")
+        .header("sec-fetch-mode", "cors")
+        .header("sec-fetch-site", "same-origin")
+        .header("cookie", &format!("sessionKey={session_key}"))
 }
 
 #[cfg(feature = "quota-sync")]
 fn map_ureq_error(err: ureq::Error) -> color_eyre::Report {
     match err {
-        ureq::Error::Status(401, _) => {
+        ureq::Error::StatusCode(401) => {
             eyre!("Claude session expired or unauthorized — reconfigure the session cookie")
         }
-        ureq::Error::Status(403, _) => {
+        ureq::Error::StatusCode(403) => {
             eyre!("Claude request blocked (HTTP 403 — likely Cloudflare challenge)")
         }
-        ureq::Error::Status(429, _) => eyre!("Claude rate limited (HTTP 429)"),
-        ureq::Error::Status(code, _) => eyre!("Claude HTTP error {code}"),
-        ureq::Error::Transport(t) => eyre!("Claude transport error: {t}"),
+        ureq::Error::StatusCode(429) => eyre!("Claude rate limited (HTTP 429)"),
+        ureq::Error::StatusCode(code) => eyre!("Claude HTTP error {code}"),
+        err => eyre!("Claude transport error: {err}"),
     }
 }
 

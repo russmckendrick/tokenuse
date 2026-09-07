@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChevronRight } from 'lucide-svelte';
+  import { ChevronRight } from '@lucide/svelte';
   import { api } from '../api';
   import { count, rankLabel, rankPercent } from '../format';
   import ProviderIcon from '../icons/ProviderIcon.svelte';

@@ -1864,11 +1864,10 @@ body {
   border: 1px solid rgba(37, 43, 55, .08);
   border-radius: 8px;
   box-shadow: 0 20px 42px rgba(37, 43, 55, .08);
-  break-after: page;
   break-inside: avoid;
   overflow: hidden;
 }
-.report-page:last-child { break-after: auto; }
+.report-page + .report-page { break-before: page; }
 .deck-header,
 .brand-lockup,
 .section-title,
@@ -2235,7 +2234,9 @@ h3 { color: var(--ink); font-size: 17px; line-height: 1.2; }
   .overview-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .overview-kpis .kpi-card { min-height: 120px; }
 }
-@media print {
+"#;
+
+const REPORT_PRINT_CSS: &str = r#"
   body { background: #fff; }
   .report-deck { padding: 0; }
   .report-page {
@@ -2248,10 +2249,8 @@ h3 { color: var(--ink); font-size: 17px; line-height: 1.2; }
     border-radius: 0;
     box-shadow: none;
     overflow: hidden;
-    page-break-after: always;
   }
-  .report-page:last-child { page-break-after: auto; }
-  .report-page + .report-page { padding-top: 0; }
+  .report-page + .report-page { page-break-before: always; padding-top: 0; }
   h1 { font-size: 28px; margin-top: 8px; max-width: 620px; }
   h2 { font-size: 20px; }
   .deck-header { padding-bottom: 10px; }
@@ -2298,10 +2297,13 @@ h3 { color: var(--ink); font-size: 17px; line-height: 1.2; }
   .signal-row strong { font-size: 9px; }
   .raw-note { margin-top: 6px; padding: 0; font-size: 10px; }
   .heatmap-viewport { overflow: visible; }
-}
 "#;
 
 fn build_html_report(dataset: &ReportDataset) -> String {
+    build_styled_report(dataset, &format!("@media print {{{REPORT_PRINT_CSS}}}"))
+}
+
+fn build_styled_report(dataset: &ReportDataset, print_styles: &str) -> String {
     let insights = report_insights(dataset);
     let mut out = String::with_capacity(128 * 1024);
     out.push_str("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">");
@@ -2310,6 +2312,7 @@ fn build_html_report(dataset: &ReportDataset) -> String {
     out.push_str(&escape_html(&report_title(dataset)));
     out.push_str("</title><style>");
     out.push_str(REPORT_CSS);
+    out.push_str(print_styles);
     out.push_str("</style></head><body><main class=\"report-deck\">");
     push_overview_page(&mut out, dataset, &insights);
     push_activity_page(&mut out, dataset, &insights);
@@ -2325,7 +2328,9 @@ fn write_pdf_report(path: &Path, dataset: &ReportDataset) -> Result<()> {
         .margin(Margin::uniform_mm(10.0))
         .title(report_title(dataset))
         .build()
-        .render_html(&build_html_report(dataset))
+        // Fulgur's layout viewport uses screen media. Apply the existing print
+        // rules directly so screen margins cannot create a trailing blank page.
+        .render(&build_styled_report(dataset, REPORT_PRINT_CSS))
         .wrap_err("render report PDF")?;
     fs::write(path, bytes).wrap_err_with(|| format!("write {}", path.display()))
 }
@@ -4262,7 +4267,8 @@ mod tests {
         assert!(fs::read_to_string(html.path)
             .unwrap()
             .contains("data-report-page=\"overview\""));
-        assert!(fs::read(pdf.path).unwrap().starts_with(b"%PDF-"));
+        let pdf = lopdf::Document::load(pdf.path).unwrap();
+        assert_eq!(pdf.get_pages().len(), 3, "one PDF page per report section");
         assert!(fs::read_to_string(svg.path)
             .unwrap()
             .contains("Executive Summary"));

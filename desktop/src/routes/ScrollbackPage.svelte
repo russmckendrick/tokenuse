@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Search } from 'lucide-svelte';
+  import { Search } from '@lucide/svelte';
   import { api } from '../api';
   import { count, rankPercent } from '../format';
   import { staggeredReveal } from '../motion';

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowLeft } from 'lucide-svelte';
+  import { ArrowLeft } from '@lucide/svelte';
   import { count } from '../format';
   import { reveal } from '../motion';
   import Panel from '../Panel.svelte';

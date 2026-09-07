@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Focus, RotateCcw, Search } from 'lucide-svelte';
+  import { Focus, RotateCcw, Search } from '@lucide/svelte';
   import { api } from '../api';
   import RelationshipGraph from '../components/RelationshipGraph.svelte';
   import { count } from '../format';

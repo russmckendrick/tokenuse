@@ -4,7 +4,7 @@
   import { Channel } from '@tauri-apps/api/core';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { confirm, open as openDialog } from '@tauri-apps/plugin-dialog';
-  import { Download, FolderOpen, Search, X } from 'lucide-svelte';
+  import { Download, FolderOpen, Search, X } from '@lucide/svelte';
   import { api } from './api';
   import { count } from './format';
   import { router, type Route } from './lib/router.svelte';

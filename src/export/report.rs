@@ -2450,7 +2450,7 @@ pub(super) fn write_pdf_report(
         .margin(Margin::uniform_mm(8.0))
         .title(report_title(context))
         .build()
-        .render_html(&html)
+        .render(&html)
         .wrap_err("render branded HTML workbook to PDF")?;
 
     fs::write(path, bytes).wrap_err_with(|| format!("write {}", path.display()))

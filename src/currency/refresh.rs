@@ -41,7 +41,8 @@ pub fn run(output: &Path) -> Result<()> {
     let rows: Vec<FrankfurterRate> = ureq::get(crate::config::FRANKFURTER_RATES_URL)
         .call()
         .map_err(|e| eyre!("fetch frankfurter currency rates: {e}"))?
-        .into_json()
+        .body_mut()
+        .read_json()
         .map_err(|e| eyre!("parse frankfurter currency json: {e}"))?;
 
     let generated_at = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
@@ -53,7 +54,8 @@ pub fn download_published_snapshot(output: &Path) -> Result<()> {
     let raw = ureq::get(crate::config::CURRENCY_RATES_URL)
         .call()
         .map_err(|e| eyre!("fetch published currency rates: {e}"))?
-        .into_string()
+        .body_mut()
+        .read_to_string()
         .map_err(|e| eyre!("read published currency rates: {e}"))?;
 
     super::CurrencyTable::from_json_str(&raw, super::RateSource::Local(output.to_path_buf()))?;

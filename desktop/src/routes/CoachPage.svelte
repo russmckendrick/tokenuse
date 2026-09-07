@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CalendarDays, ChevronRight, Code2, FileText, Lightbulb, Search, TriangleAlert } from 'lucide-svelte';
+  import { CalendarDays, ChevronRight, Code2, FileText, Lightbulb, Search, TriangleAlert } from '@lucide/svelte';
   import { api } from '../api';
   import ActivityHourGrid from '../charts/ActivityHourGrid.svelte';
   import ActivityProfile from '../charts/ActivityProfile.svelte';

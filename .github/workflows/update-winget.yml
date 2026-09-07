@@ -48,11 +48,22 @@ jobs:
           $viewer = $response.Content | ConvertFrom-Json
 
           if (-not $scopes) {
-            throw "WINGET_CREATE_GITHUB_TOKEN must be a classic PAT with public_repo scope. Fine-grained PATs are not supported by vedantmgoyal9/winget-releaser."
+            throw "WINGET_CREATE_GITHUB_TOKEN must be a classic PAT with public_repo (or repo) and workflow scopes. Fine-grained PATs are not supported by vedantmgoyal9/winget-releaser."
           }
 
-          if ($scopes -notmatch '(^|,\s*)(public_repo|repo)(,|$)') {
-            throw "WINGET_CREATE_GITHUB_TOKEN must include public_repo scope. Current scopes: $scopes"
+          $scopeList = @($scopes -split ',') | ForEach-Object { $_.Trim() }
+          $missingScopes = @()
+
+          if (-not (($scopeList -contains "public_repo") -or ($scopeList -contains "repo"))) {
+            $missingScopes += "public_repo (or repo)"
+          }
+
+          if ($scopeList -notcontains "workflow") {
+            $missingScopes += "workflow"
+          }
+
+          if ($missingScopes.Count -gt 0) {
+            throw "WINGET_CREATE_GITHUB_TOKEN is missing required classic PAT scope(s): $($missingScopes -join ', '). Current scopes: $($scopeList -join ', ')"
           }
 
           if (-not $viewer.login) {
@@ -86,24 +97,23 @@ jobs:
         shell: pwsh
         env:
           FORK_USER: ${{ github.repository_owner }}
-          WINGET_TOKEN: ${{ secrets.WINGET_CREATE_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.WINGET_CREATE_GITHUB_TOKEN }}
         run: |
-          $headers = @{
-            Authorization = "Bearer $env:WINGET_TOKEN"
-            "X-GitHub-Api-Version" = "2022-11-28"
-          }
-
           $forkRepository = "$env:FORK_USER/winget-pkgs"
-          $fork = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$forkRepository"
-          $defaultBranch = $fork.default_branch
+          Write-Host "Syncing '$forkRepository' with microsoft/winget-pkgs."
 
-          try {
-            $body = @{ branch = $defaultBranch } | ConvertTo-Json
-            $result = Invoke-RestMethod -Method Post -Headers $headers -ContentType "application/json" -Body $body -Uri "https://api.github.com/repos/$forkRepository/merge-upstream"
-            Write-Host "Synced '$forkRepository' ($defaultBranch): $($result.message)"
-          } catch {
-            throw "Failed to sync '$forkRepository' with microsoft/winget-pkgs: $($_.Exception.Message). A stale fork makes komac fail with a misleading 'CreateRef' permission error. Sync manually with 'gh repo sync $forkRepository --source microsoft/winget-pkgs' and re-run this workflow."
+          $syncOutput = & gh repo sync $forkRepository --source microsoft/winget-pkgs 2>&1
+          $syncExitCode = $LASTEXITCODE
+
+          if ($syncOutput) {
+            $syncOutput | ForEach-Object { Write-Host $_ }
           }
+
+          if ($syncExitCode -ne 0) {
+            throw "Failed to sync '$forkRepository' with microsoft/winget-pkgs: 'gh repo sync' exited with code $syncExitCode. A stale fork makes komac fail with a misleading 'CreateRef' permission error. Confirm WINGET_CREATE_GITHUB_TOKEN has public_repo (or repo) and workflow scopes, then run 'gh repo sync $forkRepository --source microsoft/winget-pkgs' and re-run this workflow."
+          }
+
+          Write-Host "Synced '$forkRepository' with microsoft/winget-pkgs."
 
       - name: "🏷️ Resolve release tag"
         id: version

@@ -306,7 +306,8 @@ fn fetch_string(label: &str, url: &str) -> Result<String> {
     ureq::get(url)
         .call()
         .map_err(|e| eyre!("fetch {label}: {e}"))?
-        .into_string()
+        .body_mut()
+        .read_to_string()
         .map_err(|e| eyre!("read {label}: {e}"))
 }
 

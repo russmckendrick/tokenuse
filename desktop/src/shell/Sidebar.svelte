@@ -11,7 +11,7 @@
     Settings,
     TextSearch,
     Wrench
-  } from 'lucide-svelte';
+  } from '@lucide/svelte';
   import ProviderIcon from '../icons/ProviderIcon.svelte';
   import type { CopyDeck, OptionItem, ToolId } from '../types';
   import type { Route, RouteToolId } from '../lib/router.svelte';
