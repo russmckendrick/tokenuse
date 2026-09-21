@@ -8,7 +8,7 @@ No additions recorded yet.
 
 ## Changed
 
-No changes recorded yet.
+- Pricing refreshes now keep expired historical pinned rates without requiring their old marker text to remain on a provider's live page. Current pins still fail loudly when an entire configured source disappears.
 
 ## Removed
 

@@ -90,6 +90,7 @@ Those rows use `"mode": "pinned"`. Nothing is parsed from the page — every row
 - **Model no longer named.** The refresh prints a `warning: ... keeping the pinned price` line and keeps the row, so archived calls still price.
 - **No live model named at all.** The source fails loudly, mirroring the `model-rows` zero-match guard — the page has been reshuffled and the pins need re-checking by hand.
 - **`"retired": true`.** The model is already gone from the source (e.g. Composer 1); the liveness check is skipped so the refresh does not warn on every run.
+- **Expired `effective_to` window.** The historical price remains in the generated book, but it no longer participates in the live-page liveness gate. A provider removing obsolete pricing copy therefore cannot block unrelated current-source updates.
 
 A pinned row cannot detect an upstream *price* change — only a rename or retirement. Re-check historical pins when the source publishes a retrospective correction.
 

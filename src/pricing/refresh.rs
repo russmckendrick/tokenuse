@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use chrono::Utc;
+use chrono::{NaiveDate, Utc};
 use color_eyre::{
     eyre::{eyre, Context},
     Result,
@@ -197,7 +197,8 @@ struct TokenMultipliers {
 
 pub fn run(output_dir: &Path) -> Result<RefreshOutput> {
     let config = sources_config()?;
-    let checked_at = Utc::now().date_naive().to_string();
+    let refresh_date = Utc::now().date_naive();
+    let checked_at = refresh_date.to_string();
     let mut models = Map::new();
 
     for source in config
@@ -234,7 +235,7 @@ pub fn run(output_dir: &Path) -> Result<RefreshOutput> {
         .iter()
         .filter(|source| source.output == "overrides")
     {
-        merge_override_source(source, &mut overrides)?;
+        merge_override_source(source, refresh_date, &mut overrides)?;
     }
     write_json_value(&overrides_path, &overrides)?;
 
@@ -447,7 +448,11 @@ fn positive_token_rate_count(price: &Map<String, Value>) -> usize {
         .count()
 }
 
-fn merge_override_source(source: &SourceConfig, overrides: &mut Value) -> Result<()> {
+fn merge_override_source(
+    source: &SourceConfig,
+    refresh_date: NaiveDate,
+    overrides: &mut Value,
+) -> Result<()> {
     let Some(extract) = source.extract.as_ref() else {
         return Err(eyre!(
             "override source {} is missing extract config",
@@ -458,7 +463,7 @@ fn merge_override_source(source: &SourceConfig, overrides: &mut Value) -> Result
     match extract.mode.as_str() {
         "label-rows" => merge_label_rows_source(source, extract, &raw, overrides),
         "model-rows" => merge_model_rows_source(source, extract, &raw, overrides),
-        "pinned" => merge_pinned_rows_source(source, extract, &raw, overrides),
+        "pinned" => merge_pinned_rows_source(source, extract, &raw, refresh_date, overrides),
         other => Err(eyre!(
             "source {} uses unsupported override extract mode {other}",
             source.id
@@ -506,15 +511,18 @@ fn merge_configured_tool_aliases(
 /// publishes a machine-readable rate row.
 ///
 /// Nothing is parsed from the page: every row supplies its own `set` values. The
-/// fetched body is still used as a liveness check so a renamed or retired model
-/// surfaces as a warning instead of staying pinned and unexamined forever. A
-/// pin whose price changes upstream cannot be detected this way — that is the
-/// cost of the source dropping its table, and the reason each row carries a
-/// `note` recording what was verified.
+/// fetched body is still used as a liveness check for current, non-retired pins
+/// so a renamed or retired model surfaces as a warning instead of staying pinned
+/// and unexamined forever. Expired rows remain in the historical book without
+/// requiring their old marker text to stay on the live page. A pin whose price
+/// changes upstream cannot be detected this way — that is the cost of the source
+/// dropping its table, and the reason each row carries a `note` recording what
+/// was verified.
 fn merge_pinned_rows_source(
     source: &SourceConfig,
     extract: &ExtractConfig,
     raw: &str,
+    refresh_date: NaiveDate,
     overrides: &mut Value,
 ) -> Result<()> {
     if extract.rows.is_empty() {
@@ -524,7 +532,7 @@ fn merge_pinned_rows_source(
     let mut checked = 0usize;
     let mut present = 0usize;
     for row_rule in &extract.rows {
-        if !row_rule.retired {
+        if !row_rule.retired && !pinned_row_is_expired(source, row_rule, refresh_date)? {
             let marker = row_rule
                 .match_text
                 .as_deref()
@@ -586,6 +594,28 @@ fn merge_pinned_rows_source(
         ));
     }
     Ok(())
+}
+
+fn pinned_row_is_expired(
+    source: &SourceConfig,
+    row: &ExtractRow,
+    refresh_date: NaiveDate,
+) -> Result<bool> {
+    let Some(effective_to) = row
+        .effective_to
+        .as_deref()
+        .or(source.effective_to.as_deref())
+    else {
+        return Ok(false);
+    };
+    let effective_to = NaiveDate::parse_from_str(effective_to, "%Y-%m-%d").map_err(|error| {
+        eyre!(
+            "source {} row {} has invalid effective_to date {effective_to}: {error}",
+            source.id,
+            row.model
+        )
+    })?;
+    Ok(refresh_date >= effective_to)
 }
 
 fn merge_label_rows_source(
@@ -2026,6 +2056,7 @@ after
             &source,
             source.extract.as_ref().unwrap(),
             raw,
+            NaiveDate::from_ymd_opt(2026, 9, 1).unwrap(),
             &mut overrides,
         )
         .unwrap();
@@ -2058,6 +2089,7 @@ after
             &source,
             source.extract.as_ref().unwrap(),
             raw,
+            NaiveDate::from_ymd_opt(2026, 9, 1).unwrap(),
             &mut overrides,
         )
         .unwrap_err();
@@ -2094,6 +2126,7 @@ after
             &source,
             source.extract.as_ref().unwrap(),
             "nothing relevant here",
+            NaiveDate::from_ymd_opt(2026, 9, 1).unwrap(),
             &mut overrides,
         )
         .unwrap();
@@ -2101,6 +2134,47 @@ after
         assert!(overrides
             .pointer("/tool_models/cursor/composer-1")
             .is_some());
+    }
+
+    #[test]
+    fn expired_pinned_rows_skip_the_liveness_check_and_remain_in_the_book() {
+        let source: SourceConfig = serde_json::from_str(
+            r#"{
+              "id": "cursor-pricing",
+              "name": "Cursor pricing",
+              "url": "https://example.invalid/cursor.md",
+              "kind": "markdown-table",
+              "output": "overrides",
+              "extract": {
+                "mode": "pinned",
+                "scope": "global",
+                "rows": [
+                  {
+                    "match": "Legacy Enterprise Auto",
+                    "model": "cursor-auto",
+                    "effective_to": "2026-09-07",
+                    "set": { "input": 0.00000125, "output": 0.000006 }
+                  }
+                ]
+              }
+            }"#,
+        )
+        .unwrap();
+        let mut overrides = json!({ "fallback": "cursor-auto", "models": {} });
+
+        merge_pinned_rows_source(
+            &source,
+            source.extract.as_ref().unwrap(),
+            "the historical marker is no longer published",
+            NaiveDate::from_ymd_opt(2026, 9, 7).unwrap(),
+            &mut overrides,
+        )
+        .unwrap();
+
+        assert_eq!(
+            overrides.pointer("/models/cursor-auto/effective_to"),
+            Some(&json!("2026-09-07"))
+        );
     }
 
     #[test]
@@ -2129,6 +2203,7 @@ after
             &source,
             source.extract.as_ref().unwrap(),
             "### Auto Cost",
+            NaiveDate::from_ymd_opt(2026, 9, 1).unwrap(),
             &mut overrides,
         )
         .unwrap_err();
