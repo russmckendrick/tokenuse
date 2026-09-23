@@ -138,12 +138,13 @@ jobs:
 
           "tag=$tag" >> $env:GITHUB_OUTPUT
 
-      # winget-releaser builds komac's --urls from the release-by-tag
-      # endpoint. Straight after publishing, that endpoint can return the
-      # release with an empty asset list for several minutes (the per-release
-      # assets endpoint already lists them), which makes komac fail with
-      # "a value is required for '--urls'". Wait for the MSI to appear there.
-      - name: "⏳ Wait for release MSI to be visible"
+      # The release-by-tag endpoint (which vedantmgoyal9/winget-releaser uses
+      # to build komac's --urls) can return the release with an empty asset
+      # list for a long time after publishing, flipping between empty and full
+      # responses. The per-release assets endpoint is consistent, so resolve
+      # the MSI URL from there and drive komac directly.
+      - name: "🔎 Resolve release MSI URL"
+        id: msi
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -153,31 +154,58 @@ jobs:
             Authorization = "Bearer $env:GH_TOKEN"
             "X-GitHub-Api-Version" = "2022-11-28"
           }
-          $uri = "https://api.github.com/repos/${{ github.repository }}/releases/tags/$tag"
-          $deadline = (Get-Date).AddMinutes(20)
+          $api = "https://api.github.com/repos/${{ github.repository }}"
+          $releaseId = (Invoke-RestMethod -Headers $headers -Uri "$api/releases/tags/$tag").id
+          $deadline = (Get-Date).AddMinutes(10)
 
           while ($true) {
-            $release = Invoke-RestMethod -Headers $headers -Uri $uri
-            $msi = @($release.assets | Where-Object { $_.name -match 'tokenuse-desktop-windows-amd64\.msi$' })
-            if ($msi.Count -gt 0) {
-              Write-Host "Release $tag lists $($release.assets.Count) assets, including $($msi[0].name)."
+            $assets = Invoke-RestMethod -Headers $headers -Uri "$api/releases/$releaseId/assets?per_page=100"
+            $msi = @($assets | Where-Object { $_.name -match '^tokenuse-desktop-windows-amd64\.msi$' -and $_.state -eq 'uploaded' })
+            if ($msi.Count -eq 1) {
               break
             }
             if ((Get-Date) -gt $deadline) {
-              throw "Release $tag still lists no Windows MSI on $uri after 20 minutes. Once it does, re-run this workflow with release_tag=$tag."
+              throw "Release $tag ($releaseId) has no uploaded tokenuse-desktop-windows-amd64.msi after 10 minutes."
             }
-            Write-Host "Release $tag lists $(@($release.assets).Count) assets and no MSI yet; retrying in 30s."
+            Write-Host "Release $tag lists $(@($assets).Count) assets and no uploaded MSI yet; retrying in 30s."
             Start-Sleep -Seconds 30
           }
 
+          $url = $msi[0].browser_download_url
+          $response = Invoke-WebRequest -Uri $url -Method Head -MaximumRedirection 5
+          Write-Host "Resolved $url (HTTP $($response.StatusCode))."
+          "url=$url" >> $env:GITHUB_OUTPUT
+          "version=$($tag -replace '^v')" >> $env:GITHUB_OUTPUT
+
+      - name: "🧰 Install cargo-binstall"
+        uses: cargo-bins/cargo-binstall@main
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: "🧰 Install komac"
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: cargo binstall komac -y
+
       - name: "📦 Submit WinGet package update"
-        uses: vedantmgoyal9/winget-releaser@v2
-        with:
-          identifier: RussMckendrick.TokenUse
-          fork-user: ${{ github.repository_owner }}
-          installers-regex: 'tokenuse-desktop-windows-amd64\.msi$'
-          release-tag: ${{ steps.version.outputs.tag }}
-          token: ${{ secrets.WINGET_CREATE_GITHUB_TOKEN }}
+        shell: pwsh
+        env:
+          KOMAC_FORK_OWNER: ${{ github.repository_owner }}
+          KOMAC_CREATED_WITH: tokenuse release workflow
+          KOMAC_CREATED_WITH_URL: ${{ github.server_url }}/${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.WINGET_CREATE_GITHUB_TOKEN }}
+        run: |
+          komac update 'RussMckendrick.TokenUse' --version '${{ steps.msi.outputs.version }}' --submit --urls '${{ steps.msi.outputs.url }}'
+          if ($LASTEXITCODE -ne 0) { throw "komac update exited with code $LASTEXITCODE" }
+
+      - name: "🧹 Clean up merged komac branches"
+        shell: pwsh
+        continue-on-error: true
+        env:
+          KOMAC_FORK_OWNER: ${{ github.repository_owner }}
+          GITHUB_TOKEN: ${{ secrets.WINGET_CREATE_GITHUB_TOKEN }}
+        run: komac cleanup --only-merged
 
       - name: "🔗 Resolve WinGet pull request URL"
         id: pr
