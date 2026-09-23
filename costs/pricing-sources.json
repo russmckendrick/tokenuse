@@ -95,6 +95,12 @@
           { "match": "Claude Fable 5", "model": "claude-fable-5" },
           { "match": "Claude Mythos 5", "model": "claude-mythos-5" },
           {
+            "match": "Claude Opus 5.5",
+            "model": "claude-opus-5-5",
+            "set": { "fast_multiplier": 2 },
+            "note": "Opus 5.5 launched 2026-09-22 at $4 input, $5 5-minute cache writes, $0.20 cache reads (0.05x input), and $20 output per MTok. Fast multiplier is configured from Claude Code fast mode, which lists Opus 5.5 fast mode at $8 input and $40 output per MTok (2x base)."
+          },
+          {
             "match": "Claude Opus 5",
             "model": "claude-opus-5",
             "set": { "fast_multiplier": 2 },
@@ -184,6 +190,132 @@
       }
     },
     {
+      "id": "openai-gpt-5-codex-pricing",
+      "name": "OpenAI GPT-5 Codex model pricing",
+      "url": "https://developers.openai.com/api/docs/models/gpt-5-codex.md",
+      "kind": "markdown-table",
+      "output": "overrides",
+      "table_heading": "Text tokens",
+      "extract": {
+        "mode": "label-rows",
+        "scope": "global",
+        "model": "gpt-5-codex",
+        "columns": { "label": "Metric", "price": "Price" },
+        "labels": {
+          "input": "Input",
+          "cache_read": "Cached input",
+          "output": "Output"
+        },
+        "defaults": { "web_search": 0.01 },
+        "note": "Official GPT-5 Codex rates. LiteLLM dropped its direct key, leaving only regional Azure aliases that carry a 10% uplift."
+      }
+    },
+    {
+      "id": "openai-gpt-5-1-codex-pricing",
+      "name": "OpenAI GPT-5.1 Codex model pricing",
+      "url": "https://developers.openai.com/api/docs/models/gpt-5.1-codex.md",
+      "kind": "markdown-table",
+      "output": "overrides",
+      "table_heading": "Text tokens",
+      "extract": {
+        "mode": "label-rows",
+        "scope": "global",
+        "model": "gpt-5.1-codex",
+        "columns": { "label": "Metric", "price": "Price" },
+        "labels": {
+          "input": "Input",
+          "cache_read": "Cached input",
+          "output": "Output"
+        },
+        "defaults": { "web_search": 0.01 },
+        "note": "Official GPT-5.1 Codex rates. LiteLLM dropped its direct key, leaving only regional Azure aliases that carry a 10% uplift."
+      }
+    },
+    {
+      "id": "openai-gpt-5-1-codex-max-pricing",
+      "name": "OpenAI GPT-5.1 Codex Max model pricing",
+      "url": "https://developers.openai.com/api/docs/models/gpt-5.1-codex-max.md",
+      "kind": "markdown-table",
+      "output": "overrides",
+      "table_heading": "Text tokens",
+      "extract": {
+        "mode": "label-rows",
+        "scope": "global",
+        "model": "gpt-5.1-codex-max",
+        "columns": { "label": "Metric", "price": "Price" },
+        "labels": {
+          "input": "Input",
+          "cache_read": "Cached input",
+          "output": "Output"
+        },
+        "defaults": { "web_search": 0.01 },
+        "note": "Official GPT-5.1 Codex Max rates. LiteLLM dropped its direct key, leaving only regional Azure aliases that carry a 10% uplift."
+      }
+    },
+    {
+      "id": "openai-gpt-5-1-codex-mini-pricing",
+      "name": "OpenAI GPT-5.1 Codex Mini model pricing",
+      "url": "https://developers.openai.com/api/docs/models/gpt-5.1-codex-mini.md",
+      "kind": "markdown-table",
+      "output": "overrides",
+      "table_heading": "Text tokens",
+      "extract": {
+        "mode": "label-rows",
+        "scope": "global",
+        "model": "gpt-5.1-codex-mini",
+        "columns": { "label": "Metric", "price": "Price" },
+        "labels": {
+          "input": "Input",
+          "cache_read": "Cached input",
+          "output": "Output"
+        },
+        "defaults": { "web_search": 0.01 },
+        "note": "Official GPT-5.1 Codex Mini rates. LiteLLM dropped its direct key, leaving only regional Azure aliases that carry a 10% uplift."
+      }
+    },
+    {
+      "id": "openai-gpt-5-2-codex-pricing",
+      "name": "OpenAI GPT-5.2 Codex model pricing",
+      "url": "https://developers.openai.com/api/docs/models/gpt-5.2-codex.md",
+      "kind": "markdown-table",
+      "output": "overrides",
+      "table_heading": "Text tokens",
+      "extract": {
+        "mode": "label-rows",
+        "scope": "global",
+        "model": "gpt-5.2-codex",
+        "columns": { "label": "Metric", "price": "Price" },
+        "labels": {
+          "input": "Input",
+          "cache_read": "Cached input",
+          "output": "Output"
+        },
+        "defaults": { "web_search": 0.01 },
+        "note": "Official GPT-5.2 Codex rates. LiteLLM dropped its direct key, leaving only regional Azure aliases that carry a 10% uplift."
+      }
+    },
+    {
+      "id": "openai-codex-mini-latest-pricing",
+      "name": "OpenAI codex-mini-latest model pricing",
+      "url": "https://developers.openai.com/api/docs/models/codex-mini-latest.md",
+      "kind": "markdown-table",
+      "output": "overrides",
+      "table_heading": "Text tokens",
+      "extract": {
+        "mode": "label-rows",
+        "scope": "global",
+        "model": "codex-mini-latest",
+        "columns": { "label": "Metric", "price": "Price" },
+        "labels": {
+          "input": "Input",
+          "cache_read": "Cached input",
+          "output": "Output"
+        },
+        "defaults": { "web_search": 0.01 },
+        "note": "Official codex-mini-latest rates. LiteLLM dropped this key entirely, so without this row Codex CLI calls fell through to the fallback model."
+      }
+    },
+    {
       "id": "openai-gpt-6-astra-pricing",
       "name": "OpenAI GPT-6 Astra model pricing",
       "url": "https://developers.openai.com/api/docs/models/gpt-6-astra.md",
@@ -204,6 +336,52 @@
         },
         "defaults": { "web_search": 0.01 },
         "note": "Default-tier GPT-6 Astra rates. Requests above 272K input tokens use OpenAI's long-context rates, which tokenuse does not yet select per call."
+      }
+    },
+    {
+      "id": "openai-gpt-6-sol-pricing",
+      "name": "OpenAI GPT-6 Sol model pricing",
+      "url": "https://developers.openai.com/api/docs/models/gpt-6-sol.md",
+      "kind": "markdown-table",
+      "output": "overrides",
+      "effective_from": "2026-09-22",
+      "table_heading": "Text tokens",
+      "extract": {
+        "mode": "label-rows",
+        "scope": "global",
+        "model": "gpt-6-sol",
+        "columns": { "label": "Metric", "price": "Price" },
+        "labels": {
+          "input": "Input",
+          "cache_write": "Cache writes",
+          "cache_read": "Cached input",
+          "output": "Output"
+        },
+        "defaults": { "web_search": 0.01 },
+        "note": "Default-tier GPT-6 Sol rates. Requests above 272K input tokens use OpenAI's long-context rates, which tokenuse does not yet select per call."
+      }
+    },
+    {
+      "id": "openai-gpt-6-luna-pricing",
+      "name": "OpenAI GPT-6 Luna model pricing",
+      "url": "https://developers.openai.com/api/docs/models/gpt-6-luna.md",
+      "kind": "markdown-table",
+      "output": "overrides",
+      "effective_from": "2026-09-22",
+      "table_heading": "Text tokens",
+      "extract": {
+        "mode": "label-rows",
+        "scope": "global",
+        "model": "gpt-6-luna",
+        "columns": { "label": "Metric", "price": "Price" },
+        "labels": {
+          "input": "Input",
+          "cache_write": "Cache writes",
+          "cache_read": "Cached input",
+          "output": "Output"
+        },
+        "defaults": { "web_search": 0.01 },
+        "note": "Default-tier GPT-6 Luna rates. Requests above 272K input tokens use OpenAI's long-context rates, which tokenuse does not yet select per call."
       }
     },
     {
@@ -467,6 +645,7 @@
           { "match": "GPT-5.6 Sol", "model": "gpt-5.6-sol", "effective_from": "2026-08-21" },
           { "match": "GPT-5.6 Terra", "model": "gpt-5.6-terra" },
           { "match": "Claude Sonnet 5", "model": "claude-sonnet-5" },
+          { "match": "Claude Opus 5.5", "model": "claude-opus-5-5" },
           { "match": "Claude Opus 5", "model": "claude-opus-5" },
           { "match": "Claude Opus 4.8", "model": "claude-opus-4-8" },
           { "match": "Gemini 3.6 Flash", "model": "gemini-3.6-flash" },
@@ -686,6 +865,8 @@
           { "match": "GPT-5.6 Sol", "model": "gpt-5.6-sol", "effective_from": "2026-08-21" },
           { "match": "GPT-5.6 Terra", "model": "gpt-5.6-terra" },
           { "match": "GPT-6 Astra", "model": "gpt-6-astra", "effective_from": "2026-09-04" },
+          { "match": "GPT-6 Sol", "model": "gpt-6-sol", "effective_from": "2026-09-22" },
+          { "match": "GPT-6 Luna", "model": "gpt-6-luna", "effective_from": "2026-09-22" },
           { "match": "Claude Haiku 4.5", "model": "claude-haiku-4-5" },
           { "match": "Claude Sonnet 4", "model": "claude-sonnet-4" },
           { "match": "Claude Sonnet 4.5", "model": "claude-sonnet-4-5" },
@@ -700,6 +881,7 @@
             "note": "Copilot lists fast mode as its own billable model row."
           },
           { "match": "Claude Opus 5", "model": "claude-opus-5" },
+          { "match": "Claude Opus 5.5", "model": "claude-opus-5-5", "effective_from": "2026-09-22" },
           { "match": "Claude Sonnet 5", "model": "claude-sonnet-5" },
           { "match": "Claude Fable 5.1", "model": "claude-fable-5-1", "effective_from": "2026-09-01" },
           { "match": "Claude Fable 5", "model": "claude-fable-5" },

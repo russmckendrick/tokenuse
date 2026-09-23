@@ -998,6 +998,35 @@ mod tests {
         assert_eq!(opus_5.fast_multiplier, Some(2.0));
         assert!(!uses_fallback("claude-code", "claude-opus-5", None));
 
+        // Opus 5.5 (2026-09-22) is 20% cheaper than Opus 5 and halves the
+        // cache-read ratio to 0.05x. Without its own row it inherits Opus 5
+        // through longest-prefix matching.
+        for (tool, raw) in [
+            ("claude-code", "claude-opus-5-5"),
+            ("claude-code", "claude-opus-5.5"),
+            ("cursor", "claude-opus-5-5"),
+            ("copilot", "Claude Opus 5.5"),
+        ] {
+            let opus_55 = table.lookup_for(
+                tool,
+                raw,
+                Some(Utc.with_ymd_and_hms(2026, 9, 22, 12, 0, 0).unwrap()),
+            );
+            assert!((opus_55.input * 1e6 - 4.0).abs() < 0.001, "{tool} {raw}");
+            assert!((opus_55.output * 1e6 - 20.0).abs() < 0.001, "{tool} {raw}");
+            assert!(
+                (opus_55.cache_write * 1e6 - 5.0).abs() < 0.001,
+                "{tool} {raw}"
+            );
+            assert!(
+                (opus_55.cache_read * 1e6 - 0.2).abs() < 0.001,
+                "{tool} {raw}"
+            );
+        }
+        assert_eq!(table.lookup("claude-opus-5-5").fast_multiplier, Some(2.0));
+        assert_eq!(table.cache_read_rate_label("claude-opus-5-5"), "5%");
+        assert!((table.lookup("claude-opus-5").input * 1e6 - 5.0).abs() < 0.001);
+
         let intro = table.lookup_for(
             "claude-code",
             "claude-sonnet-5",
@@ -1086,6 +1115,48 @@ mod tests {
             "gpt-6-astra",
             Some(Utc.with_ymd_and_hms(2026, 9, 5, 12, 0, 0).unwrap())
         ));
+        let launch = Some(Utc.with_ymd_and_hms(2026, 9, 22, 12, 0, 0).unwrap());
+        for (tool, raw, input, cache_read, cache_write, output) in [
+            ("codex", "gpt-6-sol", 2.0, 0.2, 2.5, 10.0),
+            ("copilot", "GPT-6 Sol", 2.0, 0.2, 2.5, 10.0),
+            ("codex", "gpt-6-luna", 0.1, 0.01, 0.125, 0.5),
+            ("copilot", "GPT-6 Luna", 0.1, 0.01, 0.125, 0.5),
+        ] {
+            let price = table.lookup_for(tool, raw, launch);
+            assert!(!table.uses_fallback(tool, raw, launch), "{tool} {raw}");
+            assert!((price.input * 1e6 - input).abs() < 0.0001, "{tool} {raw}");
+            assert!(
+                (price.cache_read * 1e6 - cache_read).abs() < 0.0001,
+                "{tool} {raw}"
+            );
+            assert!(
+                (price.cache_write * 1e6 - cache_write).abs() < 0.0001,
+                "{tool} {raw}"
+            );
+            assert!((price.output * 1e6 - output).abs() < 0.0001, "{tool} {raw}");
+        }
+
+        // LiteLLM dropped the direct keys for these Codex models; the books
+        // must keep OpenAI's list rates rather than a regional Azure uplift
+        // or the fallback model.
+        for (raw, input, cache_read, output) in [
+            ("gpt-5-codex", 1.25, 0.125, 10.0),
+            ("gpt-5.1-codex", 1.25, 0.125, 10.0),
+            ("gpt-5.1-codex-max", 1.25, 0.125, 10.0),
+            ("gpt-5.1-codex-mini", 0.25, 0.025, 2.0),
+            ("gpt-5.2-codex", 1.75, 0.175, 14.0),
+            ("codex-mini-latest", 1.5, 0.375, 6.0),
+        ] {
+            let price = table.lookup_for("codex", raw, None);
+            assert!(!table.uses_fallback("codex", raw, None), "{raw}");
+            assert!((price.input * 1e6 - input).abs() < 0.0001, "{raw}");
+            assert!(
+                (price.cache_read * 1e6 - cache_read).abs() < 0.0001,
+                "{raw}"
+            );
+            assert!((price.output * 1e6 - output).abs() < 0.0001, "{raw}");
+        }
+
         assert!(
             table.uses_fallback("codex", "codex-auto-review", None),
             "the unpublished Auto Review route must stay visible as an estimate"

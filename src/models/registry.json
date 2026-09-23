@@ -6,6 +6,8 @@
   "rules": [
     { "tool": "copilot", "match": "exact", "keys": ["claude fable 5.1", "claude-fable-5-1", "claude-fable-5.1"], "canonical": "claude-fable-5-1", "display": "Fable 5.1", "provider": "anthropic", "family": "Fable" },
     { "tool": "copilot", "match": "exact", "keys": ["gpt-6 astra", "gpt-6-astra"], "canonical": "gpt-6-astra", "display": "GPT-6 Astra", "provider": "openai", "family": "GPT-6" },
+    { "tool": "copilot", "match": "exact", "keys": ["gpt-6 sol", "gpt-6-sol"], "canonical": "gpt-6-sol", "display": "GPT-6 Sol", "provider": "openai", "family": "GPT-6" },
+    { "tool": "copilot", "match": "exact", "keys": ["gpt-6 luna", "gpt-6-luna"], "canonical": "gpt-6-luna", "display": "GPT-6 Luna", "provider": "openai", "family": "GPT-6" },
     { "tool": "copilot", "match": "exact", "keys": ["gemini 3.6 flash", "gemini-3.6-flash"], "canonical": "gemini-3.6-flash", "display": "Gemini 3.6 Flash", "provider": "google", "family": "Gemini" },
     { "tool": "copilot", "match": "exact", "keys": ["gemini 3.7 flash", "gemini-3.7-flash"], "canonical": "gemini-3.7-flash", "display": "Gemini 3.7 Flash", "provider": "google", "family": "Gemini" },
     { "tool": "copilot", "match": "exact", "keys": ["gemini 3.8 flash", "gemini-3.8-flash"], "canonical": "gemini-3.8-flash", "display": "Gemini 3.8 Flash", "provider": "google", "family": "Gemini" },
@@ -46,6 +48,7 @@
     { "match": "prefix", "keys": ["claude-fable-5"], "display": "Fable 5", "provider": "anthropic", "family": "Fable" },
     { "match": "prefix", "keys": ["claude-mythos-5-1", "claude-mythos-5.1"], "canonical": "claude-mythos-5-1", "display": "Mythos 5.1", "provider": "anthropic", "family": "Mythos" },
     { "match": "prefix", "keys": ["claude-mythos-5"], "display": "Mythos 5", "provider": "anthropic", "family": "Mythos" },
+    { "match": "prefix", "keys": ["claude-opus-5-5", "claude-opus-5.5"], "canonical": "claude-opus-5-5", "display": "Opus 5.5", "provider": "anthropic", "family": "Opus" },
     { "match": "prefix", "keys": ["claude-opus-5"], "display": "Opus 5", "provider": "anthropic", "family": "Opus" },
     { "match": "prefix", "keys": ["claude-opus-4-8"], "display": "Opus 4.8", "provider": "anthropic", "family": "Opus" },
     { "match": "prefix", "keys": ["claude-opus-4-7"], "display": "Opus 4.7", "provider": "anthropic", "family": "Opus" },

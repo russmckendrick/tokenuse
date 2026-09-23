@@ -1,6 +1,6 @@
 {
   "_metadata": {
-    "checked_at": "2026-09-07",
+    "checked_at": "2026-09-23",
     "fields": {
       "cache_read": "USD per cache read token",
       "cache_write": "USD per cache write token",
@@ -52,25 +52,11 @@
       "output": 0.000015,
       "web_search": 0.01
     },
-    "anthropic.claude-3-haiku-20240307-v1:0": {
-      "cache_read": 2.5e-8,
-      "cache_write": 3.125e-7,
-      "input": 2.5e-7,
-      "output": 1.25e-6,
-      "web_search": 0.01
-    },
     "anthropic.claude-3-opus-20240229-v1:0": {
       "cache_read": 1.5e-6,
       "cache_write": 0.00001875,
       "input": 0.000015,
       "output": 0.000075,
-      "web_search": 0.01
-    },
-    "anthropic.claude-3-sonnet-20240229-v1:0": {
-      "cache_read": 3e-7,
-      "cache_write": 3.75e-6,
-      "input": 3e-6,
-      "output": 0.000015,
       "web_search": 0.01
     },
     "anthropic.claude-fable-5": {
@@ -150,6 +136,13 @@
       "output": 0.000025,
       "web_search": 0.01
     },
+    "anthropic.claude-opus-5-5": {
+      "cache_read": 2e-7,
+      "cache_write": 5e-6,
+      "input": 4e-6,
+      "output": 0.00002,
+      "web_search": 0.01
+    },
     "anthropic.claude-sonnet-4-20250514-v1:0": {
       "cache_read": 3e-7,
       "cache_write": 3.75e-6,
@@ -176,34 +169,6 @@
       "cache_write": 2.5e-6,
       "input": 2e-6,
       "output": 0.00001,
-      "web_search": 0.01
-    },
-    "apac.anthropic.claude-3-5-sonnet-20240620-v1:0": {
-      "cache_read": 3e-7,
-      "cache_write": 3.75e-6,
-      "input": 3e-6,
-      "output": 0.000015,
-      "web_search": 0.01
-    },
-    "apac.anthropic.claude-3-5-sonnet-20241022-v2:0": {
-      "cache_read": 3e-7,
-      "cache_write": 3.75e-6,
-      "input": 3e-6,
-      "output": 0.000015,
-      "web_search": 0.01
-    },
-    "apac.anthropic.claude-3-haiku-20240307-v1:0": {
-      "cache_read": 2.5e-8,
-      "cache_write": 3.125e-7,
-      "input": 2.5e-7,
-      "output": 1.25e-6,
-      "web_search": 0.01
-    },
-    "apac.anthropic.claude-3-sonnet-20240229-v1:0": {
-      "cache_read": 3e-7,
-      "cache_write": 3.75e-6,
-      "input": 3e-6,
-      "output": 0.000015,
       "web_search": 0.01
     },
     "apac.anthropic.claude-haiku-4-5-20251001-v1:0": {
@@ -255,6 +220,13 @@
       "output": 0.0000275,
       "web_search": 0.01
     },
+    "au.anthropic.claude-opus-5-5": {
+      "cache_read": 2.2e-7,
+      "cache_write": 5.5e-6,
+      "input": 4.4e-6,
+      "output": 0.000022,
+      "web_search": 0.01
+    },
     "au.anthropic.claude-sonnet-4-5-20250929-v1:0": {
       "cache_read": 3.3e-7,
       "cache_write": 4.125e-6,
@@ -274,11 +246,6 @@
       "cache_write": 2.75e-6,
       "input": 2.2e-6,
       "output": 0.000011,
-      "web_search": 0.01
-    },
-    "chatgpt-4o-latest": {
-      "input": 5e-6,
-      "output": 0.000015,
       "web_search": 0.01
     },
     "claude-fable-5": {
@@ -302,14 +269,28 @@
       "output": 0.00005,
       "web_search": 0.01
     },
-    "claude-haiku-3": {
-      "cache_read": 3e-8,
-      "cache_write": 3e-7,
-      "input": 2.5e-7,
-      "output": 1.25e-6,
+    "claude-fable-5.1:batch": {
+      "cache_read": 1.25e-7,
+      "cache_write": 6.25e-6,
+      "input": 5e-6,
+      "output": 0.000025,
       "web_search": 0.01
     },
-    "claude-haiku-3-20240307": {
+    "claude-fable-5:batch": {
+      "cache_read": 5e-7,
+      "cache_write": 6.25e-6,
+      "input": 5e-6,
+      "output": 0.000025,
+      "web_search": 0.01
+    },
+    "claude-fable-latest": {
+      "cache_read": 2.5e-7,
+      "cache_write": 0.0000125,
+      "input": 0.00001,
+      "output": 0.00005,
+      "web_search": 0.01
+    },
+    "claude-haiku-3": {
       "cache_read": 3e-8,
       "cache_write": 3e-7,
       "input": 2.5e-7,
@@ -336,6 +317,20 @@
       "web_search": 0.01
     },
     "claude-haiku-4.5": {
+      "cache_read": 1e-7,
+      "cache_write": 1.25e-6,
+      "input": 1e-6,
+      "output": 5e-6,
+      "web_search": 0.01
+    },
+    "claude-haiku-4.5:batch": {
+      "cache_read": 5e-8,
+      "cache_write": 6.25e-7,
+      "input": 5e-7,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "claude-haiku-latest": {
       "cache_read": 1e-7,
       "cache_write": 1.25e-6,
       "input": 1e-6,
@@ -370,35 +365,7 @@
       "output": 0.000075,
       "web_search": 0.01
     },
-    "claude-opus-3-20240229": {
-      "cache_read": 1.5e-6,
-      "cache_write": 0.00001875,
-      "input": 0.000015,
-      "output": 0.000075,
-      "web_search": 0.01
-    },
     "claude-opus-4": {
-      "cache_read": 1.5e-6,
-      "cache_write": 0.00001875,
-      "input": 0.000015,
-      "output": 0.000075,
-      "web_search": 0.01
-    },
-    "claude-opus-4-1": {
-      "cache_read": 1.5e-6,
-      "cache_write": 0.00001875,
-      "input": 0.000015,
-      "output": 0.000075,
-      "web_search": 0.01
-    },
-    "claude-opus-4-1-20250805": {
-      "cache_read": 1.5e-6,
-      "cache_write": 0.00001875,
-      "input": 0.000015,
-      "output": 0.000075,
-      "web_search": 0.01
-    },
-    "claude-opus-4-20250514": {
       "cache_read": 1.5e-6,
       "cache_write": 0.00001875,
       "input": 0.000015,
@@ -454,11 +421,25 @@
       "output": 0.000025,
       "web_search": 0.01
     },
+    "claude-opus-4-8-think": {
+      "cache_read": 5e-7,
+      "cache_write": 6.25e-6,
+      "input": 5e-6,
+      "output": 0.000025,
+      "web_search": 0.01
+    },
     "claude-opus-4.1": {
       "cache_read": 1.5e-6,
       "cache_write": 0.00001875,
       "input": 0.000015,
       "output": 0.000075,
+      "web_search": 0.01
+    },
+    "claude-opus-4.1:batch": {
+      "cache_read": 7.5e-7,
+      "cache_write": 9.375e-6,
+      "input": 7.5e-6,
+      "output": 0.0000375,
       "web_search": 0.01
     },
     "claude-opus-4.5": {
@@ -468,11 +449,25 @@
       "output": 0.000025,
       "web_search": 0.01
     },
+    "claude-opus-4.5:batch": {
+      "cache_read": 2.5e-7,
+      "cache_write": 3.125e-6,
+      "input": 2.5e-6,
+      "output": 0.0000125,
+      "web_search": 0.01
+    },
     "claude-opus-4.6": {
       "cache_read": 5e-7,
       "cache_write": 6.25e-6,
       "input": 5e-6,
       "output": 0.000025,
+      "web_search": 0.01
+    },
+    "claude-opus-4.6:batch": {
+      "cache_read": 2.5e-7,
+      "cache_write": 3.125e-6,
+      "input": 2.5e-6,
+      "output": 0.0000125,
       "web_search": 0.01
     },
     "claude-opus-4.7": {
@@ -482,6 +477,13 @@
       "output": 0.000025,
       "web_search": 0.01
     },
+    "claude-opus-4.7:batch": {
+      "cache_read": 2.5e-7,
+      "cache_write": 3.125e-6,
+      "input": 2.5e-6,
+      "output": 0.0000125,
+      "web_search": 0.01
+    },
     "claude-opus-4.8": {
       "cache_read": 5e-7,
       "cache_write": 6.25e-6,
@@ -489,11 +491,46 @@
       "output": 0.000025,
       "web_search": 0.01
     },
+    "claude-opus-4.8:batch": {
+      "cache_read": 2.5e-7,
+      "cache_write": 3.125e-6,
+      "input": 2.5e-6,
+      "output": 0.0000125,
+      "web_search": 0.01
+    },
     "claude-opus-5": {
       "cache_read": 5e-7,
       "cache_write": 6.25e-6,
       "input": 5e-6,
       "output": 0.000025,
+      "web_search": 0.01
+    },
+    "claude-opus-5-5": {
+      "cache_read": 2e-7,
+      "cache_write": 5e-6,
+      "input": 4e-6,
+      "output": 0.00002,
+      "web_search": 0.01
+    },
+    "claude-opus-5.5": {
+      "cache_read": 2e-7,
+      "cache_write": 5e-6,
+      "input": 4e-6,
+      "output": 0.00002,
+      "web_search": 0.01
+    },
+    "claude-opus-5:batch": {
+      "cache_read": 2.5e-7,
+      "cache_write": 3.125e-6,
+      "input": 2.5e-6,
+      "output": 0.0000125,
+      "web_search": 0.01
+    },
+    "claude-opus-latest": {
+      "cache_read": 2e-7,
+      "cache_write": 5e-6,
+      "input": 4e-6,
+      "output": 0.00002,
       "web_search": 0.01
     },
     "claude-sonnet-3": {
@@ -522,13 +559,6 @@
       "output": 0.000015,
       "web_search": 0.01
     },
-    "claude-sonnet-3-7-20250219": {
-      "cache_read": 3e-7,
-      "cache_write": 3.75e-6,
-      "input": 3e-6,
-      "output": 0.000015,
-      "web_search": 0.01
-    },
     "claude-sonnet-3-7-latest": {
       "cache_read": 3.3e-7,
       "input": 3.3e-6,
@@ -536,13 +566,6 @@
       "web_search": 0.01
     },
     "claude-sonnet-4": {
-      "cache_read": 3e-7,
-      "cache_write": 3.75e-6,
-      "input": 3e-6,
-      "output": 0.000015,
-      "web_search": 0.01
-    },
-    "claude-sonnet-4-20250514": {
       "cache_read": 3e-7,
       "cache_write": 3.75e-6,
       "input": 3e-6,
@@ -584,11 +607,25 @@
       "output": 0.000015,
       "web_search": 0.01
     },
+    "claude-sonnet-4.5:batch": {
+      "cache_read": 1.5e-7,
+      "cache_write": 1.875e-6,
+      "input": 1.5e-6,
+      "output": 7.5e-6,
+      "web_search": 0.01
+    },
     "claude-sonnet-4.6": {
       "cache_read": 3e-7,
       "cache_write": 3.75e-6,
       "input": 3e-6,
       "output": 0.000015,
+      "web_search": 0.01
+    },
+    "claude-sonnet-4.6:batch": {
+      "cache_read": 1.5e-7,
+      "cache_write": 1.875e-6,
+      "input": 1.5e-6,
+      "output": 7.5e-6,
       "web_search": 0.01
     },
     "claude-sonnet-5": {
@@ -598,17 +635,18 @@
       "output": 0.00001,
       "web_search": 0.01
     },
-    "codex-mini-latest": {
-      "cache_read": 3.75e-7,
-      "input": 1.5e-6,
-      "output": 6e-6,
+    "claude-sonnet-5:batch": {
+      "cache_read": 1e-7,
+      "cache_write": 1.25e-6,
+      "input": 1e-6,
+      "output": 5e-6,
       "web_search": 0.01
     },
-    "databricks-claude-3-7-sonnet": {
-      "cache_read": 3.0002e-7,
-      "cache_write": 3.74997e-6,
-      "input": 2.99999e-6,
-      "output": 0.000015000020000000002,
+    "claude-sonnet-latest": {
+      "cache_read": 2e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
       "web_search": 0.01
     },
     "databricks-claude-fable-5": {
@@ -793,28 +831,7 @@
       "output": 9.999990000000002e-6,
       "web_search": 0.01
     },
-    "databricks-gpt-5-1-codex-max": {
-      "cache_read": 1.2502e-7,
-      "cache_write": 1.24999e-6,
-      "input": 1.24999e-6,
-      "output": 9.999990000000002e-6,
-      "web_search": 0.01
-    },
-    "databricks-gpt-5-1-codex-mini": {
-      "cache_read": 2.499e-8,
-      "cache_write": 2.4997e-7,
-      "input": 2.4997e-7,
-      "output": 1.99997e-6,
-      "web_search": 0.01
-    },
     "databricks-gpt-5-2": {
-      "cache_read": 1.75e-7,
-      "cache_write": 1.75e-6,
-      "input": 1.75e-6,
-      "output": 0.000014,
-      "web_search": 0.01
-    },
-    "databricks-gpt-5-2-codex": {
       "cache_read": 1.75e-7,
       "cache_write": 1.75e-6,
       "input": 1.75e-6,
@@ -906,10 +923,10 @@
       "web_search": 0.01
     },
     "eu.anthropic.claude-3-5-haiku-20241022-v1:0": {
-      "cache_read": 2.5e-8,
-      "cache_write": 3.125e-7,
-      "input": 2.5e-7,
-      "output": 1.25e-6,
+      "cache_read": 8e-8,
+      "cache_write": 1e-6,
+      "input": 8e-7,
+      "output": 4e-6,
       "web_search": 0.01
     },
     "eu.anthropic.claude-3-5-sonnet-20240620-v1:0": {
@@ -933,25 +950,11 @@
       "output": 0.000015,
       "web_search": 0.01
     },
-    "eu.anthropic.claude-3-haiku-20240307-v1:0": {
-      "cache_read": 2.5e-8,
-      "cache_write": 3.125e-7,
-      "input": 2.5e-7,
-      "output": 1.25e-6,
-      "web_search": 0.01
-    },
     "eu.anthropic.claude-3-opus-20240229-v1:0": {
       "cache_read": 1.5e-6,
       "cache_write": 0.00001875,
       "input": 0.000015,
       "output": 0.000075,
-      "web_search": 0.01
-    },
-    "eu.anthropic.claude-3-sonnet-20240229-v1:0": {
-      "cache_read": 3e-7,
-      "cache_write": 3.75e-6,
-      "input": 3e-6,
-      "output": 0.000015,
       "web_search": 0.01
     },
     "eu.anthropic.claude-fable-5": {
@@ -990,10 +993,10 @@
       "web_search": 0.01
     },
     "eu.anthropic.claude-opus-4-5-20251101-v1:0": {
-      "cache_read": 5e-7,
-      "cache_write": 6.25e-6,
-      "input": 5e-6,
-      "output": 0.000025,
+      "cache_read": 5.5e-7,
+      "cache_write": 6.875e-6,
+      "input": 5.5e-6,
+      "output": 0.0000275,
       "web_search": 0.01
     },
     "eu.anthropic.claude-opus-4-6-v1": {
@@ -1022,6 +1025,13 @@
       "cache_write": 6.875e-6,
       "input": 5.5e-6,
       "output": 0.0000275,
+      "web_search": 0.01
+    },
+    "eu.anthropic.claude-opus-5-5": {
+      "cache_read": 2.2e-7,
+      "cache_write": 5.5e-6,
+      "input": 4.4e-6,
+      "output": 0.000022,
       "web_search": 0.01
     },
     "eu.anthropic.claude-sonnet-4-20250514-v1:0": {
@@ -1071,25 +1081,11 @@
       "web_search": 0.01
     },
     "gemini-2.0-flash": {
-      "cache_read": 2.5e-8,
-      "input": 1e-7,
-      "output": 4e-7,
-      "web_search": 0.01
-    },
-    "gemini-2.0-flash-001": {
-      "cache_read": 3.75e-8,
       "input": 1.5e-7,
       "output": 6e-7,
       "web_search": 0.01
     },
     "gemini-2.0-flash-lite": {
-      "cache_read": 1.875e-8,
-      "input": 7.5e-8,
-      "output": 3e-7,
-      "web_search": 0.01
-    },
-    "gemini-2.0-flash-lite-001": {
-      "cache_read": 1.875e-8,
       "input": 7.5e-8,
       "output": 3e-7,
       "web_search": 0.01
@@ -1101,6 +1097,7 @@
     },
     "gemini-2.5-flash": {
       "cache_read": 3e-8,
+      "cache_write": 8.33333333333333e-8,
       "input": 3e-7,
       "output": 2.5e-6,
       "web_search": 0.01
@@ -1114,12 +1111,7 @@
     },
     "gemini-2.5-flash-lite": {
       "cache_read": 1e-8,
-      "input": 1e-7,
-      "output": 4e-7,
-      "web_search": 0.01
-    },
-    "gemini-2.5-flash-lite-preview-06-17": {
-      "cache_read": 1e-8,
+      "cache_write": 8.33333333333333e-8,
       "input": 1e-7,
       "output": 4e-7,
       "web_search": 0.01
@@ -1130,14 +1122,27 @@
       "output": 4e-7,
       "web_search": 0.01
     },
+    "gemini-2.5-flash-lite:batch": {
+      "cache_read": 1e-8,
+      "input": 5e-8,
+      "output": 2e-7,
+      "web_search": 0.01
+    },
     "gemini-2.5-flash-preview-09-2025": {
       "cache_read": 3e-8,
       "input": 3e-7,
       "output": 2.5e-6,
       "web_search": 0.01
     },
+    "gemini-2.5-flash:batch": {
+      "cache_read": 3e-8,
+      "input": 1.5e-7,
+      "output": 1.25e-6,
+      "web_search": 0.01
+    },
     "gemini-2.5-pro": {
       "cache_read": 1.25e-7,
+      "cache_write": 3.75e-7,
       "input": 1.25e-6,
       "output": 0.00001,
       "web_search": 0.01
@@ -1162,10 +1167,28 @@
       "output": 0.00002,
       "web_search": 0.01
     },
+    "gemini-2.5-pro:batch": {
+      "cache_read": 1.25e-7,
+      "input": 6.25e-7,
+      "output": 5e-6,
+      "web_search": 0.01
+    },
     "gemini-3-flash-preview": {
+      "cache_read": 5e-8,
+      "cache_write": 8.33333333333333e-8,
+      "input": 5e-7,
+      "output": 3e-6,
+      "web_search": 0.01
+    },
+    "gemini-3-flash-preview-search": {
       "cache_read": 5e-8,
       "input": 5e-7,
       "output": 3e-6,
+      "web_search": 0.01
+    },
+    "gemini-3-flash-preview:batch": {
+      "input": 2.5e-7,
+      "output": 1.5e-6,
       "web_search": 0.01
     },
     "gemini-3-pro": {
@@ -1205,6 +1228,7 @@
     },
     "gemini-3.1-flash-lite": {
       "cache_read": 2.5e-8,
+      "cache_write": 8.33333333333333e-8,
       "input": 2.5e-7,
       "output": 1.5e-6,
       "web_search": 0.01
@@ -1216,8 +1240,15 @@
     },
     "gemini-3.1-flash-lite-preview": {
       "cache_read": 2.5e-8,
+      "cache_write": 8.33333333333333e-8,
       "input": 2.5e-7,
       "output": 1.5e-6,
+      "web_search": 0.01
+    },
+    "gemini-3.1-flash-lite:batch": {
+      "cache_read": 1.25e-8,
+      "input": 1.25e-7,
+      "output": 7.5e-7,
       "web_search": 0.01
     },
     "gemini-3.1-pro": {
@@ -1227,6 +1258,7 @@
     },
     "gemini-3.1-pro-preview": {
       "cache_read": 2e-7,
+      "cache_write": 3.75e-7,
       "input": 2e-6,
       "output": 0.000012,
       "web_search": 0.01
@@ -1238,34 +1270,77 @@
       "output": 0.000012,
       "web_search": 0.01
     },
+    "gemini-3.1-pro-preview:batch": {
+      "input": 1e-6,
+      "output": 6e-6,
+      "web_search": 0.01
+    },
     "gemini-3.5-flash": {
       "cache_read": 1.5e-7,
+      "cache_write": 8.33333333333333e-8,
       "input": 1.5e-6,
       "output": 9e-6,
       "web_search": 0.01
     },
     "gemini-3.5-flash-lite": {
       "cache_read": 3e-8,
+      "cache_write": 8.33333333333333e-8,
       "input": 3e-7,
       "output": 2.5e-6,
       "web_search": 0.01
     },
-    "gemini-3.6-flash": {
+    "gemini-3.5-flash-lite:batch": {
+      "cache_read": 1.5e-8,
+      "input": 1.5e-7,
+      "output": 1.25e-6,
+      "web_search": 0.01
+    },
+    "gemini-3.5-flash:batch": {
       "cache_read": 7.5e-8,
       "input": 7.5e-7,
+      "output": 4.5e-6,
+      "web_search": 0.01
+    },
+    "gemini-3.6-flash": {
+      "cache_read": 7.5e-8,
+      "cache_write": 4.16666666666667e-8,
+      "input": 7.5e-7,
       "output": 3.75e-6,
+      "web_search": 0.01
+    },
+    "gemini-3.6-flash:batch": {
+      "cache_read": 3.75e-8,
+      "cache_write": 4.16666666666667e-8,
+      "input": 3.75e-7,
+      "output": 1.875e-6,
       "web_search": 0.01
     },
     "gemini-3.7-flash": {
       "cache_read": 7.5e-8,
+      "cache_write": 4.16666666666667e-8,
       "input": 7.5e-7,
       "output": 3.75e-6,
       "web_search": 0.01
     },
+    "gemini-3.7-flash:batch": {
+      "cache_read": 3.75e-8,
+      "cache_write": 4.16666666666667e-8,
+      "input": 3.75e-7,
+      "output": 1.875e-6,
+      "web_search": 0.01
+    },
     "gemini-3.8-flash": {
       "cache_read": 7.5e-8,
+      "cache_write": 4.16666666666667e-8,
       "input": 7.5e-7,
       "output": 3.75e-6,
+      "web_search": 0.01
+    },
+    "gemini-3.8-flash:batch": {
+      "cache_read": 3.75e-8,
+      "cache_write": 4.16666666666667e-8,
+      "input": 3.75e-7,
+      "output": 1.875e-6,
       "web_search": 0.01
     },
     "gemini-exp-1206": {
@@ -1275,15 +1350,16 @@
       "web_search": 0.01
     },
     "gemini-flash-latest": {
-      "cache_read": 3e-8,
-      "input": 3e-7,
-      "output": 2.5e-6,
+      "cache_read": 7.5e-8,
+      "cache_write": 4.16666666666667e-8,
+      "input": 7.5e-7,
+      "output": 3.75e-6,
       "web_search": 0.01
     },
     "gemini-flash-lite-latest": {
-      "cache_read": 1e-8,
-      "input": 1e-7,
-      "output": 4e-7,
+      "cache_read": 3e-8,
+      "input": 3e-7,
+      "output": 2.5e-6,
       "web_search": 0.01
     },
     "gemini-gemma-2-27b-it": {
@@ -1301,15 +1377,21 @@
       "output": 9e-6,
       "web_search": 0.01
     },
+    "gemini-omni-1.1-flash-preview": {
+      "input": 1.5e-6,
+      "output": 9e-6,
+      "web_search": 0.01
+    },
     "gemini-omni-flash-preview": {
       "input": 1.5e-6,
       "output": 9e-6,
       "web_search": 0.01
     },
     "gemini-pro-latest": {
-      "cache_read": 1.25e-7,
-      "input": 1.25e-6,
-      "output": 0.00001,
+      "cache_read": 2e-7,
+      "cache_write": 3.75e-7,
+      "input": 2e-6,
+      "output": 0.000012,
       "web_search": 0.01
     },
     "gemini-robotics-er-1.5-preview": {
@@ -1318,20 +1400,15 @@
       "output": 2.5e-6,
       "web_search": 0.01
     },
-    "gemini-robotics-er-1.6-preview": {
+    "gemini-robotics-er-2-preview": {
+      "cache_read": 1e-7,
       "input": 1e-6,
       "output": 5e-6,
       "web_search": 0.01
     },
-    "gemini-robotics-er-2-preview": {
-      "cache_read": 2e-7,
-      "input": 2e-6,
-      "output": 0.00001,
-      "web_search": 0.01
-    },
     "gemini-robotics-er-2-streaming-preview": {
-      "input": 2e-6,
-      "output": 0.00001,
+      "input": 1e-6,
+      "output": 5e-6,
       "web_search": 0.01
     },
     "global.anthropic.claude-fable-5": {
@@ -1390,6 +1467,13 @@
       "output": 0.000025,
       "web_search": 0.01
     },
+    "global.anthropic.claude-opus-5-5": {
+      "cache_read": 2e-7,
+      "cache_write": 5e-6,
+      "input": 4e-6,
+      "output": 0.00002,
+      "web_search": 0.01
+    },
     "global.anthropic.claude-sonnet-4-20250514-v1:0": {
       "cache_read": 3e-7,
       "cache_write": 3.75e-6,
@@ -1439,6 +1523,13 @@
       "output": 0.000012,
       "web_search": 0.01
     },
+    "global.openai.gpt-6-astra": {
+      "cache_read": 1e-6,
+      "cache_write": 0.0000125,
+      "input": 0.00001,
+      "output": 0.00005,
+      "web_search": 0.01
+    },
     "global.xai.grok-4.6": {
       "cache_read": 5e-7,
       "input": 2e-6,
@@ -1485,11 +1576,6 @@
       "output": 0.00001,
       "web_search": 0.01
     },
-    "gpt-4o-audio-preview": {
-      "input": 2.5e-6,
-      "output": 0.00001,
-      "web_search": 0.01
-    },
     "gpt-4o-audio-preview-2024-12-17": {
       "input": 2.5e-6,
       "output": 0.00001,
@@ -1513,11 +1599,6 @@
       "output": 6e-7,
       "web_search": 0.01
     },
-    "gpt-4o-mini-audio-preview": {
-      "input": 1.5e-7,
-      "output": 6e-7,
-      "web_search": 0.01
-    },
     "gpt-4o-mini-audio-preview-2024-12-17": {
       "input": 1.5e-7,
       "output": 6e-7,
@@ -1529,10 +1610,10 @@
       "output": 6e-7,
       "web_search": 0.01
     },
-    "gpt-4o-mini-search-preview-2025-03-11": {
-      "cache_read": 7.5e-8,
-      "input": 1.5e-7,
-      "output": 6e-7,
+    "gpt-4o-mini:batch": {
+      "cache_read": 3.75e-8,
+      "input": 7.5e-8,
+      "output": 3e-7,
       "web_search": 0.01
     },
     "gpt-4o-search-preview": {
@@ -1541,10 +1622,10 @@
       "output": 0.00001,
       "web_search": 0.01
     },
-    "gpt-4o-search-preview-2025-03-11": {
-      "cache_read": 1.25e-6,
-      "input": 2.5e-6,
-      "output": 0.00001,
+    "gpt-4o:batch": {
+      "cache_read": 6.25e-7,
+      "input": 1.25e-6,
+      "output": 5e-6,
       "web_search": 0.01
     },
     "gpt-5": {
@@ -1565,16 +1646,22 @@
       "output": 0.00001,
       "web_search": 0.01
     },
-    "gpt-5-chat-latest": {
-      "cache_read": 1.25e-7,
-      "input": 1.25e-6,
+    "gpt-5-codex": {
+      "cache_read": 1.38e-7,
+      "input": 1.375e-6,
+      "output": 0.000011,
+      "web_search": 0.01
+    },
+    "gpt-5-image": {
+      "cache_read": 1.25e-6,
+      "input": 0.00001,
       "output": 0.00001,
       "web_search": 0.01
     },
-    "gpt-5-codex": {
-      "cache_read": 1.25e-7,
-      "input": 1.25e-6,
-      "output": 0.00001,
+    "gpt-5-image-mini": {
+      "cache_read": 2.5e-7,
+      "input": 2.5e-6,
+      "output": 2e-6,
       "web_search": 0.01
     },
     "gpt-5-mini": {
@@ -1589,6 +1676,12 @@
       "output": 2e-6,
       "web_search": 0.01
     },
+    "gpt-5-mini:batch": {
+      "cache_read": 1.25e-8,
+      "input": 1.25e-7,
+      "output": 1e-6,
+      "web_search": 0.01
+    },
     "gpt-5-nano": {
       "cache_read": 5e-9,
       "input": 5e-8,
@@ -1601,6 +1694,12 @@
       "output": 4e-7,
       "web_search": 0.01
     },
+    "gpt-5-nano:batch": {
+      "cache_read": 2.5e-9,
+      "input": 2.5e-8,
+      "output": 2e-7,
+      "web_search": 0.01
+    },
     "gpt-5-pro": {
       "input": 0.000015,
       "output": 0.00012,
@@ -1609,6 +1708,11 @@
     "gpt-5-pro-2025-10-06": {
       "input": 0.000015,
       "output": 0.00012,
+      "web_search": 0.01
+    },
+    "gpt-5-pro:batch": {
+      "input": 7.5e-6,
+      "output": 0.00006,
       "web_search": 0.01
     },
     "gpt-5-search-api": {
@@ -1635,28 +1739,10 @@
       "output": 0.00001,
       "web_search": 0.01
     },
-    "gpt-5.1-chat": {
-      "cache_read": 1.4e-7,
-      "input": 1.38e-6,
-      "output": 0.000011,
-      "web_search": 0.01
-    },
-    "gpt-5.1-chat-2025-11-13": {
-      "cache_read": 1.25e-7,
-      "input": 1.25e-6,
-      "output": 0.00001,
-      "web_search": 0.01
-    },
-    "gpt-5.1-chat-latest": {
-      "cache_read": 1.25e-7,
-      "input": 1.25e-6,
-      "output": 0.00001,
-      "web_search": 0.01
-    },
     "gpt-5.1-codex": {
-      "cache_read": 1.25e-7,
-      "input": 1.25e-6,
-      "output": 0.00001,
+      "cache_read": 1.375e-7,
+      "input": 1.375e-6,
+      "output": 0.000011,
       "web_search": 0.01
     },
     "gpt-5.1-codex-2025-11-13": {
@@ -1666,21 +1752,27 @@
       "web_search": 0.01
     },
     "gpt-5.1-codex-max": {
-      "cache_read": 1.25e-7,
-      "input": 1.25e-6,
-      "output": 0.00001,
+      "cache_read": 1.375e-7,
+      "input": 1.375e-6,
+      "output": 0.000011,
       "web_search": 0.01
     },
     "gpt-5.1-codex-mini": {
-      "cache_read": 2.5e-8,
-      "input": 2.5e-7,
-      "output": 2e-6,
+      "cache_read": 2.75e-8,
+      "input": 2.75e-7,
+      "output": 2.2e-6,
       "web_search": 0.01
     },
     "gpt-5.1-codex-mini-2025-11-13": {
       "cache_read": 2.5e-8,
       "input": 2.5e-7,
       "output": 2e-6,
+      "web_search": 0.01
+    },
+    "gpt-5.1:batch": {
+      "cache_read": 6.25e-8,
+      "input": 6.25e-7,
+      "output": 5e-6,
       "web_search": 0.01
     },
     "gpt-5.2": {
@@ -1701,22 +1793,10 @@
       "output": 0.000014,
       "web_search": 0.01
     },
-    "gpt-5.2-chat-2025-12-11": {
-      "cache_read": 1.75e-7,
-      "input": 1.75e-6,
-      "output": 0.000014,
-      "web_search": 0.01
-    },
-    "gpt-5.2-chat-latest": {
-      "cache_read": 1.75e-7,
-      "input": 1.75e-6,
-      "output": 0.000014,
-      "web_search": 0.01
-    },
     "gpt-5.2-codex": {
-      "cache_read": 1.75e-7,
-      "input": 1.75e-6,
-      "output": 0.000014,
+      "cache_read": 1.925e-7,
+      "input": 1.925e-6,
+      "output": 0.0000154,
       "web_search": 0.01
     },
     "gpt-5.2-pro": {
@@ -1729,16 +1809,15 @@
       "output": 0.000168,
       "web_search": 0.01
     },
-    "gpt-5.3-chat": {
-      "cache_read": 1.75e-7,
-      "input": 1.75e-6,
-      "output": 0.000014,
+    "gpt-5.2-pro:batch": {
+      "input": 0.0000105,
+      "output": 0.000084,
       "web_search": 0.01
     },
-    "gpt-5.3-chat-latest": {
-      "cache_read": 1.75e-7,
-      "input": 1.75e-6,
-      "output": 0.000014,
+    "gpt-5.2:batch": {
+      "cache_read": 8.75e-8,
+      "input": 8.75e-7,
+      "output": 7e-6,
       "web_search": 0.01
     },
     "gpt-5.3-codex": {
@@ -1759,6 +1838,24 @@
       "output": 0.000015,
       "web_search": 0.01
     },
+    "gpt-5.4-high": {
+      "cache_read": 2.5e-7,
+      "input": 2.5e-6,
+      "output": 0.000015,
+      "web_search": 0.01
+    },
+    "gpt-5.4-image-2": {
+      "cache_read": 2e-6,
+      "input": 8e-6,
+      "output": 0.000015,
+      "web_search": 0.01
+    },
+    "gpt-5.4-low": {
+      "cache_read": 2.5e-7,
+      "input": 2.5e-6,
+      "output": 0.000015,
+      "web_search": 0.01
+    },
     "gpt-5.4-mini": {
       "cache_read": 7.5e-8,
       "input": 7.5e-7,
@@ -1769,6 +1866,12 @@
       "cache_read": 7.5e-8,
       "input": 7.5e-7,
       "output": 4.5e-6,
+      "web_search": 0.01
+    },
+    "gpt-5.4-mini:batch": {
+      "cache_read": 3.75e-8,
+      "input": 3.75e-7,
+      "output": 2.25e-6,
       "web_search": 0.01
     },
     "gpt-5.4-nano": {
@@ -1783,6 +1886,12 @@
       "output": 1.25e-6,
       "web_search": 0.01
     },
+    "gpt-5.4-nano:batch": {
+      "cache_read": 1e-8,
+      "input": 1e-7,
+      "output": 6.25e-7,
+      "web_search": 0.01
+    },
     "gpt-5.4-pro": {
       "cache_read": 3e-6,
       "input": 0.00003,
@@ -1793,6 +1902,17 @@
       "cache_read": 3e-6,
       "input": 0.00003,
       "output": 0.00018,
+      "web_search": 0.01
+    },
+    "gpt-5.4-pro:batch": {
+      "input": 0.000015,
+      "output": 0.00009,
+      "web_search": 0.01
+    },
+    "gpt-5.4:batch": {
+      "cache_read": 1.25e-7,
+      "input": 1.25e-6,
+      "output": 7.5e-6,
       "web_search": 0.01
     },
     "gpt-5.5": {
@@ -1807,6 +1927,18 @@
       "output": 0.00003,
       "web_search": 0.01
     },
+    "gpt-5.5-2026-04-24": {
+      "cache_read": 5.5e-7,
+      "input": 5.5e-6,
+      "output": 0.000033,
+      "web_search": 0.01
+    },
+    "gpt-5.5-cyber": {
+      "cache_read": 1.25e-6,
+      "input": 0.0000125,
+      "output": 0.000075,
+      "web_search": 0.01
+    },
     "gpt-5.5-pro": {
       "cache_read": 3e-6,
       "input": 0.00003,
@@ -1817,6 +1949,17 @@
       "cache_read": 3e-6,
       "input": 0.00003,
       "output": 0.00018,
+      "web_search": 0.01
+    },
+    "gpt-5.5-pro:batch": {
+      "input": 0.000015,
+      "output": 0.00009,
+      "web_search": 0.01
+    },
+    "gpt-5.5:batch": {
+      "cache_read": 2.5e-7,
+      "input": 2.5e-6,
+      "output": 0.000015,
       "web_search": 0.01
     },
     "gpt-5.6": {
@@ -1840,11 +1983,72 @@
       "output": 1.2e-6,
       "web_search": 0.01
     },
+    "gpt-5.6-luna-2026-07-09": {
+      "cache_read": 2e-8,
+      "cache_write": 2.5e-7,
+      "input": 2e-7,
+      "output": 1.2e-6,
+      "web_search": 0.01
+    },
+    "gpt-5.6-luna-pro": {
+      "cache_read": 2e-8,
+      "cache_write": 2.5e-7,
+      "input": 2e-7,
+      "output": 1.2e-6,
+      "web_search": 0.01
+    },
+    "gpt-5.6-luna-pro:batch": {
+      "cache_read": 1e-8,
+      "input": 1e-7,
+      "output": 6e-7,
+      "web_search": 0.01
+    },
+    "gpt-5.6-luna:batch": {
+      "cache_read": 1e-8,
+      "input": 1e-7,
+      "output": 6e-7,
+      "web_search": 0.01
+    },
     "gpt-5.6-sol": {
       "cache_read": 4e-7,
       "cache_write": 5e-6,
       "input": 4e-6,
       "output": 0.00002,
+      "web_search": 0.01
+    },
+    "gpt-5.6-sol-2026-07-09": {
+      "cache_read": 4e-7,
+      "cache_write": 5e-6,
+      "input": 4e-6,
+      "output": 0.00002,
+      "web_search": 0.01
+    },
+    "gpt-5.6-sol-disc": {
+      "cache_read": 4e-7,
+      "cache_write": 5e-6,
+      "input": 4e-6,
+      "output": 0.00002,
+      "web_search": 0.01
+    },
+    "gpt-5.6-sol-pro": {
+      "cache_read": 2e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
+    "gpt-5.6-sol-pro:batch": {
+      "cache_read": 1e-7,
+      "cache_write": 1.25e-6,
+      "input": 1e-6,
+      "output": 5e-6,
+      "web_search": 0.01
+    },
+    "gpt-5.6-sol:batch": {
+      "cache_read": 1e-7,
+      "cache_write": 1.25e-6,
+      "input": 1e-6,
+      "output": 5e-6,
       "web_search": 0.01
     },
     "gpt-5.6-terra": {
@@ -1854,11 +2058,99 @@
       "output": 0.000012,
       "web_search": 0.01
     },
+    "gpt-5.6-terra-2026-07-09": {
+      "cache_read": 2e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.000012,
+      "web_search": 0.01
+    },
+    "gpt-5.6-terra-pro": {
+      "cache_read": 2e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.000012,
+      "web_search": 0.01
+    },
+    "gpt-5.6-terra-pro:batch": {
+      "cache_read": 1e-7,
+      "input": 1e-6,
+      "output": 6e-6,
+      "web_search": 0.01
+    },
+    "gpt-5.6-terra:batch": {
+      "cache_read": 1e-7,
+      "input": 1e-6,
+      "output": 6e-6,
+      "web_search": 0.01
+    },
+    "gpt-5:batch": {
+      "cache_read": 6.25e-8,
+      "input": 6.25e-7,
+      "output": 5e-6,
+      "web_search": 0.01
+    },
     "gpt-6-astra": {
       "cache_read": 1e-6,
       "cache_write": 0.0000125,
       "input": 0.00001,
       "output": 0.00005,
+      "web_search": 0.01
+    },
+    "gpt-6-astra-2026-09-03": {
+      "cache_read": 1e-6,
+      "cache_write": 0.0000125,
+      "input": 0.00001,
+      "output": 0.00005,
+      "web_search": 0.01
+    },
+    "gpt-6-astra-pro": {
+      "cache_read": 1e-6,
+      "cache_write": 0.0000125,
+      "input": 0.00001,
+      "output": 0.00005,
+      "web_search": 0.01
+    },
+    "gpt-6-astra-pro:batch": {
+      "cache_read": 5e-7,
+      "cache_write": 6.25e-6,
+      "input": 5e-6,
+      "output": 0.000025,
+      "web_search": 0.01
+    },
+    "gpt-6-astra:batch": {
+      "cache_read": 5e-7,
+      "cache_write": 6.25e-6,
+      "input": 5e-6,
+      "output": 0.000025,
+      "web_search": 0.01
+    },
+    "gpt-6-luna": {
+      "cache_read": 1e-8,
+      "cache_write": 1.25e-7,
+      "input": 1e-7,
+      "output": 5e-7,
+      "web_search": 0.01
+    },
+    "gpt-6-luna-pro": {
+      "cache_read": 1e-8,
+      "cache_write": 1.25e-7,
+      "input": 1e-7,
+      "output": 5e-7,
+      "web_search": 0.01
+    },
+    "gpt-6-sol": {
+      "cache_read": 2e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
+    "gpt-6-sol-pro": {
+      "cache_read": 2e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
       "web_search": 0.01
     },
     "grok-2": {
@@ -1872,15 +2164,8 @@
       "web_search": 0.01
     },
     "grok-3": {
-      "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
-      "web_search": 0.01
-    },
-    "grok-3-beta": {
-      "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
+      "input": 3e-6,
+      "output": 0.000015,
       "web_search": 0.01
     },
     "grok-3-fast": {
@@ -1888,118 +2173,41 @@
       "output": 0.000025,
       "web_search": 0.01
     },
-    "grok-3-fast-beta": {
-      "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
-      "web_search": 0.01
-    },
-    "grok-3-fast-latest": {
-      "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
-      "web_search": 0.01
-    },
-    "grok-3-latest": {
-      "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
-      "web_search": 0.01
-    },
     "grok-3-mini": {
-      "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
-      "web_search": 0.01
-    },
-    "grok-3-mini-beta": {
-      "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
+      "input": 3e-7,
+      "output": 5e-7,
       "web_search": 0.01
     },
     "grok-3-mini-fast": {
-      "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
-      "web_search": 0.01
-    },
-    "grok-3-mini-fast-beta": {
-      "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
-      "web_search": 0.01
-    },
-    "grok-3-mini-fast-latest": {
-      "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
-      "web_search": 0.01
-    },
-    "grok-3-mini-latest": {
-      "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
+      "input": 6e-7,
+      "output": 4e-6,
       "web_search": 0.01
     },
     "grok-4": {
-      "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
-      "web_search": 0.01
-    },
-    "grok-4-0709": {
-      "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
-      "web_search": 0.01
-    },
-    "grok-4-1-fast": {
-      "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
+      "input": 3e-6,
+      "output": 0.000015,
       "web_search": 0.01
     },
     "grok-4-1-fast-non-reasoning": {
-      "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
-      "web_search": 0.01
-    },
-    "grok-4-1-fast-non-reasoning-latest": {
-      "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
+      "input": 2e-7,
+      "output": 5e-7,
       "web_search": 0.01
     },
     "grok-4-1-fast-reasoning": {
-      "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
+      "input": 2e-7,
+      "output": 5e-7,
       "web_search": 0.01
     },
-    "grok-4-1-fast-reasoning-latest": {
+    "grok-4-20-non-reasoning": {
       "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
+      "input": 2e-6,
+      "output": 6e-6,
       "web_search": 0.01
     },
-    "grok-4-fast-non-reasoning": {
+    "grok-4-20-reasoning": {
       "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
-      "web_search": 0.01
-    },
-    "grok-4-fast-reasoning": {
-      "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
-      "web_search": 0.01
-    },
-    "grok-4-latest": {
-      "cache_read": 2e-7,
-      "input": 1.25e-6,
-      "output": 2.5e-6,
+      "input": 2e-6,
+      "output": 6e-6,
       "web_search": 0.01
     },
     "grok-4.1-fast-non-reasoning": {
@@ -2020,6 +2228,12 @@
       "output": 2.5e-6,
       "web_search": 0.01
     },
+    "grok-4.20-0309": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
     "grok-4.20-0309-non-reasoning": {
       "cache_read": 2e-7,
       "input": 1.25e-6,
@@ -2032,6 +2246,18 @@
       "output": 2.5e-6,
       "web_search": 0.01
     },
+    "grok-4.20-beta": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "grok-4.20-beta-0309": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
     "grok-4.20-beta-0309-non-reasoning": {
       "cache_read": 2e-7,
       "input": 1.25e-6,
@@ -2039,6 +2265,72 @@
       "web_search": 0.01
     },
     "grok-4.20-beta-0309-reasoning": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "grok-4.20-beta-latest": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "grok-4.20-beta-latest-non-reasoning": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "grok-4.20-beta-latest-reasoning": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "grok-4.20-beta-non-reasoning": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "grok-4.20-beta-reasoning": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "grok-4.20-experimental-beta-0304": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "grok-4.20-experimental-beta-0304-non-reasoning": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "grok-4.20-experimental-beta-0304-reasoning": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "grok-4.20-experimental-beta-latest": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "grok-4.20-experimental-beta-non-reasoning-latest": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "grok-4.20-experimental-beta-reasoning-latest": {
       "cache_read": 2e-7,
       "input": 1.25e-6,
       "output": 2.5e-6,
@@ -2062,6 +2354,24 @@
       "output": 2.5e-6,
       "web_search": 0.01
     },
+    "grok-4.20-multi-agent-beta-latest": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "grok-4.20-multi-agent-experimental-beta-0304": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "grok-4.20-multi-agent-experimental-beta-latest": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
     "grok-4.20-multi-agent-latest": {
       "cache_read": 2e-7,
       "input": 1.25e-6,
@@ -2074,6 +2384,12 @@
       "output": 2.5e-6,
       "web_search": 0.01
     },
+    "grok-4.20-non-reasoning-gv2": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
     "grok-4.20-non-reasoning-latest": {
       "cache_read": 2e-7,
       "input": 1.25e-6,
@@ -2081,6 +2397,12 @@
       "web_search": 0.01
     },
     "grok-4.20-reasoning": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "grok-4.20-reasoning-gv2": {
       "cache_read": 2e-7,
       "input": 1.25e-6,
       "output": 2.5e-6,
@@ -2104,6 +2426,12 @@
       "output": 2.5e-6,
       "web_search": 0.01
     },
+    "grok-4.3:batch": {
+      "cache_read": 1.6e-7,
+      "input": 1e-6,
+      "output": 2e-6,
+      "web_search": 0.01
+    },
     "grok-4.5": {
       "cache_read": 3e-7,
       "input": 2e-6,
@@ -2120,6 +2448,12 @@
       "cache_read": 5e-7,
       "input": 2e-6,
       "output": 6e-6,
+      "web_search": 0.01
+    },
+    "grok-4.7": {
+      "cache_read": 4e-7,
+      "input": 1.6e-6,
+      "output": 4.8e-6,
       "web_search": 0.01
     },
     "grok-build-0.1": {
@@ -2152,6 +2486,12 @@
       "output": 2e-6,
       "web_search": 0.01
     },
+    "grok-latest": {
+      "cache_read": 4e-7,
+      "input": 1.6e-6,
+      "output": 4.8e-6,
+      "web_search": 0.01
+    },
     "jp.anthropic.claude-haiku-4-5-20251001-v1:0": {
       "cache_read": 1.1e-7,
       "cache_write": 1.375e-6,
@@ -2178,6 +2518,13 @@
       "cache_write": 6.875e-6,
       "input": 5.5e-6,
       "output": 0.0000275,
+      "web_search": 0.01
+    },
+    "jp.anthropic.claude-opus-5-5": {
+      "cache_read": 2.2e-7,
+      "cache_write": 5.5e-6,
+      "input": 4.4e-6,
+      "output": 0.000022,
       "web_search": 0.01
     },
     "jp.anthropic.claude-sonnet-4-5-20250929-v1:0": {
@@ -2221,12 +2568,27 @@
       "output": 5e-8,
       "web_search": 0.01
     },
+    "l3-lunaris-8b": {
+      "input": 4e-8,
+      "output": 5e-8,
+      "web_search": 0.01
+    },
     "l3.1-70b-euryale-v2.2": {
       "input": 8.5e-7,
       "output": 8.5e-7,
       "web_search": 0.01
     },
+    "l3.1-euryale-70b": {
+      "input": 8.5e-7,
+      "output": 8.5e-7,
+      "web_search": 0.01
+    },
     "l3.3-70b-euryale-v2.3": {
+      "input": 6.5e-7,
+      "output": 7.5e-7,
+      "web_search": 0.01
+    },
+    "l3.3-euryale-70b": {
       "input": 6.5e-7,
       "output": 7.5e-7,
       "web_search": 0.01
@@ -2261,18 +2623,6 @@
       "output": 4.84e-6,
       "web_search": 0.01
     },
-    "o1-preview": {
-      "cache_read": 7.5e-6,
-      "input": 0.000015,
-      "output": 0.00006,
-      "web_search": 0.01
-    },
-    "o1-preview-2024-09-12": {
-      "cache_read": 8.25e-6,
-      "input": 0.0000165,
-      "output": 0.000066,
-      "web_search": 0.01
-    },
     "o1-pro": {
       "input": 0.00015,
       "output": 0.0006,
@@ -2297,15 +2647,9 @@
       "web_search": 0.01
     },
     "o3-deep-research": {
-      "cache_read": 2.5e-6,
-      "input": 0.00001,
-      "output": 0.00004,
-      "web_search": 0.01
-    },
-    "o3-deep-research-2025-06-26": {
-      "cache_read": 2.5e-6,
-      "input": 0.00001,
-      "output": 0.00004,
+      "cache_read": 2.75e-6,
+      "input": 0.000011,
+      "output": 0.000044,
       "web_search": 0.01
     },
     "o3-mini": {
@@ -2327,6 +2671,12 @@
       "output": 4.4e-6,
       "web_search": 0.01
     },
+    "o3-mini:batch": {
+      "cache_read": 2.75e-7,
+      "input": 5.5e-7,
+      "output": 2.2e-6,
+      "web_search": 0.01
+    },
     "o3-pro": {
       "input": 0.00002,
       "output": 0.00008,
@@ -2335,6 +2685,12 @@
     "o3-pro-2025-06-10": {
       "input": 0.00002,
       "output": 0.00008,
+      "web_search": 0.01
+    },
+    "o3:batch": {
+      "cache_read": 2.5e-7,
+      "input": 1e-6,
+      "output": 4e-6,
       "web_search": 0.01
     },
     "openai-gpt-5": {
@@ -2405,10 +2761,10 @@
       "web_search": 0.01
     },
     "openai.gpt-5.6-sol": {
-      "cache_read": 5.5e-7,
-      "cache_write": 6.875e-6,
-      "input": 5.5e-6,
-      "output": 0.000033,
+      "cache_read": 4.4e-7,
+      "cache_write": 5.5e-6,
+      "input": 4.4e-6,
+      "output": 0.000022,
       "web_search": 0.01
     },
     "openai.gpt-5.6-terra": {
@@ -2418,11 +2774,39 @@
       "output": 0.0000132,
       "web_search": 0.01
     },
+    "openai.gpt-6-astra": {
+      "cache_read": 1.1e-6,
+      "cache_write": 0.00001375,
+      "input": 0.000011,
+      "output": 0.000055,
+      "web_search": 0.01
+    },
+    "us-gov.anthropic.claude-fable-5-1": {
+      "cache_read": 3e-7,
+      "cache_write": 0.000015,
+      "input": 0.000012,
+      "output": 0.00006,
+      "web_search": 0.01
+    },
     "us-gov.anthropic.claude-opus-4-8": {
       "cache_read": 6e-7,
       "cache_write": 7.5e-6,
       "input": 6e-6,
       "output": 0.00003,
+      "web_search": 0.01
+    },
+    "us-gov.anthropic.claude-opus-5": {
+      "cache_read": 6e-7,
+      "cache_write": 7.5e-6,
+      "input": 6e-6,
+      "output": 0.00003,
+      "web_search": 0.01
+    },
+    "us-gov.anthropic.claude-opus-5-5": {
+      "cache_read": 2.4e-7,
+      "cache_write": 6e-6,
+      "input": 4.8e-6,
+      "output": 0.000024,
       "web_search": 0.01
     },
     "us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0": {
@@ -2437,6 +2821,12 @@
       "cache_write": 3e-6,
       "input": 2.4e-6,
       "output": 0.000012,
+      "web_search": 0.01
+    },
+    "us-gov.xai.grok-4.6": {
+      "cache_read": 6.6e-7,
+      "input": 2.64e-6,
+      "output": 7.92e-6,
       "web_search": 0.01
     },
     "us.anthropic.claude-3-5-haiku-20241022-v1:0": {
@@ -2467,25 +2857,11 @@
       "output": 0.000015,
       "web_search": 0.01
     },
-    "us.anthropic.claude-3-haiku-20240307-v1:0": {
-      "cache_read": 2.5e-8,
-      "cache_write": 3.125e-7,
-      "input": 2.5e-7,
-      "output": 1.25e-6,
-      "web_search": 0.01
-    },
     "us.anthropic.claude-3-opus-20240229-v1:0": {
       "cache_read": 1.5e-6,
       "cache_write": 0.00001875,
       "input": 0.000015,
       "output": 0.000075,
-      "web_search": 0.01
-    },
-    "us.anthropic.claude-3-sonnet-20240229-v1:0": {
-      "cache_read": 3e-7,
-      "cache_write": 3.75e-6,
-      "input": 3e-6,
-      "output": 0.000015,
       "web_search": 0.01
     },
     "us.anthropic.claude-fable-5": {
@@ -2558,6 +2934,13 @@
       "output": 0.0000275,
       "web_search": 0.01
     },
+    "us.anthropic.claude-opus-5-5": {
+      "cache_read": 2.2e-7,
+      "cache_write": 5.5e-6,
+      "input": 4.4e-6,
+      "output": 0.000022,
+      "web_search": 0.01
+    },
     "us.anthropic.claude-sonnet-4-20250514-v1:0": {
       "cache_read": 3e-7,
       "cache_write": 3.75e-6,
@@ -2605,6 +2988,13 @@
       "cache_write": 2.75e-6,
       "input": 2.2e-6,
       "output": 0.0000132,
+      "web_search": 0.01
+    },
+    "us.openai.gpt-6-astra": {
+      "cache_read": 1.1e-6,
+      "cache_write": 0.00001375,
+      "input": 0.000011,
+      "output": 0.000055,
       "web_search": 0.01
     },
     "us.xai.grok-4.6": {
@@ -2665,9 +3055,9 @@
       "web_search": 0.01
     },
     "xai.grok-4.6": {
-      "cache_read": 5.5e-7,
-      "input": 2.2e-6,
-      "output": 6.6e-6,
+      "cache_read": 6.6e-7,
+      "input": 2.64e-6,
+      "output": 7.92e-6,
       "web_search": 0.01
     },
     "xai.grok-code-fast-1": {

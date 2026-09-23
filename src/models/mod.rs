@@ -416,6 +416,8 @@ mod tests {
         assert_eq!(display("codex", "gpt-5.6-terra"), "GPT-5.6 Terra");
         assert_eq!(display("codex", "gpt-5.6-luna"), "GPT-5.6 Luna");
         assert_eq!(display("codex", "gpt-6-astra"), "GPT-6 Astra");
+        assert_eq!(display("codex", "gpt-6-sol"), "GPT-6 Sol");
+        assert_eq!(display("codex", "gpt-6-luna"), "GPT-6 Luna");
         assert_eq!(display("codex", "gpt-5.6"), "GPT-5.6");
         assert_eq!(display("codex", "gpt-5.3-codex"), "GPT-5.3 Codex");
         assert_eq!(
@@ -461,6 +463,20 @@ mod tests {
                 "GPT-6 Astra",
                 "gpt-6-astra",
                 "GPT-6 Astra",
+                Provider::OpenAI,
+                "GPT-6",
+            ),
+            (
+                "GPT-6 Sol",
+                "gpt-6-sol",
+                "GPT-6 Sol",
+                Provider::OpenAI,
+                "GPT-6",
+            ),
+            (
+                "GPT-6 Luna",
+                "gpt-6-luna",
+                "GPT-6 Luna",
                 Provider::OpenAI,
                 "GPT-6",
             ),
@@ -553,6 +569,24 @@ mod tests {
         assert_eq!(opus_5.canonical_id, "claude-opus-5");
         assert_eq!(opus_5.family, "Opus");
         assert_eq!(display("copilot", "claude-opus-5"), "Opus 5");
+
+        // Opus 5.5 would otherwise fall into the `claude-opus-5` prefix rule
+        // and be reported (and bucketed) as Opus 5.
+        for raw in [
+            "claude-opus-5-5",
+            "claude-opus-5.5",
+            "claude-opus-5-5-20260922",
+        ] {
+            let opus_55 = resolve("claude-code", raw);
+            assert_eq!(opus_55.display, "Opus 5.5", "{raw}");
+            assert_eq!(opus_55.canonical_id, "claude-opus-5-5", "{raw}");
+            assert_eq!(opus_55.family, "Opus", "{raw}");
+        }
+        assert_eq!(display("cursor", "claude-opus-5-5-fast"), "Opus 5.5");
+        assert_eq!(
+            resolve("claude-code", "claude-opus-5").canonical_id,
+            "claude-opus-5"
+        );
 
         // Unknown Claude ids self-name in the short-name style.
         let unknown = resolve("claude-code", "claude-nova-2");

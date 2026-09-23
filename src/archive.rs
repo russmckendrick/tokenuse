@@ -19,7 +19,7 @@ use crate::tools::{
 
 pub const SYNC_INTERVAL: Duration = crate::ingest_cache::TTL;
 
-const ARCHIVE_SCHEMA_VERSION: u32 = 9;
+const ARCHIVE_SCHEMA_VERSION: u32 = 10;
 
 /// Rates the v8 repair reasons about, frozen as literals rather than read
 /// from the books: the repair has to reproduce what was actually charged at
@@ -99,6 +99,26 @@ mod claude_2026_09_repair {
         cache_write_5m: 2.5e-6,
         cache_read: 0.2e-6,
     };
+
+    /// Opus 5 pricing, which a 5.5 id inherited through longest-prefix
+    /// matching before an exact Opus 5.5 row existed in the books.
+    pub const OPUS_5: ClaudeRepairRates = ClaudeRepairRates {
+        input: 5e-6,
+        output: 25e-6,
+        cache_write_5m: 6.25e-6,
+        cache_read: 0.5e-6,
+    };
+
+    /// Opus 5.5 launched 2026-09-22 at $4/$20 with 0.05x cache reads.
+    pub const OPUS_5_5: ClaudeRepairRates = ClaudeRepairRates {
+        input: 4e-6,
+        output: 20e-6,
+        cache_write_5m: 5e-6,
+        cache_read: 0.2e-6,
+    };
+
+    /// Claude Code fast mode is 2x on both Opus 5 and Opus 5.5.
+    pub const OPUS_5_FAST_MULTIPLIER: f64 = 2.0;
 }
 
 mod codex_spark_repair {
@@ -108,17 +128,50 @@ mod codex_spark_repair {
     pub const WEB_SEARCH: f64 = 0.01;
 }
 
-mod gpt_6_astra_repair {
+mod gpt_6_repair {
     pub const FALLBACK_INPUT: f64 = 3e-6;
     pub const FALLBACK_OUTPUT: f64 = 15e-6;
     pub const FALLBACK_CACHE_WRITE: f64 = 3.75e-6;
     pub const FALLBACK_CACHE_READ: f64 = 0.3e-6;
-
-    pub const INPUT: f64 = 10e-6;
-    pub const OUTPUT: f64 = 50e-6;
-    pub const CACHE_WRITE: f64 = 12.5e-6;
-    pub const CACHE_READ: f64 = 1e-6;
     pub const WEB_SEARCH: f64 = 0.01;
+
+    /// A GPT-6 model that stale books billed at the Sonnet fallback, with
+    /// its launch date and official default-tier rates.
+    pub struct Target {
+        pub model: &'static str,
+        pub launch: (i32, u32, u32),
+        pub input: f64,
+        pub output: f64,
+        pub cache_write: f64,
+        pub cache_read: f64,
+    }
+
+    pub const TARGETS: [Target; 3] = [
+        Target {
+            model: "gpt-6-astra",
+            launch: (2026, 9, 3),
+            input: 10e-6,
+            output: 50e-6,
+            cache_write: 12.5e-6,
+            cache_read: 1e-6,
+        },
+        Target {
+            model: "gpt-6-sol",
+            launch: (2026, 9, 22),
+            input: 2e-6,
+            output: 10e-6,
+            cache_write: 2.5e-6,
+            cache_read: 0.2e-6,
+        },
+        Target {
+            model: "gpt-6-luna",
+            launch: (2026, 9, 22),
+            input: 0.1e-6,
+            output: 0.5e-6,
+            cache_write: 0.125e-6,
+            cache_read: 0.01e-6,
+        },
+    ];
 }
 
 pub struct Archive {
@@ -645,6 +698,17 @@ impl Archive {
             let tx = self.conn.unchecked_transaction()?;
             repair_v9_mispriced_calls(&tx, None, None)?;
             tx.execute_batch("PRAGMA user_version = 9;")?;
+            tx.commit()?;
+        }
+        if version < 10 {
+            // v10 re-runs the guarded repair pass after it learned about the
+            // 2026-09-22 launches: Opus 5.5 calls charged at inherited Opus 5
+            // rates, and GPT-6 Sol/Luna calls charged at the Sonnet fallback.
+            // Every repair checks the exact stored cost first, so the v9
+            // repairs it also re-runs leave already-correct rows untouched.
+            let tx = self.conn.unchecked_transaction()?;
+            repair_v9_mispriced_calls(&tx, None, None)?;
+            tx.execute_batch("PRAGMA user_version = 10;")?;
             tx.commit()?;
         }
         Ok(())
@@ -1207,10 +1271,21 @@ fn is_any_model_or_variant(model: &str, bases: &[&str]) -> bool {
 /// integer split of its total cache writes. Rows for which both the stale and
 /// corrected schedules match are intentionally ambiguous and must be skipped.
 fn matches_claude_cost_hypothesis(call: &ClaudeRepairCandidate, rates: ClaudeRepairRates) -> bool {
+    inferred_one_hour_cache_writes(call, rates, call.cost_usd).is_some()
+}
+
+/// The 1-hour cache-write token count for which `rates` reproduces `charged`
+/// exactly, if one exists. `charged` is the stored cost with any speed
+/// multiplier already divided out.
+fn inferred_one_hour_cache_writes(
+    call: &ClaudeRepairCandidate,
+    rates: ClaudeRepairRates,
+    charged: f64,
+) -> Option<f64> {
     const MAX_EXACT_F64_INTEGER: i64 = 1_i64 << 53;
 
-    if !call.cost_usd.is_finite()
-        || call.cost_usd < 0.0
+    if !charged.is_finite()
+        || charged < 0.0
         || [
             call.input_tokens,
             call.output_tokens,
@@ -1221,20 +1296,111 @@ fn matches_claude_cost_hypothesis(call: &ClaudeRepairCandidate, rates: ClaudeRep
         .into_iter()
         .any(|tokens| !(0..=MAX_EXACT_F64_INTEGER).contains(&tokens))
     {
-        return false;
+        return None;
     }
 
     let five_minute_floor = claude_cost_hypothesis(call, rates, 0.0);
     let one_hour_premium = rates.cache_write_5m * (1.6 - 1.0);
-    let inferred_one_hour = ((call.cost_usd - five_minute_floor) / one_hour_premium).round();
+    let inferred_one_hour = ((charged - five_minute_floor) / one_hour_premium).round();
     if inferred_one_hour < 0.0 || inferred_one_hour > call.cache_write_tokens as f64 {
-        return false;
+        return None;
     }
 
     approximately_same_cost(
-        call.cost_usd,
+        charged,
         claude_cost_hypothesis(call, rates, inferred_one_hour),
     )
+    .then_some(inferred_one_hour)
+}
+
+/// Repair Opus 5.5 calls archived before the books had an Opus 5.5 row. The
+/// id inherited Opus 5 through longest-prefix matching, so these calls were
+/// charged $5/$25 with 0.1x cache reads instead of $4/$20 with 0.05x. The
+/// buckets do not scale by one factor, so the hidden 1-hour cache-write count
+/// is recovered from the Opus 5 hypothesis and carried into the recompute.
+/// Both rows bill fast mode at 2x, which is divided out before the check.
+fn reprice_opus_5_5_calls_charged_at_opus_5(
+    tx: &Transaction<'_>,
+    min_call_id: Option<i64>,
+    max_call_id: Option<i64>,
+) -> Result<usize> {
+    use claude_2026_09_repair as rates;
+
+    let claude_code = crate::tools::claude_code::config::TOOL_ID;
+    let cursor = crate::tools::cursor::config::TOOL_ID;
+    let mut candidates = Vec::new();
+    {
+        let mut stmt = tx.prepare(
+            "
+            SELECT id, tool, model, speed, timestamp, imported_at, cost_usd,
+                   input_tokens, output_tokens, cache_creation_input_tokens,
+                   cache_read_input_tokens, web_search_requests
+            FROM calls
+            WHERE tool IN (?1, ?2)
+              AND id >= COALESCE(?3, 0)
+              AND id <= COALESCE(?4, 9223372036854775807)
+              AND (lower(model) LIKE '%opus-5-5%' OR lower(model) LIKE '%opus-5.5%')
+            ",
+        )?;
+        let rows = stmt.query_map(
+            params![claude_code, cursor, min_call_id, max_call_id],
+            |row| {
+                Ok(ClaudeRepairCandidate {
+                    id: row.get(0)?,
+                    tool: row.get(1)?,
+                    model: row.get(2)?,
+                    speed: row.get(3)?,
+                    timestamp: row.get(4)?,
+                    imported_at: row.get(5)?,
+                    cost_usd: row.get(6)?,
+                    input_tokens: row.get(7)?,
+                    output_tokens: row.get(8)?,
+                    cache_write_tokens: row.get(9)?,
+                    cache_read_tokens: row.get(10)?,
+                    web_search_requests: row.get(11)?,
+                })
+            },
+        )?;
+        for row in rows {
+            candidates.push(row?);
+        }
+    }
+
+    let launch = NaiveDate::from_ymd_opt(2026, 9, 22).expect("valid Opus 5.5 launch date");
+    let mut repriced = 0usize;
+    for call in candidates {
+        if call.pricing_date().is_none_or(|date| date < launch)
+            || !is_any_model_or_variant(
+                &crate::models::canonical_key(&call.model),
+                &["claude-opus-5-5", "claude-opus-5.5"],
+            )
+        {
+            continue;
+        }
+        let multiplier = match call.speed.as_str() {
+            "standard" => 1.0,
+            "fast" => rates::OPUS_5_FAST_MULTIPLIER,
+            _ => continue,
+        };
+        let charged = call.cost_usd / multiplier;
+        let Some(one_hour) = inferred_one_hour_cache_writes(&call, rates::OPUS_5, charged) else {
+            continue;
+        };
+        if inferred_one_hour_cache_writes(&call, rates::OPUS_5_5, charged).is_some() {
+            continue;
+        }
+        let corrected = multiplier * claude_cost_hypothesis(&call, rates::OPUS_5_5, one_hour);
+        if !corrected.is_finite() || corrected < 0.0 {
+            continue;
+        }
+        tx.execute(
+            "UPDATE calls SET cost_usd = ?1 WHERE id = ?2",
+            params![corrected, call.id],
+        )?;
+        repriced += 1;
+    }
+
+    Ok(repriced)
 }
 
 /// Correct the September 2026 Claude pricing mistakes that can be proven from
@@ -1363,7 +1529,8 @@ fn repair_v9_mispriced_calls(
     Ok(
         reprice_mispriced_september_2026_claude_calls(tx, min_call_id, max_call_id)?
             + reprice_zero_priced_codex_spark_calls(tx, min_call_id, max_call_id)?
-            + reprice_fallback_priced_gpt_6_astra_calls(tx, min_call_id, max_call_id)?,
+            + reprice_fallback_priced_gpt_6_calls(tx, min_call_id, max_call_id)?
+            + reprice_opus_5_5_calls_charged_at_opus_5(tx, min_call_id, max_call_id)?,
     )
 }
 
@@ -1486,7 +1653,7 @@ fn reprice_zero_priced_codex_spark_calls(
 }
 
 #[derive(Debug)]
-struct AstraRepairCandidate {
+struct Gpt6RepairCandidate {
     id: i64,
     model: String,
     timestamp: Option<String>,
@@ -1499,7 +1666,7 @@ struct AstraRepairCandidate {
     web_search_requests: i64,
 }
 
-impl AstraRepairCandidate {
+impl Gpt6RepairCandidate {
     fn pricing_date(&self) -> Option<NaiveDate> {
         let raw = self.timestamp.as_deref().unwrap_or(&self.imported_at);
         DateTime::parse_from_rfc3339(raw)
@@ -1512,16 +1679,30 @@ impl AstraRepairCandidate {
             + self.output_tokens as f64 * output
             + self.cache_write_tokens as f64 * cache_write
             + self.cache_read_tokens as f64 * cache_read
-            + self.web_search_requests as f64 * gpt_6_astra_repair::WEB_SEARCH
+            + self.web_search_requests as f64 * gpt_6_repair::WEB_SEARCH
     }
 }
 
-/// Repair GPT-6 Astra calls archived while stale local books had no Astra row
-/// and therefore charged the Claude Sonnet fallback. The old fallback and the
-/// official Astra formula are both frozen here. A row changes only when its
-/// exact stored cost proves the fallback formula was used after launch.
-fn reprice_fallback_priced_gpt_6_astra_calls(
+/// Repair GPT-6 calls archived while stale local books had no row for the
+/// model and therefore charged the Claude Sonnet fallback. The old fallback
+/// and each official GPT-6 formula are frozen in [`gpt_6_repair`]. A row
+/// changes only when its exact stored cost proves the fallback formula was
+/// used on or after that model's launch.
+fn reprice_fallback_priced_gpt_6_calls(
     tx: &Transaction<'_>,
+    min_call_id: Option<i64>,
+    max_call_id: Option<i64>,
+) -> Result<usize> {
+    let mut repriced = 0usize;
+    for target in &gpt_6_repair::TARGETS {
+        repriced += reprice_fallback_priced_gpt_6_target(tx, target, min_call_id, max_call_id)?;
+    }
+    Ok(repriced)
+}
+
+fn reprice_fallback_priced_gpt_6_target(
+    tx: &Transaction<'_>,
+    target: &gpt_6_repair::Target,
     min_call_id: Option<i64>,
     max_call_id: Option<i64>,
 ) -> Result<usize> {
@@ -1536,17 +1717,18 @@ fn reprice_fallback_priced_gpt_6_astra_calls(
             WHERE tool = ?1
               AND id >= COALESCE(?2, 0)
               AND id <= COALESCE(?3, 9223372036854775807)
-              AND lower(model) LIKE '%gpt-6-astra%'
+              AND lower(model) LIKE '%' || ?4 || '%'
             ",
         )?;
         let rows = stmt.query_map(
             params![
                 crate::tools::codex::config::TOOL_ID,
                 min_call_id,
-                max_call_id
+                max_call_id,
+                target.model
             ],
             |row| {
-                Ok(AstraRepairCandidate {
+                Ok(Gpt6RepairCandidate {
                     id: row.get(0)?,
                     model: row.get(1)?,
                     timestamp: row.get(2)?,
@@ -1566,10 +1748,11 @@ fn reprice_fallback_priced_gpt_6_astra_calls(
     }
 
     const MAX_EXACT_F64_INTEGER: i64 = 1_i64 << 53;
-    let launch = NaiveDate::from_ymd_opt(2026, 9, 3).expect("valid GPT-6 Astra launch date");
+    let (year, month, day) = target.launch;
+    let launch = NaiveDate::from_ymd_opt(year, month, day).expect("valid GPT-6 launch date");
     let mut repriced = 0usize;
     for call in candidates {
-        if crate::models::canonical_key(&call.model) != "gpt-6-astra"
+        if crate::models::canonical_key(&call.model) != target.model
             || call.pricing_date().is_none_or(|date| date < launch)
             || !call.cost_usd.is_finite()
             || call.cost_usd < 0.0
@@ -1587,19 +1770,19 @@ fn reprice_fallback_priced_gpt_6_astra_calls(
         }
 
         let fallback_cost = call.cost_at(
-            gpt_6_astra_repair::FALLBACK_INPUT,
-            gpt_6_astra_repair::FALLBACK_OUTPUT,
-            gpt_6_astra_repair::FALLBACK_CACHE_WRITE,
-            gpt_6_astra_repair::FALLBACK_CACHE_READ,
+            gpt_6_repair::FALLBACK_INPUT,
+            gpt_6_repair::FALLBACK_OUTPUT,
+            gpt_6_repair::FALLBACK_CACHE_WRITE,
+            gpt_6_repair::FALLBACK_CACHE_READ,
         );
         if !approximately_same_cost(call.cost_usd, fallback_cost) {
             continue;
         }
         let corrected = call.cost_at(
-            gpt_6_astra_repair::INPUT,
-            gpt_6_astra_repair::OUTPUT,
-            gpt_6_astra_repair::CACHE_WRITE,
-            gpt_6_astra_repair::CACHE_READ,
+            target.input,
+            target.output,
+            target.cache_write,
+            target.cache_read,
         );
         if approximately_same_cost(call.cost_usd, corrected) {
             continue;
@@ -3391,26 +3574,34 @@ mod tests {
     }
 
     fn gpt_6_astra_cost(call: &ParsedCall, fallback: bool) -> f64 {
+        gpt_6_cost(call, "gpt-6-astra", fallback)
+    }
+
+    fn gpt_6_cost(call: &ParsedCall, model: &str, fallback: bool) -> f64 {
+        let target = gpt_6_repair::TARGETS
+            .iter()
+            .find(|target| target.model == model)
+            .expect("known GPT-6 repair target");
         let (input, output, cache_write, cache_read) = if fallback {
             (
-                gpt_6_astra_repair::FALLBACK_INPUT,
-                gpt_6_astra_repair::FALLBACK_OUTPUT,
-                gpt_6_astra_repair::FALLBACK_CACHE_WRITE,
-                gpt_6_astra_repair::FALLBACK_CACHE_READ,
+                gpt_6_repair::FALLBACK_INPUT,
+                gpt_6_repair::FALLBACK_OUTPUT,
+                gpt_6_repair::FALLBACK_CACHE_WRITE,
+                gpt_6_repair::FALLBACK_CACHE_READ,
             )
         } else {
             (
-                gpt_6_astra_repair::INPUT,
-                gpt_6_astra_repair::OUTPUT,
-                gpt_6_astra_repair::CACHE_WRITE,
-                gpt_6_astra_repair::CACHE_READ,
+                target.input,
+                target.output,
+                target.cache_write,
+                target.cache_read,
             )
         };
         call.input_tokens as f64 * input
             + call.output_tokens as f64 * output
             + call.cache_creation_input_tokens as f64 * cache_write
             + call.cache_read_input_tokens as f64 * cache_read
-            + call.web_search_requests as f64 * gpt_6_astra_repair::WEB_SEARCH
+            + call.web_search_requests as f64 * gpt_6_repair::WEB_SEARCH
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3751,7 +3942,7 @@ mod tests {
                 .conn
                 .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
                 .unwrap(),
-            9
+            ARCHIVE_SCHEMA_VERSION
         );
 
         assert_eq!(
@@ -4108,6 +4299,201 @@ mod tests {
         assert!((cost_of(&archive, "astra-before-launch") - fallback).abs() < 1e-12);
         assert!((cost_of(&archive, "astra-neighbour") - fallback).abs() < 1e-12);
         assert!((cost_of(&archive, "astra-empty") - unchanged_empty).abs() < 1e-12);
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn migrate_v10_repairs_opus_5_5_calls_charged_at_opus_5() {
+        use claude_2026_09_repair::{OPUS_5, OPUS_5_5};
+
+        let mut call = bare_call("opus-5-5");
+        call.tool = crate::tools::claude_code::config::TOOL_ID;
+        call.model = "claude-opus-5-5".into();
+        call.timestamp = Some(Utc.with_ymd_and_hms(2026, 9, 22, 12, 0, 0).unwrap());
+        call.input_tokens = 12_000;
+        call.output_tokens = 3_400;
+        call.cache_creation_input_tokens = 50_000;
+        call.cache_creation_1h_input_tokens = 30_000;
+        call.cache_read_input_tokens = 900_000;
+        call.web_search_requests = 2;
+
+        let charged = historical_claude_cost(&call, OPUS_5);
+        let truth = historical_claude_cost(&call, OPUS_5_5);
+        assert!(charged > truth);
+        // The repair must land exactly where live pricing now puts the call,
+        // hidden 1-hour cache-write premium included.
+        let live = crate::pricing::cost("claude-opus-5-5", &call, Speed::Standard);
+        assert!((live - truth).abs() < 1e-9, "live {live} vs repair {truth}");
+        let live_fast = crate::pricing::cost("claude-opus-5-5", &call, Speed::Fast);
+        assert!((live_fast - 2.0 * truth).abs() < 1e-9);
+
+        let nonmatching = charged + 0.25;
+        let at = |day: u32| format!("2026-09-{day:02}T12:00:00Z");
+        let row = |label: &str, tool: &str, model: &str, speed: &str, day: u32, cost: f64| {
+            legacy_september_claude_row(
+                label,
+                tool,
+                model,
+                speed,
+                Some(&at(day)),
+                &at(day),
+                cost,
+                &call,
+            )
+        };
+
+        let paths = temp_paths("migrate-v10-opus-5-5");
+        create_legacy_db(
+            &paths,
+            &[
+                row(
+                    "opus55",
+                    "claude-code",
+                    "claude-opus-5-5",
+                    "standard",
+                    22,
+                    charged,
+                ),
+                row(
+                    "opus55-dated",
+                    "claude-code",
+                    "anthropic/claude-opus-5-5-20260922",
+                    "standard",
+                    23,
+                    charged,
+                ),
+                row(
+                    "opus55-dotted",
+                    "cursor",
+                    "claude-opus-5.5",
+                    "standard",
+                    23,
+                    charged,
+                ),
+                row(
+                    "opus55-fast",
+                    "claude-code",
+                    "claude-opus-5-5",
+                    "fast",
+                    23,
+                    2.0 * charged,
+                ),
+                row(
+                    "opus55-correct",
+                    "claude-code",
+                    "claude-opus-5-5",
+                    "standard",
+                    23,
+                    truth,
+                ),
+                row(
+                    "opus55-early",
+                    "claude-code",
+                    "claude-opus-5-5",
+                    "standard",
+                    21,
+                    charged,
+                ),
+                row(
+                    "opus55-odd",
+                    "claude-code",
+                    "claude-opus-5-5",
+                    "standard",
+                    23,
+                    nonmatching,
+                ),
+                row(
+                    "opus5",
+                    "claude-code",
+                    "claude-opus-5",
+                    "standard",
+                    23,
+                    charged,
+                ),
+                "PRAGMA user_version = 9;".to_string(),
+            ]
+            .join("\n"),
+        );
+
+        let archive = Archive::open(&paths).unwrap();
+        for key in ["opus55", "opus55-dated", "opus55-dotted"] {
+            let repaired = cost_of(&archive, key);
+            assert!(
+                (repaired - truth).abs() < 1e-9,
+                "{key}: got {repaired}, want {truth}"
+            );
+        }
+        assert!((cost_of(&archive, "opus55-fast") - 2.0 * truth).abs() < 1e-9);
+        assert!((cost_of(&archive, "opus55-correct") - truth).abs() < 1e-12);
+        assert!((cost_of(&archive, "opus55-early") - charged).abs() < 1e-12);
+        assert!((cost_of(&archive, "opus55-odd") - nonmatching).abs() < 1e-12);
+        assert!(
+            (cost_of(&archive, "opus5") - charged).abs() < 1e-12,
+            "real Opus 5 calls keep their Opus 5 price"
+        );
+
+        // Re-running the migration must not apply the correction twice.
+        archive
+            .conn
+            .execute_batch("PRAGMA user_version = 9;")
+            .unwrap();
+        drop(archive);
+        let archive = Archive::open(&paths).unwrap();
+        assert!((cost_of(&archive, "opus55") - truth).abs() < 1e-9);
+        assert!((cost_of(&archive, "opus55-fast") - 2.0 * truth).abs() < 1e-9);
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn migrate_v10_repairs_fallback_priced_gpt_6_sol_and_luna() {
+        let mut call = bare_call("gpt-6");
+        call.tool = crate::tools::codex::config::TOOL_ID;
+        call.input_tokens = 2_600_000;
+        call.output_tokens = 480_700;
+        call.cache_creation_input_tokens = 0;
+        call.cache_read_input_tokens = 104_500_000;
+        call.web_search_requests = 1;
+
+        let fallback = gpt_6_cost(&call, "gpt-6-sol", true);
+        let sol = gpt_6_cost(&call, "gpt-6-sol", false);
+        let luna = gpt_6_cost(&call, "gpt-6-luna", false);
+        assert!(fallback > sol && sol > luna);
+        call.model = "gpt-6-sol".into();
+        call.timestamp = Some(Utc.with_ymd_and_hms(2026, 9, 22, 12, 0, 0).unwrap());
+        assert!((crate::pricing::cost("gpt-6-sol", &call, Speed::Standard) - sol).abs() < 1e-9);
+        assert!((crate::pricing::cost("gpt-6-luna", &call, Speed::Standard) - luna).abs() < 1e-9);
+
+        let row = |label: &str, model: &str, day: u32| {
+            let at = format!("2026-09-{day:02}T12:00:00Z");
+            legacy_september_claude_row(
+                label,
+                "codex",
+                model,
+                "standard",
+                Some(&at),
+                &at,
+                fallback,
+                &call,
+            )
+        };
+        let paths = temp_paths("migrate-v10-gpt-6-sol-luna");
+        create_legacy_db(
+            &paths,
+            &[
+                row("sol", "openai/gpt-6-sol", 22),
+                row("luna", "gpt-6-luna", 23),
+                row("sol-early", "gpt-6-sol", 21),
+                row("sol-pro", "gpt-6-sol-pro", 23),
+                "PRAGMA user_version = 9;".to_string(),
+            ]
+            .join("\n"),
+        );
+
+        let archive = Archive::open(&paths).unwrap();
+        assert!((cost_of(&archive, "sol") - sol).abs() < 1e-9);
+        assert!((cost_of(&archive, "luna") - luna).abs() < 1e-9);
+        assert!((cost_of(&archive, "sol-early") - fallback).abs() < 1e-12);
+        assert!((cost_of(&archive, "sol-pro") - fallback).abs() < 1e-12);
         let _ = fs::remove_dir_all(paths.dir);
     }
 
