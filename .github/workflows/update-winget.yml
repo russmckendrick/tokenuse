@@ -138,6 +138,38 @@ jobs:
 
           "tag=$tag" >> $env:GITHUB_OUTPUT
 
+      # winget-releaser builds komac's --urls from the release-by-tag
+      # endpoint. Straight after publishing, that endpoint can return the
+      # release with an empty asset list for several minutes (the per-release
+      # assets endpoint already lists them), which makes komac fail with
+      # "a value is required for '--urls'". Wait for the MSI to appear there.
+      - name: "⏳ Wait for release MSI to be visible"
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ steps.version.outputs.tag }}"
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          $uri = "https://api.github.com/repos/${{ github.repository }}/releases/tags/$tag"
+          $deadline = (Get-Date).AddMinutes(20)
+
+          while ($true) {
+            $release = Invoke-RestMethod -Headers $headers -Uri $uri
+            $msi = @($release.assets | Where-Object { $_.name -match 'tokenuse-desktop-windows-amd64\.msi$' })
+            if ($msi.Count -gt 0) {
+              Write-Host "Release $tag lists $($release.assets.Count) assets, including $($msi[0].name)."
+              break
+            }
+            if ((Get-Date) -gt $deadline) {
+              throw "Release $tag still lists no Windows MSI on $uri after 20 minutes. Once it does, re-run this workflow with release_tag=$tag."
+            }
+            Write-Host "Release $tag lists $(@($release.assets).Count) assets and no MSI yet; retrying in 30s."
+            Start-Sleep -Seconds 30
+          }
+
       - name: "📦 Submit WinGet package update"
         uses: vedantmgoyal9/winget-releaser@v2
         with:
