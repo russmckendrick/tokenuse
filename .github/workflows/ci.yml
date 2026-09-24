@@ -212,9 +212,18 @@ jobs:
 
   build:
     name: "📦 Build (${{ matrix.artifact }})"
-    needs: [check, desktop-check, rust-audit, frontend-audit, release-version]
+    # Ordered after the Windows desktop job: the Windows leg signs with the
+    # same Certum account, and a TOTP code is single-use, so two overlapping
+    # SimplySign logins make the later one fail. A concurrency group cannot
+    # do this for a matrix (only one job per group may be pending, so queued
+    # legs are cancelled).
+    needs: [check, desktop-check, rust-audit, frontend-audit, release-version, desktop-build-windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ${{ matrix.os }}
+    env:
+      # A flag, never the seed itself: job env is visible to every step,
+      # third-party actions included. Unset secrets mean an unsigned build.
+      SIGN_WINDOWS: ${{ secrets.CERTUM_OTP_URI != '' }}
     strategy:
       matrix:
         include:
@@ -252,6 +261,27 @@ jobs:
 
       - name: "🏗️ Build release binary"
         run: cargo build --release --target ${{ matrix.target }}
+
+      - name: "🔏 Open the SimplySign session"
+        if: runner.os == 'Windows' && env.SIGN_WINDOWS == 'true'
+        shell: pwsh
+        env:
+          CERTUM_USERNAME: ${{ secrets.CERTUM_USERNAME }}
+          CERTUM_OTP_URI: ${{ secrets.CERTUM_OTP_URI }}
+          CERTUM_CERT_SHA1: ${{ secrets.CERTUM_CERT_SHA1 }}
+        run: ./.github/scripts/Connect-SimplySign.ps1
+
+      - name: "🔏 Sign the Windows executable"
+        if: runner.os == 'Windows' && env.SIGN_WINDOWS == 'true'
+        shell: pwsh
+        env:
+          CERTUM_CERT_SHA1: ${{ secrets.CERTUM_CERT_SHA1 }}
+        run: |
+          $exe = "target/${{ matrix.target }}/release/tokenuse.exe"
+          signtool sign /sha1 $env:CERTUM_CERT_SHA1 /fd SHA256 /tr http://time.certum.pl /td SHA256 $exe
+          if ($LASTEXITCODE -ne 0) { throw "signtool could not sign $exe" }
+          signtool verify /pa /v $exe
+          if ($LASTEXITCODE -ne 0) { throw "$exe does not carry a valid signature" }
 
       - name: "🏷️ Rename binary (Unix)"
         if: matrix.os != 'windows-latest'
@@ -447,12 +477,21 @@ jobs:
     needs: [check, desktop-check, rust-audit, frontend-audit, release-version]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
+    # One SimplySign login at a time across every run: a TOTP code is
+    # single-use, so an overlapping login from another run would fail.
+    concurrency:
+      group: certum-simplysign
+      cancel-in-progress: false
 
     env:
       DESKTOP_WINDOWS_SETUP: tokenuse-desktop-windows-amd64-setup.exe
       DESKTOP_WINDOWS_MSI: tokenuse-desktop-windows-amd64.msi
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      # Certum Authenticode signing is optional: when the secrets are unset
+      # the installers ship unsigned and SmartScreen warns. Setting the three
+      # CERTUM_* secrets turns signing on. A flag, never the seed itself.
+      SIGN_WINDOWS: ${{ secrets.CERTUM_OTP_URI != '' }}
 
     steps:
       - name: "📥 Check out repository"
@@ -493,9 +532,80 @@ jobs:
             exit 1
           }
 
-      - name: "🏗️ Build unsigned desktop installers"
+      # Tauri signs as it bundles: the app executable, the NSIS uninstaller
+      # and both installers, with the certificate SimplySign put in the
+      # user's store. The updater .sig is made from the signed setup.exe.
+      - name: "🔏 Open the SimplySign session"
+        if: env.SIGN_WINDOWS == 'true'
+        shell: pwsh
+        env:
+          CERTUM_USERNAME: ${{ secrets.CERTUM_USERNAME }}
+          CERTUM_OTP_URI: ${{ secrets.CERTUM_OTP_URI }}
+          CERTUM_CERT_SHA1: ${{ secrets.CERTUM_CERT_SHA1 }}
+        run: ./.github/scripts/Connect-SimplySign.ps1
+
+      - name: "📎 Write the signing bundle config"
+        if: env.SIGN_WINDOWS == 'true'
+        shell: pwsh
+        env:
+          CERTUM_CERT_SHA1: ${{ secrets.CERTUM_CERT_SHA1 }}
+        run: |
+          # Passed with --config from a file: an inline JSON argument loses
+          # its quotes in PowerShell.
+          @{ bundle = @{ windows = [ordered]@{
+            certificateThumbprint = $env:CERTUM_CERT_SHA1
+            digestAlgorithm = "sha256"
+            timestampUrl = "http://time.certum.pl"
+            tsp = $true
+          } } } | ConvertTo-Json -Depth 10 | Set-Content -Encoding utf8 "$env:RUNNER_TEMP/windows-signing.json"
+
+      - name: "🏗️ Build desktop installers"
         working-directory: desktop
-        run: pnpm tauri build --bundles nsis,msi --ci
+        shell: pwsh
+        run: |
+          $extra = @()
+          if ($env:SIGN_WINDOWS -eq 'true') { $extra = @("--config", "$env:RUNNER_TEMP/windows-signing.json") }
+          pnpm tauri build --bundles nsis,msi --ci @extra
+          if ($LASTEXITCODE -ne 0) { throw "tauri build failed" }
+
+      - name: "✅ Verify signatures"
+        if: env.SIGN_WINDOWS == 'true'
+        working-directory: desktop
+        shell: pwsh
+        run: |
+          # Tauri signs the app executable once per installer and packs the
+          # signed copy, then restores the unsigned original in
+          # target/release on purpose. So check the installers themselves
+          # and every executable unpacked from them, not target/release.
+          function Assert-Signed($path) {
+            signtool verify /pa $path
+            if ($LASTEXITCODE -ne 0) { throw "$(Split-Path $path -Leaf) does not carry a valid signature" }
+          }
+          $setup = Get-ChildItem "src-tauri/target/release/bundle/nsis" -Filter "*-setup.exe" | Select-Object -First 1
+          $msi = Get-ChildItem "src-tauri/target/release/bundle/msi" -Filter "*.msi" | Select-Object -First 1
+          Assert-Signed $setup.FullName
+          Assert-Signed $msi.FullName
+
+          $unpacked = Join-Path $env:RUNNER_TEMP "installer-contents"
+          7z x $setup.FullName "-o$(Join-Path $unpacked nsis)" -y | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "7-Zip could not unpack $($setup.Name)" }
+          $admin = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @(
+            "/a", "`"$($msi.FullName)`"", "/qn", "TARGETDIR=`"$(Join-Path $unpacked msi)`"")
+          if ($admin.ExitCode -ne 0) { throw "msiexec could not unpack $($msi.Name) (exit code $($admin.ExitCode))" }
+
+          foreach ($kind in @("nsis", "msi")) {
+            $exes = @(Get-ChildItem (Join-Path $unpacked $kind) -Recurse -Filter "*.exe" -File |
+              Where-Object { $_.FullName -notlike '*$PLUGINSDIR*' })
+            if ($exes.Count -eq 0) { throw "No executable found inside the $kind installer" }
+            foreach ($exe in $exes) { Assert-Signed $exe.FullName }
+          }
+
+      - name: "⚠️ Note unsigned installers"
+        if: env.SIGN_WINDOWS != 'true'
+        shell: bash
+        run: |
+          echo "::notice::Windows installers are unsigned: the CERTUM_* secrets are not configured. SmartScreen will warn on first run."
+          echo "Windows installers in this release are **unsigned** (no Certum signing secrets configured); SmartScreen will warn on first run." >> "$GITHUB_STEP_SUMMARY"
 
       - name: "🏷️ Normalize desktop installers"
         working-directory: desktop

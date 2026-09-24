@@ -8,7 +8,7 @@ No additions recorded yet.
 
 ## Changed
 
-No changes recorded yet.
+- Windows releases are now Authenticode-signed with a Certum code-signing certificate: the TUI's `tokenuse-windows-amd64.exe`, the desktop NSIS and MSI installers, and the app executable inside them. SmartScreen warnings should fade as the signed releases build reputation.
 
 ## Removed
 

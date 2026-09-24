@@ -1,0 +1,45 @@
+name: "🔏 Windows signing check"
+
+# Proves the Certum SimplySign login and signtool work on a runner without
+# cutting a release. Each run spends one Certum login, and repeated failed
+# logins lock the account, so it is manual only.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    name: "🔏 Sign a throwaway executable"
+    runs-on: windows-latest
+    timeout-minutes: 20
+    # Shared with the CI desktop-build-windows job: one login at a time.
+    concurrency:
+      group: certum-simplysign
+      cancel-in-progress: false
+    steps:
+      - name: "📥 Check out source"
+        uses: actions/checkout@v6
+      - name: "🔏 Open the SimplySign session"
+        shell: pwsh
+        env:
+          CERTUM_USERNAME: ${{ secrets.CERTUM_USERNAME }}
+          CERTUM_OTP_URI: ${{ secrets.CERTUM_OTP_URI }}
+          CERTUM_CERT_SHA1: ${{ secrets.CERTUM_CERT_SHA1 }}
+        run: ./.github/scripts/Connect-SimplySign.ps1
+      - name: "✍️ Sign and verify"
+        shell: pwsh
+        env:
+          CERTUM_CERT_SHA1: ${{ secrets.CERTUM_CERT_SHA1 }}
+        run: |
+          $exe = Join-Path $env:RUNNER_TEMP "signing-check.exe"
+          Copy-Item "$env:WINDIR\System32\whoami.exe" $exe
+          signtool sign /sha1 $env:CERTUM_CERT_SHA1 /fd SHA256 /tr http://time.certum.pl /td SHA256 $exe
+          if ($LASTEXITCODE -ne 0) { throw "signtool could not sign the test executable" }
+          signtool verify /pa /v $exe
+          if ($LASTEXITCODE -ne 0) { throw "The test executable does not carry a valid signature" }
+          # Read the embedded signature: Get-AuthenticodeSignature prefers a
+          # Windows catalog, and whoami.exe is catalog-signed by Microsoft.
+          $signer = [System.Security.Cryptography.X509Certificates.X509Certificate]::CreateFromSignedFile($exe)
+          "Signed by: $($signer.Subject)" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append

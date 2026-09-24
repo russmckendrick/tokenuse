@@ -73,7 +73,7 @@ Get-FileHash .\tokenuse-windows-amd64.exe -Algorithm SHA256
 .\tokenuse-windows-amd64.exe
 ```
 
-Compare the hash output with the first value in `tokenuse-windows-amd64.exe.sha256`.
+Compare the hash output with the first value in `tokenuse-windows-amd64.exe.sha256`. The executable is Authenticode-signed by **Open Source Developer Russell McKendrick**.
 
 ## Windows Desktop
 
@@ -85,7 +85,7 @@ winget install --id RussMckendrick.TokenUse -e
 
 WinGet pins the SHA256 of each release in its manifest, so no manual checksum step is needed.
 
-Alternatively, Windows desktop releases are published as unsigned AMD64 NSIS and MSI installers on GitHub Releases. Verify the checksum before installing:
+Alternatively, Windows desktop releases are published as AMD64 NSIS and MSI installers on GitHub Releases, Authenticode-signed by **Open Source Developer Russell McKendrick**. SmartScreen reputation builds per file as a release is downloaded, so a freshly signed installer can still show **Windows protected your PC** for a few days; choose **More info › Run anyway**. Verify the checksum before installing:
 
 ```powershell
 Invoke-WebRequest -Uri "https://github.com/russmckendrick/tokenuse/releases/latest/download/tokenuse-desktop-windows-amd64-setup.exe" -OutFile "tokenuse-desktop-windows-amd64-setup.exe"

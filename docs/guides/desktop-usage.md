@@ -11,7 +11,7 @@ brew install --cask russmckendrick/tap/tokenuse-desktop
 open -a "Token Use"
 ```
 
-The macOS app also ships as a signed and notarized Apple Silicon DMG. Linux builds are published as unsigned AppImage, deb, and rpm assets for AMD64 and ARM64. Windows builds are published as unsigned AMD64 NSIS and MSI installers. Verify the matching `.sha256` file before running an unsigned asset.
+The macOS app also ships as a signed and notarized Apple Silicon DMG. Linux builds are published as unsigned AppImage, deb, and rpm assets for AMD64 and ARM64. Windows builds are published as Authenticode-signed AMD64 NSIS and MSI installers. Verify the matching `.sha256` file before running any downloaded asset.
 
 ## Application Shell
 

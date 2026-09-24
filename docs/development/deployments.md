@@ -39,7 +39,7 @@ Each asset has a matching `.sha256` checksum file.
 
 The release also uploads `latest.json`, the static manifest consumed by the Windows/Linux Tauri updater. The manifest points Windows to the normalized NSIS setup installer and Linux to the normalized AppImage assets. `.deb` and `.rpm` packages remain manual GitHub Release installs.
 
-The macOS desktop release job builds the Apple Silicon DMG, signs it with a Developer ID Application certificate, notarizes through App Store Connect, verifies the mounted DMG, and uploads the normalized artifact to the GitHub Release. Windows and Linux desktop assets are not OS code-signed for now and should be verified with their checksum files before installing. Their `.sig` files are Tauri updater signatures, not Authenticode or Linux package signatures.
+The macOS desktop release job builds the Apple Silicon DMG, signs it with a Developer ID Application certificate, notarizes through App Store Connect, verifies the mounted DMG, and uploads the normalized artifact to the GitHub Release. Windows release binaries (the TUI's `tokenuse-windows-amd64.exe`, the NSIS and MSI installers, and the app executable and uninstaller inside them) are Authenticode-signed with a Certum code-signing certificate when the `CERTUM_*` secrets are set; see [Windows Code Signing](#windows-code-signing). Linux desktop assets are not OS code-signed and should be verified with their checksum files before installing. The `.sig` files are Tauri updater signatures, not Authenticode or Linux package signatures.
 
 ## Required Secrets
 
@@ -58,7 +58,28 @@ The macOS desktop release job requires:
 | `HOMEBREW_TAP_TOKEN` | Token with push access to `russmckendrick/homebrew-tap` |
 | `WINGET_CREATE_GITHUB_TOKEN` | Classic PAT with `public_repo` and `workflow` scopes and push access to the `russmckendrick/winget-pkgs` fork |
 
+The Windows release jobs also read these optional secrets; when all are set they turn on Authenticode signing:
+
+| Secret | Purpose |
+| --- | --- |
+| `CERTUM_USERNAME` | The Certum SimplySign account email |
+| `CERTUM_OTP_URI` | The complete `otpauth://totp/...` URI behind the SimplySign mobile app's QR code. As sensitive as the signing key |
+| `CERTUM_CERT_SHA1` | SHA-1 thumbprint of the Certum code-signing certificate, hex without colons. Not secret |
+
 Use a Developer ID Application certificate for direct-download DMGs. Apple Distribution is for App Store distribution, and Developer ID Installer is for `.pkg` installers.
+
+## Windows Code Signing
+
+The certificate is a Certum Open Source Code Signing certificate held in Certum's cloud HSM, the same account azdocs signs with. `.github/scripts/Connect-SimplySign.ps1` installs a pinned, hash-checked SimplySign Desktop on the runner, logs in with a TOTP code generated from `CERTUM_OTP_URI`, and waits for the certificate to appear in `Cert:\CurrentUser\My`; signtool then finds it by thumbprint.
+
+- `desktop-build-windows` merges a `bundle.windows` signing config into `tauri build`, so Tauri signs the app executable, the NSIS uninstaller, `setup.exe` and the MSI as it bundles. The updater `.sig` is generated from the signed `setup.exe`. A verify step unpacks both installers and runs `signtool verify /pa` on every executable inside.
+- The `build` matrix's Windows leg signs and verifies `tokenuse.exe` before renaming it.
+
+A TOTP code is single-use, so two SimplySign logins must never overlap: the later one reads "invalid user name or token", and repeated failures lock the account. `desktop-build-windows` and the manual signing check share the `certum-simplysign` concurrency group, and the `build` matrix is ordered after `desktop-build-windows` (a concurrency group would cancel queued matrix legs). Concurrency groups are per repository, so avoid tagging a tokenuse release while an azdocs release is signing. Do not rerun a failed login repeatedly; check the account in SimplySign first.
+
+To prove the secrets work without a release, run the **Windows signing check** workflow (`.github/workflows/signing-check.yml`) by hand. It spends one login and signs a throwaway executable.
+
+Without `CERTUM_OTP_URI` the Windows jobs build unsigned binaries, say so in the run summary, and SmartScreen warns on first run.
 
 ## Homebrew Tap
 
@@ -73,6 +94,6 @@ The tap downloads checksums from the newly published release before writing the 
 
 After the GitHub Release is created, `.github/workflows/update-winget.yml` submits the Windows desktop app to WinGet as `RussMckendrick.TokenUse`. It uses `gh repo sync` to fast-forward the `russmckendrick/winget-pkgs` fork from `microsoft/winget-pkgs`, then runs `vedantmgoyal9/winget-releaser` to open a manifest pull request against upstream pointing at `tokenuse-desktop-windows-amd64.msi`. The classic PAT needs both `public_repo` and `workflow` because upstream changes can include files under `.github/workflows/`. The installer regex is pinned to the MSI for two reasons: the raw TUI binary `tokenuse-windows-amd64.exe` in the same release must never be picked up as an installer, and komac (which `winget-releaser` runs under the hood) fails to emulate the Tauri NSIS setup installer (it aborts in the WebView2 branch of the installer script), while the MSI yields a clean `wix` manifest with ProductCode and UpgradeCode metadata.
 
-The action only updates packages that already exist in `winget-pkgs`; the initial `RussMckendrick.TokenUse` version was bootstrapped manually with `komac new`. The workflow can also be re-run for a given tag via `workflow_dispatch`. WinGet installs the MSI silently and each manifest pins the installer SHA256, so no Authenticode signature is required, though users may see a SmartScreen prompt. Note the in-app Config-page updater ships the NSIS installer; WinGet users should update via `winget upgrade` to keep a single Apps & Features entry.
+The action only updates packages that already exist in `winget-pkgs`; the initial `RussMckendrick.TokenUse` version was bootstrapped manually with `komac new`. The workflow can also be re-run for a given tag via `workflow_dispatch`. WinGet installs the MSI silently and each manifest pins the installer SHA256, so no Authenticode signature is required; signed releases still carry one, which helps SmartScreen reputation. Note the in-app Config-page updater ships the NSIS installer; WinGet users should update via `winget upgrade` to keep a single Apps & Features entry.
 
 If the automatic fork sync fails, verify the PAT scopes and run `gh repo sync russmckendrick/winget-pkgs --source microsoft/winget-pkgs` with that token before re-running the workflow. Do not force the sync unless the fork intentionally contains commits that should be discarded.
