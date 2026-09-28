@@ -1,6 +1,6 @@
 {
   "_metadata": {
-    "checked_at": "2026-09-23",
+    "checked_at": "2026-09-28",
     "fields": {
       "cache_read": "USD per cache read token",
       "cache_write": "USD per cache write token",
@@ -87,6 +87,20 @@
       "output": 5e-6,
       "web_search": 0.01
     },
+    "anthropic.claude-mythos-5-1": {
+      "cache_read": 2.5e-7,
+      "cache_write": 0.0000125,
+      "input": 0.00001,
+      "output": 0.00005,
+      "web_search": 0.01
+    },
+    "anthropic.claude-mythos-preview": {
+      "cache_read": 2.75e-6,
+      "cache_write": 0.000034375,
+      "input": 0.0000275,
+      "output": 0.0001375,
+      "web_search": 0.01
+    },
     "anthropic.claude-opus-4-1-20250805-v1:0": {
       "cache_read": 1.5e-6,
       "cache_write": 0.00001875,
@@ -171,11 +185,53 @@
       "output": 0.00001,
       "web_search": 0.01
     },
+    "apac.anthropic.claude-fable-5": {
+      "cache_read": 1.1e-6,
+      "cache_write": 0.00001375,
+      "input": 0.000011,
+      "output": 0.000055,
+      "web_search": 0.01
+    },
     "apac.anthropic.claude-haiku-4-5-20251001-v1:0": {
       "cache_read": 1.1e-7,
       "cache_write": 1.375e-6,
       "input": 1.1e-6,
       "output": 5.5e-6,
+      "web_search": 0.01
+    },
+    "apac.anthropic.claude-mythos-preview": {
+      "cache_read": 2.75e-6,
+      "cache_write": 0.000034375,
+      "input": 0.0000275,
+      "output": 0.0001375,
+      "web_search": 0.01
+    },
+    "apac.anthropic.claude-opus-4-7": {
+      "cache_read": 5.5e-7,
+      "cache_write": 6.875e-6,
+      "input": 5.5e-6,
+      "output": 0.0000275,
+      "web_search": 0.01
+    },
+    "apac.anthropic.claude-opus-4-8": {
+      "cache_read": 5.5e-7,
+      "cache_write": 6.875e-6,
+      "input": 5.5e-6,
+      "output": 0.0000275,
+      "web_search": 0.01
+    },
+    "apac.anthropic.claude-opus-5": {
+      "cache_read": 5.5e-7,
+      "cache_write": 6.875e-6,
+      "input": 5.5e-6,
+      "output": 0.0000275,
+      "web_search": 0.01
+    },
+    "apac.anthropic.claude-opus-5-5": {
+      "cache_read": 2.2e-7,
+      "cache_write": 5.5e-6,
+      "input": 4.4e-6,
+      "output": 0.000022,
       "web_search": 0.01
     },
     "apac.anthropic.claude-sonnet-4-20250514-v1:0": {
@@ -185,11 +241,39 @@
       "output": 0.000015,
       "web_search": 0.01
     },
+    "apac.anthropic.claude-sonnet-4-6": {
+      "cache_read": 3.3e-7,
+      "cache_write": 4.125e-6,
+      "input": 3.3e-6,
+      "output": 0.0000165,
+      "web_search": 0.01
+    },
+    "apac.anthropic.claude-sonnet-5": {
+      "cache_read": 2.2e-7,
+      "cache_write": 2.75e-6,
+      "input": 2.2e-6,
+      "output": 0.000011,
+      "web_search": 0.01
+    },
+    "au.anthropic.claude-fable-5": {
+      "cache_read": 1.1e-6,
+      "cache_write": 0.00001375,
+      "input": 0.000011,
+      "output": 0.000055,
+      "web_search": 0.01
+    },
     "au.anthropic.claude-haiku-4-5-20251001-v1:0": {
       "cache_read": 1.1e-7,
       "cache_write": 1.375e-6,
       "input": 1.1e-6,
       "output": 5.5e-6,
+      "web_search": 0.01
+    },
+    "au.anthropic.claude-mythos-preview": {
+      "cache_read": 2.75e-6,
+      "cache_write": 0.000034375,
+      "input": 0.0000275,
+      "output": 0.0001375,
       "web_search": 0.01
     },
     "au.anthropic.claude-opus-4-6-v1": {
@@ -519,6 +603,13 @@
       "output": 0.00002,
       "web_search": 0.01
     },
+    "claude-opus-5.5:batch": {
+      "cache_read": 1e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
     "claude-opus-5:batch": {
       "cache_read": 2.5e-7,
       "cache_write": 3.125e-6,
@@ -717,6 +808,13 @@
       "cache_write": 6.25002e-6,
       "input": 5.00003e-6,
       "output": 0.00002500001,
+      "web_search": 0.01
+    },
+    "databricks-claude-opus-5-5": {
+      "cache_read": 1.9999e-7,
+      "cache_write": 5.00003e-6,
+      "input": 4.00001e-6,
+      "output": 0.00001999998,
       "web_search": 0.01
     },
     "databricks-claude-sonnet-4": {
@@ -1336,6 +1434,12 @@
       "output": 3.75e-6,
       "web_search": 0.01
     },
+    "gemini-3.8-flash-cyber": {
+      "cache_read": 1.5e-7,
+      "input": 1.5e-6,
+      "output": 7.5e-6,
+      "web_search": 0.01
+    },
     "gemini-3.8-flash:batch": {
       "cache_read": 3.75e-8,
       "cache_write": 4.16666666666667e-8,
@@ -1432,6 +1536,13 @@
       "output": 5e-6,
       "web_search": 0.01
     },
+    "global.anthropic.claude-mythos-5-1": {
+      "cache_read": 2.5e-7,
+      "cache_write": 0.0000125,
+      "input": 0.00001,
+      "output": 0.00005,
+      "web_search": 0.01
+    },
     "global.anthropic.claude-opus-4-5-20251101-v1:0": {
       "cache_read": 5e-7,
       "cache_write": 6.25e-6,
@@ -1502,6 +1613,18 @@
       "output": 0.00001,
       "web_search": 0.01
     },
+    "global.openai.gpt-5.4": {
+      "cache_read": 2.5e-7,
+      "input": 2.5e-6,
+      "output": 0.000015,
+      "web_search": 0.01
+    },
+    "global.openai.gpt-5.5": {
+      "cache_read": 5e-7,
+      "input": 5e-6,
+      "output": 0.00003,
+      "web_search": 0.01
+    },
     "global.openai.gpt-5.6-luna": {
       "cache_read": 2e-8,
       "cache_write": 2.5e-7,
@@ -1528,6 +1651,20 @@
       "cache_write": 0.0000125,
       "input": 0.00001,
       "output": 0.00005,
+      "web_search": 0.01
+    },
+    "global.openai.gpt-6-luna": {
+      "cache_read": 1e-8,
+      "cache_write": 1.25e-7,
+      "input": 1e-7,
+      "output": 5e-7,
+      "web_search": 0.01
+    },
+    "global.openai.gpt-6-sol": {
+      "cache_read": 2e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
       "web_search": 0.01
     },
     "global.xai.grok-4.6": {
@@ -1646,10 +1783,16 @@
       "output": 0.00001,
       "web_search": 0.01
     },
+    "gpt-5-chat-latest": {
+      "cache_read": 1.25e-7,
+      "input": 1.25e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
     "gpt-5-codex": {
-      "cache_read": 1.38e-7,
-      "input": 1.375e-6,
-      "output": 0.000011,
+      "cache_read": 1.25e-7,
+      "input": 1.25e-6,
+      "output": 0.00001,
       "web_search": 0.01
     },
     "gpt-5-image": {
@@ -1739,10 +1882,22 @@
       "output": 0.00001,
       "web_search": 0.01
     },
-    "gpt-5.1-codex": {
+    "gpt-5.1-chat": {
       "cache_read": 1.375e-7,
       "input": 1.375e-6,
       "output": 0.000011,
+      "web_search": 0.01
+    },
+    "gpt-5.1-chat-latest": {
+      "cache_read": 1.25e-7,
+      "input": 1.25e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
+    "gpt-5.1-codex": {
+      "cache_read": 1.25e-7,
+      "input": 1.25e-6,
+      "output": 0.00001,
       "web_search": 0.01
     },
     "gpt-5.1-codex-2025-11-13": {
@@ -1752,15 +1907,15 @@
       "web_search": 0.01
     },
     "gpt-5.1-codex-max": {
-      "cache_read": 1.375e-7,
-      "input": 1.375e-6,
-      "output": 0.000011,
+      "cache_read": 1.25e-7,
+      "input": 1.25e-6,
+      "output": 0.00001,
       "web_search": 0.01
     },
     "gpt-5.1-codex-mini": {
-      "cache_read": 2.75e-8,
-      "input": 2.75e-7,
-      "output": 2.2e-6,
+      "cache_read": 2.5e-8,
+      "input": 2.5e-7,
+      "output": 2e-6,
       "web_search": 0.01
     },
     "gpt-5.1-codex-mini-2025-11-13": {
@@ -1788,15 +1943,21 @@
       "web_search": 0.01
     },
     "gpt-5.2-chat": {
+      "cache_read": 1.925e-7,
+      "input": 1.925e-6,
+      "output": 0.0000154,
+      "web_search": 0.01
+    },
+    "gpt-5.2-chat-latest": {
       "cache_read": 1.75e-7,
       "input": 1.75e-6,
       "output": 0.000014,
       "web_search": 0.01
     },
     "gpt-5.2-codex": {
-      "cache_read": 1.925e-7,
-      "input": 1.925e-6,
-      "output": 0.0000154,
+      "cache_read": 1.75e-7,
+      "input": 1.75e-6,
+      "output": 0.000014,
       "web_search": 0.01
     },
     "gpt-5.2-pro": {
@@ -1818,6 +1979,18 @@
       "cache_read": 8.75e-8,
       "input": 8.75e-7,
       "output": 7e-6,
+      "web_search": 0.01
+    },
+    "gpt-5.3-chat": {
+      "cache_read": 1.925e-7,
+      "input": 1.925e-6,
+      "output": 0.0000154,
+      "web_search": 0.01
+    },
+    "gpt-5.3-chat-latest": {
+      "cache_read": 1.75e-7,
+      "input": 1.75e-6,
+      "output": 0.000014,
       "web_search": 0.01
     },
     "gpt-5.3-codex": {
@@ -2132,6 +2305,13 @@
       "output": 5e-7,
       "web_search": 0.01
     },
+    "gpt-6-luna-2026-09-22": {
+      "cache_read": 1e-8,
+      "cache_write": 1.25e-7,
+      "input": 1e-7,
+      "output": 5e-7,
+      "web_search": 0.01
+    },
     "gpt-6-luna-pro": {
       "cache_read": 1e-8,
       "cache_write": 1.25e-7,
@@ -2139,7 +2319,28 @@
       "output": 5e-7,
       "web_search": 0.01
     },
+    "gpt-6-luna-pro:batch": {
+      "cache_read": 5e-9,
+      "cache_write": 6.25e-8,
+      "input": 5e-8,
+      "output": 2.5e-7,
+      "web_search": 0.01
+    },
+    "gpt-6-luna:batch": {
+      "cache_read": 5e-9,
+      "cache_write": 6.25e-8,
+      "input": 5e-8,
+      "output": 2.5e-7,
+      "web_search": 0.01
+    },
     "gpt-6-sol": {
+      "cache_read": 2e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
+    "gpt-6-sol-2026-09-22": {
       "cache_read": 2e-7,
       "cache_write": 2.5e-6,
       "input": 2e-6,
@@ -2151,6 +2352,20 @@
       "cache_write": 2.5e-6,
       "input": 2e-6,
       "output": 0.00001,
+      "web_search": 0.01
+    },
+    "gpt-6-sol-pro:batch": {
+      "cache_read": 1e-7,
+      "cache_write": 1.25e-6,
+      "input": 1e-6,
+      "output": 5e-6,
+      "web_search": 0.01
+    },
+    "gpt-6-sol:batch": {
+      "cache_read": 1e-7,
+      "cache_write": 1.25e-6,
+      "input": 1e-6,
+      "output": 5e-6,
       "web_search": 0.01
     },
     "grok-2": {
@@ -2174,8 +2389,8 @@
       "web_search": 0.01
     },
     "grok-3-mini": {
-      "input": 3e-7,
-      "output": 5e-7,
+      "input": 2.5e-7,
+      "output": 1.27e-6,
       "web_search": 0.01
     },
     "grok-3-mini-fast": {
@@ -2208,6 +2423,16 @@
       "cache_read": 2e-7,
       "input": 2e-6,
       "output": 6e-6,
+      "web_search": 0.01
+    },
+    "grok-4-fast-non-reasoning": {
+      "input": 2e-7,
+      "output": 5e-7,
+      "web_search": 0.01
+    },
+    "grok-4-fast-reasoning": {
+      "input": 2e-7,
+      "output": 5e-7,
       "web_search": 0.01
     },
     "grok-4.1-fast-non-reasoning": {
@@ -2623,6 +2848,12 @@
       "output": 4.84e-6,
       "web_search": 0.01
     },
+    "o1-preview": {
+      "cache_read": 8.25e-6,
+      "input": 0.0000165,
+      "output": 0.000066,
+      "web_search": 0.01
+    },
     "o1-pro": {
       "input": 0.00015,
       "output": 0.0006,
@@ -2647,9 +2878,9 @@
       "web_search": 0.01
     },
     "o3-deep-research": {
-      "cache_read": 2.75e-6,
-      "input": 0.000011,
-      "output": 0.000044,
+      "cache_read": 2.5e-6,
+      "input": 0.00001,
+      "output": 0.00004,
       "web_search": 0.01
     },
     "o3-mini": {
@@ -2781,6 +3012,20 @@
       "output": 0.000055,
       "web_search": 0.01
     },
+    "openai.gpt-6-luna": {
+      "cache_read": 1e-8,
+      "cache_write": 1.25e-7,
+      "input": 1e-7,
+      "output": 5e-7,
+      "web_search": 0.01
+    },
+    "openai.gpt-6-sol": {
+      "cache_read": 2e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
     "us-gov.anthropic.claude-fable-5-1": {
       "cache_read": 3e-7,
       "cache_write": 0.000015,
@@ -2885,6 +3130,27 @@
       "output": 5.5e-6,
       "web_search": 0.01
     },
+    "us.anthropic.claude-mythos-5": {
+      "cache_read": 1.1e-6,
+      "cache_write": 0.00001375,
+      "input": 0.000011,
+      "output": 0.000055,
+      "web_search": 0.01
+    },
+    "us.anthropic.claude-mythos-5-1": {
+      "cache_read": 2.75e-7,
+      "cache_write": 0.00001375,
+      "input": 0.000011,
+      "output": 0.000055,
+      "web_search": 0.01
+    },
+    "us.anthropic.claude-mythos-preview": {
+      "cache_read": 2.75e-6,
+      "cache_write": 0.000034375,
+      "input": 0.0000275,
+      "output": 0.0001375,
+      "web_search": 0.01
+    },
     "us.anthropic.claude-opus-4-1-20250805-v1:0": {
       "cache_read": 1.5e-6,
       "cache_write": 0.00001875,
@@ -2969,6 +3235,18 @@
       "output": 0.000011,
       "web_search": 0.01
     },
+    "us.openai.gpt-5.4": {
+      "cache_read": 2.75e-7,
+      "input": 2.75e-6,
+      "output": 0.0000165,
+      "web_search": 0.01
+    },
+    "us.openai.gpt-5.5": {
+      "cache_read": 5.5e-7,
+      "input": 5.5e-6,
+      "output": 0.000033,
+      "web_search": 0.01
+    },
     "us.openai.gpt-5.6-luna": {
       "cache_read": 2.2e-8,
       "cache_write": 2.75e-7,
@@ -2995,6 +3273,20 @@
       "cache_write": 0.00001375,
       "input": 0.000011,
       "output": 0.000055,
+      "web_search": 0.01
+    },
+    "us.openai.gpt-6-luna": {
+      "cache_read": 1.1e-8,
+      "cache_write": 1.375e-7,
+      "input": 1.1e-7,
+      "output": 5.5e-7,
+      "web_search": 0.01
+    },
+    "us.openai.gpt-6-sol": {
+      "cache_read": 2.2e-7,
+      "cache_write": 2.75e-6,
+      "input": 2.2e-6,
+      "output": 0.000011,
       "web_search": 0.01
     },
     "us.xai.grok-4.6": {
