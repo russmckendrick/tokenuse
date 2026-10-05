@@ -1,6 +1,6 @@
 {
   "_metadata": {
-    "checked_at": "2026-09-28",
+    "checked_at": "2026-10-05",
     "fields": {
       "cache_read": "USD per cache read token",
       "cache_write": "USD per cache write token",
@@ -185,6 +185,13 @@
       "output": 0.00001,
       "web_search": 0.01
     },
+    "anthropic.claude-sonnet-5-5": {
+      "cache_read": 2e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
     "apac.anthropic.claude-fable-5": {
       "cache_read": 1.1e-6,
       "cache_write": 0.00001375,
@@ -249,6 +256,13 @@
       "web_search": 0.01
     },
     "apac.anthropic.claude-sonnet-5": {
+      "cache_read": 2.2e-7,
+      "cache_write": 2.75e-6,
+      "input": 2.2e-6,
+      "output": 0.000011,
+      "web_search": 0.01
+    },
+    "apac.anthropic.claude-sonnet-5-5": {
       "cache_read": 2.2e-7,
       "cache_write": 2.75e-6,
       "input": 2.2e-6,
@@ -326,6 +340,13 @@
       "web_search": 0.01
     },
     "au.anthropic.claude-sonnet-5": {
+      "cache_read": 2.2e-7,
+      "cache_write": 2.75e-6,
+      "input": 2.2e-6,
+      "output": 0.000011,
+      "web_search": 0.01
+    },
+    "au.anthropic.claude-sonnet-5-5": {
       "cache_read": 2.2e-7,
       "cache_write": 2.75e-6,
       "input": 2.2e-6,
@@ -724,6 +745,27 @@
       "cache_write": 2.5e-6,
       "input": 2e-6,
       "output": 0.00001,
+      "web_search": 0.01
+    },
+    "claude-sonnet-5-5": {
+      "cache_read": 2e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
+    "claude-sonnet-5.5": {
+      "cache_read": 2e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
+    "claude-sonnet-5.5:batch": {
+      "cache_read": 1e-7,
+      "cache_write": 1.25e-6,
+      "input": 1e-6,
+      "output": 5e-6,
       "web_search": 0.01
     },
     "claude-sonnet-5:batch": {
@@ -1154,6 +1196,13 @@
       "web_search": 0.01
     },
     "eu.anthropic.claude-sonnet-5": {
+      "cache_read": 2.2e-7,
+      "cache_write": 2.75e-6,
+      "input": 2.2e-6,
+      "output": 0.000011,
+      "web_search": 0.01
+    },
+    "eu.anthropic.claude-sonnet-5-5": {
       "cache_read": 2.2e-7,
       "cache_write": 2.75e-6,
       "input": 2.2e-6,
@@ -1613,6 +1662,13 @@
       "output": 0.00001,
       "web_search": 0.01
     },
+    "global.anthropic.claude-sonnet-5-5": {
+      "cache_read": 2e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
     "global.openai.gpt-5.4": {
       "cache_read": 2.5e-7,
       "input": 2.5e-6,
@@ -1667,7 +1723,20 @@
       "output": 0.00001,
       "web_search": 0.01
     },
+    "global.openai.gpt-6.1-sol": {
+      "cache_read": 1e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
     "global.xai.grok-4.6": {
+      "cache_read": 5e-7,
+      "input": 2e-6,
+      "output": 6e-6,
+      "web_search": 0.01
+    },
+    "global.xai.grok-4.7": {
       "cache_read": 5e-7,
       "input": 2e-6,
       "output": 6e-6,
@@ -2204,10 +2273,10 @@
       "web_search": 0.01
     },
     "gpt-5.6-sol-pro": {
-      "cache_read": 2e-7,
-      "cache_write": 2.5e-6,
-      "input": 2e-6,
-      "output": 0.00001,
+      "cache_read": 4e-7,
+      "cache_write": 5e-6,
+      "input": 4e-6,
+      "output": 0.00002,
       "web_search": 0.01
     },
     "gpt-5.6-sol-pro:batch": {
@@ -2363,6 +2432,41 @@
     },
     "gpt-6-sol:batch": {
       "cache_read": 1e-7,
+      "cache_write": 1.25e-6,
+      "input": 1e-6,
+      "output": 5e-6,
+      "web_search": 0.01
+    },
+    "gpt-6.1-sol": {
+      "cache_read": 1e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
+    "gpt-6.1-sol-2026-09-29": {
+      "cache_read": 1e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
+    "gpt-6.1-sol-pro": {
+      "cache_read": 1e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
+    "gpt-6.1-sol-pro:batch": {
+      "cache_read": 5e-8,
+      "cache_write": 1.25e-6,
+      "input": 1e-6,
+      "output": 5e-6,
+      "web_search": 0.01
+    },
+    "gpt-6.1-sol:batch": {
+      "cache_read": 5e-8,
       "cache_write": 1.25e-6,
       "input": 1e-6,
       "output": 5e-6,
@@ -2676,9 +2780,9 @@
       "web_search": 0.01
     },
     "grok-4.7": {
-      "cache_read": 4e-7,
-      "input": 1.6e-6,
-      "output": 4.8e-6,
+      "cache_read": 5e-7,
+      "input": 2e-6,
+      "output": 6e-6,
       "web_search": 0.01
     },
     "grok-build-0.1": {
@@ -2712,9 +2816,9 @@
       "web_search": 0.01
     },
     "grok-latest": {
-      "cache_read": 4e-7,
-      "input": 1.6e-6,
-      "output": 4.8e-6,
+      "cache_read": 5e-7,
+      "input": 2e-6,
+      "output": 6e-6,
       "web_search": 0.01
     },
     "jp.anthropic.claude-haiku-4-5-20251001-v1:0": {
@@ -2767,6 +2871,13 @@
       "web_search": 0.01
     },
     "jp.anthropic.claude-sonnet-5": {
+      "cache_read": 2.2e-7,
+      "cache_write": 2.75e-6,
+      "input": 2.2e-6,
+      "output": 0.000011,
+      "web_search": 0.01
+    },
+    "jp.anthropic.claude-sonnet-5-5": {
       "cache_read": 2.2e-7,
       "cache_write": 2.75e-6,
       "input": 2.2e-6,
@@ -3026,6 +3137,13 @@
       "output": 0.00001,
       "web_search": 0.01
     },
+    "openai.gpt-6.1-sol": {
+      "cache_read": 1e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
     "us-gov.anthropic.claude-fable-5-1": {
       "cache_read": 3e-7,
       "cache_write": 0.000015,
@@ -3062,6 +3180,13 @@
       "web_search": 0.01
     },
     "us-gov.anthropic.claude-sonnet-5": {
+      "cache_read": 2.4e-7,
+      "cache_write": 3e-6,
+      "input": 2.4e-6,
+      "output": 0.000012,
+      "web_search": 0.01
+    },
+    "us-gov.anthropic.claude-sonnet-5-5": {
       "cache_read": 2.4e-7,
       "cache_write": 3e-6,
       "input": 2.4e-6,
@@ -3235,6 +3360,13 @@
       "output": 0.000011,
       "web_search": 0.01
     },
+    "us.anthropic.claude-sonnet-5-5": {
+      "cache_read": 2.2e-7,
+      "cache_write": 2.75e-6,
+      "input": 2.2e-6,
+      "output": 0.000011,
+      "web_search": 0.01
+    },
     "us.openai.gpt-5.4": {
       "cache_read": 2.75e-7,
       "input": 2.75e-6,
@@ -3289,7 +3421,20 @@
       "output": 0.000011,
       "web_search": 0.01
     },
+    "us.openai.gpt-6.1-sol": {
+      "cache_read": 1.1e-7,
+      "cache_write": 2.75e-6,
+      "input": 2.2e-6,
+      "output": 0.000011,
+      "web_search": 0.01
+    },
     "us.xai.grok-4.6": {
+      "cache_read": 5.5e-7,
+      "input": 2.2e-6,
+      "output": 6.6e-6,
+      "web_search": 0.01
+    },
+    "us.xai.grok-4.7": {
       "cache_read": 5.5e-7,
       "input": 2.2e-6,
       "output": 6.6e-6,
@@ -3350,6 +3495,12 @@
       "cache_read": 6.6e-7,
       "input": 2.64e-6,
       "output": 7.92e-6,
+      "web_search": 0.01
+    },
+    "xai.grok-4.7": {
+      "cache_read": 5e-7,
+      "input": 2e-6,
+      "output": 6e-6,
       "web_search": 0.01
     },
     "xai.grok-code-fast-1": {
