@@ -1,6 +1,6 @@
 {
   "_metadata": {
-    "checked_at": "2026-10-05",
+    "checked_at": "2026-10-12",
     "fields": {
       "cache_read": "USD per cache read token",
       "cache_write": "USD per cache write token",
@@ -85,6 +85,13 @@
       "cache_write": 1.25e-6,
       "input": 1e-6,
       "output": 5e-6,
+      "web_search": 0.01
+    },
+    "anthropic.claude-haiku-5-5": {
+      "cache_read": 1e-8,
+      "cache_write": 1.25e-7,
+      "input": 1e-7,
+      "output": 5e-7,
       "web_search": 0.01
     },
     "anthropic.claude-mythos-5-1": {
@@ -186,7 +193,7 @@
       "web_search": 0.01
     },
     "anthropic.claude-sonnet-5-5": {
-      "cache_read": 2e-7,
+      "cache_read": 1e-7,
       "cache_write": 2.5e-6,
       "input": 2e-6,
       "output": 0.00001,
@@ -204,6 +211,13 @@
       "cache_write": 1.375e-6,
       "input": 1.1e-6,
       "output": 5.5e-6,
+      "web_search": 0.01
+    },
+    "apac.anthropic.claude-haiku-5-5": {
+      "cache_read": 1.1e-8,
+      "cache_write": 1.375e-7,
+      "input": 1.1e-7,
+      "output": 5.5e-7,
       "web_search": 0.01
     },
     "apac.anthropic.claude-mythos-preview": {
@@ -263,7 +277,7 @@
       "web_search": 0.01
     },
     "apac.anthropic.claude-sonnet-5-5": {
-      "cache_read": 2.2e-7,
+      "cache_read": 1.1e-7,
       "cache_write": 2.75e-6,
       "input": 2.2e-6,
       "output": 0.000011,
@@ -281,6 +295,13 @@
       "cache_write": 1.375e-6,
       "input": 1.1e-6,
       "output": 5.5e-6,
+      "web_search": 0.01
+    },
+    "au.anthropic.claude-haiku-5-5": {
+      "cache_read": 1.1e-8,
+      "cache_write": 1.375e-7,
+      "input": 1.1e-7,
+      "output": 5.5e-7,
       "web_search": 0.01
     },
     "au.anthropic.claude-mythos-preview": {
@@ -347,7 +368,7 @@
       "web_search": 0.01
     },
     "au.anthropic.claude-sonnet-5-5": {
-      "cache_read": 2.2e-7,
+      "cache_read": 1.1e-7,
       "cache_write": 2.75e-6,
       "input": 2.2e-6,
       "output": 0.000011,
@@ -361,34 +382,6 @@
       "web_search": 0.01
     },
     "claude-fable-5-1": {
-      "cache_read": 2.5e-7,
-      "cache_write": 0.0000125,
-      "input": 0.00001,
-      "output": 0.00005,
-      "web_search": 0.01
-    },
-    "claude-fable-5.1": {
-      "cache_read": 2.5e-7,
-      "cache_write": 0.0000125,
-      "input": 0.00001,
-      "output": 0.00005,
-      "web_search": 0.01
-    },
-    "claude-fable-5.1:batch": {
-      "cache_read": 1.25e-7,
-      "cache_write": 6.25e-6,
-      "input": 5e-6,
-      "output": 0.000025,
-      "web_search": 0.01
-    },
-    "claude-fable-5:batch": {
-      "cache_read": 5e-7,
-      "cache_write": 6.25e-6,
-      "input": 5e-6,
-      "output": 0.000025,
-      "web_search": 0.01
-    },
-    "claude-fable-latest": {
       "cache_read": 2.5e-7,
       "cache_write": 0.0000125,
       "input": 0.00001,
@@ -428,18 +421,18 @@
       "output": 5e-6,
       "web_search": 0.01
     },
-    "claude-haiku-4.5:batch": {
-      "cache_read": 5e-8,
-      "cache_write": 6.25e-7,
-      "input": 5e-7,
-      "output": 2.5e-6,
+    "claude-haiku-5-5": {
+      "cache_read": 1e-8,
+      "cache_write": 1.25e-7,
+      "input": 1e-7,
+      "output": 5e-7,
       "web_search": 0.01
     },
-    "claude-haiku-latest": {
-      "cache_read": 1e-7,
-      "cache_write": 1.25e-6,
-      "input": 1e-6,
-      "output": 5e-6,
+    "claude-haiku-5.5": {
+      "cache_read": 1e-8,
+      "cache_write": 1.25e-7,
+      "input": 1e-7,
+      "output": 5e-7,
       "web_search": 0.01
     },
     "claude-mythos-5": {
@@ -540,13 +533,6 @@
       "output": 0.000075,
       "web_search": 0.01
     },
-    "claude-opus-4.1:batch": {
-      "cache_read": 7.5e-7,
-      "cache_write": 9.375e-6,
-      "input": 7.5e-6,
-      "output": 0.0000375,
-      "web_search": 0.01
-    },
     "claude-opus-4.5": {
       "cache_read": 5e-7,
       "cache_write": 6.25e-6,
@@ -554,53 +540,11 @@
       "output": 0.000025,
       "web_search": 0.01
     },
-    "claude-opus-4.5:batch": {
-      "cache_read": 2.5e-7,
-      "cache_write": 3.125e-6,
-      "input": 2.5e-6,
-      "output": 0.0000125,
-      "web_search": 0.01
-    },
     "claude-opus-4.6": {
       "cache_read": 5e-7,
       "cache_write": 6.25e-6,
       "input": 5e-6,
       "output": 0.000025,
-      "web_search": 0.01
-    },
-    "claude-opus-4.6:batch": {
-      "cache_read": 2.5e-7,
-      "cache_write": 3.125e-6,
-      "input": 2.5e-6,
-      "output": 0.0000125,
-      "web_search": 0.01
-    },
-    "claude-opus-4.7": {
-      "cache_read": 5e-7,
-      "cache_write": 6.25e-6,
-      "input": 5e-6,
-      "output": 0.000025,
-      "web_search": 0.01
-    },
-    "claude-opus-4.7:batch": {
-      "cache_read": 2.5e-7,
-      "cache_write": 3.125e-6,
-      "input": 2.5e-6,
-      "output": 0.0000125,
-      "web_search": 0.01
-    },
-    "claude-opus-4.8": {
-      "cache_read": 5e-7,
-      "cache_write": 6.25e-6,
-      "input": 5e-6,
-      "output": 0.000025,
-      "web_search": 0.01
-    },
-    "claude-opus-4.8:batch": {
-      "cache_read": 2.5e-7,
-      "cache_write": 3.125e-6,
-      "input": 2.5e-6,
-      "output": 0.0000125,
       "web_search": 0.01
     },
     "claude-opus-5": {
@@ -611,34 +555,6 @@
       "web_search": 0.01
     },
     "claude-opus-5-5": {
-      "cache_read": 2e-7,
-      "cache_write": 5e-6,
-      "input": 4e-6,
-      "output": 0.00002,
-      "web_search": 0.01
-    },
-    "claude-opus-5.5": {
-      "cache_read": 2e-7,
-      "cache_write": 5e-6,
-      "input": 4e-6,
-      "output": 0.00002,
-      "web_search": 0.01
-    },
-    "claude-opus-5.5:batch": {
-      "cache_read": 1e-7,
-      "cache_write": 2.5e-6,
-      "input": 2e-6,
-      "output": 0.00001,
-      "web_search": 0.01
-    },
-    "claude-opus-5:batch": {
-      "cache_read": 2.5e-7,
-      "cache_write": 3.125e-6,
-      "input": 2.5e-6,
-      "output": 0.0000125,
-      "web_search": 0.01
-    },
-    "claude-opus-latest": {
       "cache_read": 2e-7,
       "cache_write": 5e-6,
       "input": 4e-6,
@@ -719,27 +635,6 @@
       "output": 0.000015,
       "web_search": 0.01
     },
-    "claude-sonnet-4.5:batch": {
-      "cache_read": 1.5e-7,
-      "cache_write": 1.875e-6,
-      "input": 1.5e-6,
-      "output": 7.5e-6,
-      "web_search": 0.01
-    },
-    "claude-sonnet-4.6": {
-      "cache_read": 3e-7,
-      "cache_write": 3.75e-6,
-      "input": 3e-6,
-      "output": 0.000015,
-      "web_search": 0.01
-    },
-    "claude-sonnet-4.6:batch": {
-      "cache_read": 1.5e-7,
-      "cache_write": 1.875e-6,
-      "input": 1.5e-6,
-      "output": 7.5e-6,
-      "web_search": 0.01
-    },
     "claude-sonnet-5": {
       "cache_read": 2e-7,
       "cache_write": 2.5e-6,
@@ -748,35 +643,7 @@
       "web_search": 0.01
     },
     "claude-sonnet-5-5": {
-      "cache_read": 2e-7,
-      "cache_write": 2.5e-6,
-      "input": 2e-6,
-      "output": 0.00001,
-      "web_search": 0.01
-    },
-    "claude-sonnet-5.5": {
-      "cache_read": 2e-7,
-      "cache_write": 2.5e-6,
-      "input": 2e-6,
-      "output": 0.00001,
-      "web_search": 0.01
-    },
-    "claude-sonnet-5.5:batch": {
       "cache_read": 1e-7,
-      "cache_write": 1.25e-6,
-      "input": 1e-6,
-      "output": 5e-6,
-      "web_search": 0.01
-    },
-    "claude-sonnet-5:batch": {
-      "cache_read": 1e-7,
-      "cache_write": 1.25e-6,
-      "input": 1e-6,
-      "output": 5e-6,
-      "web_search": 0.01
-    },
-    "claude-sonnet-latest": {
-      "cache_read": 2e-7,
       "cache_write": 2.5e-6,
       "input": 2e-6,
       "output": 0.00001,
@@ -1118,6 +985,13 @@
       "output": 5.5e-6,
       "web_search": 0.01
     },
+    "eu.anthropic.claude-haiku-5-5": {
+      "cache_read": 1.1e-8,
+      "cache_write": 1.375e-7,
+      "input": 1.1e-7,
+      "output": 5.5e-7,
+      "web_search": 0.01
+    },
     "eu.anthropic.claude-opus-4-1-20250805-v1:0": {
       "cache_read": 1.5e-6,
       "cache_write": 0.00001875,
@@ -1203,7 +1077,7 @@
       "web_search": 0.01
     },
     "eu.anthropic.claude-sonnet-5-5": {
-      "cache_read": 2.2e-7,
+      "cache_read": 1.1e-7,
       "cache_write": 2.75e-6,
       "input": 2.2e-6,
       "output": 0.000011,
@@ -1244,21 +1118,12 @@
     },
     "gemini-2.5-flash": {
       "cache_read": 3e-8,
-      "cache_write": 8.33333333333333e-8,
-      "input": 3e-7,
-      "output": 2.5e-6,
-      "web_search": 0.01
-    },
-    "gemini-2.5-flash-image": {
-      "cache_read": 3e-8,
-      "cache_write": 8.33333333333333e-8,
       "input": 3e-7,
       "output": 2.5e-6,
       "web_search": 0.01
     },
     "gemini-2.5-flash-lite": {
       "cache_read": 1e-8,
-      "cache_write": 8.33333333333333e-8,
       "input": 1e-7,
       "output": 4e-7,
       "web_search": 0.01
@@ -1269,41 +1134,14 @@
       "output": 4e-7,
       "web_search": 0.01
     },
-    "gemini-2.5-flash-lite:batch": {
-      "cache_read": 1e-8,
-      "input": 5e-8,
-      "output": 2e-7,
-      "web_search": 0.01
-    },
     "gemini-2.5-flash-preview-09-2025": {
       "cache_read": 3e-8,
       "input": 3e-7,
       "output": 2.5e-6,
       "web_search": 0.01
     },
-    "gemini-2.5-flash:batch": {
-      "cache_read": 3e-8,
-      "input": 1.5e-7,
-      "output": 1.25e-6,
-      "web_search": 0.01
-    },
     "gemini-2.5-pro": {
       "cache_read": 1.25e-7,
-      "cache_write": 3.75e-7,
-      "input": 1.25e-6,
-      "output": 0.00001,
-      "web_search": 0.01
-    },
-    "gemini-2.5-pro-preview": {
-      "cache_read": 1.25e-7,
-      "cache_write": 3.75e-7,
-      "input": 1.25e-6,
-      "output": 0.00001,
-      "web_search": 0.01
-    },
-    "gemini-2.5-pro-preview-05-06": {
-      "cache_read": 1.25e-7,
-      "cache_write": 3.75e-7,
       "input": 1.25e-6,
       "output": 0.00001,
       "web_search": 0.01
@@ -1314,15 +1152,8 @@
       "output": 0.00002,
       "web_search": 0.01
     },
-    "gemini-2.5-pro:batch": {
-      "cache_read": 1.25e-7,
-      "input": 6.25e-7,
-      "output": 5e-6,
-      "web_search": 0.01
-    },
     "gemini-3-flash-preview": {
       "cache_read": 5e-8,
-      "cache_write": 8.33333333333333e-8,
       "input": 5e-7,
       "output": 3e-6,
       "web_search": 0.01
@@ -1333,26 +1164,7 @@
       "output": 3e-6,
       "web_search": 0.01
     },
-    "gemini-3-flash-preview:batch": {
-      "input": 2.5e-7,
-      "output": 1.5e-6,
-      "web_search": 0.01
-    },
     "gemini-3-pro": {
-      "input": 2e-6,
-      "output": 0.000012,
-      "web_search": 0.01
-    },
-    "gemini-3-pro-image": {
-      "cache_read": 2e-7,
-      "cache_write": 3.75e-7,
-      "input": 2e-6,
-      "output": 0.000012,
-      "web_search": 0.01
-    },
-    "gemini-3-pro-image-preview": {
-      "cache_read": 2e-7,
-      "cache_write": 3.75e-7,
       "input": 2e-6,
       "output": 0.000012,
       "web_search": 0.01
@@ -1363,39 +1175,16 @@
       "output": 0.000012,
       "web_search": 0.01
     },
-    "gemini-3.1-flash-image": {
-      "input": 5e-7,
-      "output": 3e-6,
-      "web_search": 0.01
-    },
-    "gemini-3.1-flash-image-preview": {
-      "input": 5e-7,
-      "output": 3e-6,
-      "web_search": 0.01
-    },
     "gemini-3.1-flash-lite": {
       "cache_read": 2.5e-8,
-      "cache_write": 8.33333333333333e-8,
-      "input": 2.5e-7,
-      "output": 1.5e-6,
-      "web_search": 0.01
-    },
-    "gemini-3.1-flash-lite-image": {
       "input": 2.5e-7,
       "output": 1.5e-6,
       "web_search": 0.01
     },
     "gemini-3.1-flash-lite-preview": {
       "cache_read": 2.5e-8,
-      "cache_write": 8.33333333333333e-8,
       "input": 2.5e-7,
       "output": 1.5e-6,
-      "web_search": 0.01
-    },
-    "gemini-3.1-flash-lite:batch": {
-      "cache_read": 1.25e-8,
-      "input": 1.25e-7,
-      "output": 7.5e-7,
       "web_search": 0.01
     },
     "gemini-3.1-pro": {
@@ -1405,80 +1194,42 @@
     },
     "gemini-3.1-pro-preview": {
       "cache_read": 2e-7,
-      "cache_write": 3.75e-7,
       "input": 2e-6,
       "output": 0.000012,
       "web_search": 0.01
     },
     "gemini-3.1-pro-preview-customtools": {
       "cache_read": 2e-7,
-      "cache_write": 3.75e-7,
       "input": 2e-6,
       "output": 0.000012,
       "web_search": 0.01
     },
-    "gemini-3.1-pro-preview:batch": {
-      "input": 1e-6,
-      "output": 6e-6,
-      "web_search": 0.01
-    },
     "gemini-3.5-flash": {
       "cache_read": 1.5e-7,
-      "cache_write": 8.33333333333333e-8,
       "input": 1.5e-6,
       "output": 9e-6,
       "web_search": 0.01
     },
     "gemini-3.5-flash-lite": {
       "cache_read": 3e-8,
-      "cache_write": 8.33333333333333e-8,
       "input": 3e-7,
       "output": 2.5e-6,
       "web_search": 0.01
     },
-    "gemini-3.5-flash-lite:batch": {
-      "cache_read": 1.5e-8,
-      "input": 1.5e-7,
-      "output": 1.25e-6,
-      "web_search": 0.01
-    },
-    "gemini-3.5-flash:batch": {
-      "cache_read": 7.5e-8,
-      "input": 7.5e-7,
-      "output": 4.5e-6,
-      "web_search": 0.01
-    },
     "gemini-3.6-flash": {
       "cache_read": 7.5e-8,
-      "cache_write": 4.16666666666667e-8,
       "input": 7.5e-7,
       "output": 3.75e-6,
-      "web_search": 0.01
-    },
-    "gemini-3.6-flash:batch": {
-      "cache_read": 3.75e-8,
-      "cache_write": 4.16666666666667e-8,
-      "input": 3.75e-7,
-      "output": 1.875e-6,
       "web_search": 0.01
     },
     "gemini-3.7-flash": {
       "cache_read": 7.5e-8,
-      "cache_write": 4.16666666666667e-8,
       "input": 7.5e-7,
       "output": 3.75e-6,
       "web_search": 0.01
     },
-    "gemini-3.7-flash:batch": {
-      "cache_read": 3.75e-8,
-      "cache_write": 4.16666666666667e-8,
-      "input": 3.75e-7,
-      "output": 1.875e-6,
-      "web_search": 0.01
-    },
     "gemini-3.8-flash": {
       "cache_read": 7.5e-8,
-      "cache_write": 4.16666666666667e-8,
       "input": 7.5e-7,
       "output": 3.75e-6,
       "web_search": 0.01
@@ -1489,13 +1240,6 @@
       "output": 7.5e-6,
       "web_search": 0.01
     },
-    "gemini-3.8-flash:batch": {
-      "cache_read": 3.75e-8,
-      "cache_write": 4.16666666666667e-8,
-      "input": 3.75e-7,
-      "output": 1.875e-6,
-      "web_search": 0.01
-    },
     "gemini-exp-1206": {
       "cache_read": 3e-8,
       "input": 3e-7,
@@ -1504,7 +1248,6 @@
     },
     "gemini-flash-latest": {
       "cache_read": 7.5e-8,
-      "cache_write": 4.16666666666667e-8,
       "input": 7.5e-7,
       "output": 3.75e-6,
       "web_search": 0.01
@@ -1542,7 +1285,6 @@
     },
     "gemini-pro-latest": {
       "cache_read": 2e-7,
-      "cache_write": 3.75e-7,
       "input": 2e-6,
       "output": 0.000012,
       "web_search": 0.01
@@ -1583,6 +1325,13 @@
       "cache_write": 1.25e-6,
       "input": 1e-6,
       "output": 5e-6,
+      "web_search": 0.01
+    },
+    "global.anthropic.claude-haiku-5-5": {
+      "cache_read": 1e-8,
+      "cache_write": 1.25e-7,
+      "input": 1e-7,
+      "output": 5e-7,
       "web_search": 0.01
     },
     "global.anthropic.claude-mythos-5-1": {
@@ -1663,7 +1412,7 @@
       "web_search": 0.01
     },
     "global.anthropic.claude-sonnet-5-5": {
-      "cache_read": 2e-7,
+      "cache_read": 1e-7,
       "cache_write": 2.5e-6,
       "input": 2e-6,
       "output": 0.00001,
@@ -1816,22 +1565,10 @@
       "output": 6e-7,
       "web_search": 0.01
     },
-    "gpt-4o-mini:batch": {
-      "cache_read": 3.75e-8,
-      "input": 7.5e-8,
-      "output": 3e-7,
-      "web_search": 0.01
-    },
     "gpt-4o-search-preview": {
       "cache_read": 1.25e-6,
       "input": 2.5e-6,
       "output": 0.00001,
-      "web_search": 0.01
-    },
-    "gpt-4o:batch": {
-      "cache_read": 6.25e-7,
-      "input": 1.25e-6,
-      "output": 5e-6,
       "web_search": 0.01
     },
     "gpt-5": {
@@ -1864,18 +1601,6 @@
       "output": 0.00001,
       "web_search": 0.01
     },
-    "gpt-5-image": {
-      "cache_read": 1.25e-6,
-      "input": 0.00001,
-      "output": 0.00001,
-      "web_search": 0.01
-    },
-    "gpt-5-image-mini": {
-      "cache_read": 2.5e-7,
-      "input": 2.5e-6,
-      "output": 2e-6,
-      "web_search": 0.01
-    },
     "gpt-5-mini": {
       "cache_read": 2.5e-8,
       "input": 2.5e-7,
@@ -1886,12 +1611,6 @@
       "cache_read": 2.5e-8,
       "input": 2.5e-7,
       "output": 2e-6,
-      "web_search": 0.01
-    },
-    "gpt-5-mini:batch": {
-      "cache_read": 1.25e-8,
-      "input": 1.25e-7,
-      "output": 1e-6,
       "web_search": 0.01
     },
     "gpt-5-nano": {
@@ -1906,12 +1625,6 @@
       "output": 4e-7,
       "web_search": 0.01
     },
-    "gpt-5-nano:batch": {
-      "cache_read": 2.5e-9,
-      "input": 2.5e-8,
-      "output": 2e-7,
-      "web_search": 0.01
-    },
     "gpt-5-pro": {
       "input": 0.000015,
       "output": 0.00012,
@@ -1920,11 +1633,6 @@
     "gpt-5-pro-2025-10-06": {
       "input": 0.000015,
       "output": 0.00012,
-      "web_search": 0.01
-    },
-    "gpt-5-pro:batch": {
-      "input": 7.5e-6,
-      "output": 0.00006,
       "web_search": 0.01
     },
     "gpt-5-search-api": {
@@ -1993,12 +1701,6 @@
       "output": 2e-6,
       "web_search": 0.01
     },
-    "gpt-5.1:batch": {
-      "cache_read": 6.25e-8,
-      "input": 6.25e-7,
-      "output": 5e-6,
-      "web_search": 0.01
-    },
     "gpt-5.2": {
       "cache_read": 1.75e-7,
       "input": 1.75e-6,
@@ -2039,17 +1741,6 @@
       "output": 0.000168,
       "web_search": 0.01
     },
-    "gpt-5.2-pro:batch": {
-      "input": 0.0000105,
-      "output": 0.000084,
-      "web_search": 0.01
-    },
-    "gpt-5.2:batch": {
-      "cache_read": 8.75e-8,
-      "input": 8.75e-7,
-      "output": 7e-6,
-      "web_search": 0.01
-    },
     "gpt-5.3-chat": {
       "cache_read": 1.925e-7,
       "input": 1.925e-6,
@@ -2086,12 +1777,6 @@
       "output": 0.000015,
       "web_search": 0.01
     },
-    "gpt-5.4-image-2": {
-      "cache_read": 2e-6,
-      "input": 8e-6,
-      "output": 0.000015,
-      "web_search": 0.01
-    },
     "gpt-5.4-low": {
       "cache_read": 2.5e-7,
       "input": 2.5e-6,
@@ -2110,12 +1795,6 @@
       "output": 4.5e-6,
       "web_search": 0.01
     },
-    "gpt-5.4-mini:batch": {
-      "cache_read": 3.75e-8,
-      "input": 3.75e-7,
-      "output": 2.25e-6,
-      "web_search": 0.01
-    },
     "gpt-5.4-nano": {
       "cache_read": 2e-8,
       "input": 2e-7,
@@ -2128,12 +1807,6 @@
       "output": 1.25e-6,
       "web_search": 0.01
     },
-    "gpt-5.4-nano:batch": {
-      "cache_read": 1e-8,
-      "input": 1e-7,
-      "output": 6.25e-7,
-      "web_search": 0.01
-    },
     "gpt-5.4-pro": {
       "cache_read": 3e-6,
       "input": 0.00003,
@@ -2144,17 +1817,6 @@
       "cache_read": 3e-6,
       "input": 0.00003,
       "output": 0.00018,
-      "web_search": 0.01
-    },
-    "gpt-5.4-pro:batch": {
-      "input": 0.000015,
-      "output": 0.00009,
-      "web_search": 0.01
-    },
-    "gpt-5.4:batch": {
-      "cache_read": 1.25e-7,
-      "input": 1.25e-6,
-      "output": 7.5e-6,
       "web_search": 0.01
     },
     "gpt-5.5": {
@@ -2193,17 +1855,6 @@
       "output": 0.00018,
       "web_search": 0.01
     },
-    "gpt-5.5-pro:batch": {
-      "input": 0.000015,
-      "output": 0.00009,
-      "web_search": 0.01
-    },
-    "gpt-5.5:batch": {
-      "cache_read": 2.5e-7,
-      "input": 2.5e-6,
-      "output": 0.000015,
-      "web_search": 0.01
-    },
     "gpt-5.6": {
       "cache_read": 4e-7,
       "cache_write": 5e-6,
@@ -2232,25 +1883,6 @@
       "output": 1.2e-6,
       "web_search": 0.01
     },
-    "gpt-5.6-luna-pro": {
-      "cache_read": 2e-8,
-      "cache_write": 2.5e-7,
-      "input": 2e-7,
-      "output": 1.2e-6,
-      "web_search": 0.01
-    },
-    "gpt-5.6-luna-pro:batch": {
-      "cache_read": 1e-8,
-      "input": 1e-7,
-      "output": 6e-7,
-      "web_search": 0.01
-    },
-    "gpt-5.6-luna:batch": {
-      "cache_read": 1e-8,
-      "input": 1e-7,
-      "output": 6e-7,
-      "web_search": 0.01
-    },
     "gpt-5.6-sol": {
       "cache_read": 4e-7,
       "cache_write": 5e-6,
@@ -2272,27 +1904,6 @@
       "output": 0.00002,
       "web_search": 0.01
     },
-    "gpt-5.6-sol-pro": {
-      "cache_read": 4e-7,
-      "cache_write": 5e-6,
-      "input": 4e-6,
-      "output": 0.00002,
-      "web_search": 0.01
-    },
-    "gpt-5.6-sol-pro:batch": {
-      "cache_read": 1e-7,
-      "cache_write": 1.25e-6,
-      "input": 1e-6,
-      "output": 5e-6,
-      "web_search": 0.01
-    },
-    "gpt-5.6-sol:batch": {
-      "cache_read": 1e-7,
-      "cache_write": 1.25e-6,
-      "input": 1e-6,
-      "output": 5e-6,
-      "web_search": 0.01
-    },
     "gpt-5.6-terra": {
       "cache_read": 2e-7,
       "cache_write": 2.5e-6,
@@ -2305,31 +1916,6 @@
       "cache_write": 2.5e-6,
       "input": 2e-6,
       "output": 0.000012,
-      "web_search": 0.01
-    },
-    "gpt-5.6-terra-pro": {
-      "cache_read": 2e-7,
-      "cache_write": 2.5e-6,
-      "input": 2e-6,
-      "output": 0.000012,
-      "web_search": 0.01
-    },
-    "gpt-5.6-terra-pro:batch": {
-      "cache_read": 1e-7,
-      "input": 1e-6,
-      "output": 6e-6,
-      "web_search": 0.01
-    },
-    "gpt-5.6-terra:batch": {
-      "cache_read": 1e-7,
-      "input": 1e-6,
-      "output": 6e-6,
-      "web_search": 0.01
-    },
-    "gpt-5:batch": {
-      "cache_read": 6.25e-8,
-      "input": 6.25e-7,
-      "output": 5e-6,
       "web_search": 0.01
     },
     "gpt-6-astra": {
@@ -2346,27 +1932,6 @@
       "output": 0.00005,
       "web_search": 0.01
     },
-    "gpt-6-astra-pro": {
-      "cache_read": 1e-6,
-      "cache_write": 0.0000125,
-      "input": 0.00001,
-      "output": 0.00005,
-      "web_search": 0.01
-    },
-    "gpt-6-astra-pro:batch": {
-      "cache_read": 5e-7,
-      "cache_write": 6.25e-6,
-      "input": 5e-6,
-      "output": 0.000025,
-      "web_search": 0.01
-    },
-    "gpt-6-astra:batch": {
-      "cache_read": 5e-7,
-      "cache_write": 6.25e-6,
-      "input": 5e-6,
-      "output": 0.000025,
-      "web_search": 0.01
-    },
     "gpt-6-luna": {
       "cache_read": 1e-8,
       "cache_write": 1.25e-7,
@@ -2379,27 +1944,6 @@
       "cache_write": 1.25e-7,
       "input": 1e-7,
       "output": 5e-7,
-      "web_search": 0.01
-    },
-    "gpt-6-luna-pro": {
-      "cache_read": 1e-8,
-      "cache_write": 1.25e-7,
-      "input": 1e-7,
-      "output": 5e-7,
-      "web_search": 0.01
-    },
-    "gpt-6-luna-pro:batch": {
-      "cache_read": 5e-9,
-      "cache_write": 6.25e-8,
-      "input": 5e-8,
-      "output": 2.5e-7,
-      "web_search": 0.01
-    },
-    "gpt-6-luna:batch": {
-      "cache_read": 5e-9,
-      "cache_write": 6.25e-8,
-      "input": 5e-8,
-      "output": 2.5e-7,
       "web_search": 0.01
     },
     "gpt-6-sol": {
@@ -2416,27 +1960,6 @@
       "output": 0.00001,
       "web_search": 0.01
     },
-    "gpt-6-sol-pro": {
-      "cache_read": 2e-7,
-      "cache_write": 2.5e-6,
-      "input": 2e-6,
-      "output": 0.00001,
-      "web_search": 0.01
-    },
-    "gpt-6-sol-pro:batch": {
-      "cache_read": 1e-7,
-      "cache_write": 1.25e-6,
-      "input": 1e-6,
-      "output": 5e-6,
-      "web_search": 0.01
-    },
-    "gpt-6-sol:batch": {
-      "cache_read": 1e-7,
-      "cache_write": 1.25e-6,
-      "input": 1e-6,
-      "output": 5e-6,
-      "web_search": 0.01
-    },
     "gpt-6.1-sol": {
       "cache_read": 1e-7,
       "cache_write": 2.5e-6,
@@ -2449,27 +1972,6 @@
       "cache_write": 2.5e-6,
       "input": 2e-6,
       "output": 0.00001,
-      "web_search": 0.01
-    },
-    "gpt-6.1-sol-pro": {
-      "cache_read": 1e-7,
-      "cache_write": 2.5e-6,
-      "input": 2e-6,
-      "output": 0.00001,
-      "web_search": 0.01
-    },
-    "gpt-6.1-sol-pro:batch": {
-      "cache_read": 5e-8,
-      "cache_write": 1.25e-6,
-      "input": 1e-6,
-      "output": 5e-6,
-      "web_search": 0.01
-    },
-    "gpt-6.1-sol:batch": {
-      "cache_read": 5e-8,
-      "cache_write": 1.25e-6,
-      "input": 1e-6,
-      "output": 5e-6,
       "web_search": 0.01
     },
     "grok-2": {
@@ -2755,12 +2257,6 @@
       "output": 2.5e-6,
       "web_search": 0.01
     },
-    "grok-4.3:batch": {
-      "cache_read": 1.6e-7,
-      "input": 1e-6,
-      "output": 2e-6,
-      "web_search": 0.01
-    },
     "grok-4.5": {
       "cache_read": 3e-7,
       "input": 2e-6,
@@ -2815,17 +2311,18 @@
       "output": 2e-6,
       "web_search": 0.01
     },
-    "grok-latest": {
-      "cache_read": 5e-7,
-      "input": 2e-6,
-      "output": 6e-6,
-      "web_search": 0.01
-    },
     "jp.anthropic.claude-haiku-4-5-20251001-v1:0": {
       "cache_read": 1.1e-7,
       "cache_write": 1.375e-6,
       "input": 1.1e-6,
       "output": 5.5e-6,
+      "web_search": 0.01
+    },
+    "jp.anthropic.claude-haiku-5-5": {
+      "cache_read": 1.1e-8,
+      "cache_write": 1.375e-7,
+      "input": 1.1e-7,
+      "output": 5.5e-7,
       "web_search": 0.01
     },
     "jp.anthropic.claude-opus-4-7": {
@@ -2878,7 +2375,7 @@
       "web_search": 0.01
     },
     "jp.anthropic.claude-sonnet-5-5": {
-      "cache_read": 2.2e-7,
+      "cache_read": 1.1e-7,
       "cache_write": 2.75e-6,
       "input": 2.2e-6,
       "output": 0.000011,
@@ -2904,27 +2401,12 @@
       "output": 5e-8,
       "web_search": 0.01
     },
-    "l3-lunaris-8b": {
-      "input": 4e-8,
-      "output": 5e-8,
-      "web_search": 0.01
-    },
     "l3.1-70b-euryale-v2.2": {
       "input": 8.5e-7,
       "output": 8.5e-7,
       "web_search": 0.01
     },
-    "l3.1-euryale-70b": {
-      "input": 8.5e-7,
-      "output": 8.5e-7,
-      "web_search": 0.01
-    },
     "l3.3-70b-euryale-v2.3": {
-      "input": 6.5e-7,
-      "output": 7.5e-7,
-      "web_search": 0.01
-    },
-    "l3.3-euryale-70b": {
       "input": 6.5e-7,
       "output": 7.5e-7,
       "web_search": 0.01
@@ -3007,18 +2489,6 @@
       "output": 4.4e-6,
       "web_search": 0.01
     },
-    "o3-mini-high": {
-      "cache_read": 5.5e-7,
-      "input": 1.1e-6,
-      "output": 4.4e-6,
-      "web_search": 0.01
-    },
-    "o3-mini:batch": {
-      "cache_read": 2.75e-7,
-      "input": 5.5e-7,
-      "output": 2.2e-6,
-      "web_search": 0.01
-    },
     "o3-pro": {
       "input": 0.00002,
       "output": 0.00008,
@@ -3027,12 +2497,6 @@
     "o3-pro-2025-06-10": {
       "input": 0.00002,
       "output": 0.00008,
-      "web_search": 0.01
-    },
-    "o3:batch": {
-      "cache_read": 2.5e-7,
-      "input": 1e-6,
-      "output": 4e-6,
       "web_search": 0.01
     },
     "openai-gpt-5": {
@@ -3138,10 +2602,10 @@
       "web_search": 0.01
     },
     "openai.gpt-6.1-sol": {
-      "cache_read": 1e-7,
-      "cache_write": 2.5e-6,
-      "input": 2e-6,
-      "output": 0.00001,
+      "cache_read": 1.1e-7,
+      "cache_write": 2.75e-6,
+      "input": 2.2e-6,
+      "output": 0.000011,
       "web_search": 0.01
     },
     "us-gov.anthropic.claude-fable-5-1": {
@@ -3149,6 +2613,13 @@
       "cache_write": 0.000015,
       "input": 0.000012,
       "output": 0.00006,
+      "web_search": 0.01
+    },
+    "us-gov.anthropic.claude-haiku-5-5": {
+      "cache_read": 1.2e-8,
+      "cache_write": 1.5e-7,
+      "input": 1.2e-7,
+      "output": 6e-7,
       "web_search": 0.01
     },
     "us-gov.anthropic.claude-opus-4-8": {
@@ -3187,7 +2658,7 @@
       "web_search": 0.01
     },
     "us-gov.anthropic.claude-sonnet-5-5": {
-      "cache_read": 2.4e-7,
+      "cache_read": 1.2e-7,
       "cache_write": 3e-6,
       "input": 2.4e-6,
       "output": 0.000012,
@@ -3253,6 +2724,13 @@
       "cache_write": 1.375e-6,
       "input": 1.1e-6,
       "output": 5.5e-6,
+      "web_search": 0.01
+    },
+    "us.anthropic.claude-haiku-5-5": {
+      "cache_read": 1.1e-8,
+      "cache_write": 1.375e-7,
+      "input": 1.1e-7,
+      "output": 5.5e-7,
       "web_search": 0.01
     },
     "us.anthropic.claude-mythos-5": {
@@ -3361,7 +2839,7 @@
       "web_search": 0.01
     },
     "us.anthropic.claude-sonnet-5-5": {
-      "cache_read": 2.2e-7,
+      "cache_read": 1.1e-7,
       "cache_write": 2.75e-6,
       "input": 2.2e-6,
       "output": 0.000011,
@@ -3495,12 +2973,6 @@
       "cache_read": 6.6e-7,
       "input": 2.64e-6,
       "output": 7.92e-6,
-      "web_search": 0.01
-    },
-    "xai.grok-4.7": {
-      "cache_read": 5e-7,
-      "input": 2e-6,
-      "output": 6e-6,
       "web_search": 0.01
     },
     "xai.grok-code-fast-1": {
