@@ -184,7 +184,7 @@ fn session_header_line(session: &SessionSearchResult, selected: bool, _app: &App
     let deck = copy();
     let marker = if selected { "> " } else { "  " };
     let base = if selected {
-        theme::base().bg(theme::RANK_FILL_BG)
+        theme::base().bg(theme::SURFACE)
     } else {
         theme::base()
     };

@@ -1,9 +1,12 @@
 <script lang="ts">
   import { area, curveMonotoneX, line, scaleLinear } from 'd3';
+  import { gradeTone, type CoachTone } from '../lib/coachTone';
 
   export let values: number[] = [];
   export let ariaLabel = '';
   export let height = 34;
+  // Practice-score trends follow the grade curve; flow trends pass flowTone.
+  export let toneFor: (score: number) => CoachTone = gradeTone;
 
   const WIDTH = 200;
   const INSET = 3;
@@ -30,8 +33,8 @@
           .curve(curveMonotoneX)(clamped) ?? '';
   $: last = clamped[clamped.length - 1] ?? 0;
   $: lastX = clamped.length === 1 ? WIDTH / 2 : x(clamped.length - 1);
-  // Tone of the most recent point — same thresholds as ScoreBar.
-  $: tone = last >= 70 ? 'good' : last >= 40 ? 'warn' : 'bad';
+  // Tone of the most recent point.
+  $: tone = toneFor(last);
 </script>
 
 {#if clamped.length > 0}

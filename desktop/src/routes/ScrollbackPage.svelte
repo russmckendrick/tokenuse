@@ -288,12 +288,16 @@
     display: flex;
     align-items: baseline;
     gap: var(--space-md);
-    background: linear-gradient(
-      to right,
-      var(--color-rank-fill) 0,
-      var(--color-rank-fill) var(--rank-fill),
-      transparent var(--rank-fill)
-    );
+    background-image:
+      linear-gradient(var(--color-rank-edge), var(--color-rank-edge)),
+      linear-gradient(var(--color-rank-fill), var(--color-rank-fill));
+    background-position:
+      left bottom,
+      left top;
+    background-size:
+      var(--rank-fill) 2px,
+      var(--rank-fill) 100%;
+    background-repeat: no-repeat;
     padding: 2px 4px;
   }
 

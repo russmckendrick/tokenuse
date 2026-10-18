@@ -118,7 +118,7 @@ Today's and this calendar month's totals. No arguments.
   "today":  { "cost": "£42.10", "cost_usd": 56.2, "calls": 320, "sessions": 12,
               "input_tokens": 812004, "output_tokens": 41233,
               "cache_read_tokens": 60540221, "cache_write_tokens": 104322 },
-  "month":  { "cost": "£1997", "cost_usd": 2665.1, "calls": 12405, "sessions": 410, "...": "..." }
+  "month":  { "cost": "£1,997.10", "cost_usd": 2665.1, "calls": 12405, "sessions": 410, "...": "..." }
 }
 ```
 
@@ -132,11 +132,11 @@ This month with no project or session identifiers: totals, the per-tool split, d
 {
   "period": "This month",
   "currency": "GBP",
-  "totals":  { "cost": "£1997", "calls": 12405, "...": "..." },
-  "by_tool": [ { "tool": "claude-code", "cost": "£1600", "calls": 9000, "...": "..." } ],
-  "by_activity": [ { "label": "Coding", "cost": "£820", "calls": 4100 } ],
-  "models": [ { "name": "claude-…", "provider": "Anthropic", "cost": "£1200", "calls": 7000, "cache_rate": 0.86 } ],
-  "daily": [ { "day": "2026-07-01", "cost": "£63", "calls": 210 } ]
+  "totals":  { "cost": "£1,997.10", "calls": 12405, "...": "..." },
+  "by_tool": [ { "tool": "claude-code", "cost": "£1,600.00", "calls": 9000, "...": "..." } ],
+  "by_activity": [ { "label": "Coding", "cost": "£820.00", "calls": 4100 } ],
+  "models": [ { "name": "claude-…", "provider": "Anthropic", "cost": "£1,200.00", "calls": 7000, "cache_rate": 0.86 } ],
+  "daily": [ { "day": "2026-07-01", "cost": "£63.00", "calls": 210 } ]
 }
 ```
 
@@ -150,7 +150,7 @@ This month's per-project spend, busiest first. No arguments. Project names are p
   "currency": "GBP",
   "pseudonymised": true,
   "projects": [
-    { "project": "project-0e99caeba693", "cost": "£1339", "sessions": 180,
+    { "project": "project-0e99caeba693", "cost": "£1,339.00", "sessions": 180,
       "avg_per_session": "£7.44", "tool_mix": "claude-code, codex" }
   ]
 }

@@ -1,6 +1,6 @@
 {
   "_metadata": {
-    "checked_at": "2026-10-12",
+    "checked_at": "2026-10-18",
     "fields": {
       "cache_read": "USD per cache read token",
       "cache_write": "USD per cache write token",
@@ -388,6 +388,13 @@
       "output": 0.00005,
       "web_search": 0.01
     },
+    "claude-fable-5.1": {
+      "cache_read": 2.5e-7,
+      "cache_write": 0.0000125,
+      "input": 0.00001,
+      "output": 0.00005,
+      "web_search": 0.01
+    },
     "claude-haiku-3": {
       "cache_read": 3e-8,
       "cache_write": 3e-7,
@@ -547,6 +554,20 @@
       "output": 0.000025,
       "web_search": 0.01
     },
+    "claude-opus-4.8": {
+      "cache_read": 5e-7,
+      "cache_write": 6.25e-6,
+      "input": 5e-6,
+      "output": 0.000025,
+      "web_search": 0.01
+    },
+    "claude-opus-4.8-fast": {
+      "cache_read": 1e-6,
+      "cache_write": 0.0000125,
+      "input": 0.00001,
+      "output": 0.00005,
+      "web_search": 0.01
+    },
     "claude-opus-5": {
       "cache_read": 5e-7,
       "cache_write": 6.25e-6,
@@ -555,6 +576,20 @@
       "web_search": 0.01
     },
     "claude-opus-5-5": {
+      "cache_read": 2e-7,
+      "cache_write": 5e-6,
+      "input": 4e-6,
+      "output": 0.00002,
+      "web_search": 0.01
+    },
+    "claude-opus-5-5-fast": {
+      "cache_read": 4e-7,
+      "cache_write": 0.00001,
+      "input": 8e-6,
+      "output": 0.00004,
+      "web_search": 0.01
+    },
+    "claude-opus-5.5": {
       "cache_read": 2e-7,
       "cache_write": 5e-6,
       "input": 4e-6,
@@ -635,6 +670,13 @@
       "output": 0.000015,
       "web_search": 0.01
     },
+    "claude-sonnet-4.6": {
+      "cache_read": 3e-7,
+      "cache_write": 3.75e-6,
+      "input": 3e-6,
+      "output": 0.000015,
+      "web_search": 0.01
+    },
     "claude-sonnet-5": {
       "cache_read": 2e-7,
       "cache_write": 2.5e-6,
@@ -643,6 +685,13 @@
       "web_search": 0.01
     },
     "claude-sonnet-5-5": {
+      "cache_read": 1e-7,
+      "cache_write": 2.5e-6,
+      "input": 2e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
+    "claude-sonnet-5.5": {
       "cache_read": 1e-7,
       "cache_write": 2.5e-6,
       "input": 2e-6,
@@ -1240,6 +1289,18 @@
       "output": 7.5e-6,
       "web_search": 0.01
     },
+    "gemini-4-argon": {
+      "cache_read": 1e-7,
+      "input": 2e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
+    "gemini-4-argon-cyber-permissive": {
+      "cache_read": 2e-7,
+      "input": 4e-6,
+      "output": 0.00002,
+      "web_search": 0.01
+    },
     "gemini-exp-1206": {
       "cache_read": 3e-8,
       "input": 3e-7,
@@ -1565,7 +1626,19 @@
       "output": 6e-7,
       "web_search": 0.01
     },
+    "gpt-4o-mini-search-preview-2025-03-11": {
+      "cache_read": 7.5e-8,
+      "input": 1.5e-7,
+      "output": 6e-7,
+      "web_search": 0.01
+    },
     "gpt-4o-search-preview": {
+      "cache_read": 1.25e-6,
+      "input": 2.5e-6,
+      "output": 0.00001,
+      "web_search": 0.01
+    },
+    "gpt-4o-search-preview-2025-03-11": {
       "cache_read": 1.25e-6,
       "input": 2.5e-6,
       "output": 0.00001,
@@ -1838,6 +1911,12 @@
       "web_search": 0.01
     },
     "gpt-5.5-cyber": {
+      "cache_read": 1.25e-6,
+      "input": 0.0000125,
+      "output": 0.000075,
+      "web_search": 0.01
+    },
+    "gpt-5.5-cyber-preview": {
       "cache_read": 1.25e-6,
       "input": 0.0000125,
       "output": 0.000075,
@@ -2258,7 +2337,7 @@
       "web_search": 0.01
     },
     "grok-4.5": {
-      "cache_read": 3e-7,
+      "cache_read": 5e-7,
       "input": 2e-6,
       "output": 6e-6,
       "web_search": 0.01
@@ -2471,6 +2550,12 @@
       "web_search": 0.01
     },
     "o3-deep-research": {
+      "cache_read": 2.5e-6,
+      "input": 0.00001,
+      "output": 0.00004,
+      "web_search": 0.01
+    },
+    "o3-deep-research-2025-06-26": {
       "cache_read": 2.5e-6,
       "input": 0.00001,
       "output": 0.00004,
@@ -2958,9 +3043,33 @@
       "output": 0.000015,
       "web_search": 0.01
     },
+    "xai.grok-4.20-0309-non-reasoning": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "xai.grok-4.20-0309-reasoning": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
     "xai.grok-4.20-multi-agent": {
       "input": 3e-6,
       "output": 0.000015,
+      "web_search": 0.01
+    },
+    "xai.grok-4.20-non-reasoning": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
+      "web_search": 0.01
+    },
+    "xai.grok-4.20-reasoning": {
+      "cache_read": 2e-7,
+      "input": 1.25e-6,
+      "output": 2.5e-6,
       "web_search": 0.01
     },
     "xai.grok-4.3": {

@@ -1396,6 +1396,48 @@
       }
     ],
     "footers": {
+      "coach": [
+        {
+          "keys": "q",
+          "label": "quit",
+          "action": "quit"
+        },
+        {
+          "keys": "Tab",
+          "label": "tabs",
+          "action": "next_tab"
+        },
+        {
+          "keys": "1",
+          "label": "24h",
+          "action": "period_today"
+        },
+        {
+          "keys": "2",
+          "label": "week",
+          "action": "period_week"
+        },
+        {
+          "keys": "3",
+          "label": "30 days",
+          "action": "period_thirty_days"
+        },
+        {
+          "keys": "4",
+          "label": "month",
+          "action": "period_month"
+        },
+        {
+          "keys": "5",
+          "label": "all",
+          "action": "period_all_time"
+        },
+        {
+          "keys": "h",
+          "label": "help",
+          "action": "open_help"
+        }
+      ],
       "config": [
         {
           "keys": "q",
@@ -1490,45 +1532,6 @@
           "keys": "p",
           "label": "project",
           "action": "open_project_picker"
-        },
-        {
-          "keys": "s",
-          "label": "session",
-          "action": "open_session_picker"
-        },
-        {
-          "keys": "e",
-          "label": "report",
-          "action": "open_export_picker"
-        },
-        {
-          "keys": "r",
-          "label": "refresh",
-          "action": "reload"
-        }
-      ],
-      "desktop_config": [
-        {
-          "keys": "s",
-          "label": "session",
-          "action": "open_session_picker"
-        },
-        {
-          "keys": "e",
-          "label": "report",
-          "action": "open_export_picker"
-        },
-        {
-          "keys": "r",
-          "label": "refresh",
-          "action": "reload"
-        }
-      ],
-      "desktop_usage": [
-        {
-          "keys": "1",
-          "label": "24h",
-          "action": "period_today"
         },
         {
           "keys": "s",

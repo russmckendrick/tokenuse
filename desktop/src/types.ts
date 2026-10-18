@@ -412,6 +412,8 @@ export type SessionDetail = {
   timestamp: string;
   model: string;
   cost: string;
+  /** Full-precision cost for the tooltip behind rounded or `<£0.01` values. */
+  cost_exact: string;
   cache_read_rate: string;
   cache_write_rate: string;
   input_tokens: number;

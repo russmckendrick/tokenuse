@@ -89,6 +89,12 @@ pub fn composite_score(groups: &[GroupScore]) -> u64 {
     ((weighted as f64) / (total_rules as f64)).round() as u64
 }
 
+/// Coach grades on a curve (DESIGN.md "Gauges"): only A-tier scores earn the
+/// good tone, B/C read as needs-attention, D/F as trouble. The desktop mirrors
+/// these in `desktop/src/lib/coachTone.ts`.
+pub const GRADE_TONE_GOOD: u64 = 90;
+pub const GRADE_TONE_WARN: u64 = 70;
+
 /// Report-card grade id for a 0-100 score; copy maps ids to letters.
 pub fn grade_id(score: u64) -> &'static str {
     match score {

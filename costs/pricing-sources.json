@@ -143,6 +143,11 @@
             "note": "The 6x multiplier is retained for historical Claude Code fast-speed calls; current fast mode supports only Opus 5 and Opus 4.8."
           },
           {
+            "match": "Claude Sonnet 5.5",
+            "model": "claude-sonnet-5-5",
+            "note": "Sonnet 5.5 keeps Sonnet 5 input, cache-write, and output rates but halves prompt-cache reads to $0.10/MTok."
+          },
+          {
             "match": "Claude Sonnet 5",
             "model": "claude-sonnet-5",
             "note": "Anthropic made Sonnet 5 launch pricing permanent: $2 input, $2.50 5-minute cache writes, $0.20 cache reads, and $10 output per MTok."
@@ -150,6 +155,11 @@
           { "match": "Claude Sonnet 4.6", "model": "claude-sonnet-4-6" },
           { "match": "Claude Sonnet 4.5", "model": "claude-sonnet-4-5" },
           { "match": "Claude Sonnet 4", "model": "claude-sonnet-4" },
+          {
+            "match": "Claude Haiku 5.5",
+            "model": "claude-haiku-5-5",
+            "note": "Haiku 5.5 is priced by prompt length; the first matching row is the standard tier for prompts up to 100,000 tokens. Calls whose prompt exceeds 100,000 tokens pay 5x and are under-estimated until a long-context tier lands."
+          },
           { "match": "Claude Haiku 4.5", "model": "claude-haiku-4-5" },
           {
             "match": "Claude Haiku 3.5",

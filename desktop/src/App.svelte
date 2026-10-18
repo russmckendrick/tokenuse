@@ -171,6 +171,37 @@
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? '1' : '0');
   }
 
+  type PageControls = { period: boolean; tool: boolean; sort: boolean; project: boolean };
+
+  // Which global filters a page exposes. One source of truth for the header
+  // controls, the keyboard shortcuts that drive them, and the status-bar
+  // hints, so a shortcut is only advertised (and only acts) where its control
+  // is on screen.
+  function pageControls(route: Route): PageControls {
+    const page = route.page;
+    return {
+      period:
+        page !== 'config' &&
+        page !== 'session' &&
+        page !== 'scrollback' &&
+        (page !== 'tools' || route.tool !== undefined),
+      tool: page === 'overview' || page === 'analytics' || page === 'graph' || page === 'coach',
+      sort:
+        page !== 'config' &&
+        page !== 'session' &&
+        page !== 'graph' &&
+        page !== 'coach' &&
+        page !== 'scrollback' &&
+        (page !== 'models' || route.model !== undefined),
+      project:
+        page === 'overview' ||
+        page === 'analytics' ||
+        page === 'graph' ||
+        page === 'coach' ||
+        (page === 'projects' && !route.project)
+    };
+  }
+
   function pageTitle(route: Route, currentSnapshot: DesktopSnapshot | null): string {
     if (!currentSnapshot) return '';
     const nav = currentSnapshot.copy.nav;
@@ -203,7 +234,11 @@
     }
   }
 
-  $: currentPageTitle = pageTitle(router.route, snapshot);
+  // `router.route` is rune state read from a legacy component: a `$:`
+  // statement only re-runs when its local dependencies (here `snapshot`)
+  // change, so a title derived there went stale on tool-to-tool navigation
+  // (Claude Code -> Codex kept "Claude Code"). Template expressions track
+  // rune reads, so the header calls pageTitle() directly.
 
   function openModal(kind: Exclude<ModalKind, null>) {
     modal = kind;
@@ -482,13 +517,13 @@
   }
 
   $: drillBackTarget = drillReturns[drillReturns.length - 1]?.route ?? null;
-  $: drillBackLabel = snapshot
-    ? drillBackTarget
-      ? pageTitle(drillBackTarget, snapshot)
-      : router.route.model
-        ? snapshot.copy.nav.models
-        : snapshot.copy.nav.projects
-    : '';
+  // Called from the template (not a `$:` statement) so the `router.route`
+  // read stays reactive; see the pageTitle() note above.
+  function drillBackLabel(route: Route, target: Route | null, currentSnapshot: DesktopSnapshot | null): string {
+    if (!currentSnapshot) return '';
+    if (target) return pageTitle(target, currentSnapshot);
+    return route.model ? currentSnapshot.copy.nav.models : currentSnapshot.copy.nav.projects;
+  }
 
   /** Client-side navigation keys; everything else falls through to the shared keymap. */
   function clientNavTarget(event: KeyboardEvent): Route | null {
@@ -548,18 +583,16 @@
     }
 
     if (!action) return;
-    const page = router.route.page;
-    const periodLocked = page === 'tools' && router.route.tool === undefined;
-    const dataFiltersActive = page === 'overview' || page === 'analytics' || page === 'graph';
+    const controls = pageControls(router.route);
 
     switch (action.kind) {
       case 'period':
-        if (page === 'config' || periodLocked) return;
+        if (!controls.period) return;
         event.preventDefault();
         setPeriod(action.period);
         return;
       case 'cycle-tool': {
-        if (!dataFiltersActive) return;
+        if (!controls.tool) return;
         event.preventDefault();
         const tools = snapshot.tools;
         const idx = tools.findIndex((tool) => tool.value === snapshot?.tool);
@@ -568,7 +601,7 @@
         return;
       }
       case 'cycle-sort': {
-        if (page === 'config') return;
+        if (!controls.sort) return;
         event.preventDefault();
         const sorts = snapshot.sorts;
         const idx = sorts.findIndex((sort) => sort.value === snapshot?.sort);
@@ -581,7 +614,7 @@
         void commit(() => api.toggleDataSource());
         return;
       case 'open-project-picker':
-        if (!dataFiltersActive && page !== 'projects') return;
+        if (!controls.project) return;
         event.preventDefault();
         openModal('project');
         return;
@@ -1009,16 +1042,26 @@
     }
   }
 
-  function statusHints(): ShortcutHint[] {
+  // Status-bar hints advertise only the shortcuts the active page honours
+  // (DESIGN.md "Status bar"): filter-bound hints follow pageControls().
+  const HINT_CONTROLS: Record<string, keyof PageControls> = {
+    period_today: 'period',
+    period_week: 'period',
+    period_thirty_days: 'period',
+    period_month: 'period',
+    period_all_time: 'period',
+    cycle_tool: 'tool',
+    cycle_sort: 'sort',
+    open_project_picker: 'project'
+  };
+
+  function statusHints(route: Route): ShortcutHint[] {
     if (!snapshot) return [];
-    const footers = snapshot.copy.keymap.footers;
-    const name =
-      router.route.page === 'tools'
-        ? 'desktop_usage'
-        : router.route.page === 'config'
-          ? 'desktop_config'
-          : 'desktop';
-    return footers[name] ?? footers['desktop'] ?? [];
+    const controls = pageControls(route);
+    return (snapshot.copy.keymap.footers['desktop'] ?? []).filter((hint) => {
+      const control = HINT_CONTROLS[hint.action];
+      return !control || controls[control];
+    });
   }
 </script>
 
@@ -1042,12 +1085,12 @@
     <div class="content">
       <PageHeader
         copy={snapshot.copy}
-        title={currentPageTitle}
+        title={pageTitle(router.route, snapshot)}
         {snapshot}
-        showPeriod={router.route.page !== 'config' && router.route.page !== 'session' && router.route.page !== 'scrollback' && (router.route.page !== 'tools' || router.route.tool !== undefined)}
-        showTool={router.route.page === 'overview' || router.route.page === 'analytics' || router.route.page === 'graph' || router.route.page === 'coach'}
-        showSort={router.route.page !== 'config' && router.route.page !== 'session' && router.route.page !== 'graph' && (router.route.page !== 'models' || router.route.model !== undefined) && router.route.page !== 'coach' && router.route.page !== 'scrollback'}
-        showProject={router.route.page === 'overview' || router.route.page === 'analytics' || router.route.page === 'graph' || router.route.page === 'coach' || (router.route.page === 'projects' && !router.route.project)}
+        showPeriod={pageControls(router.route).period}
+        showTool={pageControls(router.route).tool}
+        showSort={pageControls(router.route).sort}
+        showProject={pageControls(router.route).project}
         {setPeriod}
         setTool={setToolFromEvent}
         setSort={setSortFromEvent}
@@ -1082,13 +1125,13 @@
               <ToolsPage {snapshot} tool={router.route.tool} {usageTone} {navigate} {openSession} {openProject} openModel={openModelPage} />
             {:else if router.route.page === 'models'}
               {#if router.route.model}
-                <ModelPage {snapshot} model={router.route.model} {openSession} {openProject} backLabel={drillBackLabel} goBack={popDrill} />
+                <ModelPage {snapshot} model={router.route.model} {openSession} {openProject} backLabel={drillBackLabel(router.route, drillBackTarget, snapshot)} goBack={popDrill} />
               {:else}
                 <ModelsPage {snapshot} {openModelPage} />
               {/if}
             {:else if router.route.page === 'projects'}
               {#if router.route.project}
-                <ProjectPage {snapshot} project={router.route.project} {openSession} openModel={openModelPage} backLabel={drillBackLabel} goBack={popDrill} />
+                <ProjectPage {snapshot} project={router.route.project} {openSession} openModel={openModelPage} backLabel={drillBackLabel(router.route, drillBackTarget, snapshot)} goBack={popDrill} />
               {:else}
                 <ProjectsPage {snapshot} {openProjectPage} />
               {/if}
@@ -1126,7 +1169,7 @@
         copy={snapshot.copy}
         source={snapshot.source}
         currency={snapshot.currency}
-        hints={statusHints()}
+        hints={statusHints(router.route)}
         sortLabel={activeSortLabel()}
       />
     </div>
@@ -1360,7 +1403,7 @@
         <div class="detail-grid">
           <div><span>{snapshot.copy.tables.time}</span><strong>{callDetail.timestamp}</strong></div>
           <div><span>{snapshot.copy.tables.model}</span><strong>{callDetail.model}</strong></div>
-          <div><span>{snapshot.copy.tables.cost}</span><strong class="money">{callDetail.cost}</strong></div>
+          <div><span>{snapshot.copy.tables.cost}</span><strong class="money" title={callDetail.cost_exact}>{callDetail.cost}</strong></div>
           <div><span>{snapshot.copy.tables.tools}</span><strong>{callDetail.tools}</strong></div>
           <div><span>{snapshot.copy.session.interaction_mode}</span><strong>{callDetail.interaction_mode}</strong></div>
           <div><span>{snapshot.copy.session.token_quality}</span><strong>{callDetail.token_quality}</strong></div>

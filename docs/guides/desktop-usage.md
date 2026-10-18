@@ -34,7 +34,7 @@ Tools sits directly above the five direct tool rows as the group's summary entry
 
 The header holds the controls that apply to the current screen in one toolbar: title, period, contextual tool/project/sort filters, refresh, then report. At compact window widths the filter labels collapse to icons while their current values remain visible. Overview and Analytics expose period, tool, sort, and project filters. Graph exposes period, tool, and project; relationship weighting lives inside its explorer. Dedicated tool pages expose period and sort. The Models catalog uses the active period for ranking while keeping all five ranges visible in its table; a model's dedicated page adds the sort control. Projects exposes period, sort, and project. The parent Tools screen is a fixed rolling 24-hour capacity view, so its period control is intentionally hidden. Scrollback hides the period and sort controls too — its search box and tool/project selects live in the page's own toolbar.
 
-The footer shows live or sample source, currency, and context-sensitive shortcut hints. Refresh, report, configuration, and sync results appear as temporary bottom-right toasts instead of permanently consuming header space.
+The footer shows live or sample source, currency, and context-sensitive shortcut hints: period, tool, sort, and project shortcuts are listed (and only act) on pages that show those controls. Refresh, report, configuration, and sync results appear as temporary bottom-right toasts instead of permanently consuming header space.
 
 Long tables and result lists have bounded heights, sticky column headings, and their own scrollbars. Selecting All Time therefore adds scrollable rows without stretching every panel on the page.
 
@@ -59,7 +59,7 @@ Analytics is the time and distribution workspace. It includes:
 
 Top Sessions rows are links: select one (click, `Enter`, or `Space`) to open that session in the full session view, alongside the existing session picker. Closing the session view returns to the page it was opened from, at the scroll position you left. Project rows link too: selecting one on Overview, Analytics, or a tool page opens that project's dedicated page. Model rows behave the same, opening that model's page.
 
-Charts use the same token-driven colors and relative ranking language as the TUI. Hovered chart values are exact for that bucket; bars, heat intensity, and row rank fills are relative to the visible dataset. Ranked tables carry that relative magnitude as a muted wash across each row's background (hover a row for the exact percentage) rather than a meter column, so the full project and model names keep the space.
+Charts use the same token-driven colors and relative ranking language as the TUI. Hovered chart values are exact for that bucket; bars, heat intensity, and row rank fills are relative to the visible dataset. Ranked tables carry that relative magnitude as a quiet wash across each row's background with a thin underline of the same length along the row's bottom edge (hover a row for the exact percentage) rather than a meter column, so the full project and model names keep the space.
 
 ### Graph
 

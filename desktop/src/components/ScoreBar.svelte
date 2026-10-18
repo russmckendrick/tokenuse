@@ -1,12 +1,14 @@
 <script lang="ts">
   import { animatedBar } from '../motion';
+  import { gradeTone } from '../lib/coachTone';
 
   export let score = 0;
   export let ariaLabel = '';
 
   $: clamped = Math.max(0, Math.min(100, Number.isFinite(score) ? score : 0));
-  // Inverse of GaugeBar: a HIGH practice score is good.
-  $: tone = clamped >= 70 ? 'good' : clamped >= 40 ? 'warn' : 'bad';
+  // Inverse of GaugeBar: a HIGH practice score is good. Shares the grade
+  // curve with the badge and radial gauge so bar and letter never disagree.
+  $: tone = gradeTone(clamped);
 </script>
 
 <span class="score-bar" aria-label={`${ariaLabel}: ${Math.round(clamped)}/100`}>

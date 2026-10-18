@@ -17,7 +17,7 @@ pub(crate) fn send_background_alert<R: Runtime>(
 fn background_alert_body(alert: BackgroundUsageAlert) -> String {
     let mut parts = Vec::new();
     if alert.cost_usd > 0.0 {
-        parts.push(format!("${:.2}", alert.cost_usd));
+        parts.push(tokenuse::currency::CurrencyFormatter::usd().format_money(alert.cost_usd));
     }
     if alert.tokens > 0 {
         parts.push(format!("{} tokens", format_compact_count(alert.tokens)));

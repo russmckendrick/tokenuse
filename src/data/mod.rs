@@ -527,6 +527,8 @@ pub struct SessionDetail {
     pub timestamp: String,
     pub model: String,
     pub cost: String,
+    /// Full-precision cost for tooltips behind rounded or `<£0.01` values.
+    pub cost_exact: String,
     pub cache_read_rate: String,
     pub cache_write_rate: String,
     pub input_tokens: u64,
@@ -879,7 +881,7 @@ fn sample_catalog(models: &[WireModelMetric]) -> Vec<ModelCatalogEntry> {
                 .map(|(tool, units, calls)| ModelToolBreakdown {
                     tool: leak(tool.clone()),
                     tool_label: crate::ingest::projects::tool_short_label(tool),
-                    cost: leak(format!("${:.2}", *units as f64 / 10_000.0)),
+                    cost: leak(CurrencyFormatter::usd().format_money(*units as f64 / 10_000.0)),
                     calls: *calls,
                     value: (units * 100 / split_max).clamp(1, 100),
                 })
@@ -890,7 +892,7 @@ fn sample_catalog(models: &[WireModelMetric]) -> Vec<ModelCatalogEntry> {
                 provider: acc.identity.provider.id(),
                 provider_label: acc.identity.provider.label(),
                 family: leak(acc.identity.family),
-                cost: leak(format!("${:.2}", acc.cost_units as f64 / 10_000.0)),
+                cost: leak(CurrencyFormatter::usd().format_money(acc.cost_units as f64 / 10_000.0)),
                 calls: acc.calls,
                 tokens: "-",
                 cache_hit: leak(if acc.cache_units == 0 {
@@ -1470,10 +1472,10 @@ fn sample_by_activity(summary: &Summary) -> Vec<ActivityMetric> {
         .iter()
         .map(|(category, weight)| ActivityMetric {
             label: category.label(),
-            cost: leak(format!(
-                "${:.2}",
-                (total_units * weight / 100) as f64 / 10_000.0
-            )),
+            cost: leak(
+                CurrencyFormatter::usd()
+                    .format_money((total_units * weight / 100) as f64 / 10_000.0),
+            ),
             calls: total_calls * weight / 100,
             value: (weight * 100 / max_weight).clamp(1, 100),
         })
@@ -1880,6 +1882,7 @@ pub fn session_detail(
             timestamp,
             model: identity.display,
             cost: currency.format_money(cost_usd),
+            cost_exact: currency.format_money_exact(cost_usd),
             cache_read_rate: "90%".into(),
             cache_write_rate: "10%".into(),
             input_tokens: input,
@@ -2136,12 +2139,12 @@ fn apply_model_filter(data: &mut DashboardData, model_filter: &ModelFilter, peri
     scaled[largest].0 += model_units - unit_sum.min(model_units);
     scaled[largest].1 += model_calls - call_sum.min(model_calls);
     for (row, (units, calls)) in data.project_tools.iter_mut().zip(&scaled) {
-        row.cost = leak(format!("${:.2}", *units as f64 / 10_000.0));
+        row.cost = leak(CurrencyFormatter::usd().format_money(*units as f64 / 10_000.0));
         row.calls = *calls;
-        row.avg_per_session = leak(format!(
-            "${:.2}",
-            *units as f64 / 10_000.0 / row.sessions.max(1) as f64
-        ));
+        row.avg_per_session = leak(
+            CurrencyFormatter::usd()
+                .format_money(*units as f64 / 10_000.0 / row.sessions.max(1) as f64),
+        );
     }
 
     // Rebuild the projects panel from the retained rows: a project used from
@@ -2203,10 +2206,9 @@ fn apply_model_filter(data: &mut DashboardData, model_filter: &ModelFilter, peri
                 .join("  ");
             ProjectMetric {
                 name: project.name,
-                cost: leak(format!("${:.2}", project.units as f64 / 10_000.0)),
-                avg_per_session: leak(format!(
-                    "${:.2}",
-                    project.units as f64 / 10_000.0 / project.sessions.max(1) as f64
+                cost: leak(CurrencyFormatter::usd().format_money(project.units as f64 / 10_000.0)),
+                avg_per_session: leak(CurrencyFormatter::usd().format_money(
+                    project.units as f64 / 10_000.0 / project.sessions.max(1) as f64,
                 )),
                 sessions: project.sessions,
                 tool_mix: leak(tool_mix),
@@ -2232,7 +2234,7 @@ fn apply_model_filter(data: &mut DashboardData, model_filter: &ModelFilter, peri
             .map(|project| project.units)
             .unwrap_or(0);
         let units = parse_money_sort_value(session.cost) * new / old;
-        session.cost = leak(format!("${:.2}", units as f64 / 10_000.0));
+        session.cost = leak(CurrencyFormatter::usd().format_money(units as f64 / 10_000.0));
         session.calls = (session.calls as f64 * new as f64 / old as f64) as u64;
     }
     let session_max = data
@@ -2249,7 +2251,7 @@ fn apply_model_filter(data: &mut DashboardData, model_filter: &ModelFilter, peri
     // Daily trend and the count panels scale by the model's overall share.
     for day in &mut data.daily {
         let units = (parse_money_sort_value(day.cost) as f64 * cost_ratio) as u64;
-        day.cost = leak(format!("${:.2}", units as f64 / 10_000.0));
+        day.cost = leak(CurrencyFormatter::usd().format_money(units as f64 / 10_000.0));
         day.calls = (day.calls as f64 * call_ratio) as u64;
     }
     for row in &mut data.tools {
@@ -2275,7 +2277,7 @@ fn apply_model_filter(data: &mut DashboardData, model_filter: &ModelFilter, peri
         model.value = (parse_money_sort_value(model.cost) * 100 / model_max).clamp(1, 100);
     }
 
-    data.summary.cost = leak(format!("${:.2}", model_units as f64 / 10_000.0));
+    data.summary.cost = leak(CurrencyFormatter::usd().format_money(model_units as f64 / 10_000.0));
     data.summary.calls = leak(format_int(model_calls));
     data.summary.sessions = leak(format_int(
         folded.iter().map(|project| project.sessions).sum(),
@@ -2363,6 +2365,8 @@ fn convert_money_text(
         while let Some(next) = chars.peek() {
             if next.is_ascii_digit() || *next == '.' {
                 number.push(*next);
+                chars.next();
+            } else if *next == ',' && chars.clone().nth(1).is_some_and(|c| c.is_ascii_digit()) {
                 chars.next();
             } else {
                 break;

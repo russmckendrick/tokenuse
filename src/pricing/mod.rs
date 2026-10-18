@@ -1024,6 +1024,29 @@ mod tests {
             );
         }
         assert_eq!(table.lookup("claude-opus-5-5").fast_multiplier, Some(2.0));
+
+        // Haiku 5.5 and Sonnet 5.5 need their own rows: Haiku 5.5 otherwise
+        // falls through to the global fallback, and Sonnet 5.5 inherits
+        // Sonnet 5's doubled cache-read rate through longest-prefix matching.
+        for (raw, input, cache_write, cache_read, output) in [
+            ("claude-haiku-5-5", 0.10, 0.125, 0.01, 0.50),
+            ("claude-haiku-5.5", 0.10, 0.125, 0.01, 0.50),
+            ("claude-sonnet-5-5", 2.0, 2.5, 0.10, 10.0),
+            ("claude-sonnet-5.5", 2.0, 2.5, 0.10, 10.0),
+        ] {
+            assert!(!table.uses_fallback("claude-code", raw, None), "{raw}");
+            let price = table.lookup_for("claude-code", raw, None);
+            assert!((price.input * 1e6 - input).abs() < 0.0001, "{raw}");
+            assert!(
+                (price.cache_write * 1e6 - cache_write).abs() < 0.0001,
+                "{raw}"
+            );
+            assert!(
+                (price.cache_read * 1e6 - cache_read).abs() < 0.0001,
+                "{raw}"
+            );
+            assert!((price.output * 1e6 - output).abs() < 0.0001, "{raw}");
+        }
         assert_eq!(table.cache_read_rate_label("claude-opus-5-5"), "5%");
         assert!((table.lookup("claude-opus-5").input * 1e6 - 5.0).abs() < 0.001);
 
@@ -1235,7 +1258,7 @@ mod tests {
         assert!((grok_46_fast_effort.output * 1e6 - 12.0).abs() < 0.001);
 
         let gemini = table.lookup_for("cursor", "gemini-3.8-flash", None);
-        assert!((gemini.output * 1e6 - 3.5).abs() < 0.001);
+        assert!((gemini.output * 1e6 - 3.75).abs() < 0.001);
     }
 
     #[test]
@@ -1681,7 +1704,7 @@ mod tests {
             "Gemini 3.8 Flash",
             Some(Utc.with_ymd_and_hms(2026, 9, 5, 12, 0, 0).unwrap()),
         );
-        assert!((cursor_gemini.output * 1e6 - 3.5).abs() < 0.001);
+        assert!((cursor_gemini.output * 1e6 - 3.75).abs() < 0.001);
         assert!((copilot_gemini.output * 1e6 - 3.75).abs() < 0.001);
     }
 

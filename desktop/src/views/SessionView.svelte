@@ -45,7 +45,7 @@
               >
                 <td>{call.timestamp}</td>
                 <td>{call.model}</td>
-                <td class="money">{call.cost}</td>
+                <td class="money" title={call.cost_exact}>{call.cost}</td>
                 <td>{count(call.input_tokens)}</td>
                 <td>{count(call.output_tokens)}</td>
                 <td>{count(call.cache_read + call.cache_write)}</td>

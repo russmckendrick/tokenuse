@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { gradeTone } from '../lib/coachTone';
+
   export let score = 0;
   export let label = '';
   export let sublabel = '';
@@ -6,9 +8,7 @@
   export let ariaLabel = '';
 
   $: clamped = Math.max(0, Math.min(100, Number.isFinite(score) ? score : 0));
-  // Grade-tier tones: green is earned by A-tier only (≥90), B/C read as
-  // needs-attention, D/F as trouble.
-  $: tone = clamped >= 90 ? 'good' : clamped >= 70 ? 'warn' : 'bad';
+  $: tone = gradeTone(clamped);
 </script>
 
 <span

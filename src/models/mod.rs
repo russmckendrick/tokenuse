@@ -583,6 +583,32 @@ mod tests {
             assert_eq!(opus_55.family, "Opus", "{raw}");
         }
         assert_eq!(display("cursor", "claude-opus-5-5-fast"), "Opus 5.5");
+
+        // Sonnet 5.5 sits under the `claude-sonnet-5` prefix rule, and Haiku
+        // 5.5 has no base rule at all, so it self-named as "Haiku 5 5".
+        for (raw, display_name, canonical, family) in [
+            (
+                "claude-sonnet-5-5",
+                "Sonnet 5.5",
+                "claude-sonnet-5-5",
+                "Sonnet",
+            ),
+            (
+                "claude-sonnet-5.5",
+                "Sonnet 5.5",
+                "claude-sonnet-5-5",
+                "Sonnet",
+            ),
+            ("claude-haiku-5-5", "Haiku 5.5", "claude-haiku-5-5", "Haiku"),
+            ("claude-haiku-5.5", "Haiku 5.5", "claude-haiku-5-5", "Haiku"),
+        ] {
+            let model = resolve("claude-code", raw);
+            assert_eq!(model.display, display_name, "{raw}");
+            assert_eq!(model.canonical_id, canonical, "{raw}");
+            assert_eq!(model.family, family, "{raw}");
+            assert_eq!(model.provider, Provider::Anthropic, "{raw}");
+        }
+        assert_eq!(display("claude-code", "claude-sonnet-5"), "Sonnet 5");
         assert_eq!(
             resolve("claude-code", "claude-opus-5").canonical_id,
             "claude-opus-5"

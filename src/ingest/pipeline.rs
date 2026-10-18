@@ -1855,6 +1855,7 @@ fn build_session_detail(
                 timestamp,
                 model,
                 cost: currency.format_money(c.cost_usd),
+                cost_exact: currency.format_money_exact(c.cost_usd),
                 cache_read_rate: pricing::cache_read_rate_label_for(c.tool, &c.model, c.timestamp),
                 cache_write_rate: pricing::cache_write_rate_label_for(
                     c.tool,

@@ -1218,6 +1218,16 @@ fn call_detail_lines(call: &SessionDetail) -> Vec<Line<'static>> {
                 call.cost.clone(),
                 theme::money().add_modifier(Modifier::BOLD),
             ),
+            // The TUI has no tooltips, so a `<£0.01` floor shows its exact
+            // value inline in the call detail instead.
+            Span::styled(
+                if call.cost.starts_with('<') {
+                    format!(" ({})", call.cost_exact)
+                } else {
+                    String::new()
+                },
+                theme::muted(),
+            ),
         ]),
         Line::from(vec![
             Span::styled(format!("{} ", copy.tables.r#in), theme::dim()),
@@ -2108,7 +2118,9 @@ pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Page::Session => "session",
         Page::Usage => "usage",
         Page::Scrollback => "scrollback",
-        Page::Overview | Page::DeepDive | Page::Coach => "dashboard",
+        // Coach ignores the sort mode, so its footer drops `g sort`.
+        Page::Coach => "coach",
+        Page::Overview | Page::DeepDive => "dashboard",
     };
     let commands = footer_line(copy().footer(footer), app);
 

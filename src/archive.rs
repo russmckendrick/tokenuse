@@ -19,7 +19,7 @@ use crate::tools::{
 
 pub const SYNC_INTERVAL: Duration = crate::ingest_cache::TTL;
 
-const ARCHIVE_SCHEMA_VERSION: u32 = 10;
+const ARCHIVE_SCHEMA_VERSION: u32 = 11;
 
 /// Rates the v8 repair reasons about, frozen as literals rather than read
 /// from the books: the repair has to reproduce what was actually charged at
@@ -119,6 +119,42 @@ mod claude_2026_09_repair {
 
     /// Claude Code fast mode is 2x on both Opus 5 and Opus 5.5.
     pub const OPUS_5_FAST_MULTIPLIER: f64 = 2.0;
+}
+
+/// Frozen rates used by the v11 repair for the two October 2026 Claude ids
+/// the books lacked rows for. None of these rows carries a fast multiplier,
+/// so every speed was charged, and is corrected, at 1x.
+mod claude_2026_10_repair {
+    use super::ClaudeRepairRates;
+
+    /// The books' global Sonnet 4.6 fallback, which `claude-haiku-5-5` fell
+    /// through to because no Haiku row is a prefix of it.
+    pub const FALLBACK: ClaudeRepairRates = ClaudeRepairRates {
+        input: 3e-6,
+        output: 15e-6,
+        cache_write_5m: 3.75e-6,
+        cache_read: 0.3e-6,
+    };
+
+    /// Haiku 5.5's standard tier, for prompts up to 100,000 tokens. The 5x
+    /// long-prompt tier is not modelled by the books either, so the repair
+    /// lands on the same standard-tier estimate fresh imports produce.
+    pub const HAIKU_5_5: ClaudeRepairRates = ClaudeRepairRates {
+        input: 0.1e-6,
+        output: 0.5e-6,
+        cache_write_5m: 0.125e-6,
+        cache_read: 0.01e-6,
+    };
+
+    /// Every Haiku 5.5 bucket is exactly 1/30 of the fallback, so one rescale
+    /// restores the cost, hidden 1-hour cache-write premium included.
+    pub const HAIKU_5_5_FACTOR: f64 = 1.0 / 30.0;
+
+    /// Sonnet 5.5 keeps Sonnet 5's rates but halves cache reads to $0.10.
+    pub const SONNET_5_5: ClaudeRepairRates = ClaudeRepairRates {
+        cache_read: 0.1e-6,
+        ..super::claude_2026_09_repair::SONNET_5
+    };
 }
 
 mod codex_spark_repair {
@@ -709,6 +745,17 @@ impl Archive {
             let tx = self.conn.unchecked_transaction()?;
             repair_v9_mispriced_calls(&tx, None, None)?;
             tx.execute_batch("PRAGMA user_version = 10;")?;
+            tx.commit()?;
+        }
+        if version < 11 {
+            // v11 re-runs the guarded repair pass after it learned about
+            // Haiku 5.5 calls charged at the Sonnet 4.6 fallback and Claude
+            // Code Sonnet 5.5 calls charged at inherited Sonnet 5 cache-read
+            // rates. As with v10, every repair proves the stale formula from
+            // the stored cost first, so re-running is a no-op on fixed rows.
+            let tx = self.conn.unchecked_transaction()?;
+            repair_v9_mispriced_calls(&tx, None, None)?;
+            tx.execute_batch("PRAGMA user_version = 11;")?;
             tx.commit()?;
         }
         Ok(())
@@ -1530,8 +1577,124 @@ fn repair_v9_mispriced_calls(
         reprice_mispriced_september_2026_claude_calls(tx, min_call_id, max_call_id)?
             + reprice_zero_priced_codex_spark_calls(tx, min_call_id, max_call_id)?
             + reprice_fallback_priced_gpt_6_calls(tx, min_call_id, max_call_id)?
-            + reprice_opus_5_5_calls_charged_at_opus_5(tx, min_call_id, max_call_id)?,
+            + reprice_opus_5_5_calls_charged_at_opus_5(tx, min_call_id, max_call_id)?
+            + reprice_unlisted_claude_5_5_calls(tx, min_call_id, max_call_id)?,
     )
+}
+
+/// Repair Haiku 5.5 and Sonnet 5.5 calls archived before the books had rows
+/// for them.
+///
+/// Haiku 5.5 matched no row and fell through to the Sonnet 4.6 fallback, 30x
+/// its standard tier on every token bucket, so a proven fallback row is
+/// rescaled with web search held out. Any tool can hit the global fallback,
+/// and none scopes a Haiku 5.5 row, so the fixed books price every tool alike.
+///
+/// Sonnet 5.5 inherited Sonnet 5 through longest-prefix matching and paid
+/// double for cache reads. That move is not proportional, so the hidden
+/// 1-hour cache-write count is recovered from the stale hypothesis and carried
+/// into the recompute. Dotted ids escaped the v9 Sonnet 5 repair, so the
+/// canceled September increase is accepted as a stale schedule too. Only
+/// Claude Code is repaired: Cursor and Copilot scope their own Sonnet 5 rows,
+/// which still prefix-match Sonnet 5.5 ids, so their fresh imports keep the
+/// Sonnet 5 rate and repairing old rows would make history disagree.
+fn reprice_unlisted_claude_5_5_calls(
+    tx: &Transaction<'_>,
+    min_call_id: Option<i64>,
+    max_call_id: Option<i64>,
+) -> Result<usize> {
+    use claude_2026_09_repair::{SONNET_5, SONNET_5_STALE, WEB_SEARCH};
+    use claude_2026_10_repair as rates;
+
+    let claude_code = crate::tools::claude_code::config::TOOL_ID;
+    let cursor = crate::tools::cursor::config::TOOL_ID;
+    let copilot = crate::tools::copilot::config::TOOL_ID;
+    let mut candidates = Vec::new();
+    {
+        let mut stmt = tx.prepare(
+            "
+            SELECT id, tool, model, speed, timestamp, imported_at, cost_usd,
+                   input_tokens, output_tokens, cache_creation_input_tokens,
+                   cache_read_input_tokens, web_search_requests
+            FROM calls
+            WHERE tool IN (?1, ?2, ?3)
+              AND id >= COALESCE(?4, 0)
+              AND id <= COALESCE(?5, 9223372036854775807)
+              AND (
+                    lower(model) LIKE '%haiku-5-5%'
+                 OR lower(model) LIKE '%haiku-5.5%'
+                 OR lower(model) LIKE '%sonnet-5-5%'
+                 OR lower(model) LIKE '%sonnet-5.5%'
+              )
+            ",
+        )?;
+        let rows = stmt.query_map(
+            params![claude_code, cursor, copilot, min_call_id, max_call_id],
+            |row| {
+                Ok(ClaudeRepairCandidate {
+                    id: row.get(0)?,
+                    tool: row.get(1)?,
+                    model: row.get(2)?,
+                    speed: row.get(3)?,
+                    timestamp: row.get(4)?,
+                    imported_at: row.get(5)?,
+                    cost_usd: row.get(6)?,
+                    input_tokens: row.get(7)?,
+                    output_tokens: row.get(8)?,
+                    cache_write_tokens: row.get(9)?,
+                    cache_read_tokens: row.get(10)?,
+                    web_search_requests: row.get(11)?,
+                })
+            },
+        )?;
+        for row in rows {
+            candidates.push(row?);
+        }
+    }
+
+    let mut repriced = 0usize;
+    for call in candidates {
+        if !matches!(call.speed.as_str(), "standard" | "fast") {
+            continue;
+        }
+        let model = crate::models::canonical_key(&call.model);
+        let corrected =
+            if is_any_model_or_variant(&model, &["claude-haiku-5-5", "claude-haiku-5.5"]) {
+                if !matches_claude_cost_hypothesis(&call, rates::FALLBACK)
+                    || matches_claude_cost_hypothesis(&call, rates::HAIKU_5_5)
+                {
+                    continue;
+                }
+                let web_cost = call.web_search_requests as f64 * WEB_SEARCH;
+                web_cost + (call.cost_usd - web_cost) * rates::HAIKU_5_5_FACTOR
+            } else if is_any_model_or_variant(&model, &["claude-sonnet-5-5", "claude-sonnet-5.5"])
+                && call.tool == claude_code
+            {
+                let mut stale = [SONNET_5, SONNET_5_STALE].into_iter().filter_map(|stale| {
+                    inferred_one_hour_cache_writes(&call, stale, call.cost_usd)
+                });
+                let (Some(one_hour), None) = (stale.next(), stale.next()) else {
+                    continue;
+                };
+                if matches_claude_cost_hypothesis(&call, rates::SONNET_5_5) {
+                    continue;
+                }
+                claude_cost_hypothesis(&call, rates::SONNET_5_5, one_hour)
+            } else {
+                continue;
+            };
+
+        if !corrected.is_finite() || corrected < 0.0 {
+            continue;
+        }
+        tx.execute(
+            "UPDATE calls SET cost_usd = ?1 WHERE id = ?2",
+            params![corrected, call.id],
+        )?;
+        repriced += 1;
+    }
+
+    Ok(repriced)
 }
 
 /// Repair newly inserted calls as one primary-key range, then repair any
@@ -4494,6 +4657,317 @@ mod tests {
         assert!((cost_of(&archive, "luna") - luna).abs() < 1e-9);
         assert!((cost_of(&archive, "sol-early") - fallback).abs() < 1e-12);
         assert!((cost_of(&archive, "sol-pro") - fallback).abs() < 1e-12);
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    fn claude_5_5_repair_call(tool: &'static str, model: &str) -> ParsedCall {
+        let mut call = bare_call(model);
+        call.tool = tool;
+        call.model = model.into();
+        call.timestamp = Some(Utc.with_ymd_and_hms(2026, 10, 15, 12, 0, 0).unwrap());
+        call.input_tokens = 12_000;
+        call.output_tokens = 3_400;
+        call.cache_creation_input_tokens = 50_000;
+        call.cache_creation_1h_input_tokens = 30_000;
+        call.cache_read_input_tokens = 900_001;
+        call.web_search_requests = 2;
+        call
+    }
+
+    #[test]
+    fn migrate_v11_repairs_fallback_priced_haiku_5_5_calls() {
+        use claude_2026_10_repair::{FALLBACK, HAIKU_5_5};
+
+        let call = claude_5_5_repair_call("claude-code", "claude-haiku-5-5");
+        let charged = historical_claude_cost(&call, FALLBACK);
+        let truth = historical_claude_cost(&call, HAIKU_5_5);
+        let web = call.web_search_requests as f64 * claude_2026_09_repair::WEB_SEARCH;
+        assert!(((charged - web) - 30.0 * (truth - web)).abs() < 1e-12);
+        // The repair must land exactly where live pricing now puts the call,
+        // hidden 1-hour cache-write premium included, for every tool that
+        // reaches the global row.
+        for tool in ["claude-code", "cursor", "copilot"] {
+            let mut live_call = call.clone();
+            live_call.tool = tool;
+            for model in ["claude-haiku-5-5", "claude-haiku-5.5"] {
+                let live = crate::pricing::cost(model, &live_call, Speed::Standard);
+                assert!(
+                    (live - truth).abs() < 1e-9,
+                    "{tool} {model}: {live} vs {truth}"
+                );
+            }
+        }
+
+        let nonmatching = charged + 0.25;
+        let row = |label: &str, tool: &str, model: &str, speed: &str, cost: f64| {
+            let at = "2026-10-15T12:00:00Z";
+            legacy_september_claude_row(label, tool, model, speed, Some(at), at, cost, &call)
+        };
+        let paths = temp_paths("migrate-v11-haiku-5-5");
+        create_legacy_db(
+            &paths,
+            &[
+                row(
+                    "haiku",
+                    "claude-code",
+                    "claude-haiku-5-5",
+                    "standard",
+                    charged,
+                ),
+                row(
+                    "haiku-dated",
+                    "claude-code",
+                    "anthropic/claude-haiku-5-5-20261015",
+                    "standard",
+                    charged,
+                ),
+                row(
+                    "haiku-dotted",
+                    "cursor",
+                    "claude-haiku-5.5",
+                    "standard",
+                    charged,
+                ),
+                row(
+                    "haiku-copilot",
+                    "copilot",
+                    "claude-haiku-5.5",
+                    "standard",
+                    charged,
+                ),
+                row(
+                    "haiku-fast",
+                    "claude-code",
+                    "claude-haiku-5-5",
+                    "fast",
+                    charged,
+                ),
+                row(
+                    "haiku-correct",
+                    "claude-code",
+                    "claude-haiku-5-5",
+                    "standard",
+                    truth,
+                ),
+                row(
+                    "haiku-odd",
+                    "claude-code",
+                    "claude-haiku-5-5",
+                    "standard",
+                    nonmatching,
+                ),
+                row(
+                    "haiku-codex",
+                    "codex",
+                    "claude-haiku-5-5",
+                    "standard",
+                    charged,
+                ),
+                row(
+                    "haiku-4-5",
+                    "claude-code",
+                    "claude-haiku-4-5",
+                    "standard",
+                    charged,
+                ),
+                "PRAGMA user_version = 10;".to_string(),
+            ]
+            .join("\n"),
+        );
+
+        let archive = Archive::open(&paths).unwrap();
+        for key in [
+            "haiku",
+            "haiku-dated",
+            "haiku-dotted",
+            "haiku-copilot",
+            "haiku-fast",
+        ] {
+            let repaired = cost_of(&archive, key);
+            assert!(
+                (repaired - truth).abs() < 1e-9,
+                "{key}: got {repaired}, want {truth}"
+            );
+        }
+        assert!((cost_of(&archive, "haiku-correct") - truth).abs() < 1e-12);
+        assert!((cost_of(&archive, "haiku-odd") - nonmatching).abs() < 1e-12);
+        assert!((cost_of(&archive, "haiku-codex") - charged).abs() < 1e-12);
+        assert!(
+            (cost_of(&archive, "haiku-4-5") - charged).abs() < 1e-12,
+            "other Haiku ids keep their stored price"
+        );
+
+        // Re-running the migration must not apply the rescale twice.
+        archive
+            .conn
+            .execute_batch("PRAGMA user_version = 10;")
+            .unwrap();
+        drop(archive);
+        let archive = Archive::open(&paths).unwrap();
+        assert!((cost_of(&archive, "haiku") - truth).abs() < 1e-9);
+        assert!((cost_of(&archive, "haiku-dotted") - truth).abs() < 1e-9);
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn migrate_v11_repairs_claude_code_sonnet_5_5_cache_reads() {
+        use claude_2026_09_repair::{SONNET_5, SONNET_5_STALE};
+        use claude_2026_10_repair::SONNET_5_5;
+
+        let call = claude_5_5_repair_call("claude-code", "claude-sonnet-5-5");
+        let charged = historical_claude_cost(&call, SONNET_5);
+        let stale = historical_claude_cost(&call, SONNET_5_STALE);
+        let truth = historical_claude_cost(&call, SONNET_5_5);
+        assert!(stale > charged && charged > truth);
+        let live = crate::pricing::cost("claude-sonnet-5-5", &call, Speed::Standard);
+        assert!((live - truth).abs() < 1e-9, "live {live} vs repair {truth}");
+        // Cursor's scoped Sonnet 5 row still prefix-matches Sonnet 5.5, so
+        // its fresh imports keep the Sonnet 5 rate and old rows must too.
+        let mut cursor_call = call.clone();
+        cursor_call.tool = "cursor";
+        let cursor_live = crate::pricing::cost("claude-sonnet-5-5", &cursor_call, Speed::Standard);
+        assert!((cursor_live - charged).abs() < 1e-9);
+
+        // Sonnet 5 with no 1-hour writes equals Sonnet 5.5 with 100, so this
+        // row cannot be attributed to either schedule and must stay put.
+        let mut ambiguous = bare_call("sonnet-5-5-ambiguous");
+        ambiguous.input_tokens = 0;
+        ambiguous.output_tokens = 0;
+        ambiguous.cache_creation_input_tokens = 600;
+        ambiguous.cache_read_input_tokens = 1_500;
+        ambiguous.web_search_requests = 0;
+        let ambiguous_cost = historical_claude_cost(&ambiguous, SONNET_5);
+        let mut ambiguous_as_5_5 = ambiguous.clone();
+        ambiguous_as_5_5.cache_creation_1h_input_tokens = 100;
+        assert!(
+            (historical_claude_cost(&ambiguous_as_5_5, SONNET_5_5) - ambiguous_cost).abs() < 1e-12
+        );
+
+        let nonmatching = charged + 0.25;
+        let at = "2026-10-15T12:00:00Z";
+        let row = |label: &str, tool: &str, model: &str, cost: f64| {
+            legacy_september_claude_row(label, tool, model, "standard", Some(at), at, cost, &call)
+        };
+        let paths = temp_paths("migrate-v11-sonnet-5-5");
+        create_legacy_db(
+            &paths,
+            &[
+                row("sonnet55", "claude-code", "claude-sonnet-5-5", charged),
+                row(
+                    "sonnet55-dated",
+                    "claude-code",
+                    "anthropic/claude-sonnet-5-5-20261001",
+                    charged,
+                ),
+                row(
+                    "sonnet55-dotted",
+                    "claude-code",
+                    "claude-sonnet-5.5",
+                    charged,
+                ),
+                // The canceled September increase: the hyphenated id is first
+                // brought to Sonnet 5 by the v9 repair, the dotted id escaped
+                // it, and both must finish on Sonnet 5.5.
+                row("sonnet55-stale", "claude-code", "claude-sonnet-5-5", stale),
+                row(
+                    "sonnet55-dotted-stale",
+                    "claude-code",
+                    "claude-sonnet-5.5",
+                    stale,
+                ),
+                row(
+                    "sonnet55-correct",
+                    "claude-code",
+                    "claude-sonnet-5-5",
+                    truth,
+                ),
+                row(
+                    "sonnet55-odd",
+                    "claude-code",
+                    "claude-sonnet-5-5",
+                    nonmatching,
+                ),
+                row("sonnet55-cursor", "cursor", "claude-sonnet-5-5", charged),
+                row("sonnet55-copilot", "copilot", "claude-sonnet-5.5", charged),
+                row("sonnet5", "claude-code", "claude-sonnet-5", charged),
+                legacy_september_claude_row(
+                    "sonnet55-ambiguous",
+                    "claude-code",
+                    "claude-sonnet-5-5",
+                    "standard",
+                    Some(at),
+                    at,
+                    ambiguous_cost,
+                    &ambiguous,
+                ),
+                "PRAGMA user_version = 10;".to_string(),
+            ]
+            .join("\n"),
+        );
+
+        let archive = Archive::open(&paths).unwrap();
+        for key in [
+            "sonnet55",
+            "sonnet55-dated",
+            "sonnet55-dotted",
+            "sonnet55-stale",
+            "sonnet55-dotted-stale",
+        ] {
+            let repaired = cost_of(&archive, key);
+            assert!(
+                (repaired - truth).abs() < 1e-9,
+                "{key}: got {repaired}, want {truth}"
+            );
+        }
+        assert!((cost_of(&archive, "sonnet55-correct") - truth).abs() < 1e-12);
+        assert!((cost_of(&archive, "sonnet55-odd") - nonmatching).abs() < 1e-12);
+        assert!((cost_of(&archive, "sonnet55-cursor") - charged).abs() < 1e-12);
+        assert!((cost_of(&archive, "sonnet55-copilot") - charged).abs() < 1e-12);
+        assert!(
+            (cost_of(&archive, "sonnet5") - charged).abs() < 1e-12,
+            "real Sonnet 5 calls keep their Sonnet 5 price"
+        );
+        assert!((cost_of(&archive, "sonnet55-ambiguous") - ambiguous_cost).abs() < 1e-12);
+
+        // Re-running the migration must not apply the correction twice.
+        archive
+            .conn
+            .execute_batch("PRAGMA user_version = 10;")
+            .unwrap();
+        drop(archive);
+        let archive = Archive::open(&paths).unwrap();
+        assert!((cost_of(&archive, "sonnet55") - truth).abs() < 1e-9);
+        assert!((cost_of(&archive, "sonnet55-dotted-stale") - truth).abs() < 1e-9);
+        let _ = fs::remove_dir_all(paths.dir);
+    }
+
+    #[test]
+    fn insert_ingested_repairs_stale_v11_rows_after_archive_open() {
+        use claude_2026_09_repair::SONNET_5;
+        use claude_2026_10_repair::{FALLBACK, HAIKU_5_5, SONNET_5_5};
+
+        let mut haiku = claude_5_5_repair_call("claude-code", "claude-haiku-5-5");
+        haiku.dedup_key = "post-open-haiku".into();
+        haiku.cost_usd = historical_claude_cost(&haiku, FALLBACK);
+        let haiku_truth = historical_claude_cost(&haiku, HAIKU_5_5);
+        let mut sonnet = claude_5_5_repair_call("claude-code", "claude-sonnet-5.5");
+        sonnet.dedup_key = "post-open-sonnet".into();
+        sonnet.cost_usd = historical_claude_cost(&sonnet, SONNET_5);
+        let sonnet_truth = historical_claude_cost(&sonnet, SONNET_5_5);
+
+        let paths = temp_paths("insert-after-v11-migration");
+        let mut archive = Archive::open(&paths).unwrap();
+        assert_eq!(
+            archive
+                .insert_ingested(&Ingested {
+                    calls: vec![haiku, sonnet],
+                    limits: Vec::new(),
+                })
+                .unwrap(),
+            2
+        );
+        assert!((cost_of(&archive, "post-open-haiku") - haiku_truth).abs() < 1e-9);
+        assert!((cost_of(&archive, "post-open-sonnet") - sonnet_truth).abs() < 1e-9);
         let _ = fs::remove_dir_all(paths.dir);
     }
 

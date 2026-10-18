@@ -267,6 +267,7 @@ mod tests {
                 timestamp: "2026-05-01 10:00".into(),
                 model: "model <x>".into(),
                 cost: "$1.23".into(),
+                cost_exact: "$1.2300".into(),
                 cache_read_rate: "10%".into(),
                 cache_write_rate: "125%".into(),
                 input_tokens: 1000,

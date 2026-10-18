@@ -152,29 +152,115 @@ impl CurrencyFormatter {
         self.code == config::DEFAULT_CURRENCY
     }
 
+    /// Display money: two decimals with thousands separators, `£0` for an
+    /// exact zero, and `<£0.01` for non-zero amounts below the smallest unit.
     pub fn format_money(&self, amount_usd: f64) -> String {
-        if self.is_usd() {
-            return format_usd(amount_usd);
-        }
-
-        self.format_converted(amount_usd, false)
+        self.format_amount(amount_usd * self.rate, false)
     }
 
+    /// Compact money for narrow mixes and labels: whole units from 100, one
+    /// decimal from 10, otherwise the same rules as [`Self::format_money`].
     pub fn format_money_short(&self, amount_usd: f64) -> String {
-        if self.is_usd() {
-            return format_usd_short(amount_usd);
-        }
-
-        self.format_converted(amount_usd, true)
+        self.format_amount(amount_usd * self.rate, true)
     }
 
-    fn format_converted(&self, amount_usd: f64, short: bool) -> String {
-        let amount = format_non_usd(amount_usd * self.rate, short);
+    /// Full-precision money for tooltips behind a rounded or `<£0.01` value.
+    pub fn format_money_exact(&self, amount_usd: f64) -> String {
+        let amount = amount_usd * self.rate;
+        if amount == 0.0 || !amount.is_finite() {
+            return self.with_prefix("0");
+        }
+        let decimals = if amount.abs() >= 0.01 { 4 } else { 6 };
+        let sign = if amount < 0.0 { "-" } else { "" };
+        format!(
+            "{sign}{}",
+            self.with_prefix(&group_thousands(amount.abs(), decimals))
+        )
+    }
+
+    fn format_amount(&self, amount: f64, short: bool) -> String {
+        if amount == 0.0 || !amount.is_finite() {
+            return self.with_prefix("0");
+        }
+
+        let minor_decimals = if zero_decimal_currency(&self.code) {
+            0
+        } else {
+            2
+        };
+        let smallest = 10f64.powi(-(minor_decimals as i32));
+        if amount.abs() < smallest {
+            let floor = format!("{smallest:.minor_decimals$}");
+            return format!("<{}", self.with_prefix(&floor));
+        }
+
+        let decimals = match amount.abs() {
+            _ if minor_decimals == 0 => 0,
+            value if short && value >= 100.0 => 0,
+            value if short && value >= 10.0 => 1,
+            _ => minor_decimals,
+        };
+        let sign = if amount < 0.0 { "-" } else { "" };
+        format!(
+            "{sign}{}",
+            self.with_prefix(&group_thousands(amount.abs(), decimals))
+        )
+    }
+
+    fn with_prefix(&self, amount: &str) -> String {
+        if self.is_usd() {
+            return format!("${amount}");
+        }
         match currency_prefix(&self.code) {
             Some(prefix) if prefix.compact => format!("{}{amount}", prefix.text),
             Some(prefix) => format!("{} {amount}", prefix.text),
             None => format!("{} {}", self.code, amount),
         }
+    }
+}
+
+/// ISO 4217 currencies with no minor unit; showing pence-style decimals for
+/// these would invent precision the currency does not have.
+fn zero_decimal_currency(code: &str) -> bool {
+    matches!(
+        code,
+        "BIF"
+            | "CLP"
+            | "DJF"
+            | "GNF"
+            | "ISK"
+            | "JPY"
+            | "KMF"
+            | "KRW"
+            | "PYG"
+            | "RWF"
+            | "UGX"
+            | "VND"
+            | "VUV"
+            | "XAF"
+            | "XOF"
+            | "XPF"
+    )
+}
+
+/// Format a non-negative amount with `decimals` places and `,` thousands
+/// separators.
+fn group_thousands(amount: f64, decimals: usize) -> String {
+    let fixed = format!("{amount:.decimals$}");
+    let (int_part, frac_part) = match fixed.split_once('.') {
+        Some((int_part, frac_part)) => (int_part, Some(frac_part)),
+        None => (fixed.as_str(), None),
+    };
+    let mut grouped = String::with_capacity(int_part.len() + int_part.len() / 3);
+    for (idx, digit) in int_part.chars().enumerate() {
+        if idx > 0 && (int_part.len() - idx) % 3 == 0 {
+            grouped.push(',');
+        }
+        grouped.push(digit);
+    }
+    match frac_part {
+        Some(frac_part) => format!("{grouped}.{frac_part}"),
+        None => grouped,
     }
 }
 
@@ -214,42 +300,6 @@ fn currency_rank(code: &str) -> (u8, &str) {
         _ => 9,
     };
     (rank, code)
-}
-
-fn format_usd(amount: f64) -> String {
-    if amount >= 1.0 {
-        format!("${amount:.2}")
-    } else if amount >= 0.01 {
-        format!("${amount:.3}")
-    } else {
-        format!("${amount:.4}")
-    }
-}
-
-fn format_usd_short(amount: f64) -> String {
-    if amount >= 100.0 {
-        format!("${amount:.0}")
-    } else if amount >= 10.0 {
-        format!("${amount:.1}")
-    } else if amount >= 0.01 {
-        format!("${amount:.2}")
-    } else {
-        format!("${amount:.4}")
-    }
-}
-
-fn format_non_usd(amount: f64, short: bool) -> String {
-    if amount >= 1000.0 {
-        format!("{amount:.0}")
-    } else if short && amount >= 10.0 {
-        format!("{amount:.1}")
-    } else if amount >= 1.0 {
-        format!("{amount:.2}")
-    } else if amount >= 0.01 {
-        format!("{amount:.3}")
-    } else {
-        format!("{amount:.4}")
-    }
 }
 
 struct CurrencyPrefix {
@@ -376,8 +426,64 @@ mod tests {
         let usd = CurrencyFormatter::usd();
 
         assert_eq!(usd.format_money(65.87), "$65.87");
-        assert_eq!(usd.format_money(0.624), "$0.624");
+        assert_eq!(usd.format_money(0.624), "$0.62");
         assert_eq!(usd.format_money_short(59.03), "$59.0");
+    }
+
+    #[test]
+    fn groups_thousands_and_keeps_two_decimals() {
+        let gbp = CurrencyFormatter {
+            code: "GBP".into(),
+            rate: 1.0,
+        };
+
+        assert_eq!(gbp.format_money(928.891), "£928.89");
+        assert_eq!(gbp.format_money(1088.0), "£1,088.00");
+        assert_eq!(gbp.format_money(2859.456), "£2,859.46");
+        assert_eq!(gbp.format_money(1_234_567.8), "£1,234,567.80");
+        assert_eq!(gbp.format_money(-1088.5), "-£1,088.50");
+        assert_eq!(gbp.format_money_short(2859.456), "£2,859");
+        assert_eq!(gbp.format_money_short(12.34), "£12.3");
+        assert_eq!(
+            CurrencyFormatter::usd().format_money(12_345.6),
+            "$12,345.60"
+        );
+    }
+
+    #[test]
+    fn shows_zero_and_sub_penny_amounts_plainly() {
+        let gbp = CurrencyFormatter {
+            code: "GBP".into(),
+            rate: 1.0,
+        };
+
+        assert_eq!(gbp.format_money(0.0), "£0");
+        assert_eq!(gbp.format_money_short(0.0), "£0");
+        assert_eq!(gbp.format_money(0.007), "<£0.01");
+        assert_eq!(gbp.format_money_short(0.0001), "<£0.01");
+        assert_eq!(gbp.format_money(0.01), "£0.01");
+        assert_eq!(gbp.format_money_exact(0.007), "£0.007000");
+        assert_eq!(gbp.format_money_exact(1088.12345), "£1,088.1235");
+        assert_eq!(CurrencyFormatter::usd().format_money(0.0), "$0");
+        assert_eq!(CurrencyFormatter::usd().format_money(0.004), "<$0.01");
+
+        let chf = CurrencyFormatter {
+            code: "CHF".into(),
+            rate: 1.0,
+        };
+        assert_eq!(chf.format_money(0.004), "<CHF 0.01");
+    }
+
+    #[test]
+    fn zero_decimal_currencies_use_whole_units() {
+        let jpy = CurrencyFormatter {
+            code: "JPY".into(),
+            rate: 150.0,
+        };
+
+        assert_eq!(jpy.format_money(10.0), "¥1,500");
+        assert_eq!(jpy.format_money(0.001), "<¥1");
+        assert_eq!(jpy.format_money(0.0), "¥0");
     }
 
     #[test]

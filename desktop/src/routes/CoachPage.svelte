@@ -13,6 +13,7 @@
   import RankBar from '../components/RankBar.svelte';
   import ScoreBar from '../components/ScoreBar.svelte';
   import Sparkline from '../components/Sparkline.svelte';
+  import { flowTone, gradeTone } from '../lib/coachTone';
   import StatTile from '../components/StatTile.svelte';
   import { count, rankLabel, rankPercent } from '../format';
   import { countUp, staggeredReveal } from '../motion';
@@ -195,17 +196,6 @@
 
   function gradeLabel(gradeId: string): string {
     return coachCopy.report.grade_labels[gradeId] ?? gradeId;
-  }
-
-  // High score is good — same thresholds as ScoreBar. Used for flow days.
-  function scoreTone(score: number): 'good' | 'warn' | 'bad' {
-    return score >= 70 ? 'good' : score >= 40 ? 'warn' : 'bad';
-  }
-
-  // Grade-tier tones: green is earned by A-tier only, B/C read as
-  // needs-attention, D/F as trouble.
-  function gradeTone(score: number): 'good' | 'warn' | 'bad' {
-    return score >= 90 ? 'good' : score >= 70 ? 'warn' : 'bad';
   }
 
   function severityTone(id: string): 'good' | 'warn' | 'bad' {
@@ -450,7 +440,7 @@
             <div class="flow-summary">
               <div class="flow-score">
                 <span class="mono flow-score-value">{coach.flow.overall_score}</span>
-                <Badge label={coachCopy.flow.labels[coach.flow.label_id] ?? coach.flow.label_id} tone={scoreTone(coach.flow.overall_score)} />
+                <Badge label={coachCopy.flow.labels[coach.flow.label_id] ?? coach.flow.label_id} tone={flowTone(coach.flow.overall_score)} />
               </div>
               <div class="flow-kpis">
                 <StatTile value={coach.flow.avg_followup} label={coachCopy.flow.avg_followup} />
@@ -461,7 +451,7 @@
             </div>
             <div class="flow-trend">
               <span class="stat-label">{coachCopy.flow.trend}</span>
-              <Sparkline values={flowTrend} ariaLabel={coachCopy.flow.chart_aria} height={44} />
+              <Sparkline values={flowTrend} ariaLabel={coachCopy.flow.chart_aria} height={44} toneFor={flowTone} />
             </div>
           {/if}
         </Panel>

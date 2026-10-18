@@ -16,6 +16,7 @@ use super::sections::{
     render_title_bar,
 };
 use crate::app::App;
+use crate::coach::score::{GRADE_TONE_GOOD, GRADE_TONE_WARN};
 use crate::copy::{copy, template, CopyDeck};
 use crate::data::{CoachData, CoachFinding};
 use crate::theme;
@@ -62,12 +63,10 @@ fn grade_label<'a>(deck: &'a CopyDeck, grade_id: &'a str) -> &'a str {
 }
 
 fn score_style(score: u64) -> ratatui::style::Style {
-    if score >= 90 {
+    if score >= GRADE_TONE_GOOD {
         theme::base().fg(theme::GREEN)
-    } else if score >= 70 {
-        theme::base().fg(theme::CYAN)
-    } else if score >= 50 {
-        theme::money()
+    } else if score >= GRADE_TONE_WARN {
+        theme::base().fg(theme::YELLOW)
     } else {
         theme::base().fg(theme::RED)
     }
