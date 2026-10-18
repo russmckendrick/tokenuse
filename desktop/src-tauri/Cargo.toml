@@ -26,7 +26,7 @@ thiserror = "2.0.20"
 tokenuse = { path = "../..", default-features = false }
 
 [target.'cfg(any(windows, target_os = "linux"))'.dependencies]
-tauri-plugin-updater = "2.11.0"
+tauri-plugin-updater = { version = "2.11.0", default-features = false, features = ["rustls-tls", "system-proxy"] }
 
 [features]
 default = ["refresh-currency", "refresh-prices", "quota-sync"]

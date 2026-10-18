@@ -3873,7 +3873,7 @@ mod tests {
         let mut out = String::new();
         for idx in 0..archive.len() {
             let mut file = archive.by_index(idx).unwrap();
-            if file.name().ends_with(".xml") {
+            if file.name().unwrap().ends_with(".xml") {
                 let mut text = String::new();
                 file.read_to_string(&mut text).unwrap();
                 out.push_str(&text);

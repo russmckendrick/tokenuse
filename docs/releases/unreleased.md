@@ -13,6 +13,7 @@ No additions recorded yet.
 - Coach colours its practice score bars and practice sparklines on the same curve as the grade letters (green from 90, yellow from 70), so an 80 no longer shows a green bar beside a yellow B. The TUI's grade colours now follow the same three tones.
 - Ranked-table rows show magnitude as a quieter wash with a thin underline instead of a full-height edge that looked like a text cursor. The TUI drops its brighter terminus cell the same way.
 - The desktop status bar only lists period, tool, sort, and project shortcuts on pages that show those controls, and those shortcuts only act there. The tool shortcut now also works on Coach. The TUI's Coach footer no longer advertises `g sort`.
+- Updated rustls to 0.23.46 in both lockfiles (RUSTSEC-2026-0346 to 0349), rust_xlsxwriter to 0.100.0 with zip 9 (RUSTSEC-2026-0367 to 0369), and the desktop's transitive devalue and source-map-js packages. The desktop updater plugin now builds without its optional `zip` feature: releases publish raw NSIS and AppImage updater artifacts, so the legacy zip and tar.gz extraction paths were unused and only pulled in the vulnerable zip 4.
 - Windows releases are now Authenticode-signed with a Certum code-signing certificate: the TUI's `tokenuse-windows-amd64.exe`, the desktop NSIS and MSI installers, and the app executable inside them. SmartScreen warnings should fade as the signed releases build reputation.
 
 ## Fixed

@@ -37,7 +37,7 @@ Tagged releases also build desktop app bundles:
 
 Each asset has a matching `.sha256` checksum file.
 
-The release also uploads `latest.json`, the static manifest consumed by the Windows/Linux Tauri updater. The manifest points Windows to the normalized NSIS setup installer and Linux to the normalized AppImage assets. `.deb` and `.rpm` packages remain manual GitHub Release installs.
+The release also uploads `latest.json`, the static manifest consumed by the Windows/Linux Tauri updater. The manifest points Windows to the normalized NSIS setup installer and Linux to the normalized AppImage assets. `.deb` and `.rpm` packages remain manual GitHub Release installs. The desktop builds `tauri-plugin-updater` without its default `zip` feature, so it only installs raw NSIS and AppImage artifacts (`createUpdaterArtifacts: true`); switching back to v1-compatible zip or tar.gz updater bundles would need that feature, and its zip dependency, again.
 
 The macOS desktop release job builds the Apple Silicon DMG, signs it with a Developer ID Application certificate, notarizes through App Store Connect, verifies the mounted DMG, and uploads the normalized artifact to the GitHub Release. Windows release binaries (the TUI's `tokenuse-windows-amd64.exe`, the NSIS and MSI installers, and the app executable and uninstaller inside them) are Authenticode-signed with a Certum code-signing certificate when the `CERTUM_*` secrets are set; see [Windows Code Signing](#windows-code-signing). Linux desktop assets are not OS code-signed and should be verified with their checksum files before installing. The `.sig` files are Tauri updater signatures, not Authenticode or Linux package signatures.
 
