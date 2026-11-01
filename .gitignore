@@ -3,7 +3,6 @@
 /desktop/dist/
 /desktop/src-tauri/target/
 /desktop/src-tauri/gen/
-/desktop/pnpm-workspace.yaml
 /.pnpm-store/
 /.pnpmstore/
 /desktop/package-lock.json
