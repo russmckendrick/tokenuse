@@ -15,6 +15,8 @@ use crate::tools::{CodeBlock, ParsedCall};
 pub struct Turn<'a> {
     pub calls: Vec<&'a ParsedCall>,
     pub tool: &'static str,
+    /// Source session id; empty when the tool records none.
+    pub session_id: &'a str,
     pub project: &'a str,
     pub model: &'a str,
     pub user_message: &'a str,
@@ -46,6 +48,12 @@ pub struct CoachSession<'a> {
     pub tool: &'static str,
     pub project: String,
     pub turns: Vec<Turn<'a>>,
+    /// Latest turn opened by a person-written prompt. Subagent transcripts
+    /// share the parent's session id, so their harness-prompt calls
+    /// interleave with the parent's by timestamp; tracking the last real
+    /// prompt lets the parent's calls rejoin their turn instead of
+    /// restarting it after every interleaved subagent call.
+    last_prompt_turn: Option<usize>,
 }
 
 impl CoachSession<'_> {
@@ -82,6 +90,7 @@ pub fn group_sessions<'a>(calls: &[&'a ParsedCall]) -> Vec<CoachSession<'a>> {
                 tool: call.tool,
                 project: call.project.clone(),
                 turns: Vec::new(),
+                last_prompt_turn: None,
             });
             sessions.len() - 1
         });
@@ -93,16 +102,33 @@ pub fn group_sessions<'a>(calls: &[&'a ParsedCall]) -> Vec<CoachSession<'a>> {
 
 fn push_call<'a>(session: &mut CoachSession<'a>, call: &'a ParsedCall) {
     let exact_timestamp = crate::coach::exact_timestamp(call);
-    let starts_new_turn = match session.turns.last() {
-        None => true,
-        Some(turn) => {
-            turn.user_message != call.user_message || turn.prompt_chars != call.prompt_chars
-        }
+    let continues = |turn: &Turn<'_>| {
+        turn.user_message == call.user_message && turn.prompt_chars == call.prompt_chars
     };
-    if starts_new_turn {
+    let harness = crate::coach::text::is_harness_prompt(&call.user_message);
+    let target = if harness {
+        session
+            .turns
+            .last()
+            .filter(|turn| continues(turn))
+            .map(|_| session.turns.len() - 1)
+    } else {
+        session
+            .last_prompt_turn
+            .filter(|&idx| continues(&session.turns[idx]))
+            .or_else(|| {
+                session
+                    .turns
+                    .last()
+                    .filter(|turn| continues(turn))
+                    .map(|_| session.turns.len() - 1)
+            })
+    };
+    let target = target.unwrap_or_else(|| {
         session.turns.push(Turn {
             calls: Vec::new(),
             tool: call.tool,
+            session_id: &call.session_id,
             project: &call.project,
             model: &call.model,
             user_message: &call.user_message,
@@ -122,8 +148,12 @@ fn push_call<'a>(session: &mut CoachSession<'a>, call: &'a ParsedCall) {
             referenced_files: 0,
             is_canceled: false,
         });
+        session.turns.len() - 1
+    });
+    if !harness {
+        session.last_prompt_turn = Some(target);
     }
-    let turn = session.turns.last_mut().expect("turn just ensured");
+    let turn = &mut session.turns[target];
     turn.calls.push(call);
     if turn.timestamp.is_none() {
         turn.timestamp = exact_timestamp;
@@ -210,6 +240,27 @@ mod tests {
             first.end_timestamp,
             Some(Utc.with_ymd_and_hms(2026, 6, 1, 10, 1, 0).unwrap())
         );
+    }
+
+    #[test]
+    fn interleaved_subagent_calls_do_not_split_the_parent_turn() {
+        let sub = "<system-reminder>Your final report is delivered through SubagentHandback";
+        let calls = [
+            call("s1", "do it all in one branch", 0, Some(23)),
+            call("s1", sub, 1, Some(72)),
+            call("s1", "do it all in one branch", 2, Some(23)),
+            call("s1", sub, 3, Some(72)),
+            call("s1", "do it all in one branch", 4, Some(23)),
+        ];
+        let refs: Vec<&ParsedCall> = calls.iter().collect();
+        let sessions = group_sessions(&refs);
+        let prompts: Vec<_> = sessions[0]
+            .turns
+            .iter()
+            .filter(|t| !crate::coach::text::is_harness_prompt(t.user_message))
+            .collect();
+        assert_eq!(prompts.len(), 1, "one prompt, one turn");
+        assert_eq!(prompts[0].calls.len(), 3);
     }
 
     #[test]

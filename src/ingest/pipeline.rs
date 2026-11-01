@@ -250,6 +250,7 @@ impl Ingested {
         period: Period,
         tool: Tool,
         project_filter: &ProjectFilter,
+        ignored_prompts: &std::collections::BTreeSet<String>,
     ) -> crate::data::CoachData {
         let now = Local::now();
         // The activity calendar needs calls beyond the period filter: its
@@ -270,7 +271,14 @@ impl Ingested {
         // Advisory setup findings scan the local config files of recently
         // active project roots (live data only; sample mode never gets here).
         let scan = crate::coach::setup::scan(&active_project_roots(&calendar));
-        crate::coach::coach_data(&filtered, &calendar, period, now, Some(&scan))
+        crate::coach::coach_data(
+            &filtered,
+            &calendar,
+            period,
+            now,
+            Some(&scan),
+            ignored_prompts,
+        )
     }
 
     pub fn coach_timeline(
@@ -1901,6 +1909,7 @@ fn interaction_mode_label(mode: crate::tools::InteractionMode) -> String {
         crate::tools::InteractionMode::Agent => session.mode_agent.clone(),
         crate::tools::InteractionMode::Chat => session.mode_chat.clone(),
         crate::tools::InteractionMode::Plan => session.mode_plan.clone(),
+        crate::tools::InteractionMode::Headless => session.mode_headless.clone(),
         crate::tools::InteractionMode::Unknown => session.mode_unknown.clone(),
     }
 }

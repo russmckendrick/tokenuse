@@ -216,6 +216,37 @@ pub(crate) async fn get_coach(
 }
 
 #[tauri::command]
+/// Add or remove a prompt from the Coach ignore list, then return the
+/// rebuilt Coach payload for `period`.
+pub(crate) async fn set_coach_prompt_ignored(
+    prompt_key: String,
+    ignored: bool,
+    period: String,
+    state: State<'_, SharedState>,
+) -> CommandResult<tokenuse::data::CoachData> {
+    with_app(state, move |app| {
+        let period = parse_period(&period)?;
+        app.set_coach_prompt_ignored(&prompt_key, ignored);
+        Ok(app.coach_for(period, app.tool, &app.project_filter.clone()))
+    })
+    .await
+}
+
+#[tauri::command]
+/// Restore every ignored Coach prompt, then return the rebuilt payload.
+pub(crate) async fn clear_coach_ignored_prompts(
+    period: String,
+    state: State<'_, SharedState>,
+) -> CommandResult<tokenuse::data::CoachData> {
+    with_app(state, move |app| {
+        let period = parse_period(&period)?;
+        app.clear_coach_ignored_prompts();
+        Ok(app.coach_for(period, app.tool, &app.project_filter.clone()))
+    })
+    .await
+}
+
+#[tauri::command]
 pub(crate) async fn get_coach_timeline(
     day: String,
     state: State<'_, SharedState>,

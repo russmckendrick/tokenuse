@@ -1118,7 +1118,7 @@
                 openToolPage={(tool) => navigate({ page: 'tools', tool })}
               />
             {:else if router.route.page === 'coach'}
-              <CoachPage {snapshot} />
+              <CoachPage {snapshot} {openSession} />
             {:else if router.route.page === 'scrollback'}
               <ScrollbackPage {snapshot} {openSession} />
             {:else if router.route.page === 'tools'}

@@ -171,6 +171,8 @@ export type CoachData = {
   output: OutputSummary;
   timeline_grid: TimelineGridDay[];
   projects: CoachProjectActivity[];
+  /** Prompts on the user's Coach ignore list. */
+  ignored_prompts: number;
 };
 
 export type CoachSetupFinding = {
@@ -235,6 +237,12 @@ export type CoachFinding = {
 export type FindingExample = {
   text: string;
   detail: string;
+  /** Session to open for this evidence row; empty when there is none. */
+  session_key: string;
+  /** Local "YYYY-MM-DD HH:MM"; empty when unknown. */
+  when: string;
+  /** Ignore-list key for prompt evidence; empty when not ignorable. */
+  prompt_key: string;
 };
 
 export type FlowSummary = {
@@ -618,6 +626,16 @@ export type CoachCopy = {
     evidence_count: string;
     why_it_matters: string;
     no_examples: string;
+    open_session: string;
+    no_session: string;
+    ignore_prompt: string;
+    ignore_prompt_hint: string;
+    ignored_count: string;
+    restore_ignored: string;
+    evidence_title: string;
+    evidence_open_hint: string;
+    ignore_key: string;
+    restore_key: string;
     severity: Record<string, string>;
   };
   setup: {

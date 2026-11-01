@@ -10,6 +10,7 @@
 use std::collections::HashMap;
 
 use super::{example, ratio_pct, RuleDef, RuleGroup, RuleHit, Severity, MAX_EXAMPLES};
+use crate::coach::sessions::Turn;
 use crate::coach::text;
 use crate::coach::CoachContext;
 
@@ -81,7 +82,7 @@ fn lazy_prompting(ctx: &CoachContext) -> Option<RuleHit> {
         if chars < MIN_CHARS {
             count += 1;
             if examples.len() < MAX_EXAMPLES {
-                examples.push(example(turn.user_message, format!("{chars} chars")));
+                examples.push(example(turn.user_message, format!("{chars} chars")).at_prompt(turn));
             }
         }
     }
@@ -111,7 +112,7 @@ fn caps_lock(ctx: &CoachContext) -> Option<RuleHit> {
         {
             count += 1;
             if examples.len() < MAX_EXAMPLES {
-                examples.push(example(turn.user_message, String::new()));
+                examples.push(example(turn.user_message, String::new()).at_prompt(turn));
             }
         }
     }
@@ -142,7 +143,7 @@ fn frustration_signals(ctx: &CoachContext) -> Option<RuleHit> {
         {
             count += 1;
             if examples.len() < MAX_EXAMPLES {
-                examples.push(example(turn.user_message, String::new()));
+                examples.push(example(turn.user_message, String::new()).at_prompt(turn));
             }
         }
     }
@@ -163,30 +164,29 @@ fn repeated_prompts(ctx: &CoachContext) -> Option<RuleHit> {
     const MIN_DUPLICATES: u64 = 3;
     const HIGH_THRESHOLD: u64 = 20;
 
-    let mut groups: HashMap<String, (u64, String)> = HashMap::new();
+    // Each group remembers its latest turn so the evidence row opens the
+    // most recent occurrence.
+    let mut groups: HashMap<String, (u64, &Turn<'_>)> = HashMap::new();
     let mut total = 0u64;
     for turn in ctx.prompt_turns() {
         total += 1;
-        let key: String = turn
-            .user_message
-            .chars()
-            .take(100)
-            .collect::<String>()
-            .to_lowercase()
-            .trim()
-            .to_string();
+        let key = text::prompt_key(turn.user_message);
         if key.chars().count() >= MIN_KEY_LEN {
-            let entry = groups
-                .entry(key)
-                .or_insert_with(|| (0, turn.user_message.to_string()));
+            let entry = groups.entry(key).or_insert((0, turn));
             entry.0 += 1;
+            if turn.timestamp >= entry.1.timestamp {
+                entry.1 = turn;
+            }
         }
     }
-    let mut dupes: Vec<(u64, String)> = groups
+    let mut dupes: Vec<(u64, &Turn<'_>)> = groups
         .into_values()
         .filter(|(count, _)| *count >= MIN_DUPLICATES)
         .collect();
-    dupes.sort_by_key(|d| std::cmp::Reverse(d.0));
+    dupes.sort_by(|a, b| {
+        b.0.cmp(&a.0)
+            .then_with(|| a.1.user_message.cmp(b.1.user_message))
+    });
     let total_dupes: u64 = dupes.iter().map(|(c, _)| c).sum();
 
     (total_dupes >= MIN_DUPLICATES).then(|| RuleHit {
@@ -198,7 +198,9 @@ fn repeated_prompts(ctx: &CoachContext) -> Option<RuleHit> {
         examples: dupes
             .iter()
             .take(MAX_EXAMPLES)
-            .map(|(count, msg)| example(msg, format!("repeated {count}x")))
+            .map(|(count, turn)| {
+                example(turn.user_message, format!("repeated {count}x")).at_prompt(turn)
+            })
             .collect(),
     })
 }
@@ -220,7 +222,7 @@ fn low_constraint_usage(ctx: &CoachContext) -> Option<RuleHit> {
         if !text::has_constraint(turn.user_message) {
             without += 1;
             if examples.len() < MAX_EXAMPLES {
-                examples.push(example(turn.user_message, "no constraints".into()));
+                examples.push(example(turn.user_message, "no constraints".into()).at_prompt(turn));
             }
         }
     }
@@ -252,10 +254,13 @@ fn verbose_output(ctx: &CoachContext) -> Option<RuleHit> {
         if turn.output_tokens > MIN_OUTPUT_TOKENS && chars > 0 && chars < MAX_MESSAGE_LENGTH {
             count += 1;
             if examples.len() < MAX_EXAMPLES {
-                examples.push(example(
-                    turn.user_message,
-                    format!("{} output tokens", turn.output_tokens),
-                ));
+                examples.push(
+                    example(
+                        turn.user_message,
+                        format!("{} output tokens", turn.output_tokens),
+                    )
+                    .at_prompt(turn),
+                );
             }
         }
     }
@@ -288,10 +293,13 @@ fn verbose_prompt_no_compression(ctx: &CoachContext) -> Option<RuleHit> {
         {
             count += 1;
             if examples.len() < MAX_EXAMPLES {
-                examples.push(example(
-                    turn.user_message,
-                    format!("{} chars", turn.prompt_chars.unwrap_or(0)),
-                ));
+                examples.push(
+                    example(
+                        turn.user_message,
+                        format!("{} chars", turn.prompt_chars.unwrap_or(0)),
+                    )
+                    .at_prompt(turn),
+                );
             }
         }
     }
@@ -325,10 +333,13 @@ fn excessive_file_context(ctx: &CoachContext) -> Option<RuleHit> {
         if turn.referenced_files >= MIN_FILES {
             count += 1;
             if examples.len() < MAX_EXAMPLES {
-                examples.push(example(
-                    turn.user_message,
-                    format!("{} files", turn.referenced_files),
-                ));
+                examples.push(
+                    example(
+                        turn.user_message,
+                        format!("{} files", turn.referenced_files),
+                    )
+                    .at_turn(turn),
+                );
             }
         }
     }
@@ -348,7 +359,7 @@ fn excessive_file_context(ctx: &CoachContext) -> Option<RuleHit> {
 mod tests {
     use super::super::run_rules;
     use crate::coach::testutil::{call, ctx_calls};
-    use crate::coach::CoachContext;
+    use crate::coach::{text, CoachContext};
 
     fn triggered_ids(calls: &[crate::tools::ParsedCall]) -> Vec<&'static str> {
         let refs = ctx_calls(calls);
@@ -417,6 +428,61 @@ mod tests {
             call("s3", 2, "finally build the desktop bundle for macos"),
         ];
         assert!(!triggered_ids(&distinct).contains(&"repeated-prompts"));
+    }
+
+    #[test]
+    fn repeated_prompt_evidence_points_at_the_latest_session() {
+        let calls: Vec<_> = (0..3)
+            .map(|i| call(&format!("s{i}"), i, "Summarize this skill for the report"))
+            .collect();
+        let refs = ctx_calls(&calls);
+        let outcomes = run_rules(&CoachContext::new(&refs));
+        let hit = &outcomes
+            .iter()
+            .find(|o| o.id == "repeated-prompts")
+            .expect("repeated prompts trigger")
+            .hit;
+        let evidence = &hit.examples[0];
+        assert_eq!(evidence.detail, "repeated 3x");
+        assert_eq!(evidence.session_key.as_deref(), Some("claude-code:s2"));
+        assert!(evidence.at.is_some());
+        assert_eq!(
+            evidence.prompt_key.as_deref(),
+            Some("summarize this skill for the report")
+        );
+    }
+
+    #[test]
+    fn harness_messages_are_not_graded_as_prompts() {
+        let calls: Vec<_> = (0..5)
+            .map(|i| {
+                call(
+                    &format!("s{i}"),
+                    i,
+                    "<system-reminder>Your final report is delivered through SubagentHandback</system-reminder>",
+                )
+            })
+            .collect();
+        let refs = ctx_calls(&calls);
+        let ctx = CoachContext::new(&refs);
+        assert_eq!(ctx.prompt_turns().count(), 0);
+        assert!(!run_rules(&ctx).iter().any(|o| o.id == "repeated-prompts"));
+        assert!(text::is_harness_prompt("  [Image: source: /tmp/x.png]"));
+        assert!(!text::is_harness_prompt("Image: please resize this"));
+    }
+
+    #[test]
+    fn ignored_prompts_drop_out_of_prompt_rules() {
+        let calls: Vec<_> = (0..3)
+            .map(|i| call(&format!("s{i}"), i, "please run the full test suite again"))
+            .collect();
+        let refs = ctx_calls(&calls);
+        let ignored = std::collections::BTreeSet::from([text::prompt_key(
+            "please run the full test suite again",
+        )]);
+        let ctx = CoachContext::new(&refs).with_ignored_prompts(&ignored);
+        assert_eq!(ctx.prompt_turns().count(), 0);
+        assert!(!run_rules(&ctx).iter().any(|o| o.id == "repeated-prompts"));
     }
 
     #[test]

@@ -165,6 +165,8 @@ flowchart LR
 
 ## Coach signals (archive v4 enrichment)
 
+Rollouts launched by `codex exec` (`session_meta.payload.originator == "codex_exec"` or `payload.source == "exec"`) are tagged `interaction_mode = headless`, and the Coach drops them: scripted runs are not interactive practice. `payload.source` is read untyped because newer builds write objects there. The `codex-v8-headless` fingerprint forces existing rollouts back through the parser so archived rows pick up the tag.
+
 The parser also consumes four `event_msg` inner types that never produce a `ParsedCall` themselves but enrich the next emitted call (or, for aborts, the previous one):
 
 ```jsonc

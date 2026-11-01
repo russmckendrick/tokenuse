@@ -1288,6 +1288,10 @@ pub struct App {
     /// Page to return to when the session drill-down closes; set by
     /// `enter_session` so Scrollback results survive the round trip.
     pub session_return_page: Page,
+    /// Coach page: selected finding, and the selected evidence row while the
+    /// evidence drill-in is open (`None` = findings list).
+    pub coach_selected: usize,
+    pub coach_evidence: Option<usize>,
     pub scrollback: ScrollbackState,
     pub call_detail_index: Option<usize>,
     pub help_open: bool,
@@ -1337,6 +1341,8 @@ impl Default for App {
             session_scroll: 0,
             session_selected: 0,
             session_return_page: Page::DeepDive,
+            coach_selected: 0,
+            coach_evidence: None,
             scrollback: ScrollbackState::default(),
             call_detail_index: None,
             help_open: false,
@@ -1648,7 +1654,12 @@ impl App {
         }
 
         let data = match &self.source {
-            DataSource::Live(ingested) => ingested.coach(period, tool, project_filter),
+            DataSource::Live(ingested) => ingested.coach(
+                period,
+                tool,
+                project_filter,
+                &self.settings.coach_ignored_prompts,
+            ),
             DataSource::Sample => crate::data::coach_sample(period),
         };
         self.query_cache
@@ -2489,7 +2500,8 @@ impl App {
             Page::Session => keymap::CONTEXT_SESSION_PAGE,
             Page::Scrollback if self.scrollback.input_focused => keymap::CONTEXT_SCROLLBACK_INPUT,
             Page::Scrollback => keymap::CONTEXT_SCROLLBACK_PAGE,
-            Page::Overview | Page::DeepDive | Page::Coach => keymap::CONTEXT_DASHBOARD,
+            Page::Coach => keymap::CONTEXT_COACH_PAGE,
+            Page::Overview | Page::DeepDive => keymap::CONTEXT_DASHBOARD,
         }
     }
 
@@ -2545,6 +2557,8 @@ impl App {
             keymap::ACTION_COOKIE_FIELD_PREV => self.cycle_cookie_field(-1),
             keymap::ACTION_COOKIE_ACTION_NEXT => self.cycle_cookie_action(1),
             keymap::ACTION_COOKIE_ACTION_PREV => self.cycle_cookie_action(-1),
+            keymap::ACTION_TOGGLE_PROMPT_IGNORE => self.ignore_selected_coach_prompt(),
+            keymap::ACTION_CLEAR_PROMPT_IGNORES => self.restore_coach_prompts(),
             _ => return false,
         }
         true
@@ -2619,6 +2633,8 @@ impl App {
             self.export_modal = None;
         } else if self.page == Page::Scrollback && self.scrollback.input_focused {
             self.scrollback.input_focused = false;
+        } else if self.page == Page::Coach {
+            self.coach_evidence = None;
         }
     }
 
@@ -2645,6 +2661,8 @@ impl App {
             self.activate_config_row();
         } else if self.page == Page::Session {
             self.open_session_call_detail(self.session_selected);
+        } else if self.page == Page::Coach {
+            self.confirm_coach();
         } else if self.page == Page::Scrollback {
             if self.scrollback.input_focused {
                 self.run_scrollback_search();
@@ -2779,6 +2797,8 @@ impl App {
                 (self.session_selected + delta as usize).min(last)
             };
             self.select_session_call(next);
+        } else if self.page == Page::Coach {
+            self.move_coach_selection(delta);
         } else if self.page == Page::Scrollback {
             self.move_scrollback_selection(delta);
         }
@@ -2800,6 +2820,8 @@ impl App {
                 (self.session_selected + delta as usize).min(last)
             };
             self.select_session_call(next);
+        } else if self.page == Page::Coach {
+            self.move_coach_selection(delta);
         } else if self.page == Page::Scrollback {
             self.move_scrollback_selection(delta);
         }
@@ -2822,6 +2844,8 @@ impl App {
             self.config_selected = 0;
         } else if self.page == Page::Session {
             self.select_session_call(0);
+        } else if self.page == Page::Coach {
+            self.move_coach_selection(isize::MIN);
         } else if self.page == Page::Scrollback {
             self.scrollback.selected = 0;
         }
@@ -2849,6 +2873,8 @@ impl App {
                 .map(|view| view.calls.len())
                 .unwrap_or(0);
             self.select_session_call(row_count.saturating_sub(1));
+        } else if self.page == Page::Coach {
+            self.move_coach_selection(isize::MAX);
         } else if self.page == Page::Scrollback {
             self.scrollback.selected = self.scrollback_result_count().saturating_sub(1);
         }
@@ -3410,6 +3436,106 @@ impl App {
         self.tool = tool;
     }
 
+    fn current_coach(&self) -> crate::data::CoachData {
+        let filter = self.project_filter.clone();
+        self.coach_for(self.period, self.tool, &filter)
+    }
+
+    /// Clamp the Coach selection onto the current payload, which shrinks
+    /// when filters change or a prompt is ignored.
+    pub fn coach_selection(&self, data: &crate::data::CoachData) -> (usize, Option<usize>) {
+        let finding = self
+            .coach_selected
+            .min(data.findings.len().saturating_sub(1));
+        let evidence = self.coach_evidence.and_then(|idx| {
+            let len = data.findings.get(finding)?.examples.len();
+            (len > 0).then(|| idx.min(len - 1))
+        });
+        (finding, evidence)
+    }
+
+    fn move_coach_selection(&mut self, delta: isize) {
+        let data = self.current_coach();
+        let (finding, evidence) = self.coach_selection(&data);
+        let step = |current: usize, len: usize| -> usize {
+            let last = len.saturating_sub(1);
+            if delta.is_negative() {
+                current.saturating_sub(delta.unsigned_abs())
+            } else {
+                current.saturating_add(delta as usize).min(last)
+            }
+        };
+        match evidence {
+            Some(idx) => {
+                let len = data.findings[finding].examples.len();
+                self.coach_evidence = Some(step(idx, len));
+            }
+            None => self.coach_selected = step(finding, data.findings.len()),
+        }
+    }
+
+    /// Enter opens the selected finding's evidence; on an evidence row it
+    /// opens that row's session (returning to the Coach on close).
+    fn confirm_coach(&mut self) {
+        let data = self.current_coach();
+        let (finding, evidence) = self.coach_selection(&data);
+        let Some(selected) = data.findings.get(finding) else {
+            return;
+        };
+        self.coach_selected = finding;
+        match evidence {
+            None => {
+                if !selected.examples.is_empty() {
+                    self.coach_evidence = Some(0);
+                }
+            }
+            Some(idx) => {
+                let key = selected.examples[idx].session_key;
+                if key.is_empty() {
+                    self.set_status(copy().status.coach_no_session.clone(), StatusTone::Warning);
+                } else {
+                    self.enter_session(key);
+                }
+            }
+        }
+    }
+
+    fn ignore_selected_coach_prompt(&mut self) {
+        let data = self.current_coach();
+        let (finding, evidence) = self.coach_selection(&data);
+        let prompt_key = evidence
+            .and_then(|idx| data.findings.get(finding)?.examples.get(idx))
+            .map(|example| example.prompt_key)
+            .unwrap_or("");
+        if prompt_key.is_empty() {
+            self.set_status(
+                copy().status.coach_not_ignorable.clone(),
+                StatusTone::Warning,
+            );
+            return;
+        }
+        self.set_coach_prompt_ignored(prompt_key, true);
+        self.set_status(
+            copy().status.coach_prompt_ignored.clone(),
+            StatusTone::Success,
+        );
+    }
+
+    fn restore_coach_prompts(&mut self) {
+        let restored = self.coach_ignored_prompt_count();
+        if restored == 0 {
+            return;
+        }
+        self.clear_coach_ignored_prompts();
+        self.set_status(
+            copy::template(
+                &copy().status.coach_prompts_restored,
+                &[("count", restored.to_string())],
+            ),
+            StatusTone::Success,
+        );
+    }
+
     pub fn set_page(&mut self, page: Page) {
         self.page = page;
         if page == Page::Usage {
@@ -3658,6 +3784,49 @@ impl App {
                 self.settings.plan_prices.remove(tool);
             }
         }
+        if let Err(e) = self.settings.save(&self.paths) {
+            self.set_status(
+                copy::template(
+                    &copy().status.config_save_failed,
+                    &[("error", e.to_string())],
+                ),
+                StatusTone::Error,
+            );
+        }
+        self.bump_data_generation();
+    }
+
+    /// Adds or removes a Coach prompt key from the ignore list and persists
+    /// the config. Bumps the data generation so the cached Coach payload
+    /// rebuilds without (or with) the prompt.
+    pub fn set_coach_prompt_ignored(&mut self, prompt_key: &str, ignored: bool) {
+        let prompt_key = prompt_key.trim();
+        if prompt_key.is_empty() {
+            return;
+        }
+        if ignored {
+            self.settings
+                .coach_ignored_prompts
+                .insert(prompt_key.to_string());
+        } else {
+            self.settings.coach_ignored_prompts.remove(prompt_key);
+        }
+        self.save_coach_ignores();
+    }
+
+    pub fn clear_coach_ignored_prompts(&mut self) {
+        if self.settings.coach_ignored_prompts.is_empty() {
+            return;
+        }
+        self.settings.coach_ignored_prompts.clear();
+        self.save_coach_ignores();
+    }
+
+    pub fn coach_ignored_prompt_count(&self) -> usize {
+        self.settings.coach_ignored_prompts.len()
+    }
+
+    fn save_coach_ignores(&mut self) {
         if let Err(e) = self.settings.save(&self.paths) {
             self.set_status(
                 copy::template(
@@ -4490,6 +4659,49 @@ mod tests {
 
         app.handle_key(key(KeyCode::Char('o')));
         assert_eq!(app.page, Page::Overview);
+    }
+
+    #[test]
+    fn coach_enter_drills_into_evidence_then_its_session() {
+        let mut app = App::default();
+        app.set_page(Page::Coach);
+        assert_eq!(app.coach_evidence, None);
+
+        // Findings list -> evidence for the first (sample) finding.
+        app.handle_key(key(KeyCode::Enter));
+        assert_eq!(app.coach_evidence, Some(0));
+        app.handle_key(key(KeyCode::Down));
+        assert_eq!(app.coach_evidence, Some(1));
+        app.handle_key(key(KeyCode::Down));
+        assert_eq!(app.coach_evidence, Some(1), "clamps to the last sample");
+
+        // Esc closes the drill-in instead of quitting.
+        app.handle_key(key(KeyCode::Esc));
+        assert_eq!(app.coach_evidence, None);
+        assert!(!app.should_quit);
+
+        // Evidence -> session view, which returns to the Coach.
+        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(key(KeyCode::Enter));
+        assert_eq!(app.page, Page::Session);
+        app.leave_session();
+        assert_eq!(app.page, Page::Coach);
+        assert_eq!(
+            app.coach_evidence,
+            Some(0),
+            "drill-in survives the round trip"
+        );
+    }
+
+    #[test]
+    fn coach_ignore_key_only_applies_to_prompt_evidence() {
+        let mut app = App::default();
+        app.set_page(Page::Coach);
+        app.handle_key(key(KeyCode::Char('x')));
+        assert_eq!(
+            app.status_text(),
+            Some(copy().status.coach_not_ignorable.as_str())
+        );
     }
 
     #[test]

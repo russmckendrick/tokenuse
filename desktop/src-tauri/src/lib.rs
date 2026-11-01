@@ -586,6 +586,8 @@ pub fn run() {
             commands::get_graph,
             commands::get_coach,
             commands::get_coach_timeline,
+            commands::set_coach_prompt_ignored,
+            commands::clear_coach_ignored_prompts,
             commands::get_session_detail,
             commands::set_open_at_login,
             commands::set_show_dock_or_taskbar_icon,

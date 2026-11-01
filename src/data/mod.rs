@@ -272,6 +272,8 @@ pub struct CoachData {
     /// Per-project activity detail for the Activity Projects view; joined
     /// client-side onto the dashboard project rows by short label.
     pub projects: Vec<CoachProjectActivity>,
+    /// Prompt keys on the user's Coach ignore list (restorable in bulk).
+    pub ignored_prompts: u64,
 }
 
 /// One project's activity profile: estimated active time, request turns,
@@ -357,6 +359,12 @@ pub struct CoachFinding {
 pub struct FindingExample {
     pub text: &'static str,
     pub detail: &'static str,
+    /// Session to open for this evidence row; empty when there is none.
+    pub session_key: &'static str,
+    /// Local "YYYY-MM-DD HH:MM" of the evidence; empty when unknown.
+    pub when: &'static str,
+    /// Ignore-list key for prompt evidence; empty when not ignorable.
+    pub prompt_key: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2504,10 +2512,16 @@ pub fn coach_sample(period: Period) -> CoachData {
                     FindingExample {
                         text: "fix bug",
                         detail: "7 chars",
+                        session_key: "sample:0",
+                        when: "2026-06-12 10:14",
+                        prompt_key: "fix bug",
                     },
                     FindingExample {
                         text: "do it again",
                         detail: "11 chars",
+                        session_key: "sample:1",
+                        when: "2026-06-11 16:40",
+                        prompt_key: "do it again",
                     },
                 ],
             },
@@ -2522,6 +2536,9 @@ pub fn coach_sample(period: Period) -> CoachData {
                 examples: vec![FindingExample {
                     text: "one more refactor before bed",
                     detail: "2026-06-11 01:24",
+                    session_key: "sample:2",
+                    when: "2026-06-11 01:24",
+                    prompt_key: "",
                 }],
             },
             CoachFinding {
@@ -2739,6 +2756,7 @@ pub fn coach_sample(period: Period) -> CoachData {
                 time_id: "",
             },
         ],
+        ignored_prompts: 0,
     }
 }
 

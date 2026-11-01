@@ -153,7 +153,9 @@ Beyond token accounting, the parser extracts per-call signals for the desktop Co
 
 User lines that are slash-command wrappers (`<command-...>`, `<local-command-...>`) or interrupt markers never become `user_message`/`prompt_chars` — they are UI plumbing, not prompts.
 
-The adapter prefixes its source fingerprints with `claude-code-v4-transcripts`; bumping that constant forces archived sessions back through the parser after an extraction change.
+Every journal line carries an `entrypoint` naming how the session was launched (`cli`, `claude-desktop`, or `sdk-*` for scripted runs such as `claude -p` and Agent SDK apps). Calls from `sdk-*` sessions — including their advisor iterations — are tagged `interaction_mode = headless`; everything else stays `unknown`. The Coach drops headless calls entirely, since scripted prompts are not interactive practice. Spend, sessions, and every other page still count them.
+
+The adapter prefixes its source fingerprints with `claude-code-v5-headless` (and `PARSE_VERSION` is `3`); bumping those forces archived sessions back through the parser after an extraction change. The v5 bump backfills `headless` onto existing rows through the archive's fill-once enrichment update.
 
 ## Transcript capture (archive v7)
 

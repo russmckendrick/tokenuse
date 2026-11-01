@@ -1,4 +1,9 @@
-use std::{collections::BTreeMap, fs, path::PathBuf, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    path::PathBuf,
+    time::Duration,
+};
 
 use color_eyre::{eyre::Context, Result};
 use serde::{Deserialize, Serialize};
@@ -108,6 +113,11 @@ pub struct UserConfig {
     /// default where one exists, otherwise show no plan value.
     #[serde(default)]
     pub plan_prices: BTreeMap<String, f64>,
+    /// Coach prompt keys (`coach::text::prompt_key`) the user marked as not
+    /// theirs - e.g. templated prompts from scripted tools. Prompt-quality
+    /// rules skip matching turns.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub coach_ignored_prompts: BTreeSet<String>,
     #[serde(default)]
     pub overrides: BTreeMap<String, Value>,
 }
@@ -120,6 +130,7 @@ impl Default for UserConfig {
             desktop: DesktopConfig::default(),
             mcp: McpConfig::default(),
             plan_prices: BTreeMap::new(),
+            coach_ignored_prompts: BTreeSet::new(),
             overrides: BTreeMap::new(),
         }
     }

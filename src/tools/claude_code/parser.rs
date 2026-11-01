@@ -10,13 +10,15 @@ use serde_json::Value;
 use walkdir::WalkDir;
 
 use crate::pricing;
-use crate::tools::{jsonl, AdapterParse, CodeBlock, ParsedCall, SessionSource, Speed};
+use crate::tools::{
+    jsonl, AdapterParse, CodeBlock, InteractionMode, ParsedCall, SessionSource, Speed,
+};
 
 use super::config;
 
 /// Bump to invalidate persisted tail cursors when parsing semantics change;
 /// a mismatch falls back to a full re-parse of every file in the source.
-const PARSE_VERSION: &str = "2";
+const PARSE_VERSION: &str = "3";
 /// Newest-modified session files that keep a resume cursor. Older files
 /// change rarely enough that a full re-parse on touch is fine, and the cap
 /// bounds the cursor JSON stored per source.
@@ -73,8 +75,19 @@ struct JournalEntry {
     session_id: Option<String>,
     #[serde(default)]
     cwd: Option<String>,
+    /// How the session was launched: `cli`, `claude-desktop`, or `sdk-*`
+    /// for scripted runs (`claude -p`, Agent SDK apps).
+    #[serde(default)]
+    entrypoint: Option<String>,
     #[serde(default)]
     message: Option<Message>,
+}
+
+fn entry_interaction_mode(entry: &JournalEntry) -> InteractionMode {
+    match entry.entrypoint.as_deref() {
+        Some(entrypoint) if entrypoint.starts_with("sdk-") => InteractionMode::Headless,
+        _ => InteractionMode::Unknown,
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -445,6 +458,8 @@ fn process_line(
             // Advisor iterations are separately billed API calls that
             // ride inside this message's usage. Emit them first so the
             // interrupt marker's "previous call" stays the main call.
+            let interaction_mode = entry_interaction_mode(&entry);
+            let advisor_start = calls.len();
             calls.extend(advisor_calls(
                 usage,
                 &dedup_key,
@@ -454,6 +469,9 @@ fn process_line(
                 project,
                 seen,
             ));
+            for advisor in &mut calls[advisor_start..] {
+                advisor.interaction_mode = interaction_mode;
+            }
 
             let mut call = ParsedCall {
                 tool: config::TOOL_ID,
@@ -485,6 +503,7 @@ fn process_line(
                 code_blocks: jsonl::merge_code_blocks(code_blocks),
                 edited_files: jsonl::dedup_files(activity.edited_files),
                 referenced_files: jsonl::dedup_files(activity.referenced_files),
+                interaction_mode,
                 transcript_user: Some(last_user_full.clone()),
                 transcript_assistant: Some(response_text),
                 ..ParsedCall::default()
@@ -1323,6 +1342,25 @@ mod tests {
             hour_calls[0].cost_usd > five_calls[0].cost_usd,
             "1h cache writes must price above the 5m rate"
         );
+    }
+
+    #[test]
+    fn sdk_entrypoints_tag_calls_as_headless() {
+        let dir = tempfile_lite::TempDir::new();
+        let mut f = std::fs::File::create(dir.path().join("session.jsonl")).unwrap();
+        for line in [
+            r#"{"type":"user","timestamp":"2026-04-26T10:00:00Z","sessionId":"s1","entrypoint":"sdk-cli","message":{"role":"user","content":"summarize this skill"}}"#,
+            r#"{"type":"assistant","timestamp":"2026-04-26T10:00:01Z","sessionId":"s1","entrypoint":"sdk-cli","message":{"role":"assistant","id":"msg_h","model":"claude-opus-4-7","usage":{"input_tokens":1,"output_tokens":1}}}"#,
+            r#"{"type":"assistant","timestamp":"2026-04-26T10:00:02Z","sessionId":"s2","entrypoint":"cli","message":{"role":"assistant","id":"msg_i","model":"claude-opus-4-7","usage":{"input_tokens":1,"output_tokens":1}}}"#,
+        ] {
+            writeln!(f, "{}", line).unwrap();
+        }
+
+        let source = SessionSource::session(dir.path().to_path_buf(), "p", config::TOOL_ID);
+        let calls = parse_session(&source, &mut HashSet::new()).unwrap();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].interaction_mode, InteractionMode::Headless);
+        assert_eq!(calls[1].interaction_mode, InteractionMode::Unknown);
     }
 
     #[test]

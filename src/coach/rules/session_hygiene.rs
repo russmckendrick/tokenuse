@@ -100,10 +100,13 @@ fn session_drift(ctx: &CoachContext) -> Option<RuleHit> {
         if kinds.len() >= MAX_WORK_TYPES {
             count += 1;
             if examples.len() < MAX_EXAMPLES {
-                examples.push(example(
-                    &session.project,
-                    format!("{} work types in one session", kinds.len()),
-                ));
+                examples.push(
+                    example(
+                        &session.project,
+                        format!("{} work types in one session", kinds.len()),
+                    )
+                    .in_session(session),
+                );
             }
         }
     }
@@ -131,10 +134,13 @@ fn late_night_coding(ctx: &CoachContext) -> Option<RuleHit> {
         if local.hour() < LATE_NIGHT_HOUR {
             count += 1;
             if examples.len() < MAX_EXAMPLES && !turn.user_message.is_empty() {
-                examples.push(example(
-                    turn.user_message,
-                    local.format("%Y-%m-%d %H:%M").to_string(),
-                ));
+                examples.push(
+                    example(
+                        turn.user_message,
+                        local.format("%Y-%m-%d %H:%M").to_string(),
+                    )
+                    .at_turn(turn),
+                );
             }
         }
     }
@@ -192,10 +198,13 @@ fn mega_sessions(ctx: &CoachContext) -> Option<RuleHit> {
         if session.turns.len() >= MAX_TURNS {
             count += 1;
             if examples.len() < MAX_EXAMPLES {
-                examples.push(example(
-                    &session.project,
-                    format!("{} messages", session.turns.len()),
-                ));
+                examples.push(
+                    example(
+                        &session.project,
+                        format!("{} messages", session.turns.len()),
+                    )
+                    .in_session(session),
+                );
             }
         }
     }
@@ -224,7 +233,8 @@ fn abandon_sessions(ctx: &CoachContext) -> Option<RuleHit> {
             if examples.len() < MAX_EXAMPLES {
                 let first = &session.turns[0];
                 if !first.user_message.is_empty() {
-                    examples.push(example(first.user_message, session.project.clone()));
+                    examples
+                        .push(example(first.user_message, session.project.clone()).at_turn(first));
                 }
             }
         }
@@ -255,7 +265,7 @@ fn high_cancellation(ctx: &CoachContext) -> Option<RuleHit> {
         if turn.is_canceled {
             count += 1;
             if examples.len() < MAX_EXAMPLES && !turn.user_message.is_empty() {
-                examples.push(example(turn.user_message, String::new()));
+                examples.push(example(turn.user_message, String::new()).at_turn(turn));
             }
         }
     }
@@ -320,7 +330,8 @@ fn slow_responses(ctx: &CoachContext) -> Option<RuleHit> {
             count += 1;
             slow_sum_ms += elapsed;
             if examples.len() < MAX_EXAMPLES && !turn.user_message.is_empty() {
-                examples.push(example(turn.user_message, format!("{}s", elapsed / 1000)));
+                examples
+                    .push(example(turn.user_message, format!("{}s", elapsed / 1000)).at_turn(turn));
             }
         }
     }
@@ -353,10 +364,10 @@ fn runaway_agent_loops(ctx: &CoachContext) -> Option<RuleHit> {
             count += 1;
             tools_sum += turn.tool_calls;
             if examples.len() < MAX_EXAMPLES && !turn.user_message.is_empty() {
-                examples.push(example(
-                    turn.user_message,
-                    format!("{} tool calls", turn.tool_calls),
-                ));
+                examples.push(
+                    example(turn.user_message, format!("{} tool calls", turn.tool_calls))
+                        .at_turn(turn),
+                );
             }
         }
     }

@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 pub const CONTEXT_DASHBOARD: &str = "dashboard";
 pub const CONTEXT_USAGE_PAGE: &str = "usage_page";
+pub const CONTEXT_COACH_PAGE: &str = "coach_page";
 pub const CONTEXT_CONFIG_PAGE: &str = "config_page";
 pub const CONTEXT_SESSION_PAGE: &str = "session_page";
 pub const CONTEXT_SCROLLBACK_PAGE: &str = "scrollback_page";
@@ -68,6 +69,8 @@ pub const ACTION_COOKIE_FIELD_NEXT: &str = "cookie_field_next";
 pub const ACTION_COOKIE_FIELD_PREV: &str = "cookie_field_prev";
 pub const ACTION_COOKIE_ACTION_NEXT: &str = "cookie_action_next";
 pub const ACTION_COOKIE_ACTION_PREV: &str = "cookie_action_prev";
+pub const ACTION_TOGGLE_PROMPT_IGNORE: &str = "toggle_prompt_ignore";
+pub const ACTION_CLEAR_PROMPT_IGNORES: &str = "clear_prompt_ignores";
 
 const SUPPORTED_ACTIONS: &[&str] = &[
     ACTION_QUIT,
@@ -114,6 +117,8 @@ const SUPPORTED_ACTIONS: &[&str] = &[
     ACTION_COOKIE_FIELD_PREV,
     ACTION_COOKIE_ACTION_NEXT,
     ACTION_COOKIE_ACTION_PREV,
+    ACTION_TOGGLE_PROMPT_IGNORE,
+    ACTION_CLEAR_PROMPT_IGNORES,
 ];
 
 #[derive(Debug, Clone, Deserialize)]

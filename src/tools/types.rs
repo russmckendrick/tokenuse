@@ -16,6 +16,9 @@ pub enum InteractionMode {
     Agent,
     Chat,
     Plan,
+    /// Scripted/non-interactive runs (`claude -p`, Agent SDK, `codex exec`).
+    /// Kept out of the Coach, which grades interactive practice only.
+    Headless,
     #[default]
     Unknown,
 }
@@ -26,6 +29,7 @@ impl InteractionMode {
             Self::Agent => "agent",
             Self::Chat => "chat",
             Self::Plan => "plan",
+            Self::Headless => "headless",
             Self::Unknown => "unknown",
         }
     }
@@ -35,6 +39,7 @@ impl InteractionMode {
             "agent" => Self::Agent,
             "chat" => Self::Chat,
             "plan" => Self::Plan,
+            "headless" => Self::Headless,
             _ => Self::Unknown,
         }
     }
