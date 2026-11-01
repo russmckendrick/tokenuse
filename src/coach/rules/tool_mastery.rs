@@ -72,10 +72,10 @@ fn mcp_tool_bloat(ctx: &CoachContext) -> Option<RuleHit> {
         if distinct > MAX_TOOLS_PER_SESSION {
             count += 1;
             if examples.len() < MAX_EXAMPLES {
-                examples.push(example(
-                    &session.project,
-                    format!("{distinct} distinct tools"),
-                ));
+                examples.push(
+                    example(&session.project, format!("{distinct} distinct tools"))
+                        .in_session(session),
+                );
             }
         }
     }
@@ -158,7 +158,7 @@ fn reasoning_effort_overuse(ctx: &CoachContext) -> Option<RuleHit> {
         if effort == "high" || effort == "max" {
             premium += 1;
             if examples.len() < MAX_EXAMPLES {
-                examples.push(example(turn.model, format!("effort: {effort}")));
+                examples.push(example(turn.model, format!("effort: {effort}")).at_turn(turn));
             }
         }
     }
@@ -196,7 +196,7 @@ fn premium_waste(ctx: &CoachContext) -> Option<RuleHit> {
         if (short_and_simple || lookup) && is_premium_model(turn.tool, turn.model) {
             count += 1;
             if examples.len() < MAX_EXAMPLES {
-                examples.push(example(turn.user_message, turn.model.to_string()));
+                examples.push(example(turn.user_message, turn.model.to_string()).at_turn(turn));
             }
         }
     }
@@ -229,13 +229,16 @@ fn cache_hit_starvation(ctx: &CoachContext) -> Option<RuleHit> {
         prompt_sum += turn.full_prompt_tokens;
         cache_sum += turn.cache_read_tokens;
         if examples.len() < MAX_EXAMPLES && !turn.user_message.is_empty() {
-            examples.push(example(
-                turn.user_message,
-                format!(
-                    "{} prompt tokens, {} cached",
-                    turn.full_prompt_tokens, turn.cache_read_tokens
-                ),
-            ));
+            examples.push(
+                example(
+                    turn.user_message,
+                    format!(
+                        "{} prompt tokens, {} cached",
+                        turn.full_prompt_tokens, turn.cache_read_tokens
+                    ),
+                )
+                .at_turn(turn),
+            );
         }
     }
     if count <= MIN_SAMPLE || prompt_sum == 0 {

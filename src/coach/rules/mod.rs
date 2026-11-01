@@ -10,6 +10,9 @@ pub mod prompt_quality;
 pub mod session_hygiene;
 pub mod tool_mastery;
 
+use chrono::{DateTime, Utc};
+
+use super::sessions::{CoachSession, Turn};
 use super::CoachContext;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -93,14 +96,51 @@ pub struct RuleExample {
     /// Short snippet, capped at 120 chars.
     pub text: String,
     pub detail: String,
+    /// Dashboard session key (`tool:session_id`) for drill-in; `None` when
+    /// the evidence has no real session behind it.
+    pub session_key: Option<String>,
+    pub at: Option<DateTime<Utc>>,
+    /// Set on prompt-quality evidence only: the `text::prompt_key` the user
+    /// can add to the Coach ignore list.
+    pub prompt_key: Option<String>,
 }
 
-pub const MAX_EXAMPLES: usize = 3;
+/// Evidence rows kept per finding. Enough to scroll and trace back without
+/// letting one noisy rule balloon the payload.
+pub const MAX_EXAMPLES: usize = 50;
 
 pub fn example(text: &str, detail: String) -> RuleExample {
     RuleExample {
         text: crate::tools::jsonl::truncate_chars(text.trim(), 120),
         detail,
+        session_key: None,
+        at: None,
+        prompt_key: None,
+    }
+}
+
+impl RuleExample {
+    /// Point the evidence at the turn it came from.
+    pub fn at_turn(mut self, turn: &Turn<'_>) -> Self {
+        self.session_key =
+            (!turn.session_id.is_empty()).then(|| format!("{}:{}", turn.tool, turn.session_id));
+        self.at = turn.timestamp;
+        self
+    }
+
+    /// Point the evidence at a session, anchored on its first turn.
+    pub fn in_session(self, session: &CoachSession<'_>) -> Self {
+        match session.turns.first() {
+            Some(turn) => self.at_turn(turn),
+            None => self,
+        }
+    }
+
+    /// Prompt evidence: drill-in plus the key the ignore action needs.
+    pub fn at_prompt(self, turn: &Turn<'_>) -> Self {
+        let mut example = self.at_turn(turn);
+        example.prompt_key = Some(crate::coach::text::prompt_key(turn.user_message));
+        example
     }
 }
 

@@ -1344,7 +1344,7 @@ pub(super) fn render_help_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
             Constraint::Min(1),
         ])
         .split(inner);
-    let split_at = copy.keymap.help.len().min(4);
+    let split_at = help_split_index(&copy.keymap.help);
     let (left_groups, right_groups) = copy.keymap.help.split_at(split_at);
 
     Paragraph::new(Text::from(help_group_lines(left_groups)))
@@ -1353,6 +1353,22 @@ pub(super) fn render_help_modal(frame: &mut Frame<'_>, area: Rect, app: &App) {
     Paragraph::new(Text::from(help_group_lines(right_groups)))
         .style(theme::base())
         .render(columns[2], frame.buffer_mut());
+}
+
+/// First group of the right column: the split that best balances the two
+/// columns' line counts (title + items + separating blank per group).
+fn help_split_index(groups: &[CopyHintGroup]) -> usize {
+    let heights: Vec<usize> = groups.iter().map(|g| g.items.len() + 2).collect();
+    let total: usize = heights.iter().sum();
+    let mut left = 0usize;
+    (0..=groups.len())
+        .min_by_key(|&split| {
+            if split > 0 {
+                left += heights[split - 1];
+            }
+            left.abs_diff(total - left)
+        })
+        .unwrap_or(0)
 }
 
 fn help_group_lines(groups: &[CopyHintGroup]) -> Vec<Line<'static>> {

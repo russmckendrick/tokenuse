@@ -18,14 +18,25 @@ pub mod signals;
 pub mod text;
 pub mod timeline;
 
+use std::collections::BTreeSet;
+
 use chrono::{DateTime, Local, NaiveDate};
 
 use crate::app::Period;
-use crate::tools::ParsedCall;
+use crate::tools::{InteractionMode, ParsedCall};
 use sessions::{CoachSession, Turn};
 
 pub struct CoachContext<'a> {
     pub sessions: Vec<CoachSession<'a>>,
+    /// `text::prompt_key`s the user marked as not theirs (scripted prompts
+    /// the headless signal missed); prompt-shaped rules skip them.
+    ignored_prompts: BTreeSet<String>,
+}
+
+/// The Coach grades interactive practice, so scripted runs (`claude -p`,
+/// Agent SDK apps, `codex exec`) stay out of every Coach panel.
+pub(crate) fn is_coached(call: &ParsedCall) -> bool {
+    call.interaction_mode != InteractionMode::Headless
 }
 
 pub(crate) fn exact_timestamp(call: &ParsedCall) -> Option<DateTime<chrono::Utc>> {
@@ -41,7 +52,13 @@ impl<'a> CoachContext<'a> {
     pub fn new(calls: &[&'a ParsedCall]) -> Self {
         Self {
             sessions: sessions::group_sessions(calls),
+            ignored_prompts: BTreeSet::new(),
         }
+    }
+
+    pub fn with_ignored_prompts(mut self, ignored: &BTreeSet<String>) -> Self {
+        self.ignored_prompts = ignored.clone();
+        self
     }
 
     pub fn turns(&self) -> impl Iterator<Item = &Turn<'a>> {
@@ -50,10 +67,19 @@ impl<'a> CoachContext<'a> {
 
     /// Turns carrying a prompt-length signal - the denominator for
     /// prompt-shaped ratio rules (rows from pre-enrichment archives or
-    /// tools without the signal are excluded).
+    /// tools without the signal are excluded). Harness-written messages and
+    /// prompts on the user's ignore list are not the person's prompts, so
+    /// they are excluded too.
     pub fn prompt_turns(&self) -> impl Iterator<Item = &Turn<'a>> {
-        self.turns()
-            .filter(|t| t.prompt_chars.is_some_and(|c| c > 0) && !t.user_message.is_empty())
+        self.turns().filter(|t| {
+            t.prompt_chars.is_some_and(|c| c > 0)
+                && !t.user_message.is_empty()
+                && !text::is_harness_prompt(t.user_message)
+                && (self.ignored_prompts.is_empty()
+                    || !self
+                        .ignored_prompts
+                        .contains(&text::prompt_key(t.user_message)))
+        })
     }
 
     pub fn timestamped_turns(&self) -> impl Iterator<Item = &Turn<'a>> {
@@ -116,8 +142,16 @@ pub fn coach_data(
     period: Period,
     now: DateTime<Local>,
     setup_scan: Option<&setup::SetupScan>,
+    ignored_prompts: &BTreeSet<String>,
 ) -> crate::data::CoachData {
-    let ctx = CoachContext::new(calls);
+    let calls: Vec<&ParsedCall> = calls.iter().copied().filter(|c| is_coached(c)).collect();
+    let calendar_calls: Vec<&ParsedCall> = calendar_calls
+        .iter()
+        .copied()
+        .filter(|c| is_coached(c))
+        .collect();
+    let (calls, calendar_calls) = (calls.as_slice(), calendar_calls.as_slice());
+    let ctx = CoachContext::new(calls).with_ignored_prompts(ignored_prompts);
     // Dashboard-consistent short labels: the same period-filtered peer set
     // `build_dashboard` uses, so names join across pages.
     let project_labels =
@@ -171,6 +205,18 @@ pub fn coach_data(
                 .map(|e| crate::data::FindingExample {
                     text: leak(e.text),
                     detail: leak(e.detail),
+                    session_key: e.session_key.map(leak).unwrap_or(""),
+                    when: e
+                        .at
+                        .map(|at| {
+                            leak(
+                                at.with_timezone(&Local)
+                                    .format("%Y-%m-%d %H:%M")
+                                    .to_string(),
+                            )
+                        })
+                        .unwrap_or(""),
+                    prompt_key: e.prompt_key.map(leak).unwrap_or(""),
                 })
                 .collect(),
         })
@@ -310,6 +356,7 @@ pub fn coach_data(
         output,
         timeline_grid,
         projects: project_rows,
+        ignored_prompts: ignored_prompts.len() as u64,
     }
 }
 
@@ -321,6 +368,8 @@ pub fn coach_timeline(
     day: NaiveDate,
     currency: &crate::currency::CurrencyFormatter,
 ) -> Option<crate::data::CoachTimelineDay> {
+    let calls: Vec<&ParsedCall> = calls.iter().copied().filter(|c| is_coached(c)).collect();
+    let calls = calls.as_slice();
     let labels =
         crate::ingest::projects::project_label_lookup(calls.iter().map(|c| c.project.as_str()));
     let ctx = CoachContext::new(calls);
@@ -452,12 +501,12 @@ mod tests {
         let refs = ctx_calls(&calls);
         let now = last_local_time(&calls);
 
-        let data = coach_data(&refs, &refs, Period::Week, now, None);
+        let data = coach_data(&refs, &refs, Period::Week, now, None, &BTreeSet::new());
         assert_eq!(data.timeline_grid.len(), 2);
         assert!(!data.timeline_grid[0].in_period, "ten-day-old context day");
         assert!(data.timeline_grid[1].in_period);
 
-        let all_time = coach_data(&refs, &refs, Period::AllTime, now, None);
+        let all_time = coach_data(&refs, &refs, Period::AllTime, now, None, &BTreeSet::new());
         assert!(all_time.timeline_grid.iter().all(|d| d.in_period));
     }
 
@@ -473,7 +522,7 @@ mod tests {
         let refs = ctx_calls(&calls);
         let now = last_local_time(&calls);
 
-        let data = coach_data(&refs, &refs, Period::AllTime, now, None);
+        let data = coach_data(&refs, &refs, Period::AllTime, now, None, &BTreeSet::new());
         assert_eq!(data.output.by_project.len(), 1);
         assert_eq!(data.output.by_project[0].name, "proj");
         assert_eq!(data.projects.len(), 1);
@@ -481,6 +530,55 @@ mod tests {
         assert_eq!(data.projects[0].turns, 1);
         assert_eq!(data.projects[0].active_hours, "1m");
         assert_eq!(data.projects[0].languages[0].name, "rust");
+    }
+
+    #[test]
+    fn headless_runs_stay_out_of_the_coach() {
+        // Three identical scripted prompts would trigger repeated-prompts if
+        // they were graded; tagged headless they never reach the rules.
+        let calls: Vec<_> = (0..3)
+            .map(|i| {
+                let mut c = call(&format!("s{i}"), i, "Summarize this skill for the report");
+                c.interaction_mode = InteractionMode::Headless;
+                c
+            })
+            .collect();
+        let refs = ctx_calls(&calls);
+        let now = last_local_time(&calls);
+
+        let data = coach_data(&refs, &refs, Period::AllTime, now, None, &BTreeSet::new());
+        assert!(data.findings.is_empty());
+        assert!(data.timeline_grid.is_empty());
+        assert!(data.projects.is_empty());
+    }
+
+    #[test]
+    fn findings_carry_drill_in_and_ignore_refs() {
+        let calls: Vec<_> = (0..3)
+            .map(|i| call(&format!("s{i}"), i, "please run the full test suite again"))
+            .collect();
+        let refs = ctx_calls(&calls);
+        let now = last_local_time(&calls);
+
+        let data = coach_data(&refs, &refs, Period::AllTime, now, None, &BTreeSet::new());
+        let finding = data
+            .findings
+            .iter()
+            .find(|f| f.rule_id == "repeated-prompts")
+            .expect("repeated prompts trigger");
+        let evidence = &finding.examples[0];
+        assert_eq!(evidence.session_key, "claude-code:s2");
+        assert_eq!(evidence.when.len(), "2026-06-01 09:02".len());
+        assert_eq!(evidence.prompt_key, "please run the full test suite again");
+        assert_eq!(data.ignored_prompts, 0);
+
+        let ignored = BTreeSet::from([evidence.prompt_key.to_string()]);
+        let data = coach_data(&refs, &refs, Period::AllTime, now, None, &ignored);
+        assert!(!data
+            .findings
+            .iter()
+            .any(|f| f.rule_id == "repeated-prompts"));
+        assert_eq!(data.ignored_prompts, 1);
     }
 
     #[test]

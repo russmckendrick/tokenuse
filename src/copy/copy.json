@@ -136,6 +136,16 @@
       "evidence_count": "Evidence samples",
       "why_it_matters": "Why it matters",
       "no_examples": "No representative examples were captured for this signal.",
+      "open_session": "Open session",
+      "no_session": "No session recorded",
+      "ignore_prompt": "Ignore",
+      "ignore_prompt_hint": "Not your prompt? Hide it from prompt findings (for templated prompts from scripts)",
+      "ignored_count": "{count} ignored prompts",
+      "restore_ignored": "Restore all",
+      "evidence_title": "{rule} · evidence",
+      "evidence_open_hint": "Enter evidence",
+      "ignore_key": "x",
+      "restore_key": "Shift+X",
       "severity": {
         "high": "High",
         "medium": "Medium",
@@ -703,6 +713,7 @@
     "mode_agent": "Agent",
     "mode_chat": "Chat",
     "mode_plan": "Plan",
+    "mode_headless": "Headless",
     "mode_unknown": "Unknown",
     "quality_exact": "Exact",
     "quality_estimated": "Estimated",
@@ -1156,7 +1167,9 @@
       "query_clear": "clear filter",
       "quit": "quit",
       "reload": "reload",
-      "toggle_data_source": "toggle live/sample data"
+      "toggle_data_source": "toggle live/sample data",
+      "toggle_prompt_ignore": "ignore prompt",
+      "clear_prompt_ignores": "restore ignored prompts"
     },
     "help": [
       {
@@ -1345,6 +1358,21 @@
         ]
       },
       {
+        "title": "Coach page",
+        "items": [
+          {
+            "keys": "Enter  Esc",
+            "label": "open evidence / session, back",
+            "action": "confirm"
+          },
+          {
+            "keys": "x  Shift+X",
+            "label": "ignore prompt / restore all",
+            "action": "toggle_prompt_ignore"
+          }
+        ]
+      },
+      {
         "title": "Session page",
         "items": [
           {
@@ -1431,6 +1459,16 @@
           "keys": "5",
           "label": "all",
           "action": "period_all_time"
+        },
+        {
+          "keys": "Enter",
+          "label": "evidence",
+          "action": "confirm"
+        },
+        {
+          "keys": "x",
+          "label": "ignore",
+          "action": "toggle_prompt_ignore"
         },
         {
           "keys": "h",
@@ -1676,6 +1714,10 @@
     "auto_refresh_failed_prior_data_kept": "Auto-refresh failed · prior data kept ({error})",
     "no_sessions_to_drill_into": "No sessions to drill into",
     "session_not_found": "Session not found · {key}",
+    "coach_prompt_ignored": "Prompt ignored · Shift+X restores all",
+    "coach_prompts_restored": "Restored {count} ignored prompts",
+    "coach_no_session": "No session recorded for this evidence",
+    "coach_not_ignorable": "Only prompt evidence can be ignored",
     "exported": "Report generated ({format}) · {path}",
     "export_failed": "Report failed · {error}",
     "export_folder": "Report folder · {path}",

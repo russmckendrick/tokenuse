@@ -1,0 +1,10 @@
+allowBuilds:
+  esbuild: true
+auditConfig:
+  # deepmerge <=4.3.1 prototype pollution (low, CVSS 2.7). No patched
+  # release exists and @sveltejs/vite-plugin-svelte 7.3.1 (latest) still
+  # depends on it. Build-time only: the plugin merges this project's own
+  # Svelte config, so no untrusted input reaches it and nothing ships in
+  # the app. Remove once deepmerge or the plugin publishes a fix.
+  ignoreGhsas:
+    - GHSA-gcqx-w48m-w2h4

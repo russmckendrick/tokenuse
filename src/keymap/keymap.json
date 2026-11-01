@@ -131,6 +131,12 @@
     },
     {
       "id": "cookie_action_prev"
+    },
+    {
+      "id": "toggle_prompt_ignore"
+    },
+    {
+      "id": "clear_prompt_ignores"
     }
   ],
   "shortcuts": [
@@ -296,6 +302,238 @@
         "e"
       ],
       "action": "open_export_picker"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "q"
+      ],
+      "action": "quit"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "h",
+        "?"
+      ],
+      "action": "open_help"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "g"
+      ],
+      "action": "cycle_sort"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "Shift+D"
+      ],
+      "action": "toggle_data_source"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "Tab"
+      ],
+      "action": "next_tab"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "Shift+Tab"
+      ],
+      "action": "prev_tab"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "1"
+      ],
+      "action": "period_today"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "2"
+      ],
+      "action": "period_week"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "3"
+      ],
+      "action": "period_thirty_days"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "4"
+      ],
+      "action": "period_month"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "5"
+      ],
+      "action": "period_all_time"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "t"
+      ],
+      "action": "cycle_tool"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "p"
+      ],
+      "action": "open_project_picker"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "m"
+      ],
+      "action": "open_model_picker"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "c"
+      ],
+      "action": "page_config"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "o"
+      ],
+      "action": "page_overview"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "d"
+      ],
+      "action": "page_deep_dive"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "u"
+      ],
+      "action": "page_usage"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "k"
+      ],
+      "action": "page_coach"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "/"
+      ],
+      "action": "page_scrollback"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "r"
+      ],
+      "action": "reload"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "s"
+      ],
+      "action": "open_session_picker"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "e"
+      ],
+      "action": "open_export_picker"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "Esc"
+      ],
+      "action": "cancel"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "Up"
+      ],
+      "action": "move_up"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "Down"
+      ],
+      "action": "move_down"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "PgUp"
+      ],
+      "action": "move_page_up"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "PgDn"
+      ],
+      "action": "move_page_down"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "Home"
+      ],
+      "action": "move_home"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "End"
+      ],
+      "action": "move_end"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "Enter"
+      ],
+      "action": "confirm"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "x"
+      ],
+      "action": "toggle_prompt_ignore"
+    },
+    {
+      "context": "coach_page",
+      "keys": [
+        "Shift+X"
+      ],
+      "action": "clear_prompt_ignores"
     },
     {
       "context": "usage_page",

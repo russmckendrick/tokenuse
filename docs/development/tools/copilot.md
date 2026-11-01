@@ -162,6 +162,8 @@ When parsing VS Code transcripts, count recognized `data.toolRequests[].toolCall
 
 Tool-call prefixes win because they reflect the backend that actually served the session; `session.start data.model` has been observed to disagree (declaring `gpt-5` in transcripts whose tool ids are Bedrock Anthropic). When no recognized prefix appears, the parser falls back to `data.model` (unless it is empty or `auto`) — display names like `Claude Sonnet 4.5` resolve through the `copilot` tool aliases in the pricing overrides. Only when both signals are missing does the call land in `copilot-auto`, which falls through pricing lookup to the book fallback.
 
+Copilot Fusion (GA Oct 2026) is a model router like `auto`. Every source above already prefers the served model (`resolvedModel`, `gen_ai.response.model`, tool-id inference) over the requested one, so Fusion turns are normally priced as the model that served them. When only the router id survives (`fusion`, `fusion-max`, `fusion-fast`, optionally `copilot/`-prefixed), the model registry folds it into `Copilot Fusion` / `Copilot Fusion Max` / `Copilot Fusion Fast` router buckets, which price through the book fallback like `copilot-auto`. No Fusion session has been observed locally yet, so the exact ids a Fusion turn records are unverified.
+
 GitHub's usage-based Copilot billing includes cached tokens. Legacy events and VS Code transcripts do not expose reliable cache buckets, so those sources keep `cache_read_input_tokens` and `cache_creation_input_tokens` at `0` and their cost is an estimate. CLI `assistant_usage_events` rows carry real `cache_read`/`cache_write` buckets and price cache-aware. See [Pricing and cache rates](../pricing.md).
 
 ## Deduplication

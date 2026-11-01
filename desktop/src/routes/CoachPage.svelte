@@ -1,5 +1,12 @@
+<script lang="ts" module>
+  // Survives the round trip through the session view (the page remounts on
+  // return), so tracing evidence lands back on the same finding.
+  let rememberedView: 'report' | 'findings' | 'output' | 'activity' = 'report';
+  let rememberedFindingId = '';
+</script>
+
 <script lang="ts">
-  import { CalendarDays, ChevronRight, Code2, FileText, Lightbulb, Search, TriangleAlert } from '@lucide/svelte';
+  import { CalendarDays, ChevronRight, Code2, EyeOff, FileText, Lightbulb, Search, TriangleAlert } from '@lucide/svelte';
   import { api } from '../api';
   import ActivityHourGrid from '../charts/ActivityHourGrid.svelte';
   import ActivityProfile from '../charts/ActivityProfile.svelte';
@@ -29,6 +36,7 @@
   } from '../types';
 
   export let snapshot: DesktopSnapshot;
+  export let openSession: (key: string) => void;
 
   let coach: CoachData | null = null;
   let analytics: AnalyticsData | null = null;
@@ -41,15 +49,17 @@
   let selectedSessionKey = '';
   let loadedSessionKey = '';
   let sessionDetail: SessionDetailView | null = null;
-  let coachView: 'report' | 'findings' | 'output' | 'activity' = 'report';
+  let coachView: 'report' | 'findings' | 'output' | 'activity' = rememberedView;
   let activityView: 'hours' | 'calendar' | 'projects' = 'hours';
   let findingFilter: 'all' | 'high' | 'medium' | 'low' = 'all';
-  let selectedFindingId = '';
+  let selectedFindingId = rememberedFindingId;
+  let ignoreBusy = false;
   let outputMode: 'language' | 'model' | 'project' = 'language';
   let selectedOutputKey = '';
   let selectedCallIndex = 0;
 
   $: coachCopy = snapshot.copy.coach;
+  $: remember(coachView, selectedFindingId);
   $: weekdays = (snapshot.copy.export.calendar_weekdays as string[]) ?? [];
   $: {
     const key = [
@@ -154,6 +164,35 @@
     selectedSessionKey = key;
     sessionDetail = null;
     selectedCallIndex = 0;
+  }
+
+  function remember(view: typeof coachView, findingId: string) {
+    rememberedView = view;
+    rememberedFindingId = findingId;
+  }
+
+  async function ignorePrompt(promptKey: string) {
+    if (!promptKey || ignoreBusy) return;
+    ignoreBusy = true;
+    try {
+      coach = await api.setCoachPromptIgnored(promptKey, true, snapshot.period);
+    } catch {
+      // Keep the previous render on transient errors.
+    } finally {
+      ignoreBusy = false;
+    }
+  }
+
+  async function restoreIgnored() {
+    if (ignoreBusy) return;
+    ignoreBusy = true;
+    try {
+      coach = await api.clearCoachIgnoredPrompts(snapshot.period);
+    } catch {
+      // Keep the previous render on transient errors.
+    } finally {
+      ignoreBusy = false;
+    }
   }
 
   function openFinding(ruleId: string) {
@@ -544,11 +583,47 @@
                   <p>{ruleCopy(selectedFinding.rule_id).how_to_improve}</p>
                 </section>
                 <section class="finding-detail-section">
-                  <h4>{coachCopy.findings.examples}</h4>
+                  <div class="evidence-head">
+                    <h4>{coachCopy.findings.examples}</h4>
+                    {#if coach.ignored_prompts > 0}
+                      <span class="evidence-ignored">
+                        <span class="dim">{tpl(coachCopy.findings.ignored_count, { count: count(coach.ignored_prompts) })}</span>
+                        <button type="button" class="panel-command" disabled={ignoreBusy} onclick={restoreIgnored}>{coachCopy.findings.restore_ignored}</button>
+                      </span>
+                    {/if}
+                  </div>
                   {#if selectedFinding.examples.length}
                     <ol class="evidence-list">
-                      {#each selectedFinding.examples as example, index}
-                        <li><span class="mono evidence-index">{String(index + 1).padStart(2, '0')}</span><div><p class="mono">"{example.text}"</p>{#if example.detail}<span>{example.detail}</span>{/if}</div></li>
+                      {#each selectedFinding.examples as example, index (index)}
+                        <li>
+                          <button
+                            type="button"
+                            class="evidence-row"
+                            disabled={!example.session_key}
+                            title={example.session_key ? coachCopy.findings.open_session : coachCopy.findings.no_session}
+                            onclick={() => openSession(example.session_key)}
+                          >
+                            <span class="mono evidence-index">{String(index + 1).padStart(2, '0')}</span>
+                            <span class="evidence-body">
+                              <span class="evidence-text mono">"{example.text}"</span>
+                              <span class="evidence-meta">
+                                {#if example.when}<span class="mono">{example.when}</span>{/if}
+                                {#if example.detail}<span>{example.detail}</span>{/if}
+                              </span>
+                            </span>
+                            {#if example.session_key}<ChevronRight size={14} aria-hidden="true" />{/if}
+                          </button>
+                          {#if example.prompt_key}
+                            <button
+                              type="button"
+                              class="evidence-ignore"
+                              disabled={ignoreBusy}
+                              title={coachCopy.findings.ignore_prompt_hint}
+                              aria-label={`${coachCopy.findings.ignore_prompt}: ${example.text}`}
+                              onclick={() => ignorePrompt(example.prompt_key)}
+                            ><EyeOff size={14} aria-hidden="true" /><span>{coachCopy.findings.ignore_prompt}</span></button>
+                          {/if}
+                        </li>
                       {/each}
                     </ol>
                   {:else}
@@ -1270,17 +1345,33 @@
     border-left: 3px solid var(--color-warning);
   }
 
+  .evidence-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-lg);
+  }
+
+  .evidence-ignored {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--space-md);
+    font-size: var(--text-label);
+  }
+
+  /* Capped like every data list: the body owns scrolling past 480px. */
   .evidence-list {
     list-style: none;
     margin: 0;
     padding: 0;
+    max-height: 480px;
+    overflow-y: auto;
   }
 
   .evidence-list li {
     display: grid;
-    grid-template-columns: 28px minmax(0, 1fr);
-    gap: var(--space-lg);
-    padding: var(--space-lg) 0;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
     border-top: 1px solid var(--color-border-row);
   }
 
@@ -1288,18 +1379,84 @@
     border-top: 0;
   }
 
-  .evidence-list p {
+  .evidence-row {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) 14px;
+    gap: var(--space-lg);
+    align-items: start;
+    width: 100%;
+    padding: var(--space-lg) var(--space-sm);
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 120ms ease;
+  }
+
+  .evidence-row:hover:not(:disabled) {
+    background: var(--color-neutral-hover);
+  }
+
+  .evidence-row:focus-visible,
+  .evidence-ignore:focus-visible {
+    outline: 1px solid var(--color-primary);
+    outline-offset: -1px;
+  }
+
+  .evidence-row:disabled {
+    cursor: default;
+  }
+
+  .evidence-row :global(svg) {
+    margin-top: 2px;
+    color: var(--color-muted-2);
+  }
+
+  .evidence-body {
+    display: grid;
+    gap: var(--space-xs);
+    min-width: 0;
+  }
+
+  .evidence-text {
     color: var(--color-on-surface);
     overflow-wrap: anywhere;
   }
 
-  .evidence-list span {
+  .evidence-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
     color: var(--color-muted-2);
     font-size: var(--text-label);
   }
 
   .evidence-index {
     padding-top: 1px;
+    color: var(--color-muted-2);
+    font-size: var(--text-label);
+  }
+
+  .evidence-ignore {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin: var(--space-lg) 0 0 var(--space-md);
+    padding: 2px var(--space-sm);
+    border: 1px solid var(--color-border-row);
+    background: transparent;
+    color: var(--color-muted-2);
+    font: inherit;
+    font-size: var(--text-label);
+    cursor: pointer;
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+
+  .evidence-ignore:hover:not(:disabled) {
+    background: var(--color-neutral-hover);
+    color: var(--color-on-surface);
   }
 
   .flow-summary {

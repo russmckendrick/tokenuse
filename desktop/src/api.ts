@@ -46,6 +46,10 @@ export const api = {
   getAnalytics: (period: PeriodId) => invoke<AnalyticsData>('get_analytics', { period }),
   getGraph: (metric: GraphMetricId) => invoke<GraphData>('get_graph', { metric }),
   getCoach: (period: PeriodId) => invoke<CoachData>('get_coach', { period }),
+  setCoachPromptIgnored: (promptKey: string, ignored: boolean, period: PeriodId) =>
+    invoke<CoachData>('set_coach_prompt_ignored', { promptKey, ignored, period }),
+  clearCoachIgnoredPrompts: (period: PeriodId) =>
+    invoke<CoachData>('clear_coach_ignored_prompts', { period }),
   getCoachTimeline: (day: string) =>
     invoke<CoachTimelineDay | null>('get_coach_timeline', { day }),
   getSessionDetail: (key: string) =>

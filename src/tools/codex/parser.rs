@@ -8,7 +8,8 @@ use serde_json::Value;
 
 use crate::pricing;
 use crate::tools::{
-    jsonl, CodeBlock, LimitCredits, LimitSnapshot, LimitWindow, ParsedCall, SessionSource, Speed,
+    jsonl, CodeBlock, InteractionMode, LimitCredits, LimitSnapshot, LimitWindow, ParsedCall,
+    SessionSource, Speed,
 };
 
 use super::config;
@@ -33,6 +34,10 @@ struct SessionMeta {
     cwd: Option<String>,
     #[serde(default)]
     originator: Option<String>,
+    /// Launch surface (`vscode`, `exec`, ...). Left untyped: newer builds
+    /// write objects here (e.g. subagent sources).
+    #[serde(default)]
+    source: Option<serde_json::Value>,
     /// Present when this rollout was forked from another session; the file
     /// then replays the parent's history before any new work.
     #[serde(default)]
@@ -193,6 +198,15 @@ pub fn parse_session(
     {
         return Ok(Vec::new());
     }
+
+    // `codex exec` runs are scripted, not interactive practice.
+    let interaction_mode = if meta.originator.as_deref() == Some("codex_exec")
+        || meta.source.as_ref().and_then(|s| s.as_str()) == Some("exec")
+    {
+        InteractionMode::Headless
+    } else {
+        InteractionMode::Unknown
+    };
 
     let session_id = source
         .path
@@ -447,6 +461,7 @@ pub fn parse_session(
                     code_blocks: jsonl::merge_code_blocks(mem::take(&mut pending_code_blocks)),
                     edited_files: jsonl::dedup_files(mem::take(&mut pending_edited)),
                     superseded_dedup_keys,
+                    interaction_mode,
                     transcript_user: Some(last_user_full.clone()),
                     transcript_assistant: Some(mem::take(&mut pending_response_text)),
                     ..ParsedCall::default()
@@ -930,6 +945,21 @@ mod tests {
     const TOKEN_LIMIT_NULL: &str = r#"{"timestamp":"2026-04-29T07:59:08.887Z","type":"event_msg","payload":{"type":"token_count","info":null,"rate_limits":{"limit_id":"codex","limit_name":null,"primary":{"used_percent":17.0,"window_minutes":300,"resets_at":1777477636},"secondary":{"used_percent":6.0,"window_minutes":10080,"resets_at":1777960801},"credits":null,"plan_type":"prolite","rate_limit_reached_type":null}}}"#;
     const TOKEN_LIMIT_MODEL: &str = r#"{"timestamp":"2026-04-29T07:59:28.815Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":18193,"cached_input_tokens":10624,"output_tokens":371,"reasoning_output_tokens":38,"total_tokens":18564},"total_token_usage":{"input_tokens":18193,"cached_input_tokens":10624,"output_tokens":371,"reasoning_output_tokens":38,"total_tokens":18564}},"rate_limits":{"limit_id":"codex_bengalfox","limit_name":"GPT-5.3-Codex-Spark","primary":{"used_percent":0.0,"window_minutes":300,"resets_at":1777487853},"secondary":{"used_percent":0.0,"window_minutes":10080,"resets_at":1778074653},"credits":{"has_credits":false,"unlimited":false,"balance":null},"plan_type":null,"rate_limit_reached_type":null}}}"#;
     const TOKEN_LIMIT_STRING_BALANCE: &str = r#"{"timestamp":"2026-07-16T16:05:42.263Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":19737,"cached_input_tokens":3840,"output_tokens":179,"reasoning_output_tokens":57,"total_tokens":19916},"total_token_usage":{"input_tokens":19737,"cached_input_tokens":3840,"output_tokens":179,"reasoning_output_tokens":57,"total_tokens":19916}},"rate_limits":{"limit_id":"codex","limit_name":null,"primary":{"used_percent":10.0,"window_minutes":10080,"resets_at":1784793140},"secondary":null,"credits":{"has_credits":false,"unlimited":false,"balance":"0"},"individual_limit":null,"plan_type":"prolite","rate_limit_reached_type":null}}}"#;
+
+    #[test]
+    fn exec_rollouts_are_headless() {
+        let exec_meta = r#"{"timestamp":"2026-03-29T15:04:01.475Z","type":"session_meta","payload":{"id":"sess-x","cwd":"/Users/me/proj","originator":"codex_exec","source":"exec"}}"#;
+        let f = write_session(&[exec_meta, TURN_GPT5, TOKEN_FIRST]);
+        let calls =
+            parse_session(&source_for(f.path().to_path_buf()), &mut HashSet::new()).unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].interaction_mode, InteractionMode::Headless);
+
+        let f = write_session(&[META_OK, TURN_GPT5, TOKEN_FIRST]);
+        let calls =
+            parse_session(&source_for(f.path().to_path_buf()), &mut HashSet::new()).unwrap();
+        assert_eq!(calls[0].interaction_mode, InteractionMode::Unknown);
+    }
 
     #[test]
     fn parses_basic_session() {

@@ -67,10 +67,13 @@ fn copy_paste_blindness(ctx: &CoachContext) -> Option<RuleHit> {
         if !refined {
             count += 1;
             if examples.len() < MAX_EXAMPLES {
-                examples.push(example(
-                    &session.project,
-                    format!("{} AI LoC, no refinement", session.ai_loc()),
-                ));
+                examples.push(
+                    example(
+                        &session.project,
+                        format!("{} AI LoC, no refinement", session.ai_loc()),
+                    )
+                    .in_session(session),
+                );
             }
         }
     }
@@ -109,10 +112,13 @@ fn speed_accept(ctx: &CoachContext) -> Option<RuleHit> {
                 gap_sum_ms += gap;
                 loc_sum += cur.ai_loc;
                 if examples.len() < MAX_EXAMPLES {
-                    examples.push(example(
-                        &session.project,
-                        format!("{} LoC accepted in {}s", cur.ai_loc, gap / 1000),
-                    ));
+                    examples.push(
+                        example(
+                            &session.project,
+                            format!("{} LoC accepted in {}s", cur.ai_loc, gap / 1000),
+                        )
+                        .at_turn(cur),
+                    );
                 }
             }
         }
@@ -159,14 +165,17 @@ fn vibe_coding(ctx: &CoachContext) -> Option<RuleHit> {
         count += 1;
         vibe_loc += session.ai_loc();
         if examples.len() < MAX_EXAMPLES {
-            examples.push(example(
-                &session.project,
-                format!(
-                    "{} AI LoC in {} messages",
-                    session.ai_loc(),
-                    session.turns.len()
-                ),
-            ));
+            examples.push(
+                example(
+                    &session.project,
+                    format!(
+                        "{} AI LoC in {} messages",
+                        session.ai_loc(),
+                        session.turns.len()
+                    ),
+                )
+                .in_session(session),
+            );
         }
     }
     (count >= MIN_SESSIONS).then(|| RuleHit {
