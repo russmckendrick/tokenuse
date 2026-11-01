@@ -2105,22 +2105,22 @@
           {
             "tool": "Claude Code",
             "scope": "Claude Code",
-            "window": "5h",
-            "used": 41,
-            "left": "59%",
-            "reset": "18 Jul 14:00",
-            "plan": "Max 20x",
+            "window": "weekly",
+            "used": 63,
+            "left": "37%",
+            "reset": "21 Jul 09:00",
+            "plan": "Ultra",
             "stale": false,
             "as_of": "18 Jul 09:12"
           },
           {
             "tool": "Claude Code",
-            "scope": "Claude Code",
+            "scope": "Fable",
             "window": "weekly",
-            "used": 63,
-            "left": "37%",
+            "used": 41,
+            "left": "59%",
             "reset": "21 Jul 09:00",
-            "plan": "Max 20x",
+            "plan": "Ultra",
             "stale": false,
             "as_of": "18 Jul 09:12"
           }

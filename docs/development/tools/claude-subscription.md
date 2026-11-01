@@ -1,6 +1,6 @@
 # Claude.ai Subscription Quota
 
-`tokenuse` can optionally show Claude.ai subscription-quota gauges (5-hour / 7-day / 7-day Opus / 7-day Sonnet / Extra Usage) next to your Claude Code spend. It is **opt-in**, **user-triggered**, and gated behind the `quota-sync` Cargo feature (on by default).
+`tokenuse` can optionally show Claude.ai subscription-quota gauges (5-hour / 7-day / model-scoped weekly caps such as Fable / Extra Usage) next to your Claude Code spend. It is **opt-in**, **user-triggered**, and gated behind the `quota-sync` Cargo feature (on by default).
 
 > Status: implemented (limits-only adapter, no session ingestion).
 
@@ -81,7 +81,12 @@ The Config page offers the equivalent Subscription cookie modal — see [docs/gu
     "five_hour":      { "utilization": 42.5, "resets_at": "2026-05-11T18:00:00Z" },
     "seven_day":      { "utilization": 17.0, "resets_at": "2026-05-18T00:00:00Z" },
     "seven_day_opus":   { "utilization": 0,    "resets_at": null },
-    "seven_day_sonnet": { "utilization": 25.0, "resets_at": "2026-05-18T00:00:00Z" }
+    "seven_day_sonnet": { "utilization": 25.0, "resets_at": "2026-05-18T00:00:00Z" },
+    "limits": [
+      { "kind": "weekly_all", "percent": 17, "resets_at": "2026-05-18T00:00:00Z", "scope": null },
+      { "kind": "weekly_scoped", "percent": 12, "resets_at": "2026-05-18T00:00:00Z",
+        "scope": { "model": { "display_name": "Fable", "id": null }, "surface": null } }
+    ]
   },
   "overage": {
     "is_enabled": true,
@@ -97,10 +102,11 @@ The parser also accepts a raw `usage` object (no wrapper) for manual snapshots.
 
 | `LimitSnapshot` row | Source field | Notes |
 | --- | --- | --- |
-| `five_hour` | `usage.five_hour.utilization` / `resets_at` | window 300 min |
-| `seven_day` | `usage.seven_day.utilization` / `resets_at` | window 10 080 min |
+| `claude-code` primary | `usage.five_hour.utilization` / `resets_at` | window 300 min. Shares the `claude-code` limit id with the Claude Code statusLine sidecar so the freshest observation wins. `null` on verified Ultra accounts (Oct 2026: Ultra dropped the 5-hour limit), so only the weekly gauge shows |
+| `claude-code` secondary | `usage.seven_day.utilization` / `resets_at`, falling back to the `limits[]` entry with `kind: "weekly_all"` (`percent`) | window 10 080 min |
 | `seven_day_opus` | `usage.seven_day_opus.utilization` / `resets_at` | window 10 080 min — skipped if utilization is 0 and `resets_at` is null |
 | `seven_day_sonnet` | `usage.seven_day_sonnet.utilization` / `resets_at` | window 10 080 min — same zero-skip |
+| `weekly_scoped_<name>` | `usage.limits[]` entries with `kind: "weekly_scoped"`; label from `scope.model.display_name` (or `scope.surface.display_name`), used % from `percent` | window 10 080 min — e.g. `weekly_scoped_fable` for the Fable cap on Max/Ultra (half the weekly allowance). Skipped when a legacy `seven_day_*` row already uses that label, or when the scope has no readable name. `scope` is read untyped so an unexpected shape drops that one gauge, not the whole sidecar |
 | `extra_usage` | `overage.monthly_limit`, `overage.used_credits` | used % derived; balance in dollars (`(limit − used) / 100`); `out_of_credits` → `rate_limit_reached_type` |
 
 ## Errors and re-auth

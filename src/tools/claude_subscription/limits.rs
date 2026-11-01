@@ -48,12 +48,42 @@ struct ClaudeUsage {
     seven_day_opus: Option<ClaudeLimit>,
     #[serde(default)]
     seven_day_sonnet: Option<ClaudeLimit>,
+    // Newer payloads (Oct 2026 Max/Ultra rename) list every active cap here,
+    // including model-scoped weekly caps (e.g. Fable) that have no
+    // dedicated `seven_day_*` key.
+    #[serde(default)]
+    limits: Vec<ClaudeListedLimit>,
 }
 
 #[derive(Debug, Deserialize)]
 struct ClaudeLimit {
     utilization: Option<f64>,
     resets_at: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClaudeListedLimit {
+    #[serde(default)]
+    kind: Option<String>,
+    #[serde(default)]
+    percent: Option<f64>,
+    #[serde(default)]
+    resets_at: Option<String>,
+    // Kept untyped: the scope shape is undocumented and a mismatch here must
+    // not take the whole sidecar (and every Claude gauge) down with it.
+    #[serde(default)]
+    scope: Option<serde_json::Value>,
+}
+
+impl ClaudeListedLimit {
+    fn scope_label(&self) -> Option<&str> {
+        let scope = self.scope.as_ref()?;
+        ["/model/display_name", "/surface/display_name"]
+            .iter()
+            .find_map(|pointer| scope.pointer(pointer).and_then(|v| v.as_str()))
+            .map(str::trim)
+            .filter(|label| !label.is_empty())
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -104,8 +134,11 @@ fn parse_sidecar_str(
     };
 
     let mut rows = Vec::new();
+    // Verified Ultra accounts have no 5-hour window: `five_hour` is null and
+    // only the weekly gauge is emitted.
     let five_hour = make_window(FIVE_HOUR_WINDOW_MINUTES, usage.five_hour.as_ref());
-    let seven_day = make_window(SEVEN_DAY_WINDOW_MINUTES, usage.seven_day.as_ref());
+    let seven_day = make_window(SEVEN_DAY_WINDOW_MINUTES, usage.seven_day.as_ref())
+        .or_else(|| weekly_all_window(&usage.limits));
     if five_hour.is_some() || seven_day.is_some() {
         // One combined snapshot, keyed by the same `limit_id` and `limit_name`
         // shape as `claude_code/limits.rs`. The pipeline's `limit_is_newer`
@@ -139,6 +172,7 @@ fn parse_sidecar_str(
         SEVEN_DAY_WINDOW_MINUTES,
         usage.seven_day_sonnet.as_ref(),
     );
+    push_scoped_weekly_windows(&mut rows, observed_at, &usage.limits);
     if let Some(overage) = overage {
         if let Some(row) = overage_row(observed_at, &overage) {
             rows.push(row);
@@ -163,6 +197,58 @@ fn make_window(window_minutes: u64, limit: Option<&ClaudeLimit>) -> Option<Limit
     })
 }
 
+fn listed_window(limit: &ClaudeListedLimit) -> Option<LimitWindow> {
+    make_window(
+        SEVEN_DAY_WINDOW_MINUTES,
+        Some(&ClaudeLimit {
+            utilization: limit.percent,
+            resets_at: limit.resets_at.clone(),
+        }),
+    )
+}
+
+fn weekly_all_window(limits: &[ClaudeListedLimit]) -> Option<LimitWindow> {
+    limits
+        .iter()
+        .find(|limit| limit.kind.as_deref() == Some("weekly_all"))
+        .and_then(listed_window)
+}
+
+/// One gauge per scoped weekly cap (e.g. the Fable cap on Max/Ultra). The
+/// legacy Opus/Sonnet caps keep their `seven_day_*` ids, so a scope already
+/// emitted under that name is skipped rather than shown twice.
+fn push_scoped_weekly_windows(
+    rows: &mut Vec<LimitSnapshot>,
+    observed_at: Option<DateTime<Utc>>,
+    limits: &[ClaudeListedLimit],
+) {
+    for limit in limits {
+        if limit.kind.as_deref() != Some("weekly_scoped") {
+            continue;
+        }
+        let Some(label) = limit.scope_label() else {
+            continue;
+        };
+        if rows
+            .iter()
+            .any(|row| row.limit_name.as_deref() == Some(label))
+        {
+            continue;
+        }
+        let Some(window) = listed_window(limit) else {
+            continue;
+        };
+        let slug = label.to_ascii_lowercase().replace(' ', "_");
+        push_window(
+            rows,
+            observed_at,
+            &format!("weekly_scoped_{slug}"),
+            label,
+            window,
+        );
+    }
+}
+
 fn push_distinct_window(
     rows: &mut Vec<LimitSnapshot>,
     observed_at: Option<DateTime<Utc>>,
@@ -174,6 +260,16 @@ fn push_distinct_window(
     let Some(window) = make_window(window_minutes, limit) else {
         return;
     };
+    push_window(rows, observed_at, id, name, window);
+}
+
+fn push_window(
+    rows: &mut Vec<LimitSnapshot>,
+    observed_at: Option<DateTime<Utc>>,
+    id: &str,
+    name: &str,
+    window: LimitWindow,
+) {
     rows.push(LimitSnapshot {
         tool: config::DISPLAY_TOOL,
         limit_id: id.to_string(),
@@ -261,6 +357,16 @@ pub fn refresh_sidecar(output: &Path, session_key: &str) -> Result<usize> {
             rows += 1;
         }
     }
+    rows += usage
+        .get("limits")
+        .and_then(Value::as_array)
+        .map(|limits| {
+            limits
+                .iter()
+                .filter(|limit| limit.get("kind").and_then(Value::as_str) == Some("weekly_scoped"))
+                .count()
+        })
+        .unwrap_or(0);
     if overage.as_ref().map(|v| !v.is_null()).unwrap_or(false) {
         rows += 1;
     }
@@ -442,5 +548,82 @@ mod tests {
         assert_eq!(extra.primary.unwrap().window_minutes, 43_200);
         let balance = extra.credits.as_ref().and_then(|c| c.balance).unwrap();
         assert!((balance - 37.5).abs() < 0.001);
+    }
+
+    // Shape observed on a verified Ultra account (Oct 2026): no 5-hour
+    // window, legacy per-model keys null, and a Fable cap only in `limits`.
+    const ULTRA_USAGE: &str = r#"{
+      "observed_at": "2026-11-01T15:26:57Z",
+      "usage": {
+        "five_hour": null,
+        "seven_day": { "utilization": 10.0, "resets_at": "2026-11-08T08:00:00.066844+00:00" },
+        "seven_day_opus": null,
+        "seven_day_sonnet": null,
+        "limits": [
+          {
+            "group": "weekly", "is_active": false, "kind": "weekly_all", "percent": 10,
+            "resets_at": "2026-11-08T08:00:00.066844+00:00", "scope": null, "severity": "normal"
+          },
+          {
+            "group": "weekly", "is_active": true, "kind": "weekly_scoped", "percent": 12,
+            "resets_at": "2026-11-08T08:00:00.067189+00:00",
+            "scope": { "model": { "display_name": "Fable", "id": null }, "surface": null },
+            "severity": "normal"
+          }
+        ]
+      }
+    }"#;
+
+    #[test]
+    fn ultra_payload_drops_five_hour_and_adds_scoped_weekly_gauge() {
+        let rows = parse_sidecar_str(ULTRA_USAGE, None).unwrap();
+        let combined = rows
+            .iter()
+            .find(|r| r.limit_id == "claude-code")
+            .expect("combined Claude row");
+        assert!(combined.primary.is_none());
+        let weekly = combined.secondary.expect("weekly window");
+        assert_eq!(weekly.window_minutes, 10_080);
+        assert!((weekly.used_percent - 10.0).abs() < 0.001);
+
+        let fable = rows
+            .iter()
+            .find(|r| r.limit_id == "weekly_scoped_fable")
+            .expect("Fable row");
+        assert_eq!(fable.tool, "claude-code");
+        assert_eq!(fable.limit_name.as_deref(), Some("Fable"));
+        let window = fable.primary.expect("Fable window");
+        assert!((window.used_percent - 12.0).abs() < 0.001);
+        assert_eq!(window.window_minutes, 10_080);
+        assert!(window.resets_at.is_some());
+        assert_eq!(rows.len(), 2);
+    }
+
+    #[test]
+    fn weekly_all_backfills_a_missing_seven_day_key() {
+        let raw = r#"{ "usage": { "limits": [
+          { "kind": "weekly_all", "percent": 33, "resets_at": "2026-11-08T08:00:00Z" }
+        ] } }"#;
+        let rows = parse_sidecar_str(raw, None).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].primary.is_none());
+        assert!((rows[0].secondary.unwrap().used_percent - 33.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn scoped_limits_skip_legacy_duplicates_and_odd_scopes() {
+        let raw = r#"{ "usage": {
+          "seven_day_sonnet": { "utilization": 25.0, "resets_at": "2026-11-08T08:00:00Z" },
+          "limits": [
+            { "kind": "weekly_scoped", "percent": 25, "resets_at": "2026-11-08T08:00:00Z",
+              "scope": { "model": { "display_name": "Sonnet" } } },
+            { "kind": "weekly_scoped", "percent": 5, "resets_at": "2026-11-08T08:00:00Z",
+              "scope": "claude_code" },
+            { "kind": "session", "percent": 40, "resets_at": "2026-11-01T18:00:00Z" }
+          ]
+        } }"#;
+        let rows = parse_sidecar_str(raw, None).unwrap();
+        let ids: Vec<&str> = rows.iter().map(|r| r.limit_id.as_str()).collect();
+        assert_eq!(ids, vec!["seven_day_sonnet"]);
     }
 }

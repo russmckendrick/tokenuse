@@ -636,6 +636,18 @@ mod tests {
         assert_eq!(copilot_auto.display, "Copilot (auto)");
         assert_eq!(copilot_auto.provider, Provider::GitHub);
 
+        // Copilot Fusion router ids only land when no resolved model was
+        // recorded; they fold into named router buckets, not raw ids.
+        let fusion = resolve("copilot", "fusion");
+        assert_eq!(fusion.display, "Copilot Fusion");
+        assert_eq!(fusion.canonical_id, "copilot-fusion");
+        assert_eq!(fusion.provider, Provider::GitHub);
+        assert_eq!(
+            display("copilot", "copilot/fusion-max"),
+            "Copilot Fusion Max"
+        );
+        assert_eq!(display("copilot", "Fusion Max"), "Copilot Fusion Max");
+
         let cursor_auto = resolve("cursor", "auto");
         assert_eq!(cursor_auto.display, "Cursor (auto)");
         assert_eq!(cursor_auto.provider, Provider::Cursor);
