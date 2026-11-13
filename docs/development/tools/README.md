@@ -13,6 +13,7 @@ The UI calls these sources **tools**. Internally each one is implemented as a `T
 | Codex | implemented | JSONL rollouts under `~/.codex/sessions/` | exact per-turn token-count deltas | [codex.md](codex.md) |
 | GitHub Copilot | implemented | JSONL events from legacy CLI, VS Code Copilot Chat transcripts, optional quota sidecar | legacy output exact when present; transcripts estimated; quota snapshots from confirmed local sync | [copilot.md](copilot.md) |
 | Gemini | implemented | JSON/JSONL chat sessions under `~/.gemini/tmp/<project_hash>/chats/` | exact usage, cache reads, thoughts, tool calls | [gemini.md](gemini.md) |
+| Muse Code | implemented | event-sourced `session.jsonl` transcripts under `~/.local/share/muse/sessions/`, including `subagent/` logs | exact per-model-call usage, cache reads/writes, reasoning tokens | [muse-code.md](muse-code.md) |
 | Claude.ai subscription | implemented (limits-only) | sidecar written by opt-in Config-page sync of `claude.ai/api/organizations/{uuid}/usage` and `/overage_spend_limit` | exact 5h / 7d / Opus / Sonnet / Extra Usage gauges; rendered inside the Claude Code section | [claude-subscription.md](claude-subscription.md) |
 | ChatGPT (Codex) subscription | implemented (limits-only) | sidecar written by opt-in Config-page sync of `chatgpt.com/backend-api/wham/usage` | exact 5h / 7d / credits gauges; rendered inside the Codex section | [codex-subscription.md](codex-subscription.md) |
 
