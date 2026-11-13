@@ -1,5 +1,5 @@
 export type PeriodId = 'today' | 'week' | 'thirty-days' | 'month' | 'all-time';
-export type ToolId = 'all' | 'claude-code' | 'cursor' | 'codex' | 'copilot' | 'gemini';
+export type ToolId = 'all' | 'claude-code' | 'cursor' | 'codex' | 'copilot' | 'gemini' | 'muse-code';
 export type SortId = 'spend' | 'date' | 'tokens';
 export type GraphMetricId = 'calls' | 'spend' | 'tokens';
 export type ReportFormatId = 'json' | 'csv' | 'svg' | 'png' | 'html' | 'pdf' | 'xlsx';

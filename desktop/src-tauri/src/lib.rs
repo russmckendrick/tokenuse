@@ -419,7 +419,7 @@ mod tests {
     use crate::ids::{parse_report_format, parse_tool, report_format_id, tool_id};
     use crate::snapshot::{snapshot, tray_snapshot};
     use tokenuse::{
-        app::{Period, ProjectFilter, SortMode, Tool},
+        app::{ModelFilter, Period, ProjectFilter, SortMode, Tool},
         reports::ReportFormat,
     };
 
@@ -446,6 +446,15 @@ mod tests {
     fn tool_helpers_roundtrip_gemini() {
         assert!(matches!(parse_tool("gemini").unwrap(), Tool::Gemini));
         assert_eq!(tool_id(Tool::Gemini), "gemini");
+    }
+
+    #[test]
+    fn tool_helpers_roundtrip_muse_code() {
+        assert!(matches!(
+            parse_tool("muse-code").unwrap(),
+            Tool::MuseCode
+        ));
+        assert_eq!(tool_id(Tool::MuseCode), "muse-code");
     }
 
     #[test]
@@ -486,6 +495,7 @@ mod tests {
             Period::Today,
             Tool::All,
             &ProjectFilter::All,
+            &ModelFilter::All,
             SortMode::Spend,
         );
         let snapshot = tray_snapshot(&app);

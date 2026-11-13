@@ -26,6 +26,7 @@
     if (normalized.includes('copilot')) return 'copilot';
     if (normalized.includes('cursor')) return 'cursor';
     if (normalized.includes('gemini')) return 'gemini';
+    if (normalized.includes('muse')) return 'muse-code';
     return normalized;
   }
 

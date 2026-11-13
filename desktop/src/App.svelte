@@ -754,6 +754,7 @@
     if (normalized.includes('cursor')) return 'blue';
     if (normalized.includes('copilot')) return 'green';
     if (normalized.includes('gemini')) return 'cyan';
+    if (normalized.includes('muse')) return 'yellow';
     return ['cyan', 'yellow', 'magenta', 'green'][index % 4];
   }
 

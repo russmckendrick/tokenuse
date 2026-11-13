@@ -37,8 +37,8 @@ The provider and tool marks under `src/icons/vendor/` are vendored from
 single-color `currentColor` silhouette to fit the dark theme.
 
 The brand logos themselves remain trademarks of their respective owners
-(Anthropic, OpenAI, Google, GitHub, Cursor, xAI) and are used here solely
-to identify those providers' models and tools in a local dashboard.
+(Anthropic, OpenAI, Google, GitHub, Cursor, xAI, Meta) and are used here
+solely to identify those providers' models and tools in a local dashboard.
 
 ```
 MIT License

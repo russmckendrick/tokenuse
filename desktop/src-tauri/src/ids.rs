@@ -45,6 +45,7 @@ pub(crate) fn parse_tool(value: &str) -> CommandResult<Tool> {
         "codex" => Ok(Tool::Codex),
         "copilot" => Ok(Tool::Copilot),
         "gemini" => Ok(Tool::Gemini),
+        "muse-code" => Ok(Tool::MuseCode),
         _ => Err(unknown("tool", value)),
     }
 }
@@ -57,6 +58,7 @@ pub(crate) fn tool_id(tool: Tool) -> &'static str {
         Tool::Codex => "codex",
         Tool::Copilot => "copilot",
         Tool::Gemini => "gemini",
+        Tool::MuseCode => "muse-code",
     }
 }
 

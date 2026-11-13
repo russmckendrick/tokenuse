@@ -8,6 +8,7 @@ import claude from './vendor/claude.svg?raw';
 import cursor from './vendor/cursor.svg?raw';
 import gemini from './vendor/gemini.svg?raw';
 import githubcopilot from './vendor/githubcopilot.svg?raw';
+import meta from './vendor/meta.svg?raw';
 import openai from './vendor/openai.svg?raw';
 import xai from './vendor/xai.svg?raw';
 
@@ -17,7 +18,8 @@ const PROVIDER_MARKS: Record<string, string> = {
   google: gemini,
   github: githubcopilot,
   cursor,
-  xai
+  xai,
+  meta
 };
 
 const TOOL_MARKS: Record<string, string> = {
@@ -25,7 +27,8 @@ const TOOL_MARKS: Record<string, string> = {
   codex: openai,
   copilot: githubcopilot,
   cursor,
-  gemini
+  gemini,
+  'muse-code': meta
 };
 
 export function providerMark(providerId: string): string | null {
