@@ -148,6 +148,7 @@ pub(crate) fn tool_short_label(tool: &str) -> &'static str {
         "codex" => "Codex",
         "copilot" => "Copilot",
         "gemini" => "Gemini",
+        "muse-code" => "Muse",
         _ => "Other",
     }
 }

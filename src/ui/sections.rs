@@ -835,6 +835,7 @@ fn usage_tool_color(tool: &str) -> Color {
         "Cursor" => theme::BLUE,
         "Copilot" => theme::GREEN,
         "Gemini" => theme::CYAN,
+        "Muse Code" => theme::YELLOW,
         _ => theme::CYAN,
     }
 }

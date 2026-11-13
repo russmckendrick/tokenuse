@@ -18,6 +18,8 @@
         return 'cursor';
       case 'gemini':
         return 'google';
+      case 'muse-code':
+        return 'meta';
       default:
         return 'other';
     }

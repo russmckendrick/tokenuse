@@ -998,6 +998,43 @@ mod tests {
         assert_eq!(opus_5.fast_multiplier, Some(2.0));
         assert!(!uses_fallback("claude-code", "claude-opus-5", None));
 
+        // Muse Spark bills per mode: Contributor ids must never inherit
+        // Standard rates (or vice versa); a mode mix-up misprices every
+        // call by 12-75x with no warning at the call site.
+        let contributor = table.lookup_for(
+            "muse-code",
+            "muse-spark-1.3-contributor",
+            Some(Utc.with_ymd_and_hms(2026, 11, 13, 12, 0, 0).unwrap()),
+        );
+        assert!((contributor.input * 1e6 - 0.10).abs() < 0.001);
+        assert!((contributor.output * 1e6 - 0.20).abs() < 0.001);
+        assert!((contributor.cache_read * 1e6 - 0.002).abs() < 0.0001);
+        assert!(!uses_fallback(
+            "muse-code",
+            "muse-spark-1.3-contributor",
+            None
+        ));
+
+        let standard = table.lookup_for(
+            "muse-code",
+            "muse-spark-1.3",
+            Some(Utc.with_ymd_and_hms(2026, 11, 13, 12, 0, 0).unwrap()),
+        );
+        assert!((standard.input * 1e6 - 1.25).abs() < 0.001);
+        assert!((standard.output * 1e6 - 4.25).abs() < 0.001);
+        assert!((standard.cache_read * 1e6 - 0.15).abs() < 0.001);
+        assert!(!uses_fallback("muse-code", "muse-spark-1.3", None));
+
+        let wonder = table.lookup_for(
+            "muse-code",
+            "muse-wonder-1.0",
+            Some(Utc.with_ymd_and_hms(2026, 11, 13, 12, 0, 0).unwrap()),
+        );
+        assert!((wonder.input * 1e6 - 4.0).abs() < 0.001);
+        assert!((wonder.output * 1e6 - 20.0).abs() < 0.001);
+        assert!((wonder.cache_read * 1e6 - 0.20).abs() < 0.001);
+        assert!(!uses_fallback("muse-code", "muse-wonder-1.0", None));
+
         // Opus 5.5 (2026-09-22) is 20% cheaper than Opus 5 and halves the
         // cache-read ratio to 0.05x. Without its own row it inherits Opus 5
         // through longest-prefix matching.

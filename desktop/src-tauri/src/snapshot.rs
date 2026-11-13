@@ -268,6 +268,7 @@ pub(crate) fn snapshot(app: &App) -> DesktopSnapshot {
             Tool::Codex,
             Tool::Copilot,
             Tool::Gemini,
+            Tool::MuseCode,
         ]
         .into_iter()
         .map(|tool| OptionItem {

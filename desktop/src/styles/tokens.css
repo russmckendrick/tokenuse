@@ -38,6 +38,7 @@
   --provider-github: #8b949e;
   --provider-cursor: #7a7fee;
   --provider-xai: #c8cdd8;
+  --provider-meta: #58a6ff;
   --provider-other: #a1a7c3;
 
   /* Charts — every chart color routes through these (no hex in components) */

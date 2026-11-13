@@ -153,6 +153,7 @@ fn filter_slug(period: Period, tool: Tool, project_filter: &ProjectFilter) -> St
         Tool::Codex => "codex",
         Tool::Copilot => "copilot",
         Tool::Gemini => "gemini",
+        Tool::MuseCode => crate::tools::muse_code::config::TOOL_ID,
     };
     let project = match project_filter {
         ProjectFilter::All => "allprojects".to_string(),

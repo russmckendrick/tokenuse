@@ -20,6 +20,7 @@ pub enum Provider {
     GitHub,
     Cursor,
     XAI,
+    Meta,
     Other,
 }
 
@@ -33,6 +34,7 @@ impl Provider {
             Self::GitHub => "github",
             Self::Cursor => "cursor",
             Self::XAI => "xai",
+            Self::Meta => "meta",
             Self::Other => "other",
         }
     }
@@ -45,6 +47,7 @@ impl Provider {
             Self::GitHub => "GitHub",
             Self::Cursor => "Cursor",
             Self::XAI => "xAI",
+            Self::Meta => "Meta",
             Self::Other => "Other",
         }
     }
@@ -57,6 +60,7 @@ impl Provider {
             "github" => Some(Self::GitHub),
             "cursor" => Some(Self::Cursor),
             "xai" => Some(Self::XAI),
+            "meta" => Some(Self::Meta),
             "other" => Some(Self::Other),
             _ => None,
         }
@@ -447,6 +451,21 @@ mod tests {
         assert_eq!(grok.display, "Grok 4.6");
         assert_eq!(grok.canonical_id, "grok-4.6");
         assert_eq!(grok.provider, Provider::XAI);
+    }
+
+    #[test]
+    fn muse_models_resolve_to_meta_provider() {
+        // The -contributor suffix is a billing mode, not a different model:
+        // identity folds it into the family while pricing keeps the full id.
+        let spark = resolve("muse-code", "muse-spark-1.3-contributor");
+        assert_eq!(spark.canonical_id, "muse-spark-1.3");
+        assert_eq!(spark.display, "Muse Spark 1.3");
+        assert_eq!(spark.provider, Provider::Meta);
+        assert_eq!(spark.family, "Muse Spark");
+
+        let wonder = resolve("muse-code", "muse-wonder-1.0");
+        assert_eq!(wonder.provider, Provider::Meta);
+        assert_eq!(wonder.family, "Muse Wonder");
     }
 
     #[test]

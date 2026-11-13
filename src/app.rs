@@ -96,6 +96,7 @@ pub enum Tool {
     Codex,
     Copilot,
     Gemini,
+    MuseCode,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -182,6 +183,7 @@ impl Tool {
             Self::Codex => copy.tools.codex.as_str(),
             Self::Copilot => copy.tools.copilot.as_str(),
             Self::Gemini => copy.tools.gemini.as_str(),
+            Self::MuseCode => copy.tools.muse_code.as_str(),
         }
     }
 
@@ -192,7 +194,8 @@ impl Tool {
             Self::Cursor => Self::Codex,
             Self::Codex => Self::Copilot,
             Self::Copilot => Self::Gemini,
-            Self::Gemini => Self::All,
+            Self::Gemini => Self::MuseCode,
+            Self::MuseCode => Self::All,
         }
     }
 }
@@ -905,6 +908,7 @@ fn scrollback_tool_filter(tool: Tool) -> Option<String> {
         Tool::Codex => crate::tools::codex::config::TOOL_ID,
         Tool::Copilot => crate::tools::copilot::config::TOOL_ID,
         Tool::Gemini => crate::tools::gemini::config::TOOL_ID,
+        Tool::MuseCode => crate::tools::muse_code::config::TOOL_ID,
     };
     Some(id.to_string())
 }
@@ -4576,6 +4580,9 @@ mod tests {
         app.handle_key(key(KeyCode::Char('t')));
         app.handle_key(key(KeyCode::Char('t')));
         assert_eq!(app.tool, Tool::Gemini);
+
+        app.handle_key(key(KeyCode::Char('t')));
+        assert_eq!(app.tool, Tool::MuseCode);
 
         app.handle_key(key(KeyCode::Char('t')));
         assert_eq!(app.tool, Tool::All);

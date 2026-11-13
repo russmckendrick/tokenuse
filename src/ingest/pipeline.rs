@@ -21,12 +21,13 @@ use crate::tools::{self, LimitSnapshot, LimitWindow, ParsedCall};
 /// Tool ids and display labels for the Usage-page limit sections, in fixed
 /// display order. Shared with the desktop plan-price settings so price
 /// configuration lists exactly the tools that grow a Usage console.
-pub const LIMIT_SECTION_TOOLS: [(&str, &str); 5] = [
+pub const LIMIT_SECTION_TOOLS: [(&str, &str); 6] = [
     ("codex", "Codex"),
     ("claude-code", "Claude Code"),
     ("cursor", "Cursor"),
     ("copilot", "Copilot"),
     ("gemini", "Gemini"),
+    (crate::tools::muse_code::config::TOOL_ID, "Muse Code"),
 ];
 
 #[cfg(test)]
@@ -542,6 +543,7 @@ pub(crate) fn matches_tool(call: &ParsedCall, tool: Tool) -> bool {
         Tool::Codex => call.tool == "codex",
         Tool::Copilot => call.tool == "copilot",
         Tool::Gemini => call.tool == "gemini",
+        Tool::MuseCode => call.tool == crate::tools::muse_code::config::TOOL_ID,
     }
 }
 
@@ -819,7 +821,7 @@ fn build_tool_limit_sections(
         models: HashMap<String, ModelAcc>,
     }
 
-    const TOOLS: [(&str, &str); 5] = LIMIT_SECTION_TOOLS;
+    const TOOLS: [(&str, &str); 6] = LIMIT_SECTION_TOOLS;
 
     let now = Local::now();
     let mut by_tool: HashMap<&str, Acc> =
@@ -3052,7 +3054,7 @@ mod tests {
         assert_eq!(codex.limits[1].window, "weekly");
         assert_eq!(codex.limits[1].used, 6);
         assert_eq!(codex.limits[1].left, "94% left");
-        assert_eq!(data.sections.len(), 5);
+        assert_eq!(data.sections.len(), 6);
         assert_eq!(data.sections[0].tool, "Codex");
         assert_eq!(data.sections[1].tool, "Claude Code");
     }
@@ -3106,7 +3108,7 @@ mod tests {
             .any(|row| row.scope == "GPT-5.3-Codex-Spark"));
         assert!(claude_section.limits.is_empty());
         assert_eq!(claude.sections[0].tool, "Codex");
-        assert_eq!(claude.sections.len(), 5);
+        assert_eq!(claude.sections.len(), 6);
     }
 
     #[test]
@@ -3358,6 +3360,7 @@ mod tests {
                 mk_recent_call("cursor", 3.0, 300),
                 mk_recent_call("copilot", 4.0, 400),
                 mk_recent_call("gemini", 5.0, 500),
+                mk_recent_call("muse-code", 6.0, 600),
             ],
             limits: Vec::new(),
         };
@@ -3372,7 +3375,14 @@ mod tests {
 
         assert_eq!(
             tools,
-            vec!["Gemini", "Copilot", "Cursor", "Claude Code", "Codex"]
+            vec![
+                "Muse Code",
+                "Gemini",
+                "Copilot",
+                "Cursor",
+                "Claude Code",
+                "Codex"
+            ]
         );
         assert!(data
             .sections

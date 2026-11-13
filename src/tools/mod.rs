@@ -14,6 +14,7 @@ pub mod copilot;
 pub mod cursor;
 pub mod gemini;
 pub mod jsonl;
+pub mod muse_code;
 pub mod paths;
 pub mod types;
 
@@ -90,6 +91,7 @@ pub fn registry() -> Vec<Box<dyn ToolAdapter>> {
         Box::new(codex_subscription::CodexSubscription),
         Box::new(copilot::Copilot),
         Box::new(gemini::Gemini),
+        Box::new(muse_code::MuseCode),
     ]
 }
 

@@ -17,7 +17,8 @@ const TOOL_COLORS: Record<string, string> = {
   'claude-code': 'var(--color-magenta)',
   cursor: 'var(--color-secondary)',
   copilot: 'var(--color-tertiary)',
-  gemini: 'var(--color-cyan)'
+  gemini: 'var(--color-cyan)',
+  'muse-code': 'var(--color-warning)'
 };
 
 const PROVIDER_COLORS: Record<string, string> = {
@@ -26,7 +27,8 @@ const PROVIDER_COLORS: Record<string, string> = {
   google: 'var(--provider-google)',
   github: 'var(--provider-github)',
   cursor: 'var(--provider-cursor)',
-  xai: 'var(--provider-xai)'
+  xai: 'var(--provider-xai)',
+  meta: 'var(--provider-meta)'
 };
 
 export function seriesColor(index: number): string {

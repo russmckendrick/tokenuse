@@ -448,7 +448,7 @@ Axis and framing rules: gridlines `desktop.charts.grid` hairlines, horizontal on
 
 ### Provider identity
 
-Vendored SVG marks (from the MIT-licensed lobehub icon set, attribution in `desktop/LICENSES-THIRD-PARTY.md`) identify providers: Anthropic, OpenAI, Google, GitHub, Cursor, xAI, plus a neutral fallback glyph.
+Vendored SVG marks (from the MIT-licensed lobehub icon set, attribution in `desktop/LICENSES-THIRD-PARTY.md`) identify providers: Anthropic, OpenAI, Google, GitHub, Cursor, xAI, Meta, plus a neutral fallback glyph.
 
 - In tables, the sidebar, and any dense row: **16px, monochrome `currentColor`**, inheriting the row's text color. Never brand-colored inside tables.
 - In page headers, Models group headers, and Tools hero bands: **20px+, provider accent color** (`colors.providers.*`).
