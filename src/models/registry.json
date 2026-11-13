@@ -92,6 +92,11 @@
 
     { "match": "prefix", "keys": ["grok-4.6", "grok-4-6"], "canonical": "grok-4.6", "display": "Grok 4.6", "provider": "xai", "family": "Grok" },
     { "match": "prefix", "keys": ["grok-4.5", "grok-4-5"], "canonical": "grok-4.5", "display": "Grok 4.5", "provider": "xai", "family": "Grok" },
-    { "match": "prefix", "keys": ["grok"], "display": "Grok", "provider": "xai", "family": "Grok" }
+    { "match": "prefix", "keys": ["grok"], "display": "Grok", "provider": "xai", "family": "Grok" },
+
+    { "match": "prefix", "keys": ["muse-spark-1.3"], "canonical": "muse-spark-1.3", "display": "Muse Spark 1.3", "provider": "meta", "family": "Muse Spark" },
+    { "match": "prefix", "keys": ["muse-spark"], "display": "Muse Spark", "provider": "meta", "family": "Muse Spark" },
+    { "match": "prefix", "keys": ["muse-wonder"], "display": "Muse Wonder", "provider": "meta", "family": "Muse Wonder" },
+    { "match": "prefix", "keys": ["muse-"], "display": "Muse", "provider": "meta", "family": "Muse" }
   ]
 }
