@@ -492,7 +492,9 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
 
-        assert!(rendered.contains(&copy().usage.idle));
+        // Six consoles fill the 2-column grid, so the idle hint is
+        // truncated in every column; assert the visible prefix.
+        assert!(rendered.contains("Idle · No limi"));
     }
 
     #[test]

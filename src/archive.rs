@@ -2565,6 +2565,7 @@ fn static_tool(tool: String) -> &'static str {
         crate::tools::codex::config::TOOL_ID => crate::tools::codex::config::TOOL_ID,
         crate::tools::copilot::config::TOOL_ID => crate::tools::copilot::config::TOOL_ID,
         crate::tools::gemini::config::TOOL_ID => crate::tools::gemini::config::TOOL_ID,
+        crate::tools::muse_code::config::TOOL_ID => crate::tools::muse_code::config::TOOL_ID,
         _ => Box::leak(tool.into_boxed_str()),
     }
 }
